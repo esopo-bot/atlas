@@ -1,0 +1,3 @@
+# fluxos
+
+Processos genéricos passo a passo: refatoração, migração, entrega...

@@ -1,0 +1,14 @@
+{
+  "read_config_from": {
+    "claude": false
+  },
+  "permissions": {
+    "allow": [],
+    "deny": [
+      "Read(.env*)",
+      "Read(**/.env*)",
+      "Read(**/appsettings*)",
+      "Read(.credenciais/**)"
+    ]
+  }
+}

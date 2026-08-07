@@ -1,0 +1,26 @@
+{
+  // Régua de markdown da camada. O verificador a usa; o VS Code também lê.
+  "default": true,
+
+  // Tamanho de linha fica de fora. As páginas da camada são escritas em 80
+  // colunas por hábito de quem escreve, não por cobrança de ferramenta — e a
+  // cobrança caía onde não paga: anotação da casa, perfil gerado, registro de
+  // incidente. Ninguém requebra aquilo, e aviso que ninguém atende ensina a
+  // ignorar aviso. Quem quiser a disciplina liga de volta na sua pasta, com
+  // um .markdownlint.jsonc próprio.
+  "MD013": false,
+
+  // Título repetido entre seções irmãs é o padrão de CHANGELOG
+  // ("Adicionado" em cada versão).
+  "MD024": { "siblings_only": true },
+
+  // Bloco cercado sem linguagem é texto puro de propósito: os templates de
+  // prompt do guia não são código.
+  "MD040": false,
+
+  // Alinhamento de tabela fica de fora: o site renderiza igual alinhado ou
+  // não, e — medido — o conserto automático não cobre esta regra. Cobrar o
+  // que a ferramenta não conserta transforma o ritual em ruído, e ruído faz
+  // gente ignorar aviso de verdade.
+  "MD060": false
+}

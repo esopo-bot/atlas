@@ -1,0 +1,16 @@
+# As branches de longa duração deste repositório.
+#
+# O gancho .claude/hooks/vetar-branch-protegida.py recusa apagar,
+# renomear e forçar qualquer nome desta lista. Push normal, commit e
+# branch nova passam sem saber que ele existe.
+#
+# Um nome por linha; linha com # é comentário. Tire o que não existe
+# aqui e acrescente os nomes da sua casa — este arquivo é seu, e a
+# atualização da camada não o sobrescreve.
+main
+master
+develop
+homolog
+staging
+release
+production

@@ -1,0 +1,17 @@
+/* Estilo mínimo: só o necessário para a leitura ficar confortável. */
+
+:root {
+  --ifm-color-primary: #2b6cb0;
+  --ifm-code-font-size: 95%;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #7cb3f0;
+}
+
+/* Tabelas largas rolam dentro da própria caixa, sem esticar a página. */
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}

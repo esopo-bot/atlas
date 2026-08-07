@@ -1,0 +1,23 @@
+# Dependências e artefatos do site
+node_modules/
+site/build/
+site/.docusaurus/
+
+# A cópia das skills fica fora do git pelo .claude/.gitignore, escrito pelo
+# montar.py — aqui não se repete.
+
+# Registros de verificação
+*.log
+__pycache__/
+
+# O esqueleto (projetos/, .credenciais/, recursos/) não existe aqui: este
+# repositório é a camada, não uma área de trabalho. O montar.py só cria essas
+# pastas quando rodado com --esqueleto, na raiz de um workspace.
+
+# Descartáveis: rascunho e cache de ferramenta. Apagar não perde nada.
+/tmp/*
+!/tmp/LEIAME.md
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

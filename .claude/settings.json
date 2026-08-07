@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [],
+    "deny": [
+      "Read(.env*)",
+      "Read(**/.env*)",
+      "Read(**/appsettings*)",
+      "Read(.credenciais/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/injetar-qualidade.py\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/conferir-mcp.py\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-branch-protegida.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

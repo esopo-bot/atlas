@@ -1,0 +1,39 @@
+---
+name: analise-de-promocao
+description: Ao dar um trabalho por pronto no workspace, separa o que a sessão criou e aprendeu em três pilhas — genérico, da casa, descartável — e propõe a promoção do genérico para a camada, já abstraído. Use ao fechar qualquer trabalho, quando pedirem a análise de promoção, ou quando perguntarem o que do trabalho atual pode virar genérico.
+---
+
+# Análise de promoção
+
+O workspace trabalha; a camada colhe. Ao dar um trabalho por pronto, esta
+análise decide o destino do que nasceu na sessão — antes do resumo final.
+
+## Antes das pilhas: a conclusão está auditada?
+
+Se o trabalho terminou numa conclusão — uma causa encontrada, um diagnóstico,
+uma regra deduzida —, passe o cético nela (skill `cetico`) antes de promover
+o que quer que seja. Lição promovida sem auditoria vira regra que outras
+pessoas seguem: o erro sai de uma casa e entra em todas.
+
+## As três pilhas
+
+Releia o que a sessão criou e aprendeu, e separe:
+
+- **Genérico** — serviria a qualquer pessoa, em qualquer casa.
+- **Da casa** — vale só para este workspace.
+- **Descartável** — morre com a sessão.
+
+## O destino de cada pilha
+
+- **Genérico**: proponha a promoção — o quê, para onde na camada (página,
+  skill, gancho ou template) e o texto **já abstraído**: sem nome de pessoa,
+  projeto, empresa ou máquina. **Proponha; não aplique** — promoção é decisão
+  do dono, e camada pública não aceita resíduo pessoal.
+- **Da casa**: escreva como nota ou decisão em `conhecimento/<subpasta>/`.
+- **Descartável**: diga o que descartou, em uma linha.
+
+## A régua da dúvida
+
+Na dúvida se algo é genérico: é pessoal, e fica na casa. O erro barato é
+deixar de promover — dá para promover amanhã; o caro é vazar o pessoal, que
+não se despublica.

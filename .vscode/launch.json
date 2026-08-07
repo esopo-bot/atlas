@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Documentação",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "console": "integratedTerminal",
+      "env": {
+        // Qual navegador o servidor abre. O Docusaurus atual lê
+        // DOCUSAURUS_BROWSER (medido no openBrowser.js dele); versões antigas
+        // liam BROWSER. Os dois nomes juntos valem em qualquer versão.
+        // Vale "firefox", "chrome", "edge" ou o caminho de um executável.
+        "DOCUSAURUS_BROWSER": "firefox",
+        "BROWSER": "firefox"
+      }
+    }
+  ]
+}
