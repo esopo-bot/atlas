@@ -3,12 +3,25 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
-## 0.54 — 2026-08-07
+## 0.56 — 2026-08-07
 
 A camada passa a conferir o que o agente recebe na abertura, o fechamento da
 sessão vira skill, e publicar ganha uma regra.
 
 ### Adicionado
+
+- **A declaração de MCP da outra ferramenta se cria pelo comando dela** — nova
+  subseção em [MCP](conhecimento/mcp.md). Medido: a doc oficial do Devin CLI
+  manda declarar MCP num arquivo próprio, e o `devin mcp add` rodado numa
+  máquina escreveu a seção `mcpServers` dentro do `.devin/config.json` — o
+  formato que a doc já dava por substituído. Quem gerasse esse arquivo pela
+  doc acertaria a doc e erraria a máquina, em silêncio. É por isso que o
+  `--sincronizar` espelha skill e **não** gera declaração de MCP.
+- **`mcp list` diz "declarado", não "funciona"**, em
+  [MCP](conhecimento/mcp.md). A lista lê a configuração e não sobe servidor
+  nenhum: o registro recém-criado aparece ali mesmo quando o comando
+  declarado está errado. É o falso positivo mais fácil de acreditar, porque
+  chega logo depois de você registrar.
 
 - **Gancho `conferir-mcp.py`**, um `SessionStart` que lê o `.mcp.json` e
   avisa quando um caminho declarado não existe no disco. Servidor MCP que não

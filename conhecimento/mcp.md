@@ -75,6 +75,33 @@ não viaja: repete-se na configuração de cada ferramenta que você usa. Ligou 
 servidor e outro agente não o vê? Confira a declaração dele naquela
 ferramenta antes de investigar o servidor.
 
+#### A declaração da outra ferramenta se cria pelo comando dela
+
+Nunca à mão, e nunca gerada a partir do arquivo da primeira. O motivo é
+medido: **a documentação e o programa instalado discordam.** A doc oficial do
+Devin CLI manda declarar MCP num arquivo próprio (`.devin/mcp_config.json`);
+o `devin mcp add` rodado numa máquina escreveu a seção `mcpServers` dentro do
+`.devin/config.json` — o formato que a doc já dava por substituído.
+
+Quem tivesse gerado o arquivo pela doc teria acertado a doc e errado a
+máquina. E erraria em silêncio, do jeito da seção seguinte: declaração no
+lugar que ninguém lê é servidor que nunca existiu.
+
+Daí a regra chata que envelhece melhor: **cada ferramenta declara pelo
+comando dela**, e o escopo se escolhe por bandeira, não por caminho de
+arquivo. O arquivo é detalhe de implementação da ferramenta; o comando é o
+contrato.
+
+| Ferramenta  | Registra com     | Confere com       |
+| ----------- | ---------------- | ----------------- |
+| Claude Code | `claude mcp add` | `claude mcp list` |
+| Devin CLI   | `devin mcp add`  | `devin mcp list`  |
+
+É também por isso que a camada não gera a segunda declaração no
+`--sincronizar`, embora espelhe skills. Skill é texto nosso num caminho que
+escolhemos; declaração de MCP é formato da outra ferramenta, e ele já mudou
+de arquivo uma vez.
+
 ## Quando o servidor some da lista
 
 Servidor declarado que não sobe **não dá erro nenhum**: ele some da lista de
@@ -91,6 +118,13 @@ Duas causas respondem por quase tudo, medidas em falhas reais:
 - **O processo morre antes de falar o protocolo.** O arquivo existe, o
   servidor sobe e sai com erro antes de responder ao `initialize` — um
   import que falha, uma dependência ausente. O cliente desiste calado.
+
+E há um terceiro sintoma, mais enganoso que os dois: **a lista da ferramenta
+diz "declarado", não "funciona"**. `claude mcp list` e o equivalente do outro
+agente leem a configuração — não sobem servidor nenhum. Registro recém-criado
+aparece ali mesmo quando o comando declarado está errado. É o falso positivo
+mais barato de acreditar, porque chega logo depois de você registrar e tem
+cara de confirmação.
 
 Por causa do segundo caso, **checar arquivo não basta: prove com sonda**.
 Uma sonda sobe o servidor de verdade, manda o `initialize` e chama uma
