@@ -43,6 +43,13 @@ e o porquê. **Proponha; não aplique**: quem decide é o dono do repositório.
     se altera de passagem. As duas são infraestrutura de outras pessoas:
     desfazer é público, caro, e às vezes impossível. Os nomes estão no perfil
     do repositório — e **na dúvida se uma branch é dessas, ela é.**
+13. **Publicar exige revisão semântica, não só varredura.** Antes de tornar
+    algo público, releia exemplo, fixture e caso de teste perguntando *um
+    colega reconheceria a casa nisto?*, e releia o texto perguntando *isto
+    conta algo sobre quem escreveu?* Varredura por padrão acha nome e
+    segredo; jeito de trabalhar e procedência não têm padrão — passam
+    inteiros. E publicação não se desfaz: reescrever a história tira das
+    listagens, não do alcance de quem já copiou.
 
 ## Como propor mudança
 

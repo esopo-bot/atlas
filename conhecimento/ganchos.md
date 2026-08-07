@@ -168,3 +168,13 @@ DEIXA_PASSAR = [
 ```
 
 Metade dos casos existe para provar que o gancho **não** atrapalha.
+
+### O que não entra num teste
+
+Fixture é onde dado sensível se esconde melhor. Ninguém revisa lista de
+teste procurando informação de casa — ali "é tudo inventado" —, e um nome de
+branch, de ambiente ou de sistema atravessa a revisão sem levantar suspeita,
+porque não parece dado: parece exemplo.
+
+Invente os nomes dos seus testes. O que você digita todo dia é o que menos
+serve — é justamente o que outra pessoa reconheceria.

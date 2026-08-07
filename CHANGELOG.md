@@ -3,6 +3,46 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.54 — 2026-08-07
+
+A camada passa a conferir o que o agente recebe na abertura, o fechamento da
+sessão vira skill, e publicar ganha uma regra.
+
+### Adicionado
+
+- **Gancho `conferir-mcp.py`**, um `SessionStart` que lê o `.mcp.json` e
+  avisa quando um caminho declarado não existe no disco. Servidor MCP que não
+  sobe **não dá erro**: some da lista de ferramentas como se nunca tivesse
+  sido configurado, e a sessão trabalha sem ele sem saber. Carrega o próprio
+  teste (`--testar`): 5 casos que acusa, 6 que cala.
+- **Skill `esfriamento`**: o fechamento da sessão em seis passos — cético na
+  conclusão, análise de promoção, candidato a automação, o que a próxima
+  sessão precisa saber, o atrito visto de dentro e a revisão das regras. Uma
+  linha basta para chamá-la, em vez de colar o roteiro inteiro.
+- **Página [abrir e fechar a sessão](fluxos/abrir-e-fechar-a-sessao.md)**,
+  segunda no menu. Os dois prompts que se repetem todo dia estavam
+  enterrados no meio dos templates; agora têm endereço próprio, e a partida
+  encolheu de dez linhas para três.
+- **Regra 13: publicar exige revisão semântica, não só varredura.** Varredura
+  por padrão acha nome e segredo; jeito de trabalhar e procedência não têm
+  padrão e passam inteiros. Exemplo e caso de teste entram na revisão.
+- **Seção "O que não entra num teste"** em
+  [ganchos](conhecimento/ganchos.md): fixture é onde dado sensível se esconde
+  melhor, porque ali "é tudo inventado" e ninguém revisa.
+
+### Corrigido
+
+- **Gancho com caminho relativo prendia o shell da sessão.** O comando do
+  gancho roda a partir do diretório atual, que anda a cada `cd`; entrado numa
+  subpasta, o gancho some — e num `PreToolUse` de shell o erro passa a vetar
+  todo comando, inclusive o `cd` de volta. Impasse fechado. Os três ganchos
+  passam a ser registrados com `${CLAUDE_PROJECT_DIR}`, e a atualização troca
+  a forma antiga em quem já tinha a camada.
+- **Duas seções novas em [MCP](conhecimento/mcp.md):** por que um servidor
+  some da lista sem avisar, e por que checar arquivo não basta — sonda que
+  fala o protocolo é o único teste que separa "o disco tem bytes" de "a
+  ferramenta funciona". Mais a regra do caminho que atravessa mudança de raiz.
+
 ## 0.46 — 2026-08-06
 
 Branch de longa duração deixa de depender de boa vontade: vira regra e vira
