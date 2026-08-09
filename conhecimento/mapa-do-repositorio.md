@@ -52,7 +52,7 @@ dentro — e os segredos ficam onde estavam.
 O `montar.py --atualizar` traz a versão nova da camada para um repositório que
 já a tem. A fronteira é fixa:
 
-| A camada sobrescreve (edite na origem, não aqui)     | Seu — nunca tocado                        |
+| A camada sobrescreve (edite na origem, não aqui)     | Seu — nunca reescrito                     |
 | ---------------------------------------------------- | ----------------------------------------- |
 | as páginas do guia em `fluxos/` e `conhecimento/`    | `AGENTS.md` e `CLAUDE.md`                 |
 | as skills da camada em `.agents/skills/` e o espelho | suas skills (pastas que a camada não tem) |
@@ -63,6 +63,43 @@ já a tem. A fronteira é fixa:
 Uma armadilha com nome: arquivo **seu** com o **mesmo caminho** de um da
 camada é tratado como da camada — a atualização o sobrescreve. Dê nome próprio
 ao que é seu.
+
+**A única exceção, e ela acrescenta:** se o seu `AGENTS.md` não citar
+`conhecimento/regras-da-camada.md`, a atualização acrescenta três linhas no
+fim dele com esse endereço. Não reescreve nada, não reordena, e não repete as
+regras — só o endereço. O porquê está logo abaixo.
+
+### Os três canais, e nenhum tem as duas propriedades
+
+Toda regra da camada chega por um destes caminhos, e a escolha decide se
+alguém vai lê-la:
+
+| Canal | Chega a quem já montou? | Lido em toda sessão? |
+| --- | --- | --- |
+| Página do guia (`fluxos/`, `conhecimento/`) | **sim** — a atualização reescreve | **não** — só se você abrir |
+| `AGENTS.md` | **não** — a atualização nunca o reescreve | **sim** |
+| Gancho de início de sessão | **sim** | **sim**, onde a ferramenta tiver gancho |
+
+É por isso que o ponteiro acima existe: **quando uma regra manda consultar uma
+fonte, a camada entrega a fonte — não confia que ela será buscada.**
+
+### A parte opcional
+
+Nem tudo da camada serve a todo repositório. O que só vale para quem usa uma
+ferramenta específica vive em **módulo**, e módulo não chega sozinho:
+
+```bash
+python montar.py --modulos          # o que existe, e o que já está aqui
+python montar.py --modulo <nome>    # instala aquele
+```
+
+Sem pedir pelo nome, **nenhum byte** de módulo nenhum chega ao seu
+repositório. E `--atualizar` atualiza o que você já instalou, mas nunca
+instala o que falta — o que você não pediu, você continua sem.
+
+Um módulo pode trazer página no primeiro nível de `conhecimento/` e molde
+**dentro de uma subpasta** — escrito uma vez e nunca mais; o que nascer ali é
+seu. A fronteira do nível é a de sempre, em "Quando criar mais uma pasta".
 
 A versão diz se vale atualizar: todo comando imprime `camada 0.N` (ou pergunte
 com `python montar.py --versao`). Máquina com número menor está atrasada —
@@ -95,10 +132,7 @@ Dois casos de borda, com resposta:
 
 A camada traz um `.markdownlint.jsonc` na raiz, e ele cobra pouco de
 propósito: estrutura do texto, sim; tamanho de linha e alinhamento de tabela,
-não. Os dois foram tirados pelo mesmo motivo — caíam sobre conteúdo que
-ninguém vai reescrever (anotação, perfil gerado, registro de incidente) e o
-alinhamento nem sequer tem conserto automático. **Aviso que ninguém atende
-ensina a ignorar aviso.**
+não — **aviso que ninguém atende ensina a ignorar aviso.**
 
 O editor lê essa régua sozinho. Quer mais disciplina numa pasta sua? Ponha um
 `.markdownlint.jsonc` dentro dela: configuração de pasta vence a da raiz, e a
@@ -130,18 +164,45 @@ gerar perfis.
 | Algo que só o Claude Code entende         | `.claude/`                       |
 | Algo que só o Devin entende               | `.devin/`                        |
 
-Uma pasta de fornecedor guarda só o que é dela. Regra que vale para todo mundo
-mora no `AGENTS.md`, e cada ferramenta a lê de lá.
+### Quando o agente for arrumar
+
+Duas travas, e as duas nasceram de estrago:
+
+- **Sem a citação da regra, não é achado.** Todo "isto está no lugar errado"
+  vem com a linha desta página ou do `AGENTS.md` que decide. Sem isso o agente
+  arruma por gosto — e arrumação por gosto é a que você desfaz na semana
+  seguinte.
+- **Nada se apaga**, nem duplicata, nem arquivo que parece morto. O que está
+  fora do lugar se **move** com `git mv`, que preserva a história; se já
+  existe arquivo no destino, os dois são relatados e a pergunta volta para
+  você. Sessão que "limpa" duplicata escolhe sozinha qual das duas versões era
+  a verdadeira — e escolhe errado na hora que importa.
+
+O pedido pronto, para quando quiser essa arrumação:
+
+```
+Proponha a arrumação das subpastas de conhecimento/ conforme as regras
+desta página. Confira, citando em cada achado o endereço da regra:
+
+- um nível de subpasta, nunca dois — o site para no segundo;
+- LEIAME.md de uma linha em cada subpasta;
+- nome minúsculo, sem acento e sem espaço;
+- o primeiro nível de conhecimento/ continua curto;
+- pasta de um arquivo só — cobra pedágio e não paga;
+- página sem link de entrada;
+- o que é da casa e deveria estar na camada, e o contrário.
+
+PROPONHA: de → para → a regra que manda. Nada se apaga, e nada se move
+sem meu OK. Sem a citação da regra, não é achado.
+```
 
 ### Quando criar mais uma pasta
 
 Três condições, juntas: o material **já** cansa a leitura (pasta por
 antecipação, com um arquivo só, cobra pedágio e não paga nada); nenhuma pasta
-existente serviria; e o primeiro nível continua curto. O número que decide não
-é gosto — em navegação medida, cada nível a mais custa cerca de vinte vezes o
-que custa um item a mais na mesma pasta, então **uma pasta só se paga quando
-tira mais de umas vinte coisas do nível de cima**. Largo e raso acha mais
-rápido que fundo e estreito.
+existente serviria; e o primeiro nível continua curto. A régua que usamos:
+**uma pasta só se paga quando tira mais de umas vinte coisas do nível de
+cima**. Largo e raso acha mais rápido que fundo e estreito.
 
 E o que faz achar depois não é a arrumação: é o **índice**. Cada subpasta
 nasce com um `LEIAME.md` de uma linha dizendo o que mora ali — sem isso, em
@@ -172,8 +233,7 @@ dentro da documentação.
 
 E os arquivos `.md` são lidos como markdown comum, não como MDX. É o que
 permite conteúdo gerado e nota pessoal escreverem `<coisa/assim>` no meio do
-texto sem derrubar a construção — o erro que isso dava não dizia onde
-consertar. Quem precisar de componente escreve `.mdx`.
+texto sem derrubar a construção. Quem precisar de componente escreve `.mdx`.
 
 ## Onde abrir o agente
 
@@ -202,6 +262,29 @@ Trabalhe em <pasta do projeto>.
 ```
 
 Assim você tem as duas coisas: tudo carregado e o foco no lugar certo.
+
+### Como saber o que o agente de fato carregou
+
+A falha acima é silenciosa, então a pergunta "chegou?" precisa de resposta
+medida. Peça o diagnóstico em **duas partes, nesta ordem** — a ordem é o que
+faz a medição valer:
+
+```
+PARTE 1 — SEM ABRIR ARQUIVO NENHUM. Só do que já está carregado agora:
+que instruções você recebeu (cite uma frase literal de cada arquivo de
+regra), que skills você enxerga, que servidores MCP estão ligados, que
+ganchos e subagentes existem para você. Não consegue medir algo? Diga
+"não consigo medir" — não estime.
+
+PARTE 2 — agora pode ler o disco. O que existe em .agents/skills/,
+.claude/ e .devin/ que NÃO apareceu na Parte 1? Cada item é uma peça que
+o repositório tem e você não recebeu.
+```
+
+**`SEM ABRIR ARQUIVO NENHUM` é a linha que segura.** Com leitura liberada o
+agente abre o disco e responde certo sobre o que nunca carregou — o falso
+positivo que faz a camada parecer instalada quando não está. A Parte 2 existe
+só para medir a distância entre as duas respostas.
 
 ## Vários repositórios na mesma pasta
 

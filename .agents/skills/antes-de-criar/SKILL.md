@@ -5,9 +5,8 @@ description: Antes de criar serviço, helper, contrato, componente ou funcionali
 
 # Antes de criar
 
-O comportamento natural de um agente é duplicar: criar de novo o que já existe
-num repositório vizinho. Esta skill troca esse padrão por procurar → citar →
-só então criar.
+O padrão natural do agente é duplicar o que já existe num repositório
+vizinho. Esta skill o troca por procurar → citar → só então criar.
 
 ## O fluxo
 

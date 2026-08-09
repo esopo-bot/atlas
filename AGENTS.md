@@ -10,10 +10,15 @@ de IA. Todo o conteúdo é genérico e reutilizável por qualquer pessoa.
 
 **As pastas de conteúdo são `fluxos/`, `conhecimento/` e `.agents/skills/`** —
 nessa ordem: processo passo a passo, técnica e ferramenta, e skill que roda de
-verdade. O mapa completo — o que existe, o que a atualização sobrescreve e onde
-escrever cada coisa — está em `conhecimento/mapa-do-repositorio.md`. Este
-arquivo é o centro neutro; `.claude/` e `.devin/` são adaptadores de
-ferramenta.
+verdade. O que mora nelas viaja para todo repositório que montar a camada. O
+mapa completo — o que existe, o que a atualização sobrescreve e onde escrever
+cada coisa — está em `conhecimento/mapa-do-repositorio.md`. Este arquivo é o
+centro neutro; `.claude/` e `.devin/` são adaptadores de ferramenta.
+
+**`modulos/` é a parte opcional, e ela não viaja.** Cada subpasta é um módulo
+que só chega onde alguém o pedir por nome. Conteúdo que serve a uma ferramenta
+específica — e que seria peso morto para quem não a usa — nasce ali, nunca nas
+três pastas acima. Como se escreve um está no `modulos/LEIAME.md`.
 
 **Editou página ou skill? Rode `python montar.py --sincronizar`.** Ele embute
 a cópia nova dentro do script e sobe a versão da camada. Sem isso, quem montar
@@ -41,5 +46,9 @@ está no `README.md`.
 
 - Conteúdo e comunicação em pt-BR.
 - Conclusão primeiro, frases curtas, uma ideia por frase, sem jargão.
-- Cada pasta de conteúdo nasce com um `LEIAME.md` de uma linha dizendo o que
-  entra ali.
+
+## As regras desta camada
+
+A lista numerada está em `conhecimento/regras-da-camada.md`. Leia antes de
+propor procedimento, de mexer em branch de longa duração e de tocar em
+configuração de esteira.

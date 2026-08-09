@@ -21,35 +21,13 @@ disso é da skill.** É da casa, muda de casa para casa, e chutar é o começo d
 trabalho errado.
 
 1. **Procure o perfil** do repositório em `conhecimento/projetos/`. Já tem o
-   bloco abaixo preenchido? Siga e não pergunte nada.
+   bloco "Trabalho por issue" preenchido? Siga e não pergunte nada.
 2. **Não tem?** Pergunte **de uma vez só**, numa mensagem — e grave a resposta
    no perfil antes de continuar. Pergunta em conta-gotas ao longo da sessão
    custa caro; perguntar de novo amanhã é sinal de que ninguém gravou.
 
-O bloco que vai no perfil. Os nomes são os que a casa usa, nunca os que a
-skill imagina:
-
-```markdown
-## Trabalho por issue
-
-- **Issues moram em:** <repositório, projeto ou sistema>
-- **Quadro de acompanhamento:** <como a casa o chama, e onde ele fica>
-- **Estados do quadro, na ordem:** <os nomes de lá>
-- **Rótulos que importam:** <quais, e o que cada um significa aqui>
-- **Etapas de verificação:** <como a casa chama cada uma, e o que prova cada>
-- **Branch onde a sessão trabalha:** <o padrão do nome, e de qual branch nasce>
-- **Branch de entrega, e o que o nome dela aciona:** <esteira? implantação?
-  aviso a outras pessoas?>
-- **A sessão pode empurrar:** <o que sim, e o que só o dono empurra>
-- **Branches protegidas** — não apagar, não renomear, não forçar, não
-  reescrever: <os nomes das de longa duração. Na dúvida, é protegida.>
-- **Quem encerra a issue:** <o papel, nunca o nome de uma pessoa>
-- **Onde moram os procedimentos:** <a documentação de como se sobe, publica e
-  libera acesso — é aqui que se procura antes de inventar passo>
-```
-
-A última linha é a que mais rende: gravada uma vez, ela faz a próxima sessão
-achar a receita em vez de improvisar uma.
+O bloco que vai no perfil — os nomes da casa, nunca os que a skill imagina —
+está em `references/moldes.md`; abra só ao preencher pela primeira vez.
 
 ## A ferramenta
 
@@ -68,31 +46,7 @@ Uma história, uma issue. As tarefas moram **dentro** dela, como critérios. Um
 pedaço que outra pessoa tocaria sozinha e que não cabe aqui vira **outra
 issue**, ligada por link no corpo — link, nunca sub-issue.
 
-```markdown
-## Objetivo
-<uma frase: o que muda no mundo quando isto fechar>
-
-## Escopo
-Dentro: <lista curta>
-Fora: <o que esta issue explicitamente não resolve>
-
-## Critério de aceitação
-- [ ] <verificável por comando ou observação — nunca por opinião>
-- [ ] <...>
-
-## Onde mexer
-<caminhos e módulos. "Ainda desconhecido" é resposta válida e útil.>
-
-## Estado
-Fase: investigar | implementar | verificar
-Feito: <...>
-Parcial: <o que está pela metade, e onde parou>
-Falta: <...>
-Decisões: <uma linha cada, com link para o comentário que decidiu>
-
-## Ponto de retomada
-<o bloco da seção "Virar a sessão", reescrito a cada virada>
-```
+O molde do corpo da issue está em `references/moldes.md`; abra ao criar.
 
 ### As três recusas
 
@@ -108,16 +62,9 @@ Não abra a issue — devolva a pergunta — quando faltar qualquer uma:
 ### O que é critério verificável
 
 Um critério é verificável quando **outra pessoa, sozinha, chega ao mesmo
-veredito**. O teste: ele começa pelo instrumento ou pelo adjetivo?
-
-| Não serve                       | Serve                                                       |
-| ------------------------------- | ------------------------------------------------------------ |
-| "o login está funcionando bem"  | "`<comando de teste>` passa, incluindo o caso de senha errada" |
-| "o código foi revisado"         | "a revisão apontou N achados e todos estão resolvidos ou respondidos" |
-| "ficou mais rápido"             | "a mesma chamada, medida do mesmo jeito, cai de X para menos de Y" |
-| "documentado"                   | "a página `<caminho>` existe e um estranho executa o passo a passo dela" |
-
-Critério bom cabe numa linha e não precisa de você para ser lido.
+veredito**. O teste: ele começa pelo instrumento ou pelo adjetivo? Critério
+bom cabe numa linha e não precisa de você para ser lido. A tabela de
+exemplos — o que serve e o que não serve — está em `references/moldes.md`.
 
 ## O que vai em comentário — e o que não vai
 
@@ -161,10 +108,9 @@ uma vez.
 
 ## Sincronizar não é entregar
 
-A branch onde a sessão trabalha existe para o trabalho não se perder — vai
-para o remoto quantas vezes for preciso, se a casa autorizou. A branch de
-**entrega** é outra coisa: o nome dela costuma ser gatilho de automação, e
-criá-la ou empurrá-la **é o ato de entregar**, não de salvar.
+O título é a **regra 9**: sincronizar a branch de trabalho é livre onde a
+casa autorizou; empurrar a de **entrega** é o ato de entregar. Texto e
+motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 
 - **A promoção é um passo explícito**, depois dos critérios provados — nunca
   efeito colateral de salvar o trabalho do dia.
@@ -172,9 +118,9 @@ criá-la ou empurrá-la **é o ato de entregar**, não de salvar.
   estão lá? Pergunte, e grave a resposta — é a regra 11.
 - **Na dúvida sobre o que pode ser empurrado, não empurre.** Push que aciona
   automação acorda gente e gasta esteira; desfazer é caro e público.
-- **A branch de trabalho é a única que a sessão cria e apaga.** As de longa
-  duração e a configuração da esteira são de outras pessoas — regra 12. Elas
-  não entram na limpeza de fim de trabalho, por mais órfãs que pareçam.
+- **A branch de trabalho é a única que a sessão cria e apaga** — regra 12. As
+  de longa duração não entram na limpeza de fim de trabalho, por mais órfãs
+  que pareçam.
 
 ## Rodada de verificação: recibo, não relato
 
@@ -228,7 +174,6 @@ escolhida. Chamada de rede em rajada é o que derruba limite de taxa.
 
 ## Fechar
 
-Feche com motivo explícito (resolvido ou descartado) e pode o corpo: o que
-virou obsoleto sai de lá e continua vivo no comentário. E antes de dar por
-encerrado, o que a issue ensinou e vale para o próximo trabalho sai dela —
-issue fechada é arquivo morto; lição é conhecimento e fica.
+Feche com motivo explícito (resolvido ou descartado) e pode o corpo — o
+obsoleto continua vivo no comentário. A lição que vale adiante sai para
+`conhecimento/`; o porquê do corte está em `fluxos/historia-em-issue.md`.

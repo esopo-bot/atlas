@@ -18,9 +18,7 @@ na skill `trabalho-por-issue`**, que roda de verdade. Um fato, uma casa.
 
 ## Por que sem hierarquia
 
-As tarefas moram dentro da issue, como critérios de aceitação. Um pedaço
-grande demais para caber vira **outra issue**, ligada por link — link, não
-sub-issue.
+A regra — critério dentro, link em vez de sub-issue — mora na skill. O porquê:
 
 Hierarquia só se paga quando outra sessão pega o pedaço sozinha, e mesmo aí
 custa peça a mais para desatualizar. Duas issues ligadas por link envelhecem

@@ -1,14 +1,14 @@
 # As regras da camada
 
-A lista numerada do que não muda sem decisão do dono. As sessões leem esta
-página no fechamento e podem propor mudanças — citando o número, o texto novo
-e o porquê. **Proponha; não aplique**: quem decide é o dono do repositório.
+A lista numerada do que não muda sem decisão do dono. **Proponha; não
+aplique**: o protocolo de proposta está no fim da página.
 
 1. **Abra a sessão na raiz** — a pasta que tem o `AGENTS.md`. O que decide é
    **onde você abre**, não onde o arquivo mora: aberta numa subpasta, a
    sessão não enxerga as skills da raiz, e nada avisa.
 2. **Só é pronto o que um instrumento provou.** Build, teste, listagem — "o
-   modelo disse" não é prova.
+   modelo disse" não é prova, e saída colada de outra sessão é citação,
+   não prova.
 3. **Antes de criar, procure e cite.** O que o conjunto já oferece não se
    reimplementa; aplicação nova imita a irmã mais parecida.
 4. **A memória mora no disco, não no contexto.** O que vale amanhã se escreve
@@ -26,23 +26,24 @@ e o porquê. **Proponha; não aplique**: quem decide é o dono do repositório.
    é de cada repositório e se grava no perfil dele; sem registro, a sessão
    não empurra nada. O que **aciona automação** (esteira, implantação, aviso
    a outras pessoas) é sempre do dono, mesmo onde o resto é liberado:
-   **sincronizar não é entregar.** Decisão dele vira pergunta com
-   recomendação; o agente prepara e executa o não-destrutivo.
+   **sincronizar não é entregar.** Decisão dele vira pergunta — uma por
+   vez, com a recomendação primeiro; o agente prepara e executa o
+   não-destrutivo.
 10. **Texto na régua.** Markdown validado, conclusão primeiro, frases curtas,
     pt-BR.
 11. **Não invente passo onde já existe receita.** Antes de propor como se faz
     algo que a casa já faz — subir uma peça de infraestrutura, publicar, abrir
     acesso —, procure o procedimento na documentação dela e cite de onde saiu
-    cada passo. Não achou? **Peça o endereço**, não improvise. É a irmã da
-    regra 3: uma cobre código, esta cobre procedimento. O motivo é o mesmo —
-    esteira improvisada parece pronta, e quebra longe de onde nasceu.
+    cada passo. Não achou? **Peça o endereço**, não improvise: esteira
+    improvisada parece pronta, e quebra longe de onde nasceu.
 12. **Branch de longa duração e configuração de esteira não se tocam.** As
     branches que a casa mantém — integração, homologação, produção, quaisquer
     que sejam os nomes — não se apagam, não se renomeiam, não recebem push
     forçado e não têm a história reescrita; e a configuração da automação não
     se altera de passagem. As duas são infraestrutura de outras pessoas:
-    desfazer é público, caro, e às vezes impossível. Os nomes estão no perfil
-    do repositório — e **na dúvida se uma branch é dessas, ela é.**
+    desfazer é público, caro, e às vezes impossível. Os nomes estão em
+    `.claude/branches-protegidas.txt` — e **na dúvida se uma branch é
+    dessas, ela é.**
 13. **Publicar exige revisão semântica, não só varredura.** Antes de tornar
     algo público, releia exemplo, fixture e caso de teste perguntando *um
     colega reconheceria a casa nisto?*, e releia o texto perguntando *isto

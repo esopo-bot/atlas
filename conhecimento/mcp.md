@@ -27,7 +27,7 @@ conversão de formato, o parâmetro que sempre esquecem. Uma vez é tarefa; a
 partir da segunda, é candidato; quando você já perdeu tempo com a mesma
 pegadinha duas vezes, o servidor se paga.
 
-Dois cuidados que vêm da experiência de errar:
+Dois cuidados de desenho:
 
 - **Parâmetro que causa erro silencioso vira obrigatório.** Se esquecer o
   ambiente ou a região devolve vazio em vez de erro, o servidor não deve
@@ -43,23 +43,15 @@ Dois cuidados que vêm da experiência de errar:
 | Remoto (HTTP)    | na máquina de quem oferece      | a URL                |
 | Local (processo) | no seu disco, o agente o inicia | o comando que o sobe |
 
-Servidor remoto é da outra pessoa: você aponta a URL e pronto — nada para
-instalar, nada para manter. Servidor local é um programa seu: o agente o inicia
-quando a sessão abre, e ele morre com ela.
-
 ## Onde declarar
 
-| Arquivo                                 | Vale para                 | Entra no git?      |
-| --------------------------------------- | ------------------------- | ------------------ |
-| `.mcp.json` na raiz do projeto          | quem clonar o repositório | sim                |
-| `~/.claude.json` (do usuário)           | você, em qualquer projeto | não — é da máquina |
-| `~/.claude.json`, na entrada do projeto | você, só neste projeto    | não                |
-
-A escolha é uma pergunta só: **quem mais deve receber esse plugue?** Todo mundo
-que clona — projeto. Só você, em todo lugar — usuário. Só você, só aqui — o
-escopo local, que a ferramenta guarda na entrada do projeto dentro do mesmo
-arquivo do usuário. Os dois últimos não se editam à mão: nascem pelo comando da
-ferramenta — no Claude Code, `claude mcp add`.
+A mecânica — tipos de servidor, os três escopos, `claude mcp add` — está na
+[doc oficial de MCP do Claude Code](https://docs.claude.com/en/docs/claude-code/mcp).
+A síntese: `.mcp.json` na raiz vale para quem clonar o repositório e entra no
+git; os escopos de usuário e local são da máquina e não se editam à mão —
+nascem pelo comando da ferramenta. A escolha é uma pergunta só: **quem mais
+deve receber esse plugue?** Todo mundo que clona — projeto. Só você —
+usuário ou local.
 
 ### A declaração é de cada ferramenta; só o programa é neutro
 
@@ -71,36 +63,38 @@ mesma raiz, listou **zero servidores e zero ferramentas**.
 
 Daí a divisão que a camada faz. O **programa** do servidor é neutro e mora em
 `.agents/mcp/<nome>/`, onde qualquer ferramenta o alcança. A **declaração**
-não viaja: repete-se na configuração de cada ferramenta que você usa. Ligou um
-servidor e outro agente não o vê? Confira a declaração dele naquela
-ferramenta antes de investigar o servidor.
+não viaja: repete-se na configuração de cada ferramenta que você usa,
+apontando o caminho relativo do programa:
+
+```json
+{
+  "mcpServers": {
+    "meu-servico": {
+      "command": "python",
+      "args": [".agents/mcp/meu-servico/servidor.py"]
+    }
+  }
+}
+```
+
+Assim servidor e declaração viajam juntos no git do workspace — quem clona
+recebe os dois prontos. O que nunca viaja é o token: cada máquina põe o seu
+no `.credenciais/mcp.env` (seção abaixo). Ligou um servidor e outro agente
+não o vê? Confira a declaração dele naquela ferramenta antes de investigar
+o servidor.
 
 #### A declaração da outra ferramenta se cria pelo comando dela
 
-Nunca à mão, e nunca gerada a partir do arquivo da primeira. O motivo é
-medido: **a documentação e o programa instalado discordam.** A doc oficial do
-Devin CLI manda declarar MCP num arquivo próprio (`.devin/mcp_config.json`);
-o `devin mcp add` rodado numa máquina escreveu a seção `mcpServers` dentro do
-`.devin/config.json` — o formato que a doc já dava por substituído.
-
-Quem tivesse gerado o arquivo pela doc teria acertado a doc e errado a
-máquina. E erraria em silêncio, do jeito da seção seguinte: declaração no
-lugar que ninguém lê é servidor que nunca existiu.
-
-Daí a regra chata que envelhece melhor: **cada ferramenta declara pelo
-comando dela**, e o escopo se escolhe por bandeira, não por caminho de
-arquivo. O arquivo é detalhe de implementação da ferramenta; o comando é o
-contrato.
+Nunca à mão, e nunca gerada a partir do arquivo da primeira. Motivo medido:
+a doc e o programa instalado do Devin CLI discordam de arquivo e de formato
+(história no `CHANGELOG.md`) — o arquivo é detalhe de implementação; **o
+comando é o contrato**, e o escopo se escolhe por bandeira. Pelo mesmo
+motivo, o `--sincronizar` espelha skills e não gera declaração de MCP.
 
 | Ferramenta  | Registra com     | Confere com       |
 | ----------- | ---------------- | ----------------- |
 | Claude Code | `claude mcp add` | `claude mcp list` |
 | Devin CLI   | `devin mcp add`  | `devin mcp list`  |
-
-É também por isso que a camada não gera a segunda declaração no
-`--sincronizar`, embora espelhe skills. Skill é texto nosso num caminho que
-escolhemos; declaração de MCP é formato da outra ferramenta, e ele já mudou
-de arquivo uma vez.
 
 ## Quando o servidor some da lista
 
@@ -145,27 +139,6 @@ cabeçalho, script apontado por declaração. A regra que evita:
   abertura, um teste, qualquer instrumento que transforme o silêncio em
   aviso.
 
-## Onde mora o programa do servidor local
-
-O código de um servidor local é neutro — qualquer agente o usa. Por isso mora
-com as coisas neutras da camada: `.agents/mcp/<nome-do-servidor>/`. A
-declaração aponta o caminho relativo:
-
-```json
-{
-  "mcpServers": {
-    "meu-servico": {
-      "command": "python",
-      "args": [".agents/mcp/meu-servico/servidor.py"]
-    }
-  }
-}
-```
-
-Assim servidor e declaração viajam juntos no git do workspace — quem clona
-recebe os dois prontos. O que nunca viaja é o token: cada máquina põe o seu
-no `.credenciais/mcp.env` (seção abaixo).
-
 ## A regra do token
 
 O `.mcp.json` aceita `${VARIAVEL}`: o valor vem da variável de ambiente na hora
@@ -194,22 +167,11 @@ moram em `.credenciais/mcp.env` (`NOME=valor`, um por linha) e
 usuário — mostrando só os nomes, nunca os valores. Trocou um token: edite o
 `mcp.env` e rode o publicador de novo.
 
-## A cortesia das requisições
-
-Servidor MCP e API respondem melhor a quem pede pouco. Proxies e limites de
-taxa derrubam quem abusa — o sintoma é `403`/`429` depois de uma rajada de
-chamadas.
-
-- **Só chame a rede se a tarefa exigir.** Antes, pergunte se o dado já está
-  no disco: a wiki, o índice, o clone local.
-- **Espace as chamadas.** Rajada de dezenas de requisições seguidas é o que
-  o bloqueio caça. Em trabalho grande, pause entre uma chamada e outra.
-- **Recue no primeiro `403`/`429`.** Não insista no ritmo que causou o
-  bloqueio: espere, reduza o volume — e se persistir, avise o dono em vez de
-  tentar de novo em rajada.
-
 ## O custo que ninguém declara
 
 Cada servidor ligado descreve as suas ferramentas ao agente, e essa descrição
 ocupa contexto da sessão inteira — usando ou não. Ligue o que resolve um
 problema que você tem hoje; desligue o que ficou de enfeite.
+
+E a rede cobra o dela: chamar só quando a tarefa exigir, espaçar, recuar no
+`403`/`429` é a regra 7 — [as regras da camada](regras-da-camada.md).

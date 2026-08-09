@@ -47,26 +47,61 @@ function subpastasDaCasa() {
     .filter(Boolean);
 }
 
+// Página de primeiro nível que a lista escrita à mão não cita.
+//
+// Acontece com módulo opcional: ele instala uma página que só existe onde
+// alguém o pediu, e por isso ela NÃO pode ganhar linha fixa aqui — a linha
+// derrubaria a construção de todo repositório que não instalou o módulo.
+//
+// Sem esta descoberta a página vira órfã, e órfã é o pior dos dois mundos:
+// medido, a rota é gerada e nenhum menu leva até ela. Ela cobra contexto de
+// toda sessão e não entrega a nenhuma.
+function paginasNaoCitadas(citadas) {
+  const conhecidas = new Set(citadas);
+  return ['fluxos', 'conhecimento']
+    .flatMap((pasta) => {
+      const dir = path.join(raiz, pasta);
+      if (!fs.existsSync(dir)) return [];
+      return fs
+        .readdirSync(dir, { withFileTypes: true })
+        .filter((e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'LEIAME.md')
+        .map((e) => `${pasta}/${e.name.slice(0, -3)}`);
+    })
+    .filter((id) => !conhecidas.has(id))
+    .sort(); // ordem estável: o menu não dança entre construções
+}
+
+// A ordem é de leitura, não de assunto: o que se usa todo dia primeiro, o
+// que se consulta depois, e a placa por último. O canivete subiu para o
+// terceiro lugar de propósito — ele é o que evita reescrever o que já existe,
+// e página que resolve isso no fim da lista chega tarde demais.
 const daCamada = [
   'conhecimento/comece-aqui',
   'fluxos/abrir-e-fechar-a-sessao',
+  'conhecimento/skills-da-camada',
   'conhecimento/regras-da-camada',
   'conhecimento/mapa-do-repositorio',
-  'fluxos/templates',
   'fluxos/investigacao-de-incidente',
-  'fluxos/historia-em-issue',
   'conhecimento/zero-que-mente',
-  'conhecimento/skills-da-camada',
+  'fluxos/historia-em-issue',
   'conhecimento/skills-criar-e-testar',
   'conhecimento/ganchos',
   'conhecimento/plugins-oficiais-do-claude-code',
   'conhecimento/mcp',
   'conhecimento/subagentes',
+  // Placa: só existe para não quebrar link antigo. Fica no fim porque não é
+  // caminho de leitura — e não sai do menu porque, fora dele, quem procura
+  // "templates" não acha nem a placa.
+  'fluxos/templates',
 ];
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
-  documentacao: [...daCamada, ...subpastasDaCasa()],
+  documentacao: [
+    ...daCamada,
+    ...paginasNaoCitadas(daCamada),
+    ...subpastasDaCasa(),
+  ],
 };
 
 export default sidebars;

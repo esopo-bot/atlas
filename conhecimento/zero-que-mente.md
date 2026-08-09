@@ -15,11 +15,11 @@ ignorou nada.
 Medido num workspace com `projetos/` ignorado, procurando um termo presente
 em dezenas de arquivos:
 
-| Onde se busca                       | Resultado |
-| ----------------------------------- | --------- |
-| da raiz                             | **zero**  |
-| dentro do repositório               | acha      |
-| da raiz, com a trava desligada      | acha      |
+| Onde se busca                                  | Resultado |
+| ---------------------------------------------- | --------- |
+| da raiz                                        | **zero**  |
+| dentro do repositório                          | acha      |
+| da raiz, com a trava desligada (`--no-ignore`) | acha      |
 
 Três hábitos que resolvem:
 
@@ -105,10 +105,9 @@ Procurar um item de menu no HTML de um site estático dá falso negativo: o que
 está dentro de componente colapsado — categoria, acordeão, aba — não nasce no
 HTML, nasce no navegador quando alguém expande.
 
-Medido num site de documentação com uma categoria de nove páginas: o **rótulo
-da categoria** aparece no HTML; os **itens dentro dela**, não; e a rota de
-cada item existe e responde. Ou seja, a página está publicada e a busca diz
-que não.
+Medido num site de documentação: o **rótulo da categoria** aparece no HTML;
+os **itens dentro dela**, não; e a rota de cada item existe e responde. Ou
+seja, a página está publicada e a busca diz que não.
 
 Busca em texto prova que a **rota** não foi gerada; nunca prova que o item
 não está no menu. Presença em interface se prova com clique: sirva o

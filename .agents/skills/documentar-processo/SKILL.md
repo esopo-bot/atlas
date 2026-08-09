@@ -5,39 +5,15 @@ description: Documenta um processo para outras pessoas - lê a fonte junto com v
 
 # Documentar um processo
 
-Processo que muda o tempo todo não se guarda na cabeça — e documentação que
-ninguém consegue seguir é pior que nenhuma. Esta skill transforma uma leitura
-acompanhada numa página que outra pessoa executa sozinha.
+Documentação que ninguém consegue seguir é pior que nenhuma.
 
 ## 1. Onde isto vai ser publicado
 
 Antes de escrever, saiba a casa. Se já existe o **perfil do repositório de
-documentação** (em `conhecimento/projetos/`), leia e siga. Se não existe,
-pergunte qual é o repositório e analise-o **uma vez**, gravando o perfil:
-
-```markdown
-# <nome do repositório de documentação>
-
-Atualizado em <data>, commit <sha>. Perfil — o repositório é a verdade.
-
-## Onde cada coisa mora
-<pastas por assunto; onde entra procedimento, onde entra referência>
-
-## Como uma página nasce
-<formato do arquivo, frontmatter, se o menu é automático ou escrito à mão,
-onde ficam as imagens, como se publica — ramo, revisão, quem aprova>
-
-## O padrão da casa
-<tom, tamanho, o que toda página tem: pré-requisitos? tempo estimado?
-seções fixas? Copie o vocabulário de duas páginas boas que já existem.>
-
-## Armadilhas
-<o que costuma derrubar a publicação: link relativo, imagem grande, nome de
-arquivo com acento, revisão obrigatória>
-```
-
-Perfil gravado, as próximas vezes começam daqui — reanalisar todo dia é
-desperdício.
+documentação** (em `conhecimento/projetos/`), leia e siga. Não existe?
+Pergunte qual é o repositório, analise-o **uma vez** e grave o perfil no
+molde de `references/molde-perfil-docs.md`. Perfil gravado, as próximas
+vezes começam daqui — reanalisar todo dia é desperdício.
 
 ## 2. Já existe página sobre isto?
 
@@ -81,9 +57,8 @@ fonte, não na lembrança de alguém:
 
 - Confira no repositório correspondente, com **busca dirigida e barata** —
   duas ou três âncoras, não varredura.
-- **Rode o cético** (skill `cetico`) antes de publicar: separe o que você
-  verificou do que lhe contaram, e diga na própria página o que ficou sem
-  conferir.
+- **Rode o cético** (skill `cetico`) antes de publicar — e diga na própria
+  página o que ficou sem conferir.
 
 ## 6. Documentação que não bate mais
 

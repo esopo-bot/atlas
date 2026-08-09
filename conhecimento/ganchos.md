@@ -93,9 +93,7 @@ shell entra numa subpasta; num `PreToolUse` de shell, o erro passa a vetar
 comando que sairia da subpasta é justamente o que o gancho recusa. O
 conserto é o `${CLAUDE_PROJECT_DIR}` do exemplo acima, e a camada já
 registra assim. A saída de emergência, se acontecer: as ferramentas de
-arquivo não passam por esse gancho — corrija o `settings.json` por elas. Em
-um dos testes a configuração recarregou sozinha no meio da sessão e
-destravou; não conte com isso em toda ferramenta.
+arquivo não passam por esse gancho — corrija o `settings.json` por elas.
 
 **Passagem é silêncio.** Emitir `permissionDecision: "defer"` no caminho de
 passagem mata a chamada de ferramenta dentro de um subagente. Para deixar
@@ -127,25 +125,18 @@ subir, não existe proteção nenhuma. Por isso a regra de texto continua no
 | `conferir-mcp.py`            | `SessionStart` | acusa declaração de MCP apontando para arquivo que não existe |
 | `vetar-branch-protegida.py`  | `PreToolUse`   | recusa apagar, renomear e forçar branch de longa duração |
 
-O `conferir-mcp.py` existe porque servidor MCP com caminho morto não sobe e
-não avisa — some da lista de ferramentas em silêncio. O detalhe está na
-página de MCP. Ele carrega o próprio teste:
-`python .claude/hooks/conferir-mcp.py --testar`.
+O porquê do `conferir-mcp.py` está na [página de MCP](mcp.md). Ele carrega o
+próprio teste: `python .claude/hooks/conferir-mcp.py --testar`.
 
 O veto de branch é a regra 12 virando trava. Os nomes protegidos vêm de
 `.claude/branches-protegidas.txt` — um por linha, **e esse arquivo é seu**: a
-atualização traz o conserto do código e nunca reescreve a sua lista.
-
-Ele carrega o próprio teste:
-
-```bash
-python .claude/hooks/vetar-branch-protegida.py --testar
-```
+atualização traz o conserto do código e nunca reescreve a sua lista. Ele
+carrega o próprio teste:
+`python .claude/hooks/vetar-branch-protegida.py --testar`.
 
 E tem um limite declarado: **push normal para branch protegida passa.** Quem
 decide isso é a regra 9 e o perfil do repositório. O gancho cuida do
-destrutivo — apagar, renomear, reescrever — porque veto largo demais é
-desligado na primeira semana.
+destrutivo — apagar, renomear, reescrever.
 
 ## Todo gancho nasce com teste
 
@@ -171,10 +162,7 @@ Metade dos casos existe para provar que o gancho **não** atrapalha.
 
 ### O que não entra num teste
 
-Fixture é onde dado sensível se esconde melhor. Ninguém revisa lista de
-teste procurando informação de casa — ali "é tudo inventado" —, e um nome de
-branch, de ambiente ou de sistema atravessa a revisão sem levantar suspeita,
-porque não parece dado: parece exemplo.
-
-Invente os nomes dos seus testes. O que você digita todo dia é o que menos
-serve — é justamente o que outra pessoa reconheceria.
+Fixture é onde dado sensível se esconde melhor — é a regra 13, em
+[as regras da camada](regras-da-camada.md). Invente os nomes dos seus
+testes. O que você digita todo dia é o que menos serve — é justamente o que
+outra pessoa reconheceria.

@@ -25,24 +25,9 @@ repositório e um mapa do conjunto, em `conhecimento/projetos/`. Ela é
 ## O índice
 
 `conhecimento/projetos/indice.json` — estado para máquina; prosa fica nos
-perfis. O template atual é a versão 2. Uma entrada por repositório:
-
-```json
-{
-  "versao_do_template": 2,
-  "repositorios": {
-    "nome-do-repo": {
-      "sha_indexado": "a1b2c3d",
-      "data": "2026-08-05",
-      "tipo": "infraestrutura",
-      "tipo_declarado_pelo_dono": false,
-      "arquivos_chave": ["README.md", "variables.tf", "outputs.tf"],
-      "versao_do_template": 2,
-      "pendente": false
-    }
-  }
-}
-```
+perfis. Índice não existe, ou `versao_do_template` antiga? Leia
+`references/indice.md` para o template atual e crie ou migre. Nas rodadas
+normais, o que se lê é o `indice.json` real do disco.
 
 ## A rodada, passo a passo
 
@@ -52,7 +37,8 @@ perfis. O template atual é a versão 2. Uma entrada por repositório:
    - SHA igual e `versao_do_template` atual → **pula**.
    - SHA mudou, mas `git -C <repo> diff --name-only <sha_indexado>..HEAD --
      <arquivos_chave>` vem vazio → **leve**: atualize SHA e data no índice;
-     perfil intocado. Leve não conta no teto.
+     perfil intocado (mudança só em CHANGELOG ou `.github/` cai aqui). Leve
+     não conta no teto.
    - Diff toca arquivo-chave, repositório novo, ou `versao_do_template`
      antiga → **perfilar** (conta no teto de 3).
 3. **Relate a triagem antes de varrer** — "N em dia, N leves, N a perfilar,
@@ -82,12 +68,10 @@ perfis. O template atual é a versão 2. Uma entrada por repositório:
   perfil sairia sem o trabalho dos outros. Antes de perfilar um repositório
   **do lote**, atualize a branch principal dele
   (`git -C <repo> pull --ff-only`), um de cada vez. Fora do lote, nada de
-  fetch: rajada de rede na frota inteira é o que proxy bloqueia (403). Rede
-  falhou? Perfile o clone como está e registre `"clone_atras": true` na
-  entrada do índice.
+  fetch — regra 7 da camada: sem rajada de rede. Rede falhou? Perfile o
+  clone como está e registre `"clone_atras": true` na entrada do índice.
 - O sinal de mudança é **o SHA do git** — nunca data, mtime ou hash próprio.
 - Estado se guarda no JSON; markdown nunca gera estado.
-- Não re-perfile por mudança irrelevante (CHANGELOG, `.github/`).
 - Conteúdo da wiki é privado do workspace. Nunca vai para repositório
   público, nem em exemplo.
 

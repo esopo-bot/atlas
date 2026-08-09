@@ -3,6 +3,282 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.65 — 2026-08-09
+
+O pacote de cortes da auditoria. A camada faz o mesmo custando menos.
+(A 0.64 foi um sincronizar intermediário desta mesma leva, sem commit.)
+
+### Mudado
+
+- **O custo fixo por sessão caiu de 81 para 74 linhas.** A `qualidade`
+  encolheu de 30 para 20 (o corpo injetado, de 25 para 16) sem perder
+  decisão. O `AGENTS.md` do atlas ganhou o ponteiro para a lista de
+  regras — a segunda porta que a 0.62 deu aos destinos e esqueceu na
+  origem — e pagou parte do acréscimo cortando o que o mapa e o LEIAME
+  de módulos já entregam.
+- **O guia caiu de 1521 para 1439 linhas**, já contando as seções novas
+  da 0.63: `mcp.md` −38 (a cortesia de rede tem casa na regra 7; o que
+  reescrevia doc oficial virou endereço + síntese), `ganchos.md` −12,
+  mapa −14, `comece-aqui` e fluxos enxutos. O prompt da partida encolheu
+  de ~1280 para ~700 caracteres — as nuances que só existiam nele
+  ("saída colada é citação, não prova"; "uma por vez, com a recomendação
+  primeiro") subiram para as regras 2 e 9, que são a casa.
+- **Molde que só a abertura usa desceu para `references/`** em três
+  skills: trabalho-por-issue 234→179, documentar-processo 99→74,
+  wiki-de-projetos 97→81. No corpo, que carrega em todo disparo, ficou a
+  regra; o molde carrega só quando se abre.
+- **O módulo observabilidade perdeu 45 linhas de duplicação em
+  lockstep** — tabela repetida entre página e skill agora tem uma casa
+  só, e a outra ponta aponta.
+
+### Corrigido
+
+- A regra 12 mandava conferir os nomes de branch no "perfil do
+  repositório"; o gancho executa `.claude/branches-protegidas.txt`.
+  Agora a regra aponta o arquivo que decide.
+- O canivete dizia "listou as sete" com oito skills — o número saiu da
+  prosa, que é onde número envelhece.
+- `zero-que-mente.md` nomeia a trava (`--no-ignore`) que a tabela medida
+  pressupunha e nunca dizia.
+
+## 0.63 — 2026-08-09
+
+Auditoria completa da camada, por instrumento. O que mudou é o que a fase
+de prompts mandou; os cortes achados ficaram como proposta.
+
+### Adicionado
+
+- **A auditoria da sessão**, em
+  [abrir e fechar a sessão](fluxos/abrir-e-fechar-a-sessao.md): quatro
+  perguntas que medem a **camada**, não a sessão — resposta sem o endereço
+  da página que deveria ter avisado não entra. E a partida agora manda
+  anotar, durante o trabalho, cada adivinhação que a camada deveria ter
+  poupado: é o insumo da auditoria, colhido de graça.
+- **O pedido pronto de arrumação**, no
+  [mapa do repositório](conhecimento/mapa-do-repositorio.md), colado nas
+  duas travas que ele obedece: propõe de → para → a regra que manda, nada
+  se apaga, e sem a citação da regra não é achado.
+
+### Corrigido
+
+- **A `esfriamento` parou de chamar o cético duas vezes** — a análise de
+  promoção já o roda; seis passos viraram cinco. O fecho ganhou escopo
+  (o perfil na wiki se atualiza; camada, regras e automação só se
+  propõem), o passo do perfil cita a skill `wiki-de-projetos` — é ela que
+  preserva a seção declarada pelo dono — e "passo sem matéria não se
+  inventa" agora vale para todos os passos. A descrição encolheu um
+  terço, e descrição é paga em toda largada.
+- **Os dois moldes-exemplo do módulo observabilidade deixaram de ser
+  órfãos.** Medido: nada os citava — nem o índice do próprio molde. Agora
+  o LEIAME os aponta, e o encerramento diz de qual arquivo cada página
+  nasce e onde moram os cinco campos da consulta.
+
+## 0.62 — 2026-08-08
+
+A camada passa a **entregar** a lista de regras, em vez de confiar que ela
+será buscada. Zero linha nova no guia.
+
+### Corrigido
+
+- **Regra nova nunca chegava a quem já tinha a camada.** O `--atualizar`
+  reescreve as páginas do guia e nunca o `AGENTS.md` — de propósito, porque a
+  primeira regra de um repositório público é o oposto da de um privado. Só que
+  as regras nascem no modelo de `AGENTS.md`. Consequência medida num
+  repositório real com a camada instalada há meses: a lista numerada chegava
+  atualizada ao disco a cada atualização, e as regras 11 e 12 **não existiam**
+  na sessão dele. A regra estava a doze linhas de distância e nada mandava
+  lê-la.
+
+  Agora o `--atualizar` **acrescenta** ao fim do `AGENTS.md` três linhas com o
+  endereço da lista — e só se ele não o tiver. Nunca reescreve, nunca
+  reordena. Medido: um `AGENTS.md` de 67 linhas próprias sobreviveu com a
+  mesma impressão digital, ganhou 6 linhas, e quatro atualizações seguidas não
+  acrescentaram nada duas vezes.
+
+  A promessa muda de *"o `AGENTS.md` nunca é tocado"* para *"nunca é
+  reescrito"*. O que se acrescenta é o **endereço**, jamais as regras: a lista
+  tem uma casa só, e uma cópia dela envelheceria torta justamente do lado que
+  a atualização não reescreve.
+
+- **Os três canais de entrega**, novos em
+  [mapa do repositório](conhecimento/mapa-do-repositorio.md). Página do guia
+  chega a todos e não é lida; `AGENTS.md` é lido sempre e não chega; gancho
+  chega e é lido, onde a ferramenta tiver gancho. **Nenhum canal tem as duas
+  propriedades** — e não saber disso é o que fazia regra nova morrer no disco.
+
+- **A camada duplicava a própria regra 2**, palavra por palavra, em
+  `comece-aqui.md` e em `regras-da-camada.md`. Editar uma faria as duas
+  divergirem. A página de entrada agora mostra o **estrago de ignorar** as três
+  primeiras regras, e aponta a lista em vez de copiá-la.
+
+## 0.61 — 2026-08-08
+
+Quatro fatos que a consolidação da 0.59 deixou sem casa voltaram — no lugar
+onde se precisa deles, não no prompt onde estavam. O guia sobe de 1416 para
+1453 linhas e continua 19% menor que antes da consolidação.
+
+### Adicionado
+
+- **Como saber o que o agente de fato carregou**, em
+  [mapa do repositório](conhecimento/mapa-do-repositorio.md). A página já
+  avisava que abrir a sessão na pasta errada mata as skills **em silêncio**;
+  faltava o instrumento. O diagnóstico é em duas partes, e a ordem é o que faz
+  a medição valer: com leitura liberada, o agente abre o disco e responde
+  certo sobre o que nunca carregou — o falso positivo que faz a camada parecer
+  instalada quando não está.
+
+- **As duas travas de quando o agente for arrumar**, na mesma página. *Sem a
+  citação da regra, não é achado* — sem ela o agente arruma por gosto, e
+  arrumação por gosto é a que se desfaz na semana seguinte. E *nada se apaga*:
+  sessão que "limpa" duplicata escolhe sozinha qual das duas versões era a
+  verdadeira, e escolhe errado na hora que importa.
+
+- **Três travas para quando o cético ataca o trabalho de outra sessão**, na
+  skill `cetico`: rode os instrumentos você mesmo (saída colada é citação, não
+  prova), não conserte nada (conferente que arruma devolve mais mudança não
+  revisada), e diga o que você contou quando a afirmação for um número — duas
+  medições honestas de coisas ligeiramente diferentes discordam, e a
+  discordância parece erro quando é definição.
+
+Dois outros fatos ficaram de fora de propósito: *ache a causa raiz antes* e
+*não amplie o escopo* já têm comando de fábrica (`/debug` e `/simplify`), e
+reescrevê-los em texto era exatamente o que a 0.59 tirou.
+
+## 0.60 — 2026-08-08
+
+### Corrigido
+
+- **O molde do módulo perdeu a coluna `Dono`.** O teste do colega a pegou: o
+  portão desta camada lista *quem é dono de quê* como processo de uma empresa,
+  não técnica de agente — e o molde viaja para quem instalar o módulo. Uma
+  varredura por nome não acharia isso; jeito de trabalhar não tem padrão.
+
+## 0.59 — 2026-08-08
+
+O guia encolheu 21%: de 1792 para 1416 linhas. Nenhum fato se perdeu de
+lugar — o que sumiu foi repetição e modelo de prompt para o que já tem
+comando.
+
+### Mudou
+
+- **A partida virou um prompt só, e completo.** Ele mora em
+  [abrir e fechar a sessão](fluxos/abrir-e-fechar-a-sessao.md) e dá à sessão
+  o que ela precisa para **não sair varrendo código**: onde a memória da casa
+  mora, o que é pronto, o que ela não decide sozinha. Custa 1278 caracteres —
+  entre 0,16% e 0,21% de uma janela de 200 mil. Ele **não repete as regras**:
+  elas já chegam pelo `AGENTS.md`, e recopiá-las gastaria a janela duas vezes
+  e criaria uma segunda versão para envelhecer torto.
+
+- **`conhecimento/skills-da-camada.md` virou o canivete**: as skills da
+  camada, os comandos que vêm de fábrica e os plugins que se pagam, numa
+  página só. Ele subiu para o terceiro lugar do menu — a página existia e não
+  era encontrada, e isso é problema de endereço, não de conteúdo.
+
+- **`conhecimento/plugins-oficiais-do-claude-code.md` encolheu de 110 para 51
+  linhas** e ficou com o que só ele tem: o critério para ler o catálogo
+  (`author.name`), o caso do `superpowers` e o comando que conta quantos são
+  hoje. A curadoria mudou de casa para o canivete — o mesmo fato em duas
+  páginas envelhece torto e passa a mentir de um dos lados.
+
+### Saiu
+
+- **Os modelos de prompt por situação** — refatorar, revisar, corrigir bug,
+  entender código, fechar e entregar, auditar, conferir outra sessão. Eles
+  descreviam em texto o que `/simplify`, `/code-review`, `/debug` e os outros
+  já fazem de fábrica. `fluxos/templates.md` continua existindo como placa,
+  apontando para onde as coisas foram: página tirada da origem não some do
+  disco de quem já tem a camada, e lá ela ficaria com o texto velho, mentindo.
+
+- Três pedaços eram **conhecimento vestido de prompt** e mudaram de casa em
+  vez de morrer: a peneira das cinco perguntas foi para
+  [skills: criar e testar](conhecimento/skills-criar-e-testar.md); as duas
+  chaves que ligam um plugin, para o canivete; e a espinha da mensagem de
+  escalação, para
+  [investigação de incidente](fluxos/investigacao-de-incidente.md) — que é
+  onde escalação acontece de verdade.
+
+## 0.58 — 2026-08-08
+
+Nasce o primeiro módulo opcional: um copiloto de observabilidade que não se
+conecta a ferramenta nenhuma.
+
+```bash
+python montar.py --modulo observabilidade
+```
+
+### Adicionado
+
+- **O módulo `observabilidade`.** Ele ensina a investigar, cataloga as
+  aplicações da casa e compõe as consultas — e fica mais especializado na
+  arquitetura de quem o usa a cada incidente. Primeira ferramenta hospedada:
+  Datadog, como seção dentro do módulo. Uma segunda entra ao lado sem
+  renomear nada.
+
+- **Ele não consulta a ferramenta, e isso é desenho.** Não é falta de
+  permissão: licença custa por assento, e agente consultando em rajada deixa
+  a ferramenta lenta para a casa inteira. O agente compõe a consulta e diz o
+  que esperar; quem roda é o dono. Consulta sugerida e nunca executada é
+  hipótese — não vira medido até alguém colar a saída de volta.
+
+- **O log se descarta; o conhecimento se guarda.** Log é grande, envelhece no
+  mesmo dia e empurra para fora o que ainda vale. A skill destila seis itens e
+  joga o resto fora — inclusive **o caminho que não deu em nada**, que é o
+  item que ninguém registra e o que mais economiza tempo na segunda vez.
+
+- **A memória é molde vazio.** A camada entrega a forma; o conteúdo nasce na
+  máquina de quem usa e a atualização nunca o sobrescreve. Tudo em tabela e
+  lista, contra o estilo do resto do guia de propósito: as páginas do guia são
+  para gente ler, a memória é para a IA ler e **atualizar** — e parágrafo não
+  se corrige, se reescreve inteiro.
+
+### Corrigido
+
+- **Página de primeiro nível fora do menu agora é descoberta** no
+  `site/sidebars.js`. Medido: uma página em `conhecimento/` que a lista
+  escrita à mão não cita vira rota e não vira item de menu — órfã silenciosa,
+  cobrando contexto e não entregando a ninguém. Módulo opcional não pode ter
+  linha fixa naquela lista (ela derrubaria a construção de quem não instalou o
+  módulo), então a descoberta era a única saída.
+
+## 0.57 — 2026-08-08
+
+A camada deixa de ser tudo-ou-nada: ela passa a saber instalar parte.
+
+### Adicionado
+
+- **Módulo opcional.** Até aqui, tudo o que entrava no repositório da camada
+  chegava em toda máquina que rodasse o `montar.py`. Conteúdo que serve a uma
+  ferramenta específica não cabia: seria peso morto para quem não a usa.
+  Agora existe uma parte opcional, e ela só chega onde for pedida pelo nome:
+
+  ```bash
+  python montar.py --modulos          # o que existe, e o que já está aqui
+  python montar.py --modulo <nome>    # instala aquele
+  python montar.py --atualizar        # atualiza o instalado; não instala o ausente
+  ```
+
+  Sem bandeira, **nenhum byte** do módulo chega ao destino — medido em dois
+  repositórios recém-montados: 56 arquivos sem a bandeira, 61 com ela, e a
+  diferença é exatamente o módulo mais o espelho da skill dele.
+
+- **A fonte do módulo espelha a árvore de destino** (`modulos/<nome>/…`), e por
+  isso não há manifesto: o caminho do arquivo é a declaração de onde ele vai
+  parar. Duas listas dessincronizam; um caminho não. Como se escreve um módulo
+  está no `modulos/LEIAME.md`.
+
+- **"Instalado" se responde pelo disco, não por arquivo de estado.** Arquivo de
+  estado é mais uma coisa para dessincronizar, e a pergunta que importa — isto
+  já está aqui? — o disco responde sozinho.
+
+- **O que o módulo entrega para dentro de subpasta de `conhecimento/` é escrito
+  uma vez e nunca mais.** É molde: o que nasce ali é memória de quem usa, e a
+  atualização não a sobrescreve. A fronteira é a mesma que o mapa do
+  repositório já declarava — primeiro nível é da camada, subpasta é da casa.
+
+- **Nome de módulo que não existe é recusado antes do primeiro byte.** Recusado
+  na hora de instalar, a montagem já teria criado dezenas de arquivos antes de
+  dizer que o nome estava errado.
+
 ## 0.56 — 2026-08-07
 
 A camada passa a conferir o que o agente recebe na abertura, o fechamento da

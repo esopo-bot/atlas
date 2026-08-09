@@ -42,6 +42,28 @@ trilha de auditoria responde isso em minutos.
 O contrário também vale: se você não consegue nomear o instante do começo,
 ainda não investigou o suficiente para acusar nada.
 
+## A mensagem de escalação
+
+O passo 7 termina fora do seu alcance: alguém do outro lado precisa agir. O
+que essa mensagem carrega decide se ela vira ação ou vira fila.
+
+| O que entra | Por quê |
+| --- | --- |
+| o sintoma em uma frase, do ponto de vista de quem usa | é o que faz o outro time reconhecer o problema como real |
+| o escopo **medido**, não amostrado: quantos afetados sobre quantos tentaram | ver abaixo — é o item que salva o incidente de ser despriorizado |
+| o instante exato em que começou | sem ele, o outro lado não sabe onde procurar |
+| os identificadores que **eles** conseguem procurar no painel deles | o seu identificador não serve na ferramenta do outro |
+| o que mudou do nosso lado, com hora e autor, em tom factual | antecipa a pergunta que eles fariam de volta |
+| **o pedido acionável**: o que conferir, e o que fazer em cada resultado | evidência sem pedido é escalação pela metade |
+| como a correção será validada em tempo real | fecha o ciclo sem uma segunda rodada de mensagens |
+
+Sem acusação e sem adjetivo. Item que não estiver medido entra dito como não
+medido — nunca estimado.
+
+**Escopo medido, não amostrado** é o que evita o erro mais caro desta lista.
+Três reclamações abertas podem ser 100% de quem tentou: quem não reclama some
+da conta, e "três casos" vira prioridade baixa numa fila que nunca anda.
+
 ## Duas armadilhas que custam horas
 
 Busca que devolve zero e log que não fala a língua que você procura fazem

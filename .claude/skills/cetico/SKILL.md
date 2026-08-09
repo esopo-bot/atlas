@@ -5,9 +5,7 @@ description: Verificação adversarial de uma conclusão antes de agir sobre ela
 
 # Cético
 
-Conclusão que ninguém atacou não está pronta: ela é a primeira história que
-explicou os fatos, e a primeira história costuma estar incompleta. Esta skill
-ataca a conclusão antes que a realidade o faça.
+Conclusão não atacada não está pronta — ataque antes que a realidade o faça.
 
 ## O procedimento
 
@@ -39,8 +37,25 @@ se diz na mesma frase — não numa nota de rodapé que ninguém lê.
 - Ela explica o sintoma sem explicar o **começo** dele ("por que hoje?").
 - Alguém vai agir caro em cima dela: escalar, reverter, avisar cliente.
 
+## Quando o alvo é o trabalho de outra sessão
+
+A conferência vale mais numa sessão **limpa**, que não tem apego à conclusão.
+Três travas a mais:
+
+- **Rode os instrumentos você mesmo.** Saída colada por outra sessão é
+  citação, não prova: ela mostra que alguém rodou algum dia, não que passa
+  agora — e quem escreveu o texto é o menos indicado para dizer se ele está
+  certo.
+- **Não conserte nada.** Conferente que arruma no meio do caminho devolve mais
+  mudança não revisada, e você perde justamente o par de olhos independente
+  que foi buscar. Isto é um relatório.
+- **Se a afirmação for um número, meça de novo e diga o que você contou.**
+  Número é o achado mais fácil de "refutar" por engano: duas medições honestas
+  de coisas ligeiramente diferentes discordam, e a discordância parece erro
+  quando é definição.
+
 ## O que isto não é
 
-Não é revisão de código nem verificação de implementação — para isso existem
-os comandos de revisar e verificar. Aqui o alvo é o **raciocínio**: a ponte
-entre o que foi medido e o que foi concluído.
+Não é revisão de código nem verificação de implementação — para isso, use
+as rotinas de revisão da sua ferramenta. Aqui o alvo é o **raciocínio**: a
+ponte entre o que foi medido e o que foi concluído.

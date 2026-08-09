@@ -14,20 +14,20 @@ atualização preserva. Duas leituras e você está pronto.
 | Peça                       | O que faz por você                                                                                                      |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `AGENTS.md` + `CLAUDE.md`  | as regras que todo agente lê ao abrir a sessão                                                                          |
-| Skills (`.agents/skills/`) | listadas em [as skills da camada](skills-da-camada.md) — uma delas entra sozinha, por gancho |
-| O guia (estas páginas)     | os templates de prompt e o saber de bolso                                                                               |
-| O site (`site/`)           | o guia navegável — `cd site`, depois `npm install` e `npm run build`                                                    |
+| Skills (`.agents/skills/`) | listadas no [canivete](skills-da-camada.md) — uma delas entra sozinha, por gancho |
+| O guia (estas páginas)     | o prompt de partida e o saber de bolso                                                                               |
+| O site (`site/`)           | o guia navegável — como construir está no `README.md` da raiz                                                           |
 
 ## Como usar o guia
 
-- **Toda sessão começa e termina igual**: a partida e o esfriamento estão
-  em [abrir e fechar a sessão](../fluxos/abrir-e-fechar-a-sessao.md) — a
+- **Toda sessão começa e termina igual**: o prompt de partida e o esfriamento
+  estão em [abrir e fechar a sessão](../fluxos/abrir-e-fechar-a-sessao.md) — a
   página seguinte a esta. A partida evita a sessão que varre tudo antes de
   perguntar; o esfriamento (uma linha: "Rode o esfriamento") colhe o que o
   dia ensinou antes de você fechar a janela.
-- **Vai pedir outra coisa a um agente?** O resto dos
-  [templates](../fluxos/templates.md) está por situação: pedido grande,
-  entender código, bug, escalação, revisão.
+- **Vai pedir automação, plugin ou skill?** Abra o
+  [canivete](skills-da-camada.md) primeiro: metade do que você ia escrever já
+  existe de fábrica.
 - **Quer saber onde cada coisa mora e o que a atualização sobrescreve?**
   [Mapa do repositório](mapa-do-repositorio.md).
 - **O que a sessão não muda sem você:** a lista numerada em
@@ -42,13 +42,17 @@ atualização preserva. Duas leituras e você está pronto.
   [história em issue](../fluxos/historia-em-issue.md) — é consulta: abra
   quando o assunto aparecer.
 
-## As três regras que não mudam
+## As três que doem se você não souber
 
-1. **Abra a sessão na raiz** — a pasta que tem o `AGENTS.md`. O que decide é
-   **onde você abre**, não onde o arquivo mora; aberta numa subpasta, a sessão
-   roda sem skill nenhuma e nada avisa.
-2. **Só é pronto o que um instrumento provou.** Build, teste, listagem — "o
-   modelo disse" não é prova.
-3. **A atualização só toca o que veio da camada.** O que é seu — instruções,
-   suas skills, seus arquivos — ninguém sobrescreve. A fronteira exata está no
-   [mapa](mapa-do-repositorio.md).
+Duas são regras da lista numerada em [regras da camada](regras-da-camada.md);
+a terceira é uma fronteira do [mapa](mapa-do-repositorio.md). O **estrago de
+ignorá-las** é o que ninguém descobre a tempo:
+
+| Se você… | Acontece isto, e nada avisa |
+| --- | --- |
+| abrir a sessão numa subpasta | ela roda sem skill nenhuma — [regras da camada](regras-da-camada.md) |
+| aceitar "terminei" sem ver a saída de um instrumento | você entrega o que ninguém mediu |
+| dar nome de página da camada a um arquivo seu | a atualização o sobrescreve — o antídoto está no [mapa](mapa-do-repositorio.md) |
+
+A atualização **nunca reescreve** o que é seu — instruções, suas skills, seus
+arquivos. A fronteira exata está no [mapa](mapa-do-repositorio.md).

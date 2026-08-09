@@ -5,8 +5,7 @@ description: Ao dar um trabalho por pronto no workspace, separa o que a sessão 
 
 # Análise de promoção
 
-O workspace trabalha; a camada colhe. Ao dar um trabalho por pronto, esta
-análise decide o destino do que nasceu na sessão — antes do resumo final.
+Esta análise decide, antes do resumo final, o destino do que a sessão criou.
 
 ## Antes das pilhas: a conclusão está auditada?
 
@@ -29,11 +28,11 @@ Releia o que a sessão criou e aprendeu, e separe:
   skill, gancho ou template) e o texto **já abstraído**: sem nome de pessoa,
   projeto, empresa ou máquina. **Proponha; não aplique** — promoção é decisão
   do dono, e camada pública não aceita resíduo pessoal.
-- **Da casa**: escreva como nota ou decisão em `conhecimento/<subpasta>/`.
-- **Descartável**: diga o que descartou, em uma linha.
+- **Da casa**: escreva como nota ou decisão em `conhecimento/<subpasta>/` —
+  o lugar que o mapa do repositório reserva ao que é seu.
+- **Descartável**: diga o que descartou, em uma linha — o dono pode discordar.
 
 ## A régua da dúvida
 
-Na dúvida se algo é genérico: é pessoal, e fica na casa. O erro barato é
-deixar de promover — dá para promover amanhã; o caro é vazar o pessoal, que
-não se despublica.
+Vale a regra 5 de `conhecimento/regras-da-camada.md`: na dúvida, é pessoal, e
+fica na casa. Deixar de promover se corrige amanhã; vazar não se despublica.
