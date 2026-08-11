@@ -8,7 +8,9 @@ aplique**: o protocolo de proposta está no fim da página.
    sessão não enxerga as skills da raiz, e nada avisa.
 2. **Só é pronto o que um instrumento provou.** Build, teste, listagem — "o
    modelo disse" não é prova, e saída colada de outra sessão é citação,
-   não prova.
+   não prova. Fluxo que ninguém executou nem tem fonte citada é hipótese —
+   se for gravado em memória ou nota, grava-se marcado como hipótese, não
+   como instrução.
 3. **Antes de criar, procure e cite.** O que o conjunto já oferece não se
    reimplementa; aplicação nova imita a irmã mais parecida.
 4. **A memória mora no disco, não no contexto.** O que vale amanhã se escreve
@@ -28,7 +30,9 @@ aplique**: o protocolo de proposta está no fim da página.
    a outras pessoas) é sempre do dono, mesmo onde o resto é liberado:
    **sincronizar não é entregar.** Decisão dele vira pergunta — uma por
    vez, com a recomendação primeiro; o agente prepara e executa o
-   não-destrutivo.
+   não-destrutivo. Redesenho de experiência também é decisão dele —
+   esboço e pergunta fechada antes do código; conserto de defeito não
+   pede.
 10. **Texto na régua.** Markdown validado, conclusão primeiro, frases curtas,
     pt-BR.
 11. **Não invente passo onde já existe receita.** Antes de propor como se faz

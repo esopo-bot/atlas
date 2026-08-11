@@ -3,6 +3,38 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.66 — 2026-08-11
+
+Sete lições de uma semana de trabalho real, triadas pelo portão: nove
+candidatas, duas rejeitadas na barreira. O custo fixo não se moveu: 74.
+
+### Adicionado
+
+- **Causa 6 no zero que mente: ambiente sem massa.** Tela zerada onde o
+  dado nunca existiu não prova nada; "o dado existe aqui?" custa uma
+  consulta direta. E remendo de massa feito por fora morre na próxima
+  recriação do ambiente — o conserto durável mora no que recria.
+
+### Mudado
+
+- **A regra 2 fecha a taxonomia da prova**: executado com saída vista é
+  prova; documentado com endereço é citação; fluxo que ninguém executou
+  nem tem fonte citada é hipótese — e se grava marcado como hipótese.
+- **A regra 9 classifica o redesenho**: mudança de experiência é decisão
+  do dono — esboço e pergunta fechada antes do código; conserto de
+  defeito não pede.
+- **A causa 5 ganhou o papel**: presença em interface se prova navegando
+  com o papel de quem vai usar — o portão de acesso é parte do caminho.
+- **A promoção confere o corpo do pedido de revisão**
+  (`trabalho-por-issue`): o que o diff tem e o corpo não conta, o revisor
+  aprova sem ver.
+- **O cético ganhou a fronteira da casa**: conclusão que vai sair —
+  e-mail, pedido de revisão, mensagem a terceiro — passa pelo cético
+  antes. Descrição intocada; o retoque é no corpo.
+- **O esfriamento confere o que ficou para trás**: repositório tocado com
+  commit fora da branch que o entrega — inclusive o do próprio workspace,
+  que ninguém trata como trabalho — se relata no fechamento.
+
 ## 0.65 — 2026-08-09
 
 O pacote de cortes da auditoria. A camada faz o mesmo custando menos.

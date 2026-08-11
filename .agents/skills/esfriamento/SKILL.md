@@ -17,7 +17,10 @@ diga que não há e siga.
 3. **O que você descobriu sobre este repositório** que pouparia tempo da
    próxima sessão — por onde entra, onde o estado mora, o que engana?
    Atualize o perfil pela skill `wiki-de-projetos`, que preserva o que o
-   dono declarou; não escreva arquivo novo.
+   dono declarou; não escreva arquivo novo. Confira também, em cada
+   repositório tocado — inclusive o do próprio workspace, que ninguém
+   trata como trabalho —, se ficou commit fora da branch que o entrega;
+   achou, relate — corrigir é decisão do dono.
 4. **O que atrapalhou hoje, e o que o dono poderia ter feito diferente?**
    Onde a sessão abriu, o que foi pedido de um jeito caro, o que sairia
    mais barato com outra ferramenta. Aponte só o que você **viu**

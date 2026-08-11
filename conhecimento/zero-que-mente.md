@@ -111,7 +111,22 @@ seja, a página está publicada e a busca diz que não.
 
 Busca em texto prova que a **rota** não foi gerada; nunca prova que o item
 não está no menu. Presença em interface se prova com clique: sirva o
-resultado e navegue.
+resultado e navegue **com o papel de quem vai usar** — o portão de acesso
+é parte do caminho.
+
+## Causa 6: o ambiente não tem o dado que a tela mostraria
+
+Tela ou consulta zerada em ambiente sem massa não prova nada: o vazio pode
+ser o defeito — ou pode ser só o ambiente. Numa mesma semana de trabalho,
+três zeros acusaram a aplicação; a causa era dado que nunca existiu ali.
+
+Antes de prometer prova por navegação, pergunte **"o dado existe aqui?"** —
+custa uma consulta direta à fonte, e decide se a navegação vai provar
+alguma coisa.
+
+E quando o conserto é semear massa: remendo feito por fora morre na próxima
+recriação do ambiente, e o zero mentiroso volta. O conserto durável mora no
+que recria o ambiente.
 
 ## A regra em uma linha
 

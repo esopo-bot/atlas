@@ -114,6 +114,9 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 
 - **A promoção é um passo explícito**, depois dos critérios provados — nunca
   efeito colateral de salvar o trabalho do dia.
+- **O corpo do pedido de revisão cobre o que o diff entrega.** Antes de
+  pedir revisão, confira as seções do corpo contra a lista real de commits:
+  o que o diff tem e o corpo não conta, o revisor aprova sem ver.
 - **Não invente o nome nem a sequência.** Estão no perfil do passo zero. Não
   estão lá? Pergunte, e grave a resposta — é a regra 11.
 - **Na dúvida sobre o que pode ser empurrado, não empurre.** Push que aciona

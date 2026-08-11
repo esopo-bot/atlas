@@ -35,7 +35,8 @@ se diz na mesma frase — não numa nota de rodapé que ninguém lê.
 - Ela apareceu cedo e tudo depois pareceu confirmá-la.
 - Ela é a única hipótese que alguém levantou.
 - Ela explica o sintoma sem explicar o **começo** dele ("por que hoje?").
-- Alguém vai agir caro em cima dela: escalar, reverter, avisar cliente.
+- Alguém vai agir caro em cima dela — escalar, reverter — ou ela vai sair
+  da casa: e-mail, pedido de revisão, mensagem a terceiro.
 
 ## Quando o alvo é o trabalho de outra sessão
 
