@@ -10,7 +10,11 @@ aplique**: o protocolo de proposta está no fim da página.
    modelo disse" não é prova, e saída colada de outra sessão é citação,
    não prova. Fluxo que ninguém executou nem tem fonte citada é hipótese —
    se for gravado em memória ou nota, grava-se marcado como hipótese, não
-   como instrução.
+   como instrução. **Resultado negativo pede contraprova**: zero, vazio,
+   "sem permissão" — o instrumento responde igual quando o fato não existe e
+   quando ele não o enxerga. Vira prova só depois que o mesmo instrumento,
+   na mesma janela, achar alguma coisa; sem isso, escreve-se **não medido**,
+   nunca "não existe".
 3. **Antes de criar, procure e cite.** O que o conjunto já oferece não se
    reimplementa; aplicação nova imita a irmã mais parecida.
 4. **A memória mora no disco, não no contexto.** O que vale amanhã se escreve
@@ -23,7 +27,10 @@ aplique**: o protocolo de proposta está no fim da página.
 7. **Rede com cortesia.** Chamada externa e MCP só quando a tarefa exigir,
    espaçadas; no primeiro `403`/`429`, recue — não insista em rajada.
 8. **Segredo não entra em git nenhum.** Credencial não se abre; configuração
-   carrega `${VARIAVEL}`, nunca o valor.
+   carrega `${VARIAVEL}`, nunca o valor. E **endereço não é segredo**:
+   domínio, região, nome de fila que só existam dentro do arquivo de
+   credencial ficam invisíveis — a sessão não o abre, e para. O que ela
+   precisa para medir se escreve onde ela lê.
 9. **Destrutivo é do dono; push segue o que a casa autorizou** — a permissão
    é de cada repositório e se grava no perfil dele; sem registro, a sessão
    não empurra nada. O que **aciona automação** (esteira, implantação, aviso

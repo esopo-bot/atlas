@@ -6,7 +6,10 @@ nenhum deles depende de qual nuvem ou ferramenta você usa.
 
 ## A ordem
 
-1. **Reproduza o sintoma.** Sem reprodução você está investigando um relato.
+1. **Reproduza o sintoma** — e reproduza a chamada **do cliente real**. Sem
+   reprodução você está investigando um relato; com uma opção a mais na sua
+   chamada (credencial, cabeçalho, sinalizador), você percorre outro caminho
+   e fabrica um defeito que não existe — e defeito fabricado parece achado.
    Não reproduziu? O primeiro trabalho é descobrir para quem acontece.
 2. **Ache no código a mensagem que o usuário vê.** É o fio mais curto entre a
    tela e a linha de código — e mostra qual caminho, dos vários possíveis,

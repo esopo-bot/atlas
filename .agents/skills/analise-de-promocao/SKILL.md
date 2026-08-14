@@ -32,6 +32,14 @@ Releia o que a sessão criou e aprendeu, e separe:
   o lugar que o mapa do repositório reserva ao que é seu.
 - **Descartável**: diga o que descartou, em uma linha — o dono pode discordar.
 
+## O endereço se confere, não se adivinha
+
+Antes de propor para onde vai, **procure na camada a página que já trata do
+assunto e cite-a**. Promoção que não confere a casa existente abre a segunda
+versão do mesmo fato — e duas versões envelhecem torto, até uma delas passar
+a mentir. Achou a casa? A proposta é **melhorar aquela página**, não abrir
+outra.
+
 ## A régua da dúvida
 
 Vale a regra 5 de `conhecimento/regras-da-camada.md`: na dúvida, é pessoal, e

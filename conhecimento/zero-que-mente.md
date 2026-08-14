@@ -1,8 +1,10 @@
 # Zero que mente
 
 Resultado vazio parece resposta e não é: "não encontrei" e "não existe" são
-coisas diferentes, e a ferramenta raramente avisa qual das duas te entregou.
-As causas abaixo explicam quase todos os casos — cada uma já custou horas.
+coisas diferentes, e o instrumento raramente avisa qual das duas te entregou.
+Vale para busca, consulta de registro, chamada de interface e verificação de
+permissão — na tela, "sem acesso" e "não existe" também se parecem. As causas
+abaixo explicam quase todos os casos — cada uma já custou horas.
 
 ## Causa 1: um filtro que você não sabia que estava ligado
 
@@ -128,8 +130,37 @@ E quando o conserto é semear massa: remendo feito por fora morre na próxima
 recriação do ambiente, e o zero mentiroso volta. O conserto durável mora no
 que recria o ambiente.
 
+A mesma armadilha com o tempo no lugar do dado: **conferência que depende de
+evento não fecha em janela sem evento**. Registro consultado numa hora sem
+movimento devolve zero honesto — e o zero se lê como "a correção não
+funcionou", ou pior, como "funcionou". Antes de prometer a conferência, ache
+o gatilho: provoque o evento você mesmo, ou ancore num que acontece sozinho e
+tem hora marcada.
+
+## Causa 7: a medição saiu de outro lugar
+
+O diretório de trabalho de algumas ferramentas **persiste entre chamadas**.
+Um `cd` numa chamada muda o chão de todas as seguintes, e nada avisa: a
+medição seguinte responde honestamente — sobre outra pasta. Medido, três
+chamadas seguidas na mesma sessão:
+
+| Chamada | Comando | Onde rodou | Contagem |
+| --- | --- | --- | --- |
+| 1 | `cd <subpasta> && pwd` | a subpasta | — |
+| 2 | `pwd; ls *.md \| wc -l` | ainda a subpasta | **11** |
+| 3 | `cd <raiz> && pwd; ls *.md \| wc -l` | a raiz | **7** |
+
+A perigosa é a chamada 2: número plausível, do lugar errado. Zero levantaria
+suspeita; onze, não — e é assim que um relatório ganha um número que ninguém
+consegue reproduzir.
+
+Dois hábitos: **ancore no caminho absoluto** em vez de depender de onde a
+sessão parou; e, quando o número importar, **imprima onde você está na mesma
+chamada que mede** (`pwd; <a medição>`).
+
 ## A regra em uma linha
 
-Antes de escrever "não existe" num relatório, prove que a sua busca sabe
-achar. Zero não provado é hipótese — e hipótese que anda como fato é o começo
-da conclusão errada.
+Antes de escrever "não existe" num relatório, prove que o seu instrumento
+sabe achar: a mesma consulta, na mesma janela, tem de trazer alguma coisa.
+Zero não provado é hipótese — e hipótese que anda como fato é o começo da
+conclusão errada.

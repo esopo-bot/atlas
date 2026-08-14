@@ -3,6 +3,50 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.67 — 2026-08-14
+
+Os modos de falha do instrumento, vindos de uma sessão de investigação
+noutra casa. Onze candidatos, sete entram — e o melhor deles não estava na
+lista: era o que a proposta de promoção revelou sobre a própria skill que a
+escreveu. O custo fixo por sessão não se moveu: 74.
+
+### Adicionado
+
+- **A promoção confere o endereço antes de propô-lo**
+  (`analise-de-promocao`). A proposta que originou esta versão mandava a
+  lição para uma skill enquanto a página que já trata do assunto estava no
+  disco daquela mesma casa. Promoção sem conferir a casa existente abre a
+  segunda versão do mesmo fato — e duas versões envelhecem torto.
+- **Causa 7 no zero que mente: a medição saiu de outro lugar.** O diretório
+  de trabalho persiste entre chamadas em várias ferramentas; um `cd` muda o
+  chão de todas as seguintes. Medido em três chamadas: a mesma contagem deu
+  11 na subpasta e 7 na raiz. A perigosa é a do meio — número plausível, do
+  lugar errado.
+- **A causa 6 ganhou o tempo**: conferência que depende de evento não fecha
+  em janela sem evento. Zero honesto de uma hora sem movimento se lê como
+  veredito. Ache o gatilho antes de prometer a conferência.
+
+### Mudado
+
+- **A regra 2 separa o negativo do provado.** Zero, vazio e "sem permissão"
+  são a mesma tela para "o fato não existe" e "o instrumento não o
+  enxerga"; vira prova só depois que o mesmo instrumento, na mesma janela,
+  achar alguma coisa. Sem contraprova, escreve-se **não medido**.
+- **A regra 8 diz que endereço não é segredo.** Domínio, região ou nome de
+  fila que só existam dentro do arquivo de credencial ficam invisíveis: a
+  sessão não abre o arquivo, e para. O que ela precisa para medir se
+  escreve onde ela lê.
+- **O zero que mente vale para todo instrumento**, não só para busca —
+  consulta de registro, chamada de interface e verificação de permissão
+  entram na abertura e na regra de uma linha.
+- **A investigação reproduz a chamada do cliente real** (passo 1): uma
+  opção a mais na sua — credencial, cabeçalho, sinalizador — percorre outro
+  caminho e fabrica um defeito que não existe. Defeito fabricado parece
+  achado.
+- **O perfil guarda o durável; a nota, o volátil** (`wiki-de-projetos`).
+  Formato de registro, permissão e endereço de ambiente mudam toda semana:
+  perfil que os absorve parece desatualizado a cada rodada.
+
 ## 0.66 — 2026-08-11
 
 Sete lições de uma semana de trabalho real, triadas pelo portão: nove

@@ -60,6 +60,11 @@ normais, o que se lê é o `indice.json` real do disco.
   particularidades de ambiente. Ao regenerar, **copie essa seção inteira,
   intacta**, para o perfil novo. Regeneração que apaga o declarado ensina o
   dono a não declarar nada.
+- **Perfil guarda o durável; nota guarda o volátil.** Formato de registro,
+  permissão concedida, endereço de ambiente mudam toda semana — moram numa
+  nota da subpasta de `conhecimento/`, não no perfil. Perfil que absorve o
+  volátil parece desatualizado a cada rodada, e a wiki inteira perde a
+  confiança.
 - Sem âncora clara, o tipo é **indefinido**: uma linha no mapa e uma pergunta
   ao dono — a resposta vira declaração.
 - Repositório de **infraestrutura nunca recebe varredura profunda de
