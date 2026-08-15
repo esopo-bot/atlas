@@ -6,8 +6,12 @@ site/.docusaurus/
 # A cópia das skills fica fora do git pelo .claude/.gitignore, escrito pelo
 # montar.py — aqui não se repete.
 
-# Registros de verificação
+# Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
+# lado do log quando o verificador roda com --debug-file: artefato dela, não
+# nosso. Entrou no git uma vez por acidente, quando core.symlinks=false o fazia
+# parecer um arquivo de texto com o caminho dentro.
 *.log
+latest
 __pycache__/
 
 # O esqueleto (projetos/, .credenciais/, recursos/) não existe aqui: este

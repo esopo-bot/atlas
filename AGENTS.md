@@ -37,9 +37,11 @@ está no `README.md`.
   esteira quebra em produção e ninguém sabe por quê.
 - Nunca abra arquivos de credencial (`.env*`, `appsettings*`, `.credenciais/`).
 - Não altere nada que já exista sem que isso seja pedido.
-- **Aqui a sessão não commita nem empurra.** Ela deixa os arquivos alterados
-  para o dono conferir, commitar e sincronizar. Ações destrutivas também são
-  dele; o agente prepara e executa o não-destrutivo.
+- **Aqui a sessão não commita, não empurra e não publica.** Ela deixa os
+  arquivos alterados para o dono conferir, commitar e sincronizar; o teto dela
+  é o ensaio — o comando que mostra o que subiria sem subir. Destrutivo
+  também é dele; o agente prepara e executa o não-destrutivo. **Esta é a única
+  casa desta regra** — outro arquivo que disser diferente está errado.
 - Só chame de pronto o que um instrumento provou (build, teste, listagem).
 
 ## Estilo

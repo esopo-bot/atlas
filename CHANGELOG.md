@@ -3,6 +3,46 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.70 — 2026-08-15
+
+A camada ganha a segunda trava dura, e a primeira para de vazar. Até aqui a
+única proteção que um instrumento sustentava era a das branches de longa
+duração — e ela deixava passar cinco comandos destrutivos, medidos. O resto
+era prosa: texto que pede e não impede. Esta versão fecha os dois lados.
+
+### Adicionado
+
+- **Credencial não se abre por comando de shell.** A regra de `deny` das
+  permissões cobre a ferramenta de leitura de arquivo, e só ela: pelo
+  terminal, `cat .env` passava inteiro. O gancho novo olha o **alvo** do
+  comando, nunca o verbo — `cat`, `less`, `grep`, `Get-Content` e
+  `python -c open(...)` abrem arquivo do mesmo jeito, e listar verbos é
+  corrida perdida. Ele carrega o próprio teste: `OK: 33 casos — 17 barrados,
+  16 liberados`. Metade da lista existe para provar que ele não atrapalha:
+  falar do assunto passa, e só o que executa é recusado.
+- **Ele não substitui a regra de permissão.** Gancho falha aberto, então o
+  `deny` continua como rede de baixo. É sobreposição declarada, não descuido
+  — e está escrito na página de ganchos, junto dos outros três limites.
+
+### Mudado
+
+- **O veto de branch protegida parou de vazar em cinco lugares.** Comando em
+  várias linhas, nome de branch entre aspas, `push origin --delete`,
+  `push --mirror` e substituição por `$(...)` devolviam "sem motivo para
+  recusar" — todos medidos. Agora barram. De `29 casos — 16 barrados, 13
+  liberados` para `45 casos — 24 barrados, 21 liberados`, e **cada caso novo
+  que barra ganhou um par que passa**: veto largo demais é desligado na
+  primeira semana.
+- **Cada regra passa a ter uma casa só.** Três arquivos diziam coisas
+  diferentes sobre quem commita e quem empurra. Agora o `AGENTS.md` é a única
+  casa dessa regra, e os outros apontam para ela em vez de repetir. É a
+  barreira contra fato duplicado aplicada ao próprio guia: repetido em dois
+  lugares, ele envelhece torto e passa a mentir de um dos lados.
+- **O modelo que nasce em repositório novo passa a falar de commit.** Ele
+  dizia o que fazer com push e calava sobre gravar — e silêncio, para um
+  agente, é autorização. A frase nova não decide pela casa de ninguém:
+  devolve a decisão ao repositório de destino, como já fazia com push.
+
 ## 0.67 — 2026-08-14
 
 Os modos de falha do instrumento, vindos de uma sessão de investigação

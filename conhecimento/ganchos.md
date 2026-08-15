@@ -124,6 +124,7 @@ subir, não existe proteção nenhuma. Por isso a regra de texto continua no
 | `injetar-qualidade.py`       | `SessionStart` | entrega o padrão de código, que skill nenhuma dispara   |
 | `conferir-mcp.py`            | `SessionStart` | acusa declaração de MCP apontando para arquivo que não existe |
 | `vetar-branch-protegida.py`  | `PreToolUse`   | recusa apagar, renomear e forçar branch de longa duração |
+| `vetar-credencial.py`        | `PreToolUse`   | recusa abrir arquivo de credencial por comando de shell |
 
 O porquê do `conferir-mcp.py` está na [página de MCP](mcp.md). Ele carrega o
 próprio teste: `python .claude/hooks/conferir-mcp.py --testar`.
@@ -137,6 +138,26 @@ carrega o próprio teste:
 E tem um limite declarado: **push normal para branch protegida passa.** Quem
 decide isso é a regra 9 e o perfil do repositório. O gancho cuida do
 destrutivo — apagar, renomear, reescrever.
+
+O veto de credencial fecha um buraco medido: a regra de `deny` do
+`settings.json` cobre a ferramenta de leitura de arquivo, e **`cat .env` pelo
+terminal passa por fora dela**. O gancho olha o **alvo** do comando, nunca o
+verbo — `cat`, `less`, `grep`, `Get-Content` e `python -c open(...)` abrem
+arquivo do mesmo jeito, e listar verbos é corrida perdida. Ele carrega o
+próprio teste: `python .claude/hooks/vetar-credencial.py --testar`.
+
+Os limites dele, declarados:
+
+- **Falar do assunto passa.** Mensagem entre aspas (`-m "explica o .env"`) e
+  corpo de documento literal (`<<'FIM'`) são dados, não alvos. Sem isso o
+  gancho barraria quem escreve o recibo dele — foi o que aconteceu com o veto
+  de branch.
+- **A mensagem que executa não passa.** Dentro de aspas duplas o `$(...)`
+  ainda roda, então `-m "$(cat .env)"` é leitura disfarçada e é recusada.
+- **Arquivo de exemplo entra junto**, porque o `deny` já o pega — duas
+  proteções da mesma casa discordando é pior que uma barrando demais.
+- **Ele não substitui o `deny`.** Gancho falha aberto; a regra de permissão
+  é a rede de baixo. É sobreposição declarada, não descuido.
 
 ## Todo gancho nasce com teste
 

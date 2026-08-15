@@ -31,7 +31,67 @@ PADRAO = {
 GLOBAIS_SIMPLES = {"--no-pager", "--paginate", "-p", "--bare", "--literal-pathspecs"}
 GLOBAIS_COM_VALOR = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 
-SEPARADORES = re.compile(r"&&|\|\||;|\|")
+# Quebra de linha separa comando tanto quanto `;` — e `$(`, `` ` `` e `)`
+# abrem e fecham comando dentro de comando. Sem eles, `git status` numa linha
+# e o destrutivo na seguinte viram um comando só, cujo verbo é `status`.
+SEPARADORES = re.compile(r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
+
+# Dentro de aspas duplas o shell ainda executa `$(...)` e crase — só `;` e
+# `&&` viram texto. Tratar os dois tipos de aspa igual abriria uma porta:
+# `git status "$(git push --force origin main)"` reescreve a branch de verdade.
+SO_EXPANSAO = re.compile(r"\$\(|`|\)")
+
+# Documento entregue com o delimitador entre aspas (`<<'FIM'`) é dado literal:
+# o shell não expande nada ali dentro. Sem esta exceção, o gancho barra quem
+# escreve o recibo dele. Já `<<FIM`, sem aspas, expande — e continua valendo.
+DOCUMENTO_LITERAL = re.compile(r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
+
+
+def _cortar_respeitando_aspas(comando: str):
+    """Parte em segmentos, dando a cada tipo de aspa o que ele protege.
+
+    Um comando que apenas CITA outro não o executa — e sem essa distinção o
+    gancho barra quem escreve o recibo dele. Mas as duas aspas protegem
+    coisas diferentes, e tratá-las igual seria trocar um falso positivo por
+    um furo: `$(...)` continua executando dentro de aspas duplas.
+
+    Devolve None quando as aspas não fecham: aí quem chama volta ao corte
+    cego, que erra para o lado seguro em vez de virar porta dos fundos.
+    """
+    segmentos, atual, aspa = [], [], None
+    i = 0
+    while i < len(comando):
+        c = comando[i]
+        if aspa == "'":                       # protege tudo
+            atual.append(c)
+            aspa = None if c == "'" else aspa
+            i += 1
+        elif aspa == '"' and c == '"':
+            atual.append(c)
+            aspa = None
+            i += 1
+        elif aspa is None and c in "\"'":
+            atual.append(c)
+            aspa = c
+            i += 1
+        elif corte := (SO_EXPANSAO if aspa else SEPARADORES).match(comando, i):
+            segmentos.append("".join(atual))
+            atual = []
+            i = corte.end()
+        else:
+            atual.append(c)
+            i += 1
+    if aspa is not None:
+        return None
+    segmentos.append("".join(atual))
+    return segmentos
+
+
+def separar(comando: str) -> list:
+    """Os pedaços do comando que podem ser um git de verdade."""
+    comando = DOCUMENTO_LITERAL.sub(" ", comando)
+    fora = _cortar_respeitando_aspas(comando)
+    return SEPARADORES.split(comando) if fora is None else fora
 
 
 def nomes_protegidos(raiz: Path) -> set:
@@ -67,12 +127,27 @@ def e_git(token: str) -> bool:
     return Path(token.replace("\\", "/")).name.lower() in {"git", "git.exe"}
 
 
+def sem_aspas(token: str) -> str:
+    """Tira o par de aspas que envolve o token inteiro.
+
+    O `shlex` roda em modo não-posix de propósito: em modo posix ele comeria a
+    contrabarra de um caminho do Windows. O preço é que as aspas ficam
+    coladas no token, e aí `"main"` deixa de ser igual a `main` na hora de
+    comparar o nome da branch.
+    """
+    for aspa in ('"', "'"):
+        if len(token) >= 2 and token.startswith(aspa) and token.endswith(aspa):
+            return token[1:-1]
+    return token
+
+
 def partir(segmento: str) -> list:
     try:
         import shlex
-        return shlex.split(segmento, posix=False)
+        tokens = shlex.split(segmento, posix=False)
     except ValueError:
-        return segmento.split()
+        tokens = segmento.split()
+    return [sem_aspas(t) for t in tokens]
 
 
 def verbo_e_resto(tokens: list):
@@ -106,7 +181,7 @@ def branch_atual(raiz: Path):
 
 def motivo_da_recusa(comando: str, protegidas: set, raiz: Path):
     """Devolve o motivo se o comando é destrutivo sobre branch protegida."""
-    for segmento in SEPARADORES.split(comando):
+    for segmento in separar(comando):
         tokens = partir(segmento.strip())
         if not tokens or not e_git(tokens[0]):
             continue
@@ -127,6 +202,12 @@ def motivo_da_recusa(comando: str, protegidas: set, raiz: Path):
             continue
 
         # push
+        # `--mirror` não cita ref nenhuma e mesmo assim reescreve todas as do
+        # remoto, apagando as que sumiram daqui. É força sobre tudo, inclusive
+        # o que está na lista — por isso não depende de `atingidas`.
+        if "--mirror" in bandeiras:
+            return ("reescrever todas as refs do remoto de uma vez (--mirror), "
+                    "as protegidas inclusive")
         apaga = bool(bandeiras & {"-d", "--delete"})
         forca = bool(bandeiras & {"-f", "--force"}) or any(
             b.startswith("--force-with-lease") or b.startswith("--force-if-includes")
@@ -203,6 +284,21 @@ BARRA = [
     ("refs/heads explícito", "git push origin +refs/heads/main"),
     ("forçar na forma curta", "git push -f origin homolog"),
     ("caminho do Windows antes do verbo", r"git -C C:\repo push --force origin main"),
+    # Os cinco furos medidos em 14/08/2026, um caso para cada.
+    ("escondido depois da quebra de linha", "git status\ngit push --force origin main"),
+    ("aspas duplas no nome da branch", 'git branch -D "main"'),
+    ("aspas simples no nome da branch", "git push origin --delete 'homolog'"),
+    ("espelhar reescreve tudo", "git push --mirror origin"),
+    ("escondido dentro de subcomando", "git status $(git push --force origin main)"),
+    # Aspas que não fecham voltam ao corte cego, de propósito: assim uma aspa
+    # solta não vira porta dos fundos.
+    ("aspa solta não abre porta", "git status ' && git push --force origin main"),
+    # Aspa dupla não protege subcomando: isto executa mesmo.
+    ("aspas duplas não seguram o subcomando",
+     'git status "$(git push --force origin main)"'),
+    # Documento sem aspas no delimitador expande — logo, executa.
+    ("documento que expande ainda executa",
+     "cat <<FIM\n$(git push --force origin main)\nFIM"),
 ]
 
 DEIXA_PASSAR = [
@@ -222,6 +318,24 @@ DEIXA_PASSAR = [
     # decide isso é a regra 9 e o perfil do repositório — este gancho cuida do
     # destrutivo. Veto largo demais é desligado na primeira semana.
     ("push normal para a protegida", "git push origin main"),
+    # O par de cada furo novo: mesmo mecanismo, alvo que não é protegido. Sem
+    # esta metade, o conserto vira veto largo e é desligado na primeira semana.
+    ("quebra de linha, trabalho comum", "git status\ngit push origin feature/x"),
+    ("aspas duplas em branch de trabalho", 'git branch -D "feature/x"'),
+    ("aspas simples em nome que só parece", "git push origin --delete 'feature/homolog-antiga'"),
+    ("espelhar em clone não é push", "git clone --mirror https://exemplo.invalido/r.git"),
+    ("subcomando que não empurra nada", "git status $(git rev-parse HEAD)"),
+    # Citar o destrutivo não é executá-lo. Estes dois casos nasceram de um
+    # falso positivo real: o gancho barrou o comando que escrevia o recibo dele.
+    ("mensagem de commit que cita o veto",
+     'git commit -m "não rode git push --force origin main"'),
+    # Aspa simples protege tudo: ali dentro é texto, não comando.
+    ("aspas simples seguram o comando inteiro",
+     "echo 'git push --force origin main'"),
+    # E o par do documento: com aspas no delimitador, é dado que vai para a
+    # entrada de outro programa. Foi este caso que barrou o recibo do gancho.
+    ("documento literal é dado, não comando",
+     "gh issue comment 13 --body-file - <<'FIM'\ngit push --force origin main\nFIM"),
 ]
 
 
