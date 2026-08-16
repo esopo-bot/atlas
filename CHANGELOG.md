@@ -3,6 +3,21 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.71 — 2026-08-15
+
+A regra 9 para de calar sobre commit. Ela mandava conferir a autorização da
+casa antes de empurrar e não dizia nada sobre gravar — e silêncio, para um
+agente, é autorização.
+
+### Mudado
+
+- **Commit e push passam a andar juntos na regra 9.** A mesma assimetria já
+  tinha sido corrigida na 0.70, no modelo que nasce em repositório novo, e
+  ficou de pé na lista numerada: o mesmo fato em duas casas, dizendo coisas
+  diferentes. Agora as duas falam igual — e nenhuma decide pela casa de
+  ninguém, porque a permissão continua sendo de cada repositório, gravada no
+  perfil dele.
+
 ## 0.70 — 2026-08-15
 
 A camada ganha a segunda trava dura, e a primeira para de vazar. Até aqui a

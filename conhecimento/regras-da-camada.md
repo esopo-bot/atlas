@@ -31,12 +31,12 @@ aplique**: o protocolo de proposta está no fim da página.
    domínio, região, nome de fila que só existam dentro do arquivo de
    credencial ficam invisíveis — a sessão não o abre, e para. O que ela
    precisa para medir se escreve onde ela lê.
-9. **Destrutivo é do dono; push segue o que a casa autorizou** — a permissão
-   é de cada repositório e se grava no perfil dele; sem registro, a sessão
-   não empurra nada. O que **aciona automação** (esteira, implantação, aviso
-   a outras pessoas) é sempre do dono, mesmo onde o resto é liberado:
-   **sincronizar não é entregar.** Decisão dele vira pergunta — uma por
-   vez, com a recomendação primeiro; o agente prepara e executa o
+9. **Destrutivo é do dono; commit e push seguem o que a casa autorizou** — a
+   permissão é de cada repositório e se grava no perfil dele; sem registro, a
+   sessão não grava e não empurra. O que **aciona automação** (esteira,
+   implantação, aviso a outras pessoas) é sempre do dono, mesmo onde o resto
+   é liberado: **sincronizar não é entregar.** Decisão dele vira pergunta —
+   uma por vez, com a recomendação primeiro; o agente prepara e executa o
    não-destrutivo. Redesenho de experiência também é decisão dele —
    esboço e pergunta fechada antes do código; conserto de defeito não
    pede.
