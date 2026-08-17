@@ -87,6 +87,8 @@ const daCamada = [
   'conhecimento/skills-criar-e-testar',
   'conhecimento/ganchos',
   'conhecimento/plugins-oficiais-do-claude-code',
+  'conhecimento/estado-que-nao-viaja',
+  'fluxos/mudar-de-maquina',
   'conhecimento/mcp',
   'conhecimento/subagentes',
   // Placa: só existe para não quebrar link antigo. Fica no fim porque não é

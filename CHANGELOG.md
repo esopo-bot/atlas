@@ -3,6 +3,98 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.80 — 2026-08-16
+
+A trava de credencial vira professor, a montagem passa a conferir o índice
+do git, e a casa ganha um lugar para dizer onde as issues nascem. (A rodada
+passou por refutação adversarial no meio: os consertos que ela cobrou estão
+na lista, e o número andou junto — não existe 0.79 publicada.)
+
+### Mudado
+
+- **`vetar-credencial.py` virou `orientar-credencial.py`.** Ler credencial
+  pelo shell deixa de ser negado: o comando passa e o modelo recebe a lição
+  junto (`additionalContext` — medido: chega ao modelo sem mexer no fluxo
+  de permissão). O veto continua **só no que não se desfaz**: alvo de
+  credencial indo para `git`/`gh` (commit, comment, pr). A atualização
+  migra o `settings.json` e remove o arquivo antigo; teste com 49 casos —
+  19 orientam, 5 vetam, 25 calam.
+- **O gancho é o primeiro cliente do recibo da esteira:** cada orientação
+  materializa um recibo `segue` e cada veto um `para`, por código
+  (`.agents/recibo/`), em `tmp/recibos/` — com prova re-executável
+  (`--avaliar`).
+- **A conferência do fim da montagem pergunta também ao índice do git.**
+  Antes ela só perguntava ao ignore, e arquivo criado mas nunca adicionado
+  passava como "em dia" — foi assim que um gancho ficou fora do git sem
+  ninguém ver. Agora: ignorado é um aviso, fora do índice é outro.
+
+### Adicionado
+
+- **Molde `configuracao-da-casa.md`** na raiz: onde as issues desta casa
+  nascem, padrão de nome e fluxo do backlog. A camada cria o molde
+  (montagem e atualização); o valor é seu e nunca é sobrescrito. A skill
+  `trabalho-por-issue` lê antes de criar issue, e o módulo `encadeador`
+  entrega o arquivo no prompt de toda etapa de sessão — com três cuidados
+  refutados antes de escritos: arquivo com UTF-8 quebrado (editor de
+  Windows salva cp1252) segue com o prompt puro em vez de derrubar a
+  corrente sem recibo; as linhas entram citadas (`> `), para config que
+  imita a moldura não fabricar limite falso; e acima de 64 mil caracteres o
+  prompt segue sem ela, com aviso — config de casa é uma página.
+- **As regras de fila em página:** `fluxos/historia-em-issue.md` ganhou "A
+  fila e o nome" — nome `semana_<ISO>_hist_<n>`, nasce no backlog, achado
+  novo entra na próxima hist, uma sessão termina um trabalho.
+
+## 0.74 a 0.78 — 2026-08-16 (registradas em atraso)
+
+A esteira de recibos chegou em cinco degraus e estas entradas não foram
+escritas na hora: **0.74** o contrato e o escritor de recibo
+(`.agents/recibo/`, recibo materializado só por código); **0.75** a
+conferência (`.agents/conferir/`, re-executa cada prova e acusa
+divergência); **0.76** o módulo opcional `encadeador` (manifesto com
+dependências, fork/join, ensaio-sentinela); **0.77–0.78** os consertos que
+o primeiro uso real cobrou (a conferência herda o ambiente das etapas e
+confere só a execução corrente; prova de git ancora em SHA; logs por
+ciclo).
+
+## 0.73 — 2026-08-16
+
+A trava de credencial para de ser punitiva. Ela barrava pelo alvo e ignorava
+o verbo — então `test -d .credenciais`, `ls` e `grep` que só citavam o
+caminho caíam junto com `cat .env`, e organizar o cofre virava briga com a
+própria proteção (o defeito que a issue #22 já tinha anotado).
+
+### Mudado
+
+- **A trava agora pergunta duas coisas, não uma: o alvo é credencial E o
+  comando lê o conteúdo?** Ler NOME/existência passa (`ls`, `test`, `find`,
+  `stat` — allowlist curto e conferível); ler CONTEÚDO continua barrado
+  (`cat`, `less`, `grep` dentro, `cp`, `python -c open`, substituição de
+  comando). O julgamento é por segmento: `ls .credenciais && cat .env` barra
+  pelo `cat`, e o `ls` do lado não o inocenta. Errar no allowlist sobra em
+  falso positivo, nunca em vazamento. O teste subiu de 33 para 45 casos.
+
+## 0.72 — 2026-08-16
+
+A camada aprende com a mudança de máquina. Uma migração real de disco provou
+o padrão: o que mora no git chega inteiro; o que mora fora — variável,
+perfil de CLI, ferramenta, estado da própria ferramenta de agente — morre em
+silêncio, e cada peça para dias depois com cara de defeito novo.
+
+### Adicionado
+
+- **Página "o estado que não viaja"** (`conhecimento/`): os quatro
+  territórios do estado, a regra de bolso — o que vale amanhã mora no git;
+  o que a sessão precisa e não está nele se declara por nome e se confere
+  por instrumento — e o padrão da página de máquina nova.
+- **Fluxo "mudar de máquina"** (`fluxos/`): o antes e o depois da mudança,
+  e os sintomas que denunciam migração malfeita.
+- **Gancho `conferir-ambiente.py`** (`SessionStart`): acusa na abertura o
+  que a máquina não tem e a casa declara precisar — as variáveis `${VAR}`
+  do `.mcp.json` e o que o `ambiente.txt` da raiz declarar (comando, pasta,
+  arquivo, variável). Nomes e existência, nunca valores; cala quando está
+  tudo lá. O `ambiente.txt` é do dono, como a lista de branches protegidas:
+  a atualização conserta o código e nunca reescreve a declaração.
+
 ## 0.71 — 2026-08-15
 
 A regra 9 para de calar sobre commit. Ela mandava conferir a autorização da

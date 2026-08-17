@@ -139,6 +139,10 @@ cabeçalho, script apontado por declaração. A regra que evita:
   abertura, um teste, qualquer instrumento que transforme o silêncio em
   aviso.
 
+E o caminho é só uma das coisas que a mudança de raiz mata. O mapa inteiro
+do que morre — e como declarar e conferir o que a casa precisa do ambiente
+— está em [o estado que não viaja](estado-que-nao-viaja.md).
+
 ## A regra do token
 
 O `.mcp.json` aceita `${VARIAVEL}`: o valor vem da variável de ambiente na hora

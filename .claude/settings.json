@@ -25,6 +25,14 @@
             "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/conferir-mcp.py\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/conferir-ambiente.py\""
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -42,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-credencial.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/orientar-credencial.py\""
           }
         ]
       }

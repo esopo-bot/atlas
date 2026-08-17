@@ -123,11 +123,20 @@ subir, não existe proteção nenhuma. Por isso a regra de texto continua no
 | ---------------------------- | -------------- | ------------------------------------------------------ |
 | `injetar-qualidade.py`       | `SessionStart` | entrega o padrão de código, que skill nenhuma dispara   |
 | `conferir-mcp.py`            | `SessionStart` | acusa declaração de MCP apontando para arquivo que não existe |
+| `conferir-ambiente.py`       | `SessionStart` | acusa o que a máquina não tem e a casa declara precisar |
 | `vetar-branch-protegida.py`  | `PreToolUse`   | recusa apagar, renomear e forçar branch de longa duração |
-| `vetar-credencial.py`        | `PreToolUse`   | recusa abrir arquivo de credencial por comando de shell |
+| `orientar-credencial.py`     | `PreToolUse`   | ensina ao ler credencial; veta só o que não se desfaz (git/gh) |
 
 O porquê do `conferir-mcp.py` está na [página de MCP](mcp.md). Ele carrega o
 próprio teste: `python .claude/hooks/conferir-mcp.py --testar`.
+
+O `conferir-ambiente.py` é o irmão dele para o resto da máquina: as
+variáveis `${VAR}` do `.mcp.json` e o que o `ambiente.txt` da raiz declarar
+— comando, pasta, arquivo, variável. Nomes e existência, nunca valores. O
+`ambiente.txt` **é seu**, como a lista de branches: a atualização conserta o
+código do gancho e nunca reescreve a sua declaração. O porquê está em
+[o estado que não viaja](estado-que-nao-viaja.md). Ele carrega o próprio
+teste: `python .claude/hooks/conferir-ambiente.py --testar`.
 
 O veto de branch é a regra 12 virando trava. Os nomes protegidos vêm de
 `.claude/branches-protegidas.txt` — um por linha, **e esse arquivo é seu**: a
@@ -139,25 +148,43 @@ E tem um limite declarado: **push normal para branch protegida passa.** Quem
 decide isso é a regra 9 e o perfil do repositório. O gancho cuida do
 destrutivo — apagar, renomear, reescrever.
 
-O veto de credencial fecha um buraco medido: a regra de `deny` do
-`settings.json` cobre a ferramenta de leitura de arquivo, e **`cat .env` pelo
-terminal passa por fora dela**. O gancho olha o **alvo** do comando, nunca o
-verbo — `cat`, `less`, `grep`, `Get-Content` e `python -c open(...)` abrem
-arquivo do mesmo jeito, e listar verbos é corrida perdida. Ele carrega o
-próprio teste: `python .claude/hooks/vetar-credencial.py --testar`.
+O professor de credencial é o princípio *trava no que não se desfaz;
+instrumento educativo em todo o resto* virando código. Ele olha o **alvo**
+do comando, nunca o verbo — `cat`, `less`, `grep`, `Get-Content` e
+`python -c open(...)` abrem arquivo do mesmo jeito, e listar verbos é
+corrida perdida — e responde em três tons: **cala** quando o alvo não é
+credencial ou o comando só lê nome (`ls`, `test`, `find`, `stat`);
+**orienta** quando o comando lê conteúdo de credencial — a leitura passa, e
+o modelo recebe por `additionalContext` onde o arquivo mora, `${VARIAVEL}`
+no lugar do valor e o que fazer se ele já entrou no git; **veta** quando o
+alvo é credencial e o verbo grava história ou publica (`git`, `gh`) —
+publicação não se desfaz. Ele carrega o próprio teste:
+`python .claude/hooks/orientar-credencial.py --testar` — e um avaliador
+avulso, `--avaliar '<comando>'`, que repete o julgamento sem executar nada.
+
+Ele também é o **primeiro cliente do recibo da esteira**: cada orientação
+vira recibo `segue` e cada veto um `para`, materializados por código
+(`.agents/recibo/recibo.py`) em `tmp/recibos/orientacao-credencial/` — com
+prova re-executável pelo `--avaliar`. O recibo nunca decide: se falhar, a
+decisão do gancho sai igual.
 
 Os limites dele, declarados:
 
-- **Falar do assunto passa.** Mensagem entre aspas (`-m "explica o .env"`) e
+- **Falar do assunto cala.** Mensagem entre aspas (`-m "explica o .env"`) e
   corpo de documento literal (`<<'FIM'`) são dados, não alvos. Sem isso o
-  gancho barraria quem escreve o recibo dele — foi o que aconteceu com o veto
+  gancho morderia quem escreve o recibo dele — foi o que aconteceu com o veto
   de branch.
 - **A mensagem que executa não passa.** Dentro de aspas duplas o `$(...)`
-  ainda roda, então `-m "$(cat .env)"` é leitura disfarçada e é recusada.
+  ainda roda, então `-m "$(cat .env)"` leva a leitura para a história — e
+  história é onde o veto continua.
+- **Orientar não é aprovar.** A orientação viaja sem `permissionDecision`
+  nenhum: um `allow` auto-aprovaria a chamada, e o fluxo de permissão da
+  sessão fica como está (medido em 16/08/2026, claude 2.1.233).
 - **Arquivo de exemplo entra junto**, porque o `deny` já o pega — duas
-  proteções da mesma casa discordando é pior que uma barrando demais.
-- **Ele não substitui o `deny`.** Gancho falha aberto; a regra de permissão
-  é a rede de baixo. É sobreposição declarada, não descuido.
+  proteções da mesma casa discordando é pior que uma orientando demais.
+- **Ele não substitui o `deny` da ferramenta de leitura.** Gancho falha
+  aberto; a regra de permissão é a rede de baixo. É sobreposição declarada,
+  não descuido — e mudar esse eixo é a peça 2 do desenho, ainda por vir.
 
 ## Todo gancho nasce com teste
 

@@ -20,9 +20,16 @@ existem, que etapas de verificação a casa reconhece, quem encerra — **nada
 disso é da skill.** É da casa, muda de casa para casa, e chutar é o começo do
 trabalho errado.
 
-1. **Procure o perfil** do repositório em `conhecimento/projetos/`. Já tem o
-   bloco "Trabalho por issue" preenchido? Siga e não pergunte nada.
-2. **Não tem?** Pergunte **de uma vez só**, numa mensagem — e grave a resposta
+1. **Leia a configuração da casa antes de criar issue:**
+   `configuracao-da-casa.md`, na raiz. É dela que saem o repositório onde a
+   issue nasce, o padrão de nome e o fluxo do backlog — nunca de palpite, e
+   nunca do repositório de código "porque era o que estava aberto". Arquivo
+   ausente ou ainda com `${...}` por preencher? Pergunte ao dono e grave a
+   resposta lá antes de criar qualquer issue.
+2. **Procure o perfil** do repositório em `conhecimento/projetos/` para o
+   resto — rótulos, quadro, etapas, quem encerra. Já tem o bloco "Trabalho
+   por issue" preenchido? Siga e não pergunte nada.
+3. **Não tem?** Pergunte **de uma vez só**, numa mensagem — e grave a resposta
    no perfil antes de continuar. Pergunta em conta-gotas ao longo da sessão
    custa caro; perguntar de novo amanhã é sinal de que ninguém gravou.
 
@@ -42,9 +49,11 @@ ferramenta nenhuma, escreva o texto pronto e diga onde colar.
 
 ## Abrir: o corpo da issue
 
-Uma história, uma issue. As tarefas moram **dentro** dela, como critérios. Um
-pedaço que outra pessoa tocaria sozinha e que não cabe aqui vira **outra
-issue**, ligada por link no corpo — link, nunca sub-issue.
+Uma história, uma issue. A issue nasce **onde e como a configuração da casa
+manda** — repositório, nome no padrão, no backlog, fim da fila. As tarefas
+moram **dentro** dela, como critérios. Um pedaço que outra pessoa tocaria
+sozinha e que não cabe aqui vira **outra issue**, ligada por link no corpo —
+link, nunca sub-issue.
 
 O molde do corpo da issue está em `references/moldes.md`; abra ao criar.
 

@@ -8,6 +8,7 @@ O que existe depois de montar a camada, e o que entra em cada lugar.
 repositorio/
 ├── AGENTS.md              instruções neutras — o centro que quase todo agente lê
 ├── CLAUDE.md              adaptador do Claude Code: importa o AGENTS.md
+├── configuracao-da-casa.md  onde as issues desta casa nascem — molde da camada, valor seu
 ├── montar.py              monta e atualiza a camada — você copia para cá
 │
 ├── .agents/skills/        fonte das skills: uma pasta por skill

@@ -7,10 +7,13 @@ Os três moldes que a abertura usa. O corpo da skill diz quando abrir cada um.
 O bloco que se grava no perfil do repositório, em `conhecimento/projetos/`.
 Os nomes são os que a casa usa, nunca os que a skill imagina:
 
+Onde as issues moram, o padrão de nome e o fluxo do backlog **não entram
+aqui**: têm casa própria, o `configuracao-da-casa.md` da raiz — um fato, uma
+casa. Este bloco guarda o resto:
+
 ```markdown
 ## Trabalho por issue
 
-- **Issues moram em:** <repositório, projeto ou sistema>
 - **Quadro de acompanhamento:** <como a casa o chama, e onde ele fica>
 - **Estados do quadro, na ordem:** <os nomes de lá>
 - **Rótulos que importam:** <quais, e o que cada um significa aqui>
