@@ -16,6 +16,11 @@ O caso que decide: `git push origin +feature/x` é push forçado e
 `git push origin feature/x` não é. Nenhum padrão de texto separa os dois sem
 errar de um lado. Um gancho lê o comando e separa.
 
+E dá para saber qual das duas te barrou pelo texto da recusa: o `deny` do
+`settings.json` nega curto e sem lição — não há programa do outro lado para
+explicar; o gancho nega ou orienta **com a lição junto**, porque quem escreve
+o motivo é ele (o contrato, abaixo).
+
 ## Onde se liga
 
 No `settings.json`, por evento e por alvo:
@@ -125,7 +130,7 @@ subir, não existe proteção nenhuma. Por isso a regra de texto continua no
 | `conferir-mcp.py`            | `SessionStart` | acusa declaração de MCP apontando para arquivo que não existe |
 | `conferir-ambiente.py`       | `SessionStart` | acusa o que a máquina não tem e a casa declara precisar |
 | `vetar-branch-protegida.py`  | `PreToolUse`   | recusa apagar, renomear e forçar branch de longa duração |
-| `orientar-credencial.py`     | `PreToolUse`   | ensina ao ler credencial; veta só o que não se desfaz (git/gh) |
+| `orientar-credencial.py`     | `PreToolUse`   | ensina ao ler credencial (shell e leitura direta); veta só o que não se desfaz |
 
 O porquê do `conferir-mcp.py` está na [página de MCP](mcp.md). Ele carrega o
 próprio teste: `python .claude/hooks/conferir-mcp.py --testar`.
@@ -153,14 +158,28 @@ instrumento educativo em todo o resto* virando código. Ele olha o **alvo**
 do comando, nunca o verbo — `cat`, `less`, `grep`, `Get-Content` e
 `python -c open(...)` abrem arquivo do mesmo jeito, e listar verbos é
 corrida perdida — e responde em três tons: **cala** quando o alvo não é
-credencial ou o comando só lê nome (`ls`, `test`, `find`, `stat`);
+credencial ou o comando só lê nome (`ls`, `test`, `find`, `stat`, e os
+subcomandos de git que só listam — `ls-files`, `status`, `check-ignore`);
 **orienta** quando o comando lê conteúdo de credencial — a leitura passa, e
 o modelo recebe por `additionalContext` onde o arquivo mora, `${VARIAVEL}`
 no lugar do valor e o que fazer se ele já entrou no git; **veta** quando o
-alvo é credencial e o verbo grava história ou publica (`git`, `gh`) —
-publicação não se desfaz. Ele carrega o próprio teste:
-`python .claude/hooks/orientar-credencial.py --testar` — e um avaliador
-avulso, `--avaliar '<comando>'`, que repete o julgamento sem executar nada.
+alvo é credencial e o comando grava história ou publica — publicação não se
+desfaz. Dentro do `git`, quem decide é o **subcomando**, não o nome `git`:
+o motivo é um falso positivo medido, uma sessão de diagnóstico inteira
+barrada de perguntar `git ls-files` e `git status` sobre a gaveta —
+comandos que não escrevem uma linha em lugar nenhum. Subcomando fora das
+listas de leitura continua vetando: o conjunto que grava é aberto, e lista
+fechada do lado errado vaza.
+
+Ele cobre as **duas portas de leitura** da sessão: o shell e a ferramenta de
+leitura direta do agente (`Read`). Antes, a mesma casa ensinava por uma
+porta e murava a outra — um `deny` negava a gaveta `.credenciais/` inteira,
+sem lição, e quem pagava era o script versionado que mora nela por
+conveniência. Muro só é melhor que professor onde professor não existe: em
+ferramenta que não roda gancho, o `deny` fica. Ele carrega o próprio teste:
+`python .claude/hooks/orientar-credencial.py --testar` — e dois avaliadores
+avulsos, `--avaliar '<comando>'` e `--avaliar-arquivo '<caminho>'`, que
+repetem o julgamento sem executar nada.
 
 Ele também é o **primeiro cliente do recibo da esteira**: cada orientação
 vira recibo `segue` e cada veto um `para`, materializados por código

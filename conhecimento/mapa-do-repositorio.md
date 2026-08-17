@@ -165,6 +165,29 @@ gerar perfis.
 | Algo que só o Claude Code entende         | `.claude/`                       |
 | Algo que só o Devin entende               | `.devin/`                        |
 
+### Toda página nasce com endereço de chegada
+
+Escrever no lugar certo não basta: **conhecimento sem endereço de chegada não
+existe para quem precisa dele.** Página que só está no disco é achada por quem
+já sabe que ela existe — e quem já sabe não é quem precisa. Por isso página
+nova entra com dois caminhos, nunca um:
+
+- **A linha no índice** — no menu do site (`site/sidebars.js`, escrito à mão
+  para as páginas da camada) e no `LEIAME.md` da subpasta, quando for sua.
+- **O link de onde a necessidade nasce** — a página que alguém já está lendo
+  quando o problema aparece cita a nova. Índice responde "o que existe aqui?";
+  ninguém abre índice no meio do incidente.
+
+A mesma exigência vale para quem escreve regra: **regra geral carrega o
+endereço das suas exceções.** Regra que manda fazer sempre X e não diz onde
+mora o caso documentado em que X não vale entrega o leitor à descoberta — e
+ele descobre pagando.
+
+Na hora de podar, a conta se inverte: **página sem link de entrada é candidata
+a sair por definição, não por opinião.** Ela passa em todo instrumento — a
+construção do site gera a rota, o markdown valida —, cobra manutenção como as
+outras e não é lida por ninguém. É o que a lista de arrumação, abaixo, cobra.
+
 ### Quando o agente for arrumar
 
 Duas travas, e as duas nasceram de estrago:

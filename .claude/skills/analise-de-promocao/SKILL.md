@@ -40,6 +40,12 @@ versão do mesmo fato — e duas versões envelhecem torto, até uma delas passa
 a mentir. Achou a casa? A proposta é **melhorar aquela página**, não abrir
 outra.
 
+Não achou casa nenhuma? A página nova só se propõe **com o endereço de
+chegada junto** — a linha no índice e o link vindo de onde a necessidade
+nasce. A regra está em `conhecimento/mapa-do-repositorio.md`, em "Toda página
+nasce com endereço de chegada": conhecimento sem endereço não existe para
+quem precisa dele.
+
 ## A régua da dúvida
 
 Vale a regra 5 de `conhecimento/regras-da-camada.md`: na dúvida, é pessoal, e

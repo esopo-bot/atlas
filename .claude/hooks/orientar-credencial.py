@@ -12,8 +12,9 @@ da trava antiga (o alvo manda, nunca o verbo; 33 casos medidos continuam
 valendo):
 
 1. **CALA** — o alvo não é credencial, ou o comando só lê NOME (`ls`,
-   `test`, `find`, `stat`...). Aviso que aparece sempre ensina a ignorar
-   aviso — metade dos testes prova o silêncio.
+   `test`, `find`, `stat`, `git status`, `git ls-files`...). Aviso que
+   aparece sempre ensina a ignorar aviso — metade dos testes prova o
+   silêncio.
 2. **ORIENTA** — o comando LÊ O CONTEÚDO de credencial (`cat`, `grep`,
    `cp`...). Passa, e o modelo recebe por `additionalContext` a lição: onde
    o arquivo mora, `${VARIAVEL}` no lugar do valor, o que fazer se já entrou
@@ -21,11 +22,25 @@ valendo):
    `additionalContext` de PreToolUse chega ao modelo e não mexe no fluxo de
    permissão — `permissionDecision: "allow"` auto-aprovaria a chamada, e por
    isso NÃO se usa aqui.
-3. **VETA** — o alvo é credencial e o verbo GRAVA HISTÓRIA ou PUBLICA
-   (`git`, `gh`): `git commit -m "$(cat .env)"`, `gh issue comment
-   --body-file .env`. Aí recusa: segredo que sobe fica exposto, e o conserto
-   vira trocar o segredo — reescrever história tira da listagem, não do
-   alcance.
+3. **VETA** — o alvo é credencial e o comando GRAVA HISTÓRIA ou PUBLICA
+   (`git commit -m "$(cat .env)"`, `gh issue comment --body-file .env`). Aí
+   recusa: segredo que sobe fica exposto, e o conserto vira trocar o segredo
+   — reescrever história tira da listagem, não do alcance.
+
+Quem decide o grau, dentro de `git`, é o SUBCOMANDO — não o verbo. Medido em
+17/08/2026, com o verbo decidindo sozinho: `git ls-files`, `git status`,
+`git check-ignore`, `git log` e `git diff` sobre uma pasta de credencial eram
+todos vetados, e nenhum deles escreve uma linha em lugar nenhum. Uma sessão
+inteira ficou sem conseguir nem perguntar ao git o que estava versionado. As
+duas listas abaixo abrem exatamente esses casos; o padrão continua sendo o
+veto, e subcomando que eu não conheço entra pelo lado seguro.
+
+E o professor vale também para a LEITURA DIRETA (a ferramenta `Read` do
+agente), não só para o shell. Antes disto, a mesma casa ensinava pelo `cat` e
+MURAVA pelo `Read` — o `deny` do settings.json negava a pasta `.credenciais/`
+inteira, sem lição nenhuma. Quem pagava era o arquivo versionado que só por
+acaso mora na gaveta: a sessão batia na parede e não recebia nem o motivo. Ler
+não publica; leitura direta nunca veta, só ensina.
 
 Este gancho é o PRIMEIRO CLIENTE do recibo da esteira (`.agents/recibo/`):
 cada ORIENTA materializa um recibo `segue` e cada VETA um `para`, escritos
@@ -36,6 +51,7 @@ aberto no dele.
 
 Rode os testes com:    python .claude/hooks/orientar-credencial.py --testar
 Avalie um comando:     python .claude/hooks/orientar-credencial.py --avaliar '<cmd>'
+Avalie uma leitura:    python .claude/hooks/orientar-credencial.py --avaliar-arquivo '<caminho>'
 """
 
 import json
@@ -78,6 +94,25 @@ VERBOS_SO_DE_NOME = {"ls", "test", "[", "stat", "find",
 # Lista curta e fechada de propósito, o espelho do allowlist de nome: o que
 # lê é infinito e orienta; o que entrega para fora é pequeno e veta.
 VERBOS_QUE_NAO_SE_DESFAZEM = {"git", "gh"}
+
+# Dentro do `git`, o subcomando é que diz o que vai acontecer. Duas listas
+# fechadas, no mesmo desenho das de cima: o que revela só NOME cai no CALA, o
+# que revela CONTEÚDO cai no ORIENTA, e o que não está em nenhuma das duas
+# continua vetando. O padrão é o veto de propósito — o conjunto que grava e
+# publica é aberto (`push`, `stash`, `notes`, `am`, `bundle`, o que a próxima
+# versão do git inventar), e lista fechada do lado errado vaza sozinha.
+#
+# `gh` fica inteiro no veto, e isso é escolha: nele não apareceu falso
+# positivo medido, e o subcomando que só lê raramente recebe caminho de
+# credencial como argumento. Inventar allowlist sem caso é inventar.
+GIT_DE_NOME = {"ls-files", "status", "check-ignore", "ls-tree", "rev-parse"}
+GIT_DE_LEITURA = {"log", "diff", "show", "grep", "blame", "cat-file"}
+
+# Bandeiras globais do `git` que COMEM a palavra seguinte. Sem pulá-las, o
+# subcomando de `git -C outra/pasta status` seria `outra/pasta` — e todo git
+# com bandeira global cairia no veto por engano.
+BANDEIRAS_QUE_COMEM = {"-C", "-c", "--git-dir", "--work-tree", "--namespace",
+                       "--exec-path"}
 
 # `find` é de nome — MAS `-exec`/`-ok` rodam outro comando (que pode ser
 # `cat`), e `-fprint*`/`-fls` escrevem no arquivo apontado. Com qualquer um
@@ -227,6 +262,52 @@ def primeiro_verbo(segmento: str) -> str:
     return ""
 
 
+def subcomando(segmento: str) -> str:
+    """A palavra que diz o que o verbo vai FAZER — sem as opções do meio.
+
+    `git -C outra/pasta ls-files` tem subcomando `ls-files`: os prefixos e as
+    atribuições saem na frente (mesma caminhada do `primeiro_verbo`), depois
+    o próprio verbo, e por fim as bandeiras — inclusive as que comem a
+    palavra seguinte. A primeira palavra que sobra é o subcomando.
+    """
+    s = sem_aspas(segmento).strip()
+    achou_verbo = False
+    pular_valor = False
+    while s:
+        palavra = re.match(r"(\S+)\s*", s)
+        if not palavra:
+            return ""
+        token = palavra.group(1)
+        s = s[palavra.end():]
+        if not achou_verbo:
+            base = re.split(r"[/\\]", token)[-1].lower()
+            if re.fullmatch(r"[A-Za-z_]\w*=\S*", token) or base in PREFIXOS:
+                continue
+            achou_verbo = True
+            continue
+        if pular_valor:
+            pular_valor = False
+            continue
+        if token in BANDEIRAS_QUE_COMEM:
+            pular_valor = True
+            continue
+        if token.startswith("-"):
+            continue
+        return token.lower()
+    return ""
+
+
+def so_le_pelo_git(segmento: str) -> bool:
+    """É `git`, mas num subcomando que não grava história nem publica?
+
+    Vale para as DUAS listas: a de nome e a de leitura. Quem separa uma da
+    outra é o `so_le_o_nome`; aqui a pergunta é só se o veto se aplica.
+    """
+    if primeiro_verbo(segmento) != "git":
+        return False
+    return subcomando(segmento) in (GIT_DE_NOME | GIT_DE_LEITURA)
+
+
 def so_le_o_nome(segmento: str) -> bool:
     """O segmento apenas lista/testa nome, sem chegar ao conteúdo?
 
@@ -237,6 +318,8 @@ def so_le_o_nome(segmento: str) -> bool:
     if EXECUTA_DENTRO.search(segmento):
         return False
     verbo = primeiro_verbo(segmento)
+    if verbo == "git":
+        return subcomando(segmento) in GIT_DE_NOME
     if verbo not in VERBOS_SO_DE_NOME:
         return False
     if verbo == "find" and FIND_LE_OU_ESCREVE.search(segmento):
@@ -277,7 +360,8 @@ def decisao(comando: str) -> tuple:
     comando, e julga cada um sozinho. Um segmento conta quando aponta
     credencial E não é só-de-nome; aí o verbo decide o grau — `git`/`gh`
     veta na hora (o veto vence a orientação: basta um segmento que publica
-    para o comando inteiro não poder rodar), o resto orienta.
+    para o comando inteiro não poder rodar), o resto orienta. A exceção é o
+    subcomando de leitura do `git`, que desce um degrau em vez de vetar.
     """
     if not comando or not vale_olhar(comando):
         return "", ""
@@ -290,10 +374,23 @@ def decisao(comando: str) -> tuple:
         alvo = e_credencial(sem_aspas(segmento))
         if not alvo or so_le_o_nome(segmento):
             continue
-        if primeiro_verbo(segmento) in VERBOS_QUE_NAO_SE_DESFAZEM:
+        if (primeiro_verbo(segmento) in VERBOS_QUE_NAO_SE_DESFAZEM
+                and not so_le_pelo_git(segmento)):
             return "veta", alvo
         resposta, alvo_achado = "orienta", alvo
     return resposta, alvo_achado
+
+
+def decisao_de_arquivo(caminho: str) -> tuple:
+    """O julgamento da LEITURA DIRETA: ('', '') ou ('orienta', alvo).
+
+    A ferramenta de leitura do agente não tem verbo — ler é ler, e ler não
+    publica. Por isso aqui não existe veto: ou o caminho é credencial e a
+    lição vai junto, ou o gancho cala. O reconhecimento do alvo é o mesmo do
+    shell (`e_credencial`), para as duas portas da casa responderem igual.
+    """
+    alvo = e_credencial(caminho or "")
+    return ("orienta", alvo) if alvo else ("", "")
 
 
 def raiz_do_repositorio() -> Path:
@@ -307,7 +404,8 @@ def raiz_do_repositorio() -> Path:
     return Path(base) if base else Path(__file__).resolve().parents[2]
 
 
-def emitir_recibo(resposta: str, alvo: str, comando: str) -> None:
+def emitir_recibo(resposta: str, alvo: str, comando: str,
+                  bandeira: str = "--avaliar") -> None:
     """O primeiro cliente do contrato: orienta é `segue`, veta é `para`.
 
     Materializado por código (.agents/recibo/recibo.py), nunca por texto — a
@@ -331,12 +429,12 @@ def emitir_recibo(resposta: str, alvo: str, comando: str) -> None:
             "ciclo": {"i": 1, "teto": 1},
             "veredito": "segue" if resposta == "orienta" else "para",
             "provado": [{
-                "afirmacao": (f"o comando aponta credencial ({alvo}) e "
+                "afirmacao": (f"o pedido aponta credencial ({alvo}) e "
                               + ("lê o conteúdo"
                                  if resposta == "orienta"
                                  else "entrega para onde não se desfaz")),
                 "comando": ("python .claude/hooks/orientar-credencial.py "
-                            f"--avaliar {shlex.quote(comando)}"),
+                            f"{bandeira} {shlex.quote(comando)}"),
                 "saida": f"{resposta}: {alvo}",
             }],
             "suposto": [],
@@ -381,27 +479,44 @@ def resposta_json(resposta: str, alvo: str) -> dict:
 def main() -> int:
     try:
         entrada = json.load(sys.stdin)
-        comando = entrada.get("tool_input", {}).get("command", "")
+        pedido = entrada.get("tool_input", {})
+        comando = pedido.get("command", "")
+        caminho = pedido.get("file_path", "")
     except (json.JSONDecodeError, AttributeError, TypeError):
         return 0  # falha aberto: entrada quebrada não prende a sessão
 
-    resposta, alvo = decisao(comando)
+    # O shell manda `command`; a leitura direta manda `file_path`. Quem tem
+    # comando é julgado como comando — nem que traga os dois.
+    if comando:
+        resposta, alvo = decisao(comando)
+        assunto, bandeira = comando, "--avaliar"
+    else:
+        resposta, alvo = decisao_de_arquivo(caminho)
+        assunto, bandeira = caminho, "--avaliar-arquivo"
     if not resposta:
         return 0  # cala: sair 0 sem imprimir nada
 
-    emitir_recibo(resposta, alvo, comando)
+    emitir_recibo(resposta, alvo, assunto, bandeira)
     print(json.dumps(resposta_json(resposta, alvo)))
     return 0
 
 
-def avaliar(argv) -> int:
-    """`--avaliar '<cmd>'`: imprime o julgamento — é a prova re-executável."""
-    depois = argv[argv.index("--avaliar") + 1:]
+def avaliar(argv, bandeira: str = "--avaliar") -> int:
+    """`--avaliar '<cmd>'`: imprime o julgamento — é a prova re-executável.
+
+    `--avaliar-arquivo '<caminho>'` faz o mesmo pela porta da leitura direta.
+    Duas bandeiras porque são dois julgamentos: um caminho solto não é um
+    comando, e adivinhar qual é qual daria prova ambígua no recibo.
+    """
+    depois = argv[argv.index(bandeira) + 1:]
     if not depois:
-        print("uso: orientar-credencial.py --avaliar '<comando>'",
+        print(f"uso: orientar-credencial.py {bandeira} '<alvo>'",
               file=sys.stderr)
         return 2
-    resposta, alvo = decisao(depois[0])
+    if bandeira == "--avaliar":
+        resposta, alvo = decisao(depois[0])
+    else:
+        resposta, alvo = decisao_de_arquivo(depois[0])
     print(f"{resposta}: {alvo}" if resposta else "cala")
     return 0
 
@@ -443,6 +558,12 @@ ORIENTA = [
     # por variável de ambiente é padrão legítimo de autenticação.
     ("atribuição que lê antes de rodar gh",
      'TOKEN=$(cat .env) gh pr create --title x --body y'),
+    # Subcomando de git que mostra CONTEÚDO: é leitura, e leitura ensina.
+    ("git mostrando o conteúdo versionado", "git show HEAD:.env"),
+    ("git com o caminho da credencial no log",
+     "git log --oneline -- .credenciais/mcp.env"),
+    ("git comparando a credencial", "git diff .env"),
+    ("git procurando dentro da gaveta", "git grep SENHA -- .credenciais/"),
 ]
 
 VETA = [
@@ -461,6 +582,12 @@ VETA = [
     ("chaveiro no prefixo e credencial no argv",
      "GH_CONFIG_DIR=.credenciais/.gh-bot gh issue comment 1 "
      "--body-file .credenciais/mcp.env"),
+    # O padrão do `git` continua sendo o veto: subcomando fora das duas
+    # listas de leitura não recebe o benefício da dúvida.
+    ("subcomando de git que guarda o valor num objeto",
+     "git hash-object -w .env"),
+    ("subcomando de git fora das listas de leitura",
+     "git stash push .credenciais/mcp.env"),
 ]
 
 CALA = [
@@ -511,6 +638,16 @@ CALA = [
      "GH_CONFIG_DIR=/home/x/code/casa/.credenciais/.gh-bot gh api user"),
     ("variável apontando credencial antes de verbo comum",
      "CONFIG=.credenciais/mcp.env python roda.py"),
+    # git de NOME: pergunta o que está versionado, não abre valor nenhum.
+    # Foram estes cinco, medidos em 17/08/2026, que o veto por verbo barrava
+    # — uma sessão de diagnóstico inteira sem conseguir olhar o repositório.
+    ("perguntar ao git o que está rastreado", "git ls-files .credenciais/"),
+    ("perguntar ao git por que ignora",
+     "git check-ignore -v .credenciais/publicar-mcp-env.py"),
+    ("estado da gaveta no git", "git status .credenciais/"),
+    ("listar a árvore versionada", "git ls-tree HEAD .credenciais/"),
+    ("git de nome com bandeira global que come valor",
+     "git -C ../casa ls-files .credenciais/"),
 ]
 
 
@@ -522,6 +659,19 @@ def _testar_comportamento(falhas: list) -> None:
     def caso(rotulo, condicao):
         if not condicao:
             falhas.append(f"  comportamento — {rotulo}")
+
+    # A porta da leitura direta: mesmo alvo, nunca veto.
+    caso("leitura direta de credencial orienta",
+         decisao_de_arquivo(".credenciais/mcp.env")[0] == "orienta")
+    caso("leitura direta de .env orienta",
+         decisao_de_arquivo("/home/x/casa/.env")[0] == "orienta")
+    caso("leitura direta de página comum cala",
+         decisao_de_arquivo("conhecimento/mcp.md") == ("", ""))
+    caso("leitura direta de nome só parecido cala",
+         decisao_de_arquivo(".envision.md") == ("", ""))
+    caso("leitura direta nunca veta",
+         all(decisao_de_arquivo(c)[0] != "veta"
+             for c in (".env", ".credenciais/x", "a/.credenciais/b")))
 
     # A forma da saída: orienta ensina sem decidir permissão; veta nega.
     orienta = resposta_json("orienta", ".env")["hookSpecificOutput"]
@@ -625,4 +775,6 @@ if __name__ == "__main__":
         sys.exit(testar())
     if "--avaliar" in sys.argv:
         sys.exit(avaliar(sys.argv))
+    if "--avaliar-arquivo" in sys.argv:
+        sys.exit(avaliar(sys.argv, "--avaliar-arquivo"))
     sys.exit(main())

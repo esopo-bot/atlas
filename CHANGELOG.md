@@ -3,6 +3,74 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.84 — 2026-08-17
+
+O conhecimento ganha a regra do endereço de chegada, a página de MCP aprende
+o servidor que sobe sem as variáveis que usa, e o território do perfil do
+sistema confessa que falha sem mudar de máquina.
+
+### Mudado
+
+- **`mapa-do-repositorio.md` ganha "Toda página nasce com endereço de
+  chegada".** Conhecimento sem endereço não existe para quem precisa dele:
+  página entra com dois caminhos — a linha no índice **e** o link vindo de
+  onde a necessidade nasce —, regra geral carrega o endereço das suas
+  exceções, e na poda a página sem link de entrada sai por definição, não por
+  opinião. A lista de arrumação já cobrava o link de entrada e não tinha
+  regra para citar; agora tem. E a skill `analise-de-promocao` aponta para a
+  regra no momento em que a necessidade nasce — ao propor página nova.
+- **`mcp.md` ganha o quarto modo de falha.** Servidor declarado sem as
+  variáveis que usa **sobe do mesmo jeito**, aparece na lista de ferramentas
+  e só falha na primeira chamada — engana no sentido oposto aos outros três,
+  porque tudo parece vivo até o uso. Medido com sonda em 17/08/2026: sem a
+  variável, o `initialize` respondeu, o `tools/list` trouxe a ferramenta, o
+  processo seguiu vivo e o erro só apareceu no `tools/call`. O conserto é
+  declarar o nome onde algum instrumento o leia — `${VARIAVEL}` na própria
+  declaração ou `variavel NOME` no `ambiente.txt`.
+- **`estado-que-nao-viaja.md`: o território 4 falha sem mudar de máquina.**
+  Processo nascido de outro pai — aplicativo aberto pelo ícone, serviço,
+  agendador — não herda o que o perfil do shell exporta. A lição inteira
+  continua numa casa só, a página de MCP.
+- **`ganchos.md` ensina a distinguir quem te barrou.** Regra do
+  `settings.json` nega curto e sem lição; gancho nega ou orienta com a lição
+  no próprio texto.
+
+## 0.83 — 2026-08-17
+
+O professor de credencial aprende a segunda porta e o subcomando do git, o
+muro da gaveta sai de onde o professor alcança, e o publicador de tokens
+aprende o canal que a sessão gráfica lê.
+
+### Mudado
+
+- **`orientar-credencial.py` julga o subcomando do `git`, não o nome.**
+  `git ls-files`, `git status` e `git check-ignore` sobre a gaveta calam
+  (leem nome); `git log`, `git diff`, `git show` e `git grep` orientam
+  (leem conteúdo); todo o resto — `add`, `commit`, `stash`, o que vier —
+  continua vetando. O motivo é falso positivo medido em 17/08/2026: uma
+  sessão de diagnóstico barrada de perguntar ao git o que estava
+  versionado, por comandos que não escrevem nada. Suíte: 65 casos — 24
+  orientam, 8 vetam, 33 calam.
+- **O professor cobre a leitura direta (`Read`), e o muro da gaveta cai.**
+  O `deny` de `.credenciais/**` barrava sem lição até script versionado que
+  mora na gaveta; agora o gancho atende as duas portas (matcher
+  `Bash|PowerShell|Read`, avaliador `--avaliar-arquivo`), leitura direta
+  nunca veta — ler não publica — e a atualização migra o `settings.json`
+  das casas que já têm a camada. Os padrões que são segredo por definição
+  (`.env*`, `appsettings*`) continuam negados. **No Devin o muro fica**:
+  ferramenta sem gancho não tem professor, e muro só sai de onde chegou
+  instrumento melhor.
+- **`publicar-mcp-env.py` publica no canal que o sistema lê.** Medido em
+  17/08/2026: variável publicada só para o shell não chega ao aplicativo
+  aberto pelo ícone — a sessão gráfica não lê o perfil do shell, e o
+  servidor MCP morre em silêncio com o `mcp.env` perfeito. No Linux com
+  systemd o publicador agora escreve um drop-in em
+  `~/.config/environment.d/` (modo 600, valor nunca na tela); no Windows
+  segue o `setx`; sistema fora dos dois medidos recebe a confissão, não um
+  chute. A lição está na página de MCP. **A cópia que já existe no
+  workspace não é trocada pela atualização** — o esqueleto preserva o que
+  existe; copie a versão nova por cima quando quiser o conserto.
+
 ## 0.82 — 2026-08-17
 
 O professor de credencial aprende que atribuição de ambiente é

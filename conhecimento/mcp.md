@@ -120,10 +120,27 @@ aparece ali mesmo quando o comando declarado está errado. É o falso positivo
 mais barato de acreditar, porque chega logo depois de você registrar e tem
 cara de confirmação.
 
-Por causa do segundo caso, **checar arquivo não basta: prove com sonda**.
-Uma sonda sobe o servidor de verdade, manda o `initialize` e chama uma
-ferramenta com dado real. É o único teste que separa "o disco tem bytes" de
-"a ferramenta funciona". Servidor local merece uma sonda ao lado do código,
+E há um quarto, que engana no sentido oposto a todos os outros: **servidor
+declarado sem as variáveis que usa sobe do mesmo jeito**, aparece na lista de
+ferramentas e só falha na primeira chamada. O valor não faz falta para
+responder ao `initialize` nem para descrever as ferramentas — só para atender
+a chamada de verdade. Medido com uma sonda (17/08/2026), com a variável fora
+do ambiente: o `initialize` respondeu, o `tools/list` trouxe a ferramenta, o
+processo seguiu vivo, e o erro só apareceu no `tools/call`. Tudo parece vivo
+até o uso.
+
+O conserto é declarar o nome onde algum instrumento o leia: `${VARIAVEL}` na
+própria declaração — o `conferir-ambiente.py` extrai daí e acusa a falta na
+abertura da sessão — ou uma linha `variavel NOME` no `ambiente.txt` da raiz,
+quando é o programa do servidor que lê a variável por conta. Nome que ninguém
+declara é falta que ninguém acusa.
+
+Por causa do segundo caso e do quarto, **checar arquivo não basta: prove com
+sonda**. Uma sonda sobe o servidor de verdade, manda o `initialize` e chama
+uma ferramenta com dado real. É o único teste que separa "o disco tem bytes"
+de "a ferramenta funciona" — e o que separa o quarto caso é justamente a
+chamada: quem para no `initialize` recebe o verde de um servidor que vai
+falhar no primeiro uso. Servidor local merece uma sonda ao lado do código,
 em `.agents/mcp/<nome>/`, rodável num comando.
 
 ### A regra do caminho que atravessa mudança de raiz
@@ -170,6 +187,19 @@ moram em `.credenciais/mcp.env` (`NOME=valor`, um por linha) e
 `python .credenciais/publicar-mcp-env.py` os publica como variáveis do
 usuário — mostrando só os nomes, nunca os valores. Trocou um token: edite o
 `mcp.env` e rode o publicador de novo.
+
+**E a variável precisa chegar em quem abre o programa.** Medido num Linux de
+área de trabalho (17/08/2026): aplicativo aberto pelo ícone nasce do gestor
+de sessão gráfica, não do shell — e não herda o que o perfil do shell
+exporta. O sintoma engana por completo: o `mcp.env` está certo, o terminal
+enxerga a variável, e o servidor MCP morre em silêncio só quando o programa
+vem do ícone. Abrir o aplicativo por um terminal "conserta" — e é assim que
+se diagnostica: se pelo terminal funciona e pelo ícone não, o problema é o
+canal, não o arquivo. O conserto durável, em sistemas com systemd, é
+publicar as variáveis onde a sessão gráfica também lê — um drop-in em
+`~/.config/environment.d/` (`NOME=valor`, um por linha, e relogar para
+valer). É por isso que o publicador escreve nesse canal, não no perfil do
+shell.
 
 ## O custo que ninguém declara
 

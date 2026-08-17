@@ -35,7 +35,10 @@ está no `README.md`.
   algo que a casa já faz, procure o procedimento na documentação dela. Não
   achou? Peça o endereço — não improvise. Esteira improvisada onde já existe
   esteira quebra em produção e ninguém sabe por quê.
-- Nunca abra arquivos de credencial (`.env*`, `appsettings*`, `.credenciais/`).
+- Nunca abra arquivo de valor de credencial (`.env*`, `appsettings*`,
+  `mcp.env` e afins). A gaveta `.credenciais/` também guarda código
+  versionado; o professor de credencial orienta a leitura dela — e o valor
+  que aparecer nunca sai da sessão: em texto, sempre `${VARIAVEL}`.
 - Não altere nada que já exista sem que isso seja pedido.
 - **Aqui a sessão não commita, não empurra e não publica.** Ela deixa os
   arquivos alterados para o dono conferir, commitar e sincronizar; o teto dela

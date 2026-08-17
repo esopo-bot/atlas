@@ -21,6 +21,12 @@ esperavam sumiram junto com o perfil de CLI (território 4). O sintoma, nos
 três casos, foi o mesmo: **silêncio**. Nada avisou na hora — cada peça
 parou dias depois, com cara de defeito novo.
 
+E o território 4 falha **sem mudar de máquina**: processo nascido de outro
+pai — aplicativo aberto pelo ícone, serviço, agendador — não herda o que o
+perfil do shell exporta. Mesmo disco, mesmo arquivo de variáveis, e a sessão
+sem o que precisa. A lição inteira — o canal que a sessão gráfica lê, e por
+que o publicador escreve nele — está em [MCP](mcp.md).
+
 ## A regra de bolso
 
 - **O que vale amanhã mora no território 1.** Lição, receita e decisão se
