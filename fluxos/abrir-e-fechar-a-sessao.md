@@ -1,9 +1,9 @@
 # Abrir e fechar a sessão
 
-Os dois momentos que se repetem em toda sessão. O do começo é um prompt que
-você cola; o do fim é uma linha, porque o resto virou skill.
+O cartão de bolso da camada: os três blocos que se colam, na ordem em que o
+dia os usa. O porquê fica no fim — leitura de uma vez.
 
-## A partida
+## 1 · A partida
 
 Cole isto, com o seu pedido no fim:
 
@@ -29,16 +29,6 @@ página que deveria ter avisado.
 Meu pedido de hoje:
 ```
 
-Três linhas fazem o trabalho pesado:
-
-- **`em vez de descobrir`** — sem ela, a sessão varre o código para
-  responder o que a wiki já responde, e chega ao seu pedido com a janela
-  pela metade.
-- **`não improvise a esteira`** — esteira improvisada em cima de esteira
-  parece pronta e quebra longe de onde nasceu.
-- **`pare e pergunte`** — sem ela, o agente decide por você no meio do
-  caminho, e pedido grande é cheio de decisões suas.
-
 Num workspace com muitos repositórios, acrescente onde eles moram:
 
 ```
@@ -47,14 +37,9 @@ perfis estão em conhecimento/projetos/. Prefira índice e busca dirigida;
 rede e MCP só se a tarefa exigir.
 ```
 
-**Não repita as regras aqui.** Elas já chegam pelo `AGENTS.md` em toda
-sessão; recopiá-las no prompt gasta janela duas vezes e cria uma segunda
-versão para envelhecer torto. Este prompt aponta e delimita — quem manda são
-as [regras da camada](../conhecimento/regras-da-camada.md).
+## 2 · A auditoria — de tempos em tempos, antes do esfriamento
 
-## A auditoria da sessão
-
-De tempos em tempos, antes do esfriamento, meça a camada — não a sessão:
+Meça a camada — não a sessão:
 
 ```
 A sessão vai fechar. Antes do esfriamento: o que a CAMADA falhou em
@@ -70,25 +55,38 @@ Junte as anotações de adivinhação feitas durante o trabalho.
 "Poderia ser mais clara" é ruído; achado é linha faltante, com endereço.
 ```
 
-## O esfriamento
-
-O fechamento é a skill `esfriamento` — da análise de promoção, com o cético
-na conclusão, à revisão das regras. Uma linha basta:
+## 3 · O esfriamento — uma linha
 
 ```
 O trabalho terminou. Rode o esfriamento.
 ```
 
-Sem a skill (outro agente, outra máquina), o roteiro está em
-`.agents/skills/esfriamento/SKILL.md` — cole os itens no prompt.
+O fechamento é a skill `esfriamento` — da análise de promoção, com o cético
+na conclusão, à revisão das regras. Sem a skill (outro agente, outra
+máquina), o roteiro está em `.agents/skills/esfriamento/SKILL.md` — cole os
+itens no prompt.
 
-## Por que só estes dois
+## O porquê, para ler uma vez
 
-Prompt para cada situação — refatorar, revisar, corrigir bug — a camada
-tinha e tirou. Eles repetiam, em texto, o que o agente já faz por conta:
-`/code-review`, `/simplify`, `/debug` e os outros vêm de fábrica e a lista
-está no [canivete](../conhecimento/skills-da-camada.md). Modelo de prompt para
-o que já tem comando é uma casa a mais para envelhecer.
+Três linhas da partida fazem o trabalho pesado:
 
-O que sobrou aqui é o que nenhuma ferramenta traz pronta: **o contorno do que
-a sessão pode decidir sozinha.**
+- **`em vez de descobrir`** — sem ela, a sessão varre o código para
+  responder o que a wiki já responde, e chega ao seu pedido com a janela
+  pela metade.
+- **`não improvise a esteira`** — esteira improvisada em cima de esteira
+  parece pronta e quebra longe de onde nasceu.
+- **`pare e pergunte`** — sem ela, o agente decide por você no meio do
+  caminho, e pedido grande é cheio de decisões suas.
+
+**Não repita as regras no prompt.** Elas já chegam pelo `AGENTS.md` em toda
+sessão; recopiá-las gasta janela duas vezes e cria uma segunda versão para
+envelhecer torto. O prompt aponta e delimita — quem manda são as
+[regras da camada](../conhecimento/regras-da-camada.md).
+
+**Por que só estes três blocos:** prompt para cada situação — refatorar,
+revisar, corrigir bug — a camada tinha e tirou. Eles repetiam, em texto, o
+que o agente já faz por conta: `/code-review`, `/simplify` e os outros vêm
+de fábrica, e a lista está no
+[canivete](../conhecimento/skills-da-camada.md). O que sobrou aqui é o que
+nenhuma ferramenta traz pronta: **o contorno do que a sessão pode decidir
+sozinha.**

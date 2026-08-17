@@ -6,6 +6,23 @@ Vale para busca, consulta de registro, chamada de interface e verificação de
 permissão — na tela, "sem acesso" e "não existe" também se parecem. As causas
 abaixo explicam quase todos os casos — cada uma já custou horas.
 
+## O bolso: causa → hábito
+
+| # | Causa | O hábito que resolve |
+| --- | --- | --- |
+| 1 | Filtro ligado sem você saber | Ancore a busca dentro do repositório; teste-a com termo que você sabe que existe. |
+| 2 | Vocabulário errado | Olhe uma linha real e copie o vocabulário dela; fixe o ambiente na consulta. |
+| 3 | O terminal reescreveu o argumento | Resposta sem sentido? Imprima o que o programa recebeu (`MSYS_NO_PATHCONV=1` no Git Bash). |
+| 4 | O filtro espera um fim que não vem | Processo longo escreve em arquivo; para esperar, use sonda que termina. |
+| 5 | A interface não está no arquivo | Presença em interface se prova com clique, não com busca no HTML. |
+| 6 | O ambiente não tem o dado | Antes de navegar, pergunte "o dado existe aqui?" com consulta direta. |
+| 7 | A medição saiu de outro lugar | Ancore no caminho absoluto; imprima o `pwd` na mesma chamada que mede. |
+| 8 | O seu próprio filtro | Exclua por arquivo, não por conteúdo; rode uma vez sem o filtro. |
+| 9 | Quem perguntou não foi você | Pergunte quem está logado com a chamada que **usa** o token; quem trocou de conta, devolve. |
+
+As seções abaixo são a prova de cada linha — leitura de consulta, para
+quando a causa aparecer.
+
 ## Causa 1: um filtro que você não sabia que estava ligado
 
 Ferramenta de busca sobre `ripgrep` — e é sobre ele que quase toda busca de
@@ -185,6 +202,67 @@ no meio do texto — a frase existe e o `grep` literal não a vê. Medido:
 com o nome entre crases e a continuação na linha seguinte. Para conferir
 presença de fato em página, normalize antes (`tr '\n' ' ' | tr -s ' '`) ou
 procure um pedaço curto, sem formatação.
+
+## Causa 9: quem perguntou não foi você
+
+Ferramenta que guarda credencial responde pela identidade **ativa naquele
+momento**, não pela que você tem em mente. Quem troca de conta para uma tarefa
+e não volta passa a perguntar com a credencial errada — e a resposta é honesta
+para aquela identidade: `404`, "não existe", "repositório não encontrado".
+
+Medido no mesmo dia, com a conta de publicação ativa por engano:
+
+| Comando                          | Resposta               | Verdade |
+| -------------------------------- | ---------------------- | ------- |
+| consultar o repositório pela API | `404`                  | existe  |
+| trazer o que está no remoto      | `Repository not found` | existe  |
+| os mesmos, com a conta certa     | funcionam              | —       |
+
+A última linha é a contraprova que a regra 2 cobra, em
+[as regras da camada](regras-da-camada.md): o instrumento sabe achar, só não
+com aquela identidade.
+
+O `404` é o pior dos vazios porque é **de propósito**. Responder "sem
+permissão" confirmaria a existência do recurso a quem não deveria saber dela,
+então a interface responde igual para "não existe" e para "você não enxerga" —
+e a distinção de que você precisa é justamente a que ela se recusa a dar.
+
+Vale para toda ferramenta com sessão ativa: cliente de repositório, interface
+de nuvem, contexto de cluster, gerenciador de pacote privado.
+
+Três hábitos:
+
+- **Antes de acreditar no vazio, pergunte quem está logado.** É uma chamada, e
+  ela desfaz o diagnóstico inteiro antes de ele começar.
+- **Pergunte ao token, não ao rótulo.** O comando que lê a configuração
+  guardada devolve o nome anotado ali, e o token em uso pode ser de outra
+  conta — medido: o rótulo dizia uma conta e a chamada autenticada devolvia
+  outra. Só a chamada que **usa** a credencial prova qual credencial está em
+  uso.
+- **Quem troca de identidade, devolve.** A troca serve a uma tarefa; a volta é
+  parte dela. Sem isso o erro aparece horas depois, noutro comando, e o sintoma
+  não aponta para a causa.
+
+E o portão que confere identidade antes de uma operação séria tem três
+exigências próprias, porque ele também é um instrumento que pode mentir. As
+três saíram do mesmo incidente de provedor, medido:
+
+- **Prova única é ponto único de falha.** A rota que devolve o usuário deu
+  `503` enquanto o resto da interface ia bem, e o trabalho parou com tudo
+  verde à volta. Uma segunda rota que pergunte ao **mesmo token** traz a mesma
+  resposta e sobrevive à queda de um lado.
+- **Uma tentativa só desperdiça a reserva.** Oito amostras por rota: a rota
+  morta deu 0/8, e a reserva, 5/8 — viva, porém intermitente. O portão tentava
+  cada prova uma vez, então parava em cerca de um terço das execuções dizendo
+  "não consegui perguntar quem está logado" — que se lê como credencial
+  quebrada, e não é. Rota degradada pede repetição, não substituta.
+- **Qual das provas respondeu aparece na tela.** Prova trocada em silêncio não
+  é prova.
+
+A armadilha de leitura, no meio disso: amostra única mentiu duas vezes. O
+mesmo comando falhou por um cliente e funcionou por outro no mesmo minuto, e a
+conclusão fácil — "o cliente está com defeito" — morreu na repetição. **Quando
+o resultado for intermitente, conte; não conclua da primeira.**
 
 ## A regra em uma linha
 

@@ -26,12 +26,12 @@ As regras de fluxo valem em qualquer casa; o **endereço** é de cada uma:
   criar. Sem o arquivo preenchido, pergunta-se ao dono. Casa que concentra
   as issues num repositório só continua concentrando, mesmo com o código
   espalhado em outros.
-- **Nome padronizado:** `semana_<número ISO da semana>_hist_<n>` — ex.:
-  `semana_33_hist_1`. O nome carrega quando e a ordem; o título fica livre
-  para o assunto.
-- **Nasce no backlog, no fim da fila.** Achado novo durante a hist corrente
-  entra na **próxima** (`hist_<n+1>`), nunca fura — fila que fura vira
-  trabalho sem fim.
+- **Nome e fila também são configuração.** O padrão de nome e onde o novo
+  entra moram no mesmo `configuracao-da-casa.md`; a skill lê de lá. Um
+  exemplo que funciona: `semana_<número ISO>_hist_<n>` — o nome carrega
+  quando e a ordem, e o título fica livre para o assunto.
+- **Achado novo não fura a fila.** Entra na próxima posição, nunca na
+  frente — fila que fura vira trabalho sem fim.
 - **Uma sessão termina um trabalho.** Começou uma issue, termina a issue.
   Achado pequeno resolve na mesma sessão; épico vira pergunta ao dono antes
   de entrar na fila.

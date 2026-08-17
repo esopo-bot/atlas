@@ -80,6 +80,8 @@ Rode os testes com:  python .agents/encadeador/encadeador.py --testar
 
 import argparse
 import concurrent.futures
+import contextlib
+import io
 import json
 import os
 import re
@@ -345,15 +347,45 @@ def _guia_da_sessao() -> str:
 TETO_CONFIGURACAO = 64_000
 
 
-def _prompt_da_sessao(etapa: dict, cwd) -> str:
-    """O prompt do manifesto, com a configuração da casa na frente.
+def _bloco_de_regras(cwd) -> str:
+    """As frases das regras da camada, entregues por código — ou nada.
 
-    A casa declara em `configuracao-da-casa.md` (raiz do `--cwd`) onde issue
-    nasce, com que nome e em que fila — e a sessão da corrente não tem outra
-    fonte: ela nasce sem contexto e decidiria de cabeça. O arquivo entra
-    inteiro, não como endereço, porque a sessão pode rodar em worktree ou
-    com leitura restrita — o que o manifesto quer que ela saiba viaja no
-    prompt, como o contrato já viaja no `--json-schema`.
+    A fonte é `conhecimento/regras.json` (camada 0.87+): só as frases
+    imperativas entram — o porquê mora nas páginas de procedência e não cabe
+    em todo prompt de etapa. Entrega determinística de propósito: regra dura
+    que depende de o modelo lembrar de buscar já custou caro no sistema
+    estudado. Fonte ausente é silêncio (casa sem a camada nova); ilegível
+    avisa e segue — nenhuma etapa derruba a corrente por causa de aviso.
+    Cada frase vira linha única citada (`> `), pela mesma razão da moldura
+    da configuração.
+    """
+    fonte = Path(cwd) / "conhecimento" / "regras.json"
+    try:
+        texto = fonte.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+    try:
+        regras = json.loads(texto)["regras"]
+        frases = [" ".join(f"{regra['id']}. {regra['regra']}".split())
+                  for regra in regras]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        print(f"AVISO: {fonte} ilegível como fonte de regras; o prompt "
+              "seguiu sem elas.", file=sys.stderr)
+        return ""
+    if not frases:
+        return ""
+    citado = "\n".join("> " + frase for frase in frases)
+    if len(citado) > TETO_CONFIGURACAO:
+        print(f"AVISO: {fonte} passou do teto ({TETO_CONFIGURACAO}); o "
+              "prompt seguiu sem as regras.", file=sys.stderr)
+        return ""
+    return ("AS REGRAS DA CAMADA — as linhas citadas com '> ' logo abaixo "
+            "valem em toda etapa; a lista completa, com o porquê, está em "
+            "conhecimento/regras-da-camada.md:\n\n" + citado + "\n---\n\n")
+
+
+def _bloco_de_configuracao(cwd) -> str:
+    """A configuração da casa citada e emoldurada — ou nada.
 
     Três cuidados, os três refutados antes de escritos:
 
@@ -372,16 +404,33 @@ def _prompt_da_sessao(etapa: dict, cwd) -> str:
     try:
         texto = configuracao.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        return etapa["prompt"]
+        return ""
     if len(texto) > TETO_CONFIGURACAO:
         print(f"AVISO: {configuracao} tem {len(texto)} caracteres (teto "
               f"{TETO_CONFIGURACAO}) — configuração de casa é uma página; "
               "o prompt seguiu sem ela.", file=sys.stderr)
-        return etapa["prompt"]
+        return ""
     citado = "\n".join("> " + linha for linha in texto.splitlines())
     return ("CONFIGURAÇÃO DA CASA — as linhas citadas com '> ' logo abaixo "
             "valem antes de criar issue ou escolher endereço de trabalho:\n\n"
-            + citado + "\n---\n\n" + etapa["prompt"])
+            + citado + "\n---\n\n")
+
+
+def _prompt_da_sessao(etapa: dict, cwd) -> str:
+    """O prompt do manifesto, com as regras e a configuração na frente.
+
+    A casa declara em `configuracao-da-casa.md` (raiz do `--cwd`) onde issue
+    nasce, com que nome e em que fila — e a sessão da corrente não tem outra
+    fonte: ela nasce sem contexto e decidiria de cabeça. O arquivo entra
+    inteiro, não como endereço, porque a sessão pode rodar em worktree ou
+    com leitura restrita — o que o manifesto quer que ela saiba viaja no
+    prompt, como o contrato já viaja no `--json-schema`.
+
+    A ordem é semântica: regras antes da configuração, configuração antes
+    do pedido — regra dura chega primeiro, como conteúdo nenhum chega.
+    """
+    return (_bloco_de_regras(cwd) + _bloco_de_configuracao(cwd)
+            + etapa["prompt"])
 
 
 def _comando_sessao(etapa: dict) -> list:
@@ -502,21 +551,18 @@ def _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
     resumo = (f"conferidos {len(alvos)} recibos desta execução — "
               + ("nenhuma acusação" if pior == 0 else f"pior exit {pior}"))
     log.write_text("\n".join(saidas) + f"\n{resumo}\n", encoding="utf-8")
-    rodada = subprocess.CompletedProcess(
-        [], 0 if pior == 0 else (4 if pior == 4 else 2),
-        "\n".join(saidas) + f"\n{resumo}", "")
+    codigo = 0 if pior == 0 else (4 if pior == 4 else 2)
 
-    if rodada.returncode == 0:
-        ultima = rodada.stdout.strip().splitlines()[-1]
+    if codigo == 0:
         envelope = {"veredito": "segue", "provado": [
             {"afirmacao": "a conferência terminou sem acusações",
              # shlex.quote: caminho com espaço quebrava a re-execução da
              # evidência e a corrente honesta se autoacusava (medido).
              "comando": f"tail -n 1 {shlex.quote(str(log))}",
-             "saida": ultima}],
+             "saida": resumo}],
             "suposto": [], "faltas": []}
-    elif rodada.returncode == 4:
-        acusacoes = [linha for linha in rodada.stdout.splitlines()
+    elif codigo == 4:
+        acusacoes = [linha for linha in "\n".join(saidas).splitlines()
                      if linha.startswith("ACUSA")]
         envelope = {"veredito": "para", "provado": [], "suposto": [],
                     "faltas": acusacoes[:10] or ["conferência acusou"],
@@ -528,7 +574,7 @@ def _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
         feito = _cli_recibo(["sintetico"] + base +
                             ["--motivo", "morta",
                              "--detalhe", f"conferência com erro de ambiente "
-                             f"(exit {rodada.returncode})"])
+                             f"(exit {codigo})"])
         return feito.stdout.strip()
     completo = {"etapa": "x", "trabalho": "x",
                 "quando": "2000-01-01T00:00:00Z",
@@ -1178,8 +1224,11 @@ def _comportamento(pasta):
          and sum(1 for l in montado.splitlines() if l == "---") == 1)
     (Path(pasta) / "configuracao-da-casa.md").write_text(
         "x" * (TETO_CONFIGURACAO + 1), encoding="utf-8")
-    caso("acima do teto o prompt segue puro",
-         _prompt_da_sessao(etapa_sessao, pasta) == "faça")
+    berro = io.StringIO()
+    with contextlib.redirect_stderr(berro):
+        puro = _prompt_da_sessao(etapa_sessao, pasta)
+    caso("acima do teto o prompt segue puro e o aviso vai para o stderr",
+         puro == "faça" and "teto" in berro.getvalue())
     (Path(pasta) / "configuracao-da-casa.md").unlink()
 
     # r) quebra de linha no comando não forja linha de onda no ensaio
@@ -1191,6 +1240,34 @@ def _comportamento(pasta):
     caso("ensaio não deixa o manifesto forjar a listagem",
          not any(linha.strip().startswith("onda 99")
                  for linha in resposta.stdout.splitlines()))
+
+    # s) as regras da camada entram por código, antes de tudo
+    conhecimento = Path(pasta) / "conhecimento"
+    conhecimento.mkdir(exist_ok=True)
+    (conhecimento / "regras.json").write_text(json.dumps({"regras": [
+        {"id": 1, "regra": "Abra a sessão na raiz."},
+        {"id": 2, "regra": "Só é pronto o que\num instrumento provou."}]},
+        ensure_ascii=False), encoding="utf-8")
+    montado = _prompt_da_sessao(etapa_sessao, pasta)
+    caso("as frases das regras entram citadas e na ordem",
+         "> 1. Abra a sessão na raiz." in montado
+         and montado.index("> 1.") < montado.index("> 2."))
+    caso("frase com quebra embutida vira linha única",
+         "> 2. Só é pronto o que um instrumento provou." in montado)
+    (Path(pasta) / "configuracao-da-casa.md").write_text(
+        "issues na casa\n", encoding="utf-8")
+    junto = _prompt_da_sessao(etapa_sessao, pasta)
+    caso("regras vêm antes da configuração, e as duas antes do pedido",
+         junto.index("AS REGRAS DA CAMADA")
+         < junto.index("CONFIGURAÇÃO DA CASA") < junto.index("faça"))
+    (Path(pasta) / "configuracao-da-casa.md").unlink()
+    (conhecimento / "regras.json").write_text("{quebrado", encoding="utf-8")
+    berro = io.StringIO()
+    with contextlib.redirect_stderr(berro):
+        puro = _prompt_da_sessao(etapa_sessao, pasta)
+    caso("fonte de regras ilegível: o prompt segue puro e o aviso sai",
+         puro == "faça" and "regras" in berro.getvalue())
+    (conhecimento / "regras.json").unlink()
 
     return resultados
 

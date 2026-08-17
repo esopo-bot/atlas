@@ -59,23 +59,21 @@ reinventar.
 | --- | --- |
 | `/code-review` | Revisar o que mudou, procurando erro de verdade |
 | `/security-review` | Passar o diff atrás de vulnerabilidade |
-| `/verify` | Subir o app e confirmar que a mudança faz o que devia |
 | `/run` | Levantar o app para ver a mudança funcionando |
 | `/simplify` | Sugerir simplificação no código |
-| `/debug` | Ligar registro de depuração e investigar |
-| `/batch` | Mudança grande espalhada pelo código, em paralelo |
 | `/loop` | Repetir um pedido num intervalo |
 | `/init` | Criar o arquivo de instruções do projeto |
 | `/dataviz` | Gráfico e painel que se leem |
 | `/claude-api` | Referência da API: modelos, preço, cache, ferramentas |
-| `/deep-research` | Pesquisa na web com fontes cruzadas e relatório |
 
-Duas delas — `/verify` e `/code-review` — **só rodam quando você chama**. É de
-propósito: gastam tempo e dinheiro, então a decisão fica com você.
+As revisões — `/code-review` e `/security-review` — **só rodam quando você
+chama**. É de propósito: gastam tempo e dinheiro, então a decisão fica com
+você.
 
-**Esta tabela envelhece a cada versão.** A lista de fábrica muda sem aviso, e
-quem cita comando que sumiu manda o leitor para o vazio. A fonte é `/help`
-numa sessão interativa; o texto aqui é o resumo.
+**Esta tabela envelhece a cada versão.** A lista de fábrica muda sem aviso —
+na conferência de 17/08/2026, quatro comandos antes citados aqui já não
+existiam e saíram. A fonte é `/help` numa sessão interativa; o texto aqui é
+o resumo.
 
 ## Os plugins que se pagam
 

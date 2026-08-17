@@ -84,6 +84,7 @@ const daCamada = [
   'fluxos/investigacao-de-incidente',
   'conhecimento/zero-que-mente',
   'fluxos/historia-em-issue',
+  'fluxos/rodar-uma-corrente',
   'conhecimento/skills-criar-e-testar',
   'conhecimento/ganchos',
   'conhecimento/plugins-oficiais-do-claude-code',

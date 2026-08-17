@@ -3,6 +3,124 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.88 — 2026-08-17
+
+O encadeador entrega as regras por código, e a corrente ganha a página que
+ensina a usá-la.
+
+### Mudado
+
+- **Toda etapa de sessão da corrente recebe as regras na frente do prompt.**
+  O encadeador lê `conhecimento/regras.json` e injeta as frases imperativas,
+  citadas (`> `), antes da configuração da casa e do pedido — entrega
+  determinística, a lição medida no sistema estudado: regra dura que depende
+  de o modelo lembrar de buscar falha no pior dia. Fonte ausente é silêncio;
+  ilegível avisa e segue — nenhuma etapa derruba a corrente por causa de
+  aviso. Quatro casos novos no `--testar` (53).
+- **`fluxos/rodar-uma-corrente.md`: o motor ganha o passo a passo.** A
+  esteira de recibos existia com autoteste e batismo em produção, e o
+  desenho morava só em docstring — quem não abre `.py` não sabia usar.
+  Cartão de bolso: manifesto mínimo, os quatro tipos de etapa, ensaio,
+  execução, leitura de recibo e os limites confessados. Entra no menu, no
+  mapa e no LEIAME de fluxos — o endereço de chegada da regra da 0.84.
+
+## 0.87 — 2026-08-17
+
+A regra vira dado: a fonte é JSON, a página é gerada, e instrumento confere.
+
+### Mudado
+
+- **As regras da camada ganham fonte em `conhecimento/regras.json`.** Decisão
+  do dono: regra em parágrafo esconde a ordem no meio da história — quem lê
+  garimpa em vez de obedecer. Cada regra agora é id estável, frase imperativa
+  e itens curtos; o porquê e as medições ficam nas páginas de procedência
+  linkadas (zero que mente, ganchos, mapa), onde a história sempre morou.
+  Conteúdo nenhum se perdeu — mudou o endereço dele.
+- **`regras-da-camada.md` passa a ser GERADA.** O `--sincronizar` gera a
+  página da fonte antes de embutir, com a marca de gerada no topo; fonte
+  inválida derruba a sincronização — regra quebrada que passasse calada
+  viraria lei quebrada em toda casa que atualizar. A fonte viaja no FONTES:
+  a casa de destino recebe o dado junto com a página, e código dela pode ler
+  as regras como dado (warm-up de corrente, gancho, subagente).
+- **`zero-que-mente.md` ganha o bolso.** Tabela causa → hábito no topo, uma
+  linha por causa: a página se abre no meio do incidente, e incidente não
+  tem tempo para 250 linhas. As seções viram a prova de cada linha.
+- O verificador local confere fonte × página (ids sem furo, toda regra
+  presente, marca de gerada) — o segundo consumidor do dado.
+
+## 0.86 — 2026-08-17
+
+A página de abrir e fechar vira cartão de bolso, o mapa mostra a esteira que
+já morava na camada, e a issue deixa de carregar convenção de uma casa só.
+
+### Mudado
+
+- **`abrir-e-fechar-a-sessao.md` reorganizada como cartão de bolso.** Os
+  três blocos coláveis — partida, auditoria, esfriamento — vêm primeiro, na
+  ordem em que o dia os usa; o porquê de cada um desce para uma seção única
+  de leitura de uma vez. Nenhum bloco mudou de conteúdo — só a ordem da
+  página, que é a mais aberta da camada.
+- **A árvore do mapa ganha o que faltava.** `.agents/recibo/` e
+  `.agents/conferir/` viajam com a camada desde a 0.78 e não apareciam no
+  mapa que o `AGENTS.md` promete completo; entram também `ambiente.txt` e
+  `site/`. A esteira deixou de ser invisível para quem só lê o guia.
+- **`historia-em-issue.md` devolve nome e fila à configuração.** O padrão
+  `semana_N_hist_M` era citado como regra universal; era convenção de uma
+  casa vazando para a camada pública. Agora nome e ordem de entrada moram
+  no `configuracao-da-casa.md`, como a skill `trabalho-por-issue` já fazia
+  — a autoridade fica uma só, e o exemplo continua na página como exemplo.
+- **O canivete confere a tabela de fábrica contra sessão real.** Quatro
+  comandos citados não existiam na conferência de 17/08/2026 e saíram; a
+  tabela agora carrega a data da última conferência.
+- **`fluxos/LEIAME.md` para de prometer fluxos que a camada tirou.** A linha
+  de exemplos citava refatoração, migração e entrega — removidos de
+  propósito na 0.59; agora lista o que existe.
+- **Encadeador: o aviso do teto vira comportamento testado.** O caso do
+  `configuracao-da-casa.md` acima do teto passou a capturar o stderr e
+  provar que o aviso sai — antes o aviso vazava no meio da saída do
+  `--testar` com cara de defeito. E a conferência perdeu um
+  `CompletedProcess` fake que embrulhava valores já computados — vestígio de
+  desenho antigo, mesma semântica, leitura direta. Os 49 casos seguem
+  passando.
+
+## 0.85 — 2026-08-17
+
+O zero que mente ganha a causa da identidade errada, e a regra do segredo
+passa a cobrir a porta por onde nenhum instrumento olha: a tela.
+
+### Mudado
+
+- **`zero-que-mente.md` ganha a causa 9: quem perguntou não foi você.**
+  Ferramenta com sessão ativa responde pela identidade do momento, não pela
+  que você tem em mente — e "não existe" é a resposta honesta para a conta
+  errada. Medido em 17/08/2026 com a conta de publicação ativa por engano:
+  consulta ao repositório deu `404`, `git pull` deu `Repository not found`, e
+  a contraprova fechou porque os mesmos comandos funcionaram com a conta
+  certa. O `404` é de propósito: dizer "sem permissão" confirmaria a
+  existência a quem não deveria saber dela. Três hábitos, e o do meio é o que
+  quase ninguém tem: **pergunte ao token, não ao rótulo** — o comando que lê
+  a configuração guardada devolve o nome anotado ali, e o token em uso pode
+  ser de outra conta. Fecha com as duas exigências de um portão de
+  identidade, as três medidas no mesmo incidente de provedor: prova única é
+  ponto único de falha (a rota do usuário deu `503` com o resto da interface
+  de pé, e o trabalho parou com tudo verde à volta); **uma tentativa só
+  desperdiça a reserva** (oito amostras por rota — a morta deu 0/8 e a
+  reserva 5/8, viva porém intermitente, e um portão que tenta cada prova uma
+  vez para em um terço das execuções acusando credencial que está boa); e
+  qual das provas respondeu aparece na tela. Fecha com a armadilha de leitura
+  que apareceu no caminho: amostra única mentiu duas vezes no mesmo minuto —
+  quando o resultado for intermitente, conte, não conclua da primeira.
+- **A regra 8 passa a cobrir a tela.** Print, janela compartilhada e captura
+  de erro levam credencial para dentro do contexto sem passar por gancho,
+  permissão ou varredura — **instrumento nenhum vê imagem**. Todos os da
+  camada julgam caminho de texto. Antes de mandar um print, feche o que
+  estiver aberto com segredo.
+- **`ganchos.md` declara o limite no lugar onde se procura por ele.** A lista
+  de limites do professor de credencial ganha "ele não vê imagem": não existe
+  chamada de ferramenta para interceptar um print. É a mesma mudança em dois
+  endereços, como a regra do endereço de chegada da 0.84 pede — quem lê a
+  regra 8 encontra o princípio, quem investiga o gancho encontra o buraco.
+
 ## 0.84 — 2026-08-17
 
 O conhecimento ganha a regra do endereço de chegada, a página de MCP aprende

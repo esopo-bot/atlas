@@ -9,9 +9,13 @@ repositorio/
 ├── AGENTS.md              instruções neutras — o centro que quase todo agente lê
 ├── CLAUDE.md              adaptador do Claude Code: importa o AGENTS.md
 ├── configuracao-da-casa.md  onde as issues desta casa nascem — molde da camada, valor seu
+├── ambiente.txt           o que a casa exige do ambiente — molde da camada, valor seu
 ├── montar.py              monta e atualiza a camada — você copia para cá
 │
-├── .agents/skills/        fonte das skills: uma pasta por skill
+├── .agents/
+│   ├── skills/            fonte das skills: uma pasta por skill
+│   ├── recibo/            o contrato do recibo: schema + validador, com --testar
+│   └── conferir/          a conferência declarado × executado, com --testar
 │
 ├── .claude/
 │   ├── settings.json      permissões do Claude Code e o gancho da qualidade
@@ -27,6 +31,7 @@ repositorio/
 │
 ├── fluxos/                processos passo a passo
 ├── conhecimento/          técnicas e ferramentas
+├── site/                  o guia navegável — como construir está no README.md
 ├── .markdownlint.jsonc    a régua de markdown — o editor lê daqui
 │
 ├── tmp/                   rascunho e saída gerada — descartável, fora do git
@@ -98,6 +103,9 @@ Sem pedir pelo nome, **nenhum byte** de módulo nenhum chega ao seu
 repositório. E `--atualizar` atualiza o que você já instalou, mas nunca
 instala o que falta — o que você não pediu, você continua sem.
 
+O motor de correntes (módulo `encadeador`) tem o passo a passo em
+[rodar uma corrente](../fluxos/rodar-uma-corrente.md).
+
 Um módulo pode trazer página no primeiro nível de `conhecimento/` e molde
 **dentro de uma subpasta** — escrito uma vez e nunca mais; o que nascer ali é
 seu. A fronteira do nível é a de sempre, em "Quando criar mais uma pasta".
@@ -157,6 +165,7 @@ gerar perfis.
 | Você quer escrever                        | Vai em                           |
 | ----------------------------------------- | -------------------------------- |
 | Uma regra que vale para qualquer agente   | `AGENTS.md`                      |
+| Uma regra da lista numerada               | `conhecimento/regras.json` — a página é gerada |
 | Uma skill                                 | `.agents/skills/<nome>/SKILL.md` |
 | Um processo passo a passo                 | `fluxos/`                        |
 | Uma técnica ou ferramenta genérica        | `conhecimento/`                  |

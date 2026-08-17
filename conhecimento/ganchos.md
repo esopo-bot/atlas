@@ -201,6 +201,10 @@ Os limites dele, declarados:
   sessão fica como está (medido em 16/08/2026, claude 2.1.233).
 - **Arquivo de exemplo entra junto**, porque o `deny` já o pega — duas
   proteções da mesma casa discordando é pior que uma orientando demais.
+- **Ele não vê imagem.** Print de tela, janela compartilhada e captura de erro
+  entram na sessão sem passar por ele: não existe chamada de ferramenta para
+  interceptar, e todo instrumento da camada julga caminho de texto. É a regra 8
+  chegando onde gancho nenhum alcança — o cuidado é de quem manda o print.
 - **Ele não substitui o `deny` da ferramenta de leitura.** Gancho falha
   aberto; a regra de permissão é a rede de baixo. É sobreposição declarada,
   não descuido — e mudar esse eixo é a peça 2 do desenho, ainda por vir.
