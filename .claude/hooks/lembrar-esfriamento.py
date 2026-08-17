@@ -19,8 +19,13 @@ Os portões, na ordem (qualquer um cala, saindo 0 sem imprimir):
 5. `last_assistant_message` cita o esfriamento — já rodou, ou está rodando.
 6. Transcript pequeno (< LIMIAR_BYTES) — sessão curta não precisa de
    fechamento cerimonial.
-7. Poucos turnos de usuário (< LIMIAR_TURNOS) no transcript.
-8. Nenhum uso de Edit/Write/Bash no transcript — sessão só de leitura e
+7. O transcript INTEIRO cita o esfriamento — o portão erra para o lado do
+   silêncio de propósito (medido em 17/08/2026: o esfriamento rodou, a
+   última resposta falava de outra coisa, e o lembrete saiu falso; sessão
+   que só mencionou o assunto de passagem fica sem lembrete, e a skill
+   continua sendo o caminho manual).
+8. Poucos turnos de usuário (< LIMIAR_TURNOS) no transcript.
+9. Nenhum uso de Edit/Write/Bash no transcript — sessão só de leitura e
    pergunta.
 
 Passou por todos: grava a marca e devolve `additionalContext` (orientação,
@@ -86,6 +91,8 @@ def decisao(entrada: dict, raiz: Path) -> str:
         texto = transcript.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
+    if "esfriamento" in texto.lower():
+        return ""
     turnos = sum(1 for linha in texto.splitlines()
                  if _tem_marca(linha, "type", "user"))
     if turnos < LIMIAR_TURNOS:
@@ -133,11 +140,13 @@ def testar() -> int:
     with tempfile.TemporaryDirectory(prefix="lembrar-teste-") as pasta:
         raiz = Path(pasta)
 
-        def transcript(nome, tamanho, turnos, ferramenta):
+        def transcript(nome, tamanho, turnos, ferramenta, recheio_extra=""):
             linhas = ['{"type": "user", "message": "pedido"}'] * turnos
             if ferramenta:
                 linhas.append(
                     f'{{"type": "assistant", "name": "{ferramenta}"}}')
+            if recheio_extra:
+                linhas.append(recheio_extra)
             recheio = '{"type": "assistant", "message": "' \
                       + "x" * 200 + '"}'
             while sum(len(linha) + 1 for linha in linhas) < tamanho:
@@ -163,6 +172,13 @@ def testar() -> int:
              {**base, "session_crons": [{"id": 1}]}),
             ("o esfriamento já apareceu na resposta",
              {**base, "last_assistant_message": "Rodei o ESFRIAMENTO."}),
+            # O falso lembrete medido em 17/08/2026: o esfriamento rodou
+            # turnos atrás e a última resposta falava de outra coisa.
+            ("o esfriamento está no transcript, não na última resposta",
+             {**base, "transcript_path": transcript(
+                 "ja-esfriou.jsonl", LIMIAR_BYTES + 1, 6, "Edit",
+                 recheio_extra='{"type": "assistant", "message": '
+                               '"## Esfriamento — colhido"}')}),
             ("transcript pequeno", {**base, "transcript_path": curto}),
             ("poucos turnos de usuário",
              {**base, "transcript_path": poucos}),

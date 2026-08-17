@@ -64,6 +64,10 @@ de consulta, não de sessão.
     - O que aciona automação — esteira, implantação, aviso a outras pessoas — é
       sempre do dono, mesmo onde o resto é liberado: sincronizar não é
       entregar.
+    - Antes de empurrar para branch compartilhada, olhe os PRs abertos dela:
+      push em branch com PR aberto entra na entrega em rota, e o corpo do PR
+      precisa cobrir o que entrou — corpo que não cobre o diff é revisão
+      aprovando sem ver.
     - Decisão do dono vira pergunta — uma por vez, com a recomendação primeiro;
       o agente prepara e executa o não-destrutivo.
     - Redesenho de experiência pede esboço e pergunta fechada antes do código;
