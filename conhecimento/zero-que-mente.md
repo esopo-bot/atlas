@@ -158,6 +158,34 @@ Dois hábitos: **ancore no caminho absoluto** em vez de depender de onde a
 sessão parou; e, quando o número importar, **imprima onde você está na mesma
 chamada que mede** (`pwd; <a medição>`).
 
+## Causa 8: o filtro que você mesmo escreveu esconde a resposta
+
+Excluir um termo para tirar ruído esconde também **as linhas que citam o
+termo**: `grep -rn "x" | grep -v "<caminho>"` some com toda linha cujo
+conteúdo menciona o caminho — inclusive a citação viva que a busca existia
+para achar. Medido duas vezes no mesmo dia, por leitores diferentes: a
+única referência a uma pasta quase passou batida porque a linha citante
+continha a própria string filtrada; e uma contagem de referências veio
+menor porque o filtro do endereço novo comeu as linhas que apontavam para
+ele.
+
+Dois hábitos:
+
+- **Exclua por arquivo, não por conteúdo**: ancore o filtro no campo do
+  caminho (`grep -v "^caminho/"`) ou use o glob da ferramenta
+  (`rg -g '!pasta/**'`) — o que se quer excluir é onde a linha mora, não o
+  que ela diz.
+- **Rode uma vez sem o filtro** quando o resultado decidir algo: a
+  diferença entre as duas contagens é exatamente o que o filtro comeu.
+
+E o primo da armadilha, no sentido contrário: **frase procurada em prosa
+formatada dá zero falso**. Crase de código, quebra de linha e recuo entram
+no meio do texto — a frase existe e o `grep` literal não a vê. Medido:
+"develop saiu do caminho" deu zero num arquivo que dizia exatamente isso,
+com o nome entre crases e a continuação na linha seguinte. Para conferir
+presença de fato em página, normalize antes (`tr '\n' ' ' | tr -s ' '`) ou
+procure um pedaço curto, sem formatação.
+
 ## A regra em uma linha
 
 Antes de escrever "não existe" num relatório, prove que o seu instrumento

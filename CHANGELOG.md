@@ -3,6 +3,27 @@
 Cada versão, pelo efeito que você vê. O número aparece em todo comando
 (`python montar.py --versao`); máquina com número menor está atrasada.
 
+## 0.82 — 2026-08-17
+
+O professor de credencial aprende que atribuição de ambiente é
+configuração, e a página do zero ganha a causa do filtro que você mesmo
+escreveu. (A revisão semântica pré-publicação cobrou o anonimato da casa
+no meio da rodada e o número andou junto — não existe 0.81 publicada.)
+
+### Mudado
+
+- **`orientar-credencial.py` cala em atribuição de ambiente literal.**
+  `GH_CONFIG_DIR=.credenciais/.gh-bot gh pr create` autentica pelo chaveiro
+  e publica só o corpo — o veto aqui era falso positivo, medido em
+  17/08/2026 barrando o PR de promoção da própria casa. Atribuição com
+  `$( )` continua na varredura (lê de verdade → orienta), e credencial no
+  argv do verbo continua vetando. Suíte: 54 casos — 20 orientam, 6 vetam,
+  28 calam.
+- **`zero-que-mente.md` ganha a causa 8:** o filtro que você mesmo escreveu
+  esconde a resposta — excluir um termo por conteúdo some com as linhas que
+  o citam (medido duas vezes no mesmo dia) — e o primo dela, o zero falso
+  de frase procurada em prosa formatada.
+
 ## 0.80 — 2026-08-16
 
 A trava de credencial vira professor, a montagem passa a conferir o índice
