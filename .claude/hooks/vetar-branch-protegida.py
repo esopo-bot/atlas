@@ -14,6 +14,7 @@ Rode os testes com:  python .claude/hooks/vetar-branch-protegida.py --testar
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -244,7 +245,10 @@ def main() -> int:
     if not comando or "git" not in comando.lower():
         return 0
 
-    raiz = Path.cwd()
+    # A raiz vem da declaração, nunca do cwd: o cwd anda com cada `cd` da
+    # sessão, e a lista de branches protegidas mora na raiz do repositório.
+    base = os.environ.get("CLAUDE_PROJECT_DIR")
+    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
     motivo = motivo_da_recusa(comando, nomes_protegidos(raiz), raiz)
     if not motivo:
         return 0  # passagem é silêncio: sair 0 sem imprimir nada

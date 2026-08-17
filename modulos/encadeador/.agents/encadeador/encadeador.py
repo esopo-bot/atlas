@@ -69,11 +69,40 @@ O que ele NÃO FAZ — e confessa (os refutadores mediram cada limite):
   automação da casa — portão e destrutivo são do dono.
 
 Uso:
-    encadeador.py ensaio   --manifesto M --trabalho T [--dir recibos] [--cwd .]
-    encadeador.py executar --manifesto M --trabalho T [--dir recibos] [--cwd .]
+    encadeador.py ensaio    --manifesto M --trabalho T [--dir recibos] [--cwd .]
+    encadeador.py executar  --manifesto M --trabalho T [--dir recibos] [--cwd .]
+    encadeador.py andamento --trabalho T [--dir recibos] [--manifesto M]
 
-Saída: 0 = corrente completa (tudo `segue`); 5 = parou num `para`;
-6 = parou num `pergunta` (aguardando o dono); 2 = erro de uso/ambiente.
+Saída de ensaio/executar: 0 = corrente completa (tudo `segue`); 5 = parou
+num `para`; 6 = parou num `pergunta` (aguardando o dono); 2 = erro de
+uso/ambiente.
+
+O `andamento` fotografa os recibos do trabalho e devolve JSON no stdout
+(exit 0; 2 = erro de uso). O contrato:
+
+    {"trabalho": T, "dir": <absoluto>, "estado":
+       "completa | parada | aguardando-portao | em-curso",
+     "etapas": [{"ordem": N, "nome": ..., "veredito": segue|para|pergunta,
+                 "ciclo": {"i": N, "teto": N}, "faltas": [...],
+                 "proximo": texto|null, "pergunta": texto|null}],
+     "paras": <total de recibos para — o contador do teto>,
+     "teto": <o teto visto nos recibos>|null,
+     "avisos": [...], "proxima_acao": <texto>}
+
+- Por etapa entra o recibo do CICLO MAIS ALTO; a ordem é a do manifesto
+  (o NN do nome do arquivo).
+- Estado: algum `para` no recibo corrente = `parada`; algum `pergunta` =
+  `aguardando-portao`; tudo `segue` = `completa`; nenhum recibo =
+  `em-curso` (nada rodou ainda).
+- `proxima_acao`: o `proximo` de quem reprovou, a `pergunta` do portão, ou
+  a leitura dos recibos — sempre uma frase acionável.
+- `--manifesto` (opcional) troca inferência por prova: `completa` passa a
+  exigir recibo `segue` de TODA etapa ligada do manifesto; etapa ligada sem
+  recibo vira `em-curso`, com a lista do que falta na `proxima_acao`.
+- Limites confessados: leitura no meio de uma execução fotografa a onda
+  parcial (releia); SEM o manifesto, corrente morta sem deixar recibo não
+  se distingue de completa — o exit de quem executou é a fonte; recibo
+  ilegível vira aviso e conta como `para`, igual ao motor.
 
 Rode os testes com:  python .agents/encadeador/encadeador.py --testar
 """
@@ -437,7 +466,13 @@ def _comando_sessao(etapa: dict) -> list:
     # O --dangerously-skip-permissions vem da receita (executar.sh): sessão
     # de rotina não tem quem responder prompt. Por isso o docstring manda
     # rodar a corrente em worktree ou clone descartável.
-    return ["claude", "-p", "--output-format", "json",
+    #
+    # O --bare é deliberado, e alinhado ao desenho: a doc o recomenda para
+    # chamada em script (e anuncia que virará o default do -p). Tudo o que a
+    # etapa precisa saber viaja no PROMPT, injetado por código — regras,
+    # configuração da casa, pedido; gancho, plugin e MCP da casa onde a
+    # corrente roda ficam de fora de propósito, determinismo antes de tudo.
+    return ["claude", "-p", "--bare", "--output-format", "json",
             "--json-schema", _guia_da_sessao(),
             "--max-turns", str(etapa.get("max-turnos", 16)),
             "--dangerously-skip-permissions"]
@@ -619,8 +654,8 @@ def _rotulo(etapa, ordem):
         texto = f"{ordem:02d}-{etapa['nome']} [codigo: {etapa['comando']}]"
     elif etapa["tipo"] == "sessao":
         texto = (f"{ordem:02d}-{etapa['nome']} "
-                 f"[sessao: claude -p --output-format json --json-schema "
-                 f"<contrato sem allOf> --max-turns "
+                 f"[sessao: claude -p --bare --output-format json "
+                 f"--json-schema <contrato sem allOf> --max-turns "
                  f"{etapa.get('max-turnos', 16)}]")
     elif etapa["tipo"] == "portao":
         texto = (f"{ordem:02d}-{etapa['nome']} "
@@ -724,6 +759,104 @@ def executar(manifesto, trabalho, dir_base, cwd) -> int:
     return 0
 
 
+# [0-9] e não \d: dígito Unicode no nome ('c１０') dirigiria a leitura do
+# ciclo — a mesma emenda do recibo.py.
+PADRAO_NOME_RECIBO = re.compile(r"^([0-9]+)-(.+)-c([0-9]+)\.json$")
+
+
+def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
+    """Fotografa os recibos do trabalho e imprime o JSON do contrato.
+
+    Só leitura: nada roda, nada nasce. O contrato completo está no
+    docstring do módulo; a régua do teto é a MESMA do motor: todo *.json da
+    pasta conta — ilegível conta como para, com aviso. Só quem casa o padrão
+    de nome vira etapa. Com o manifesto, `completa` é prova, não inferência.
+    """
+    pasta = Path(dir_base) / trabalho
+    avisos = []
+    correntes = {}
+    paras, teto = 0, None
+    if not pasta.is_dir():
+        avisos.append(f"o diretório {pasta} não existe — o trabalho nunca "
+                      "rodou aqui, ou o nome/--dir está errado")
+    for arquivo in sorted(pasta.glob("*.json")) if pasta.is_dir() else []:
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+            if not isinstance(dado, dict):
+                raise ValueError("não é um objeto de recibo")
+        except (OSError, ValueError):
+            avisos.append(f"recibo ilegível: {arquivo.name} — conta como "
+                          "para no teto")
+            paras += 1
+            continue
+        if dado.get("veredito") == "para":
+            paras += 1
+        ciclo = dado.get("ciclo", {})
+        if isinstance(ciclo, dict) and _inteiro_sao(ciclo.get("teto", 0)):
+            teto = ciclo["teto"]
+        pedacos = PADRAO_NOME_RECIBO.match(arquivo.name)
+        if not pedacos:
+            avisos.append(f"{arquivo.name} não tem nome de recibo — lido "
+                          "para o teto, fora das etapas")
+            continue
+        chave = (int(pedacos.group(1)), pedacos.group(2))
+        vez = int(pedacos.group(3))
+        if chave not in correntes or vez > correntes[chave][0]:
+            correntes[chave] = (vez, dado)
+
+    etapas = []
+    for ordem, nome in sorted(correntes):
+        _, dado = correntes[(ordem, nome)]
+        etapas.append({"ordem": ordem, "nome": nome,
+                       "veredito": dado.get("veredito"),
+                       "ciclo": dado.get("ciclo"),
+                       "faltas": dado.get("faltas", []),
+                       "proximo": dado.get("proximo"),
+                       "pergunta": dado.get("pergunta")})
+
+    parado = next((e for e in etapas if e["veredito"] == "para"), None)
+    aguarda = next((e for e in etapas if e["veredito"] == "pergunta"), None)
+    sem_recibo = []
+    if etapas_do_manifesto is not None:
+        com_recibo = {nome for _, nome in correntes}
+        sem_recibo = [e["nome"] for e in etapas_do_manifesto
+                      if e.get("ligada", True) and e["nome"] not in com_recibo]
+    if not etapas:
+        estado = "em-curso"
+        acao = (f"nada rodou ainda — rode: python "
+                f".agents/encadeador/encadeador.py executar --manifesto <M> "
+                f"--trabalho {trabalho} --dir {dir_base}")
+    elif teto is not None and paras >= teto:
+        estado = "parada"
+        acao = (f"teto de {teto} ciclos esgotado — a decisão é do dono; "
+                f"leia os recibos em {pasta}")
+    elif parado:
+        estado = "parada"
+        acao = parado["proximo"] or (f"leia o recibo da etapa "
+                                     f"{parado['nome']} em {pasta}")
+    elif aguarda:
+        estado = "aguardando-portao"
+        acao = aguarda["pergunta"] or (f"leia o recibo da etapa "
+                                       f"{aguarda['nome']} em {pasta}")
+    elif sem_recibo:
+        # A prova que o manifesto compra: etapa ligada sem recibo é corrente
+        # por rodar — ou morta no meio, e "completa" aqui seria o zero que
+        # mente do próprio instrumento.
+        estado = "em-curso"
+        acao = ("etapa ligada sem recibo: " + ", ".join(sem_recibo)
+                + " — a corrente ainda não passou por ela (ou morreu antes; "
+                "o exit de quem executou é a fonte)")
+    else:
+        estado = "completa"
+        acao = f"nada a fazer — corrente completa; recibos em {pasta}"
+
+    print(json.dumps({"trabalho": trabalho, "dir": dir_base,
+                      "estado": estado, "etapas": etapas, "paras": paras,
+                      "teto": teto, "avisos": avisos, "proxima_acao": acao},
+                     ensure_ascii=False, indent=2))
+    return 0
+
+
 def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="encadeador.py")
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -734,6 +867,12 @@ def montar_parser() -> argparse.ArgumentParser:
         p.add_argument("--trabalho", required=True)
         p.add_argument("--dir", default="recibos")
         p.add_argument("--cwd", default=".")
+    p = sub.add_parser("andamento",
+                       help="fotografa os recibos do trabalho em JSON")
+    p.add_argument("--trabalho", required=True)
+    p.add_argument("--dir", default="recibos")
+    p.add_argument("--manifesto", help="opcional: torna `completa` prova, "
+                   "não inferência")
     return parser
 
 
@@ -744,6 +883,27 @@ def main(argv) -> int:
     sys.stdout.reconfigure(line_buffering=True)
     args = montar_parser().parse_args(argv)
     esquema = _recibo.carregar_esquema()
+
+    if args.comando == "andamento":
+        problemas = _recibo._erros(esquema["properties"]["trabalho"],
+                                   args.trabalho, "argumento --trabalho")
+        etapas_do_manifesto = None
+        if args.manifesto:
+            try:
+                manifesto = json.loads(
+                    Path(args.manifesto).read_text(encoding="utf-8"))
+            except (OSError, ValueError) as erro:
+                problemas.append(f"não li o manifesto {args.manifesto}: {erro}")
+            else:
+                problemas += validar_manifesto(manifesto, esquema)
+                etapas_do_manifesto = manifesto.get("etapas") \
+                    if not problemas else None
+        if problemas:
+            for problema in problemas:
+                print(f"erro de uso: {problema}", file=sys.stderr)
+            return 2
+        return andamento(args.trabalho, str(Path(args.dir).resolve()),
+                         etapas_do_manifesto)
 
     try:
         manifesto = json.loads(Path(args.manifesto).read_text(encoding="utf-8"))
@@ -1268,6 +1428,68 @@ def _comportamento(pasta):
     caso("fonte de regras ilegível: o prompt segue puro e o aviso sai",
          puro == "faça" and "regras" in berro.getvalue())
     (conhecimento / "regras.json").unlink()
+
+    # w) andamento: fotografa os recibos que os casos acima deixaram
+    def foto(trabalho, extra=()):
+        resposta = _cli(["andamento", "--trabalho", trabalho,
+                         "--dir", recibos] + list(extra))
+        try:
+            return resposta.returncode, json.loads(resposta.stdout)
+        except ValueError:
+            return resposta.returncode, {}
+
+    codigo, dado = foto("t-sentinela")
+    caso("andamento de corrente completa: estado completa, exit 0",
+         codigo == 0 and dado.get("estado") == "completa"
+         and [e["veredito"] for e in dado.get("etapas", [])]
+         == ["segue", "segue"])
+    codigo, dado = foto("t-morte")
+    caso("andamento de corrente parada: estado parada e o proximo de quem "
+         "reprovou na proxima_acao",
+         codigo == 0 and dado.get("estado") == "parada"
+         and dado.get("etapas", [{}])[0].get("proximo")
+         and dado.get("proxima_acao") == dado["etapas"][0]["proximo"])
+    codigo, dado = foto("t-portao")
+    caso("andamento de portão pendente: aguardando-portao com a pergunta",
+         codigo == 0 and dado.get("estado") == "aguardando-portao"
+         and "Aprova a etapa" in dado.get("proxima_acao", ""))
+    codigo, dado = foto("t-nunca-rodou")
+    caso("andamento sem recibo nenhum: em-curso, etapas vazias",
+         codigo == 0 and dado.get("estado") == "em-curso"
+         and dado.get("etapas") == [])
+    codigo, dado = foto("t-teto2")
+    caso("andamento com recibo ilegível: aviso, conta no teto, sem traceback",
+         codigo == 0 and dado.get("avisos")
+         and dado.get("estado") == "parada" and dado.get("paras", 0) >= 2)
+    codigo, dado = foto("t-ciclos")
+    caso("andamento lê o ciclo mais alto de cada etapa",
+         codigo == 0 and dado.get("estado") == "completa"
+         and all(e["ciclo"]["i"] == 3 for e in dado.get("etapas", [])))
+    resposta = _cli(["andamento", "--trabalho", "Nome Errado",
+                     "--dir", recibos])
+    caso("andamento recusa trabalho fora do contrato com exit 2",
+         resposta.returncode == 2)
+
+    # w2) com o manifesto, `completa` é prova: todas as etapas ligadas têm
+    #     recibo — e etapa ligada sem recibo rebaixa para em-curso
+    codigo, dado = foto("t-sentinela",
+                        ["--manifesto", str(Path(pasta) / "m-sentinela.json")])
+    caso("andamento com manifesto prova a corrente completa",
+         codigo == 0 and dado.get("estado") == "completa")
+    maior = _manifesto(pasta, "m-sentinela-maior.json", {"etapas": [
+        {"nome": "grava", "tipo": "codigo", "comando": "true"},
+        {"nome": "confere", "tipo": "conferencia", "depende": ["grava"]},
+        {"nome": "nunca-rodou", "tipo": "codigo", "comando": "true",
+         "depende": ["confere"]}]})
+    codigo, dado = foto("t-sentinela", ["--manifesto", maior])
+    caso("etapa ligada sem recibo rebaixa completa para em-curso, nomeada",
+         codigo == 0 and dado.get("estado") == "em-curso"
+         and "nunca-rodou" in dado.get("proxima_acao", ""))
+    resposta = _cli(["andamento", "--trabalho", "t-sentinela",
+                     "--dir", recibos, "--manifesto",
+                     str(Path(pasta) / "nao-existe.json")])
+    caso("manifesto ilegível no andamento é erro de uso, exit 2",
+         resposta.returncode == 2)
 
     return resultados
 

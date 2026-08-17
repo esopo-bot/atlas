@@ -1,11 +1,7 @@
 {
   "permissions": {
     "allow": [],
-    "deny": [
-      "Read(.env*)",
-      "Read(**/.env*)",
-      "Read(**/appsettings*)"
-    ]
+    "deny": []
   },
   "hooks": {
     "SessionStart": [
@@ -50,6 +46,16 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/orientar-credencial.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-esfriamento.py\""
           }
         ]
       }

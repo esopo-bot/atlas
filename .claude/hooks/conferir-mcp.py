@@ -1,9 +1,9 @@
 """Gancho SessionStart: acusa declaração de MCP apontando para arquivo que não existe.
 
-Servidor MCP declarado que não sobe não avisa: ele some da lista de
-ferramentas como se nunca tivesse sido configurado. O agente não distingue
-"quebrou" de "nunca existiu" — e a sessão inteira trabalha sem a ferramenta
-sem saber que deveria tê-la.
+Servidor MCP declarado que não sobe some da lista de ferramentas. No Claude
+Code atual a falha de conexão chega ao agente (status no `claude mcp list`
+e aviso quando a busca de ferramenta não acha); em outros agentes o sumiço
+é silencioso. Este gancho acusa ANTES do uso e cobre os agentes que calam.
 
 A causa mais comum é caminho morto: o `command`, um item de `args` ou o
 ajudante de cabeçalho apontam para um arquivo que mudou de lugar, nunca foi
@@ -86,8 +86,9 @@ def faltantes(cfg: dict, raiz: Path) -> list:
 
 def main() -> int:
     # O cwd anda com a sessão; a raiz do projeto, não. A variável vem do
-    # Claude Code; sem ela (outro agente), o cwd da abertura ainda serve.
-    raiz = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd())
+    # Claude Code; sem ela, o próprio arquivo sabe onde mora — nunca o cwd.
+    base = os.environ.get("CLAUDE_PROJECT_DIR")
+    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
     arquivo = raiz / ".mcp.json"
     if not arquivo.exists():
         return 0  # nada declarado, nada a conferir

@@ -6,12 +6,12 @@ As instruções deste repositório estão em:
 
 ## O que é só do Claude Code
 
-O que mora em cada pasta de `.claude/` está na árvore do
-`conhecimento/mapa-do-repositorio.md`. Só três coisas não estão lá:
+O que mora em `.claude/` está na árvore do
+`conhecimento/mapa-do-repositorio.md`. Três exceções:
 
-- `settings.local.json` é pessoal, criado automaticamente e fica fora do git.
-- `skills/` é cópia gerada pelo `montar.py` e **entra no git** — sessão na
-  nuvem só enxerga o que está commitado. Não se edita ali; edite em
-  `.agents/skills/` e rode `python montar.py --sincronizar`.
+- `settings.local.json`: pessoal, criado automaticamente, fora do git.
+- `skills/`: cópia gerada pelo `montar.py --sincronizar` e **entra no git**
+  — sessão na nuvem só enxerga o commitado. Edite em `.agents/skills/`,
+  nunca aqui.
 - Pasta vazia guarda `.gitkeep`, nunca um `.md`: qualquer `.md` solto em
   `commands/` vira um comando de barra de verdade.

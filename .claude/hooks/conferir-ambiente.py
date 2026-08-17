@@ -105,8 +105,9 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
 
 def main() -> int:
     # O cwd anda com a sessão; a raiz do projeto, não. A variável vem do
-    # Claude Code; sem ela (outro agente), o cwd da abertura ainda serve.
-    raiz = Path(os.environ.get("CLAUDE_PROJECT_DIR") or Path.cwd())
+    # Claude Code; sem ela, o próprio arquivo sabe onde mora — nunca o cwd.
+    base = os.environ.get("CLAUDE_PROJECT_DIR")
+    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
     try:
         problemas, receita = faltas(raiz)
     except Exception:

@@ -1,27 +1,24 @@
-"""Gancho PreToolUse: PROFESSOR de credencial — orienta a leitura pelo shell,
+"""Gancho PreToolUse: PROFESSOR de credencial — lição curta na leitura,
 veta só o que não se desfaz.
 
-A trava antiga negava ler o conteúdo e deixava a sessão perdida na porta do
-login. Decisão do dono (16/08/2026): **ler é reversível; publicar não é** —
-a trava muda de eixo e o gancho passa a ensinar. O princípio, escrito na
-issue da esteira: *trava no que não se desfaz; instrumento educativo em todo
-o resto.*
+Regra 8 da camada (override do dono, 17/08/2026): **ler credencial
+localmente é livre; segredo não entra em git nenhum** — em texto rastreado,
+sempre `${VARIAVEL}`. O princípio: *trava no que não se desfaz; instrumento
+educativo em todo o resto.*
 
-Três respostas, decididas por segmento — e a ordem das perguntas é a mesma
-da trava antiga (o alvo manda, nunca o verbo; 33 casos medidos continuam
-valendo):
+Três respostas, decididas por segmento (o alvo manda, nunca o verbo):
 
 1. **CALA** — o alvo não é credencial, ou o comando só lê NOME (`ls`,
    `test`, `find`, `stat`, `git status`, `git ls-files`...). Aviso que
    aparece sempre ensina a ignorar aviso — metade dos testes prova o
    silêncio.
 2. **ORIENTA** — o comando LÊ O CONTEÚDO de credencial (`cat`, `grep`,
-   `cp`...). Passa, e o modelo recebe por `additionalContext` a lição: onde
-   o arquivo mora, `${VARIAVEL}` no lugar do valor, o que fazer se já entrou
-   no git. Medido nesta camada (claude 2.1.233, 16/08/2026): o
-   `additionalContext` de PreToolUse chega ao modelo e não mexe no fluxo de
-   permissão — `permissionDecision: "allow"` auto-aprovaria a chamada, e por
-   isso NÃO se usa aqui.
+   `cp`...). Passa, com uma lição de UMA linha por `additionalContext`:
+   `${VARIAVEL}` no rastreado; tire a credencial de vista quando terminar.
+   Medido nesta camada (claude 2.1.233, 16/08/2026): o `additionalContext`
+   de PreToolUse chega ao modelo e não mexe no fluxo de permissão —
+   `permissionDecision: "allow"` auto-aprovaria a chamada, e por isso NÃO
+   se usa aqui.
 3. **VETA** — o alvo é credencial e o comando GRAVA HISTÓRIA ou PUBLICA
    (`git commit -m "$(cat .env)"`, `gh issue comment --body-file .env`). Aí
    recusa: segredo que sobe fica exposto, e o conserto vira trocar o segredo
@@ -169,18 +166,12 @@ DIR_RECIBOS = "tmp/recibos"
 TRABALHO_RECIBO = "orientacao-credencial"
 ETAPA_RECIBO = "orientar-credencial"
 
+# Lição de UMA linha, de propósito (regra 8: ler é livre): aviso comprido em
+# leitura liberada é ruído que ensina a ignorar aviso.
 ORIENTACAO = (
-    "O comando LÊ O CONTEÚDO de '{alvo}', que é arquivo de credencial. Passa "
-    "— ler é reversível — e fica a lição: (1) o valor que entra na sessão "
-    "entra no histórico dela — trabalhe com o NOME (${{VARIAVEL}}), e nunca "
-    "cole o valor em arquivo, issue, commit ou resposta; (2) credencial mora "
-    "fora de todo git — na gaveta .credenciais/ do workspace ou no cofre da "
-    "casa — e configuração versionada carrega ${{VARIAVEL}}, nunca o valor; "
-    "(3) se este arquivo já entrou em algum git, o valor está exposto: o "
-    "conserto é TROCAR o segredo — reescrever história tira da listagem, não "
-    "do alcance; (4) backup de credencial é cópia fora do repositório, nunca "
-    "commit. Precisa só do nome ou da existência? `ls`, `test`, `find` e "
-    "`stat` respondem sem abrir o valor."
+    "'{alvo}' é credencial: ler localmente é livre. Em texto rastreado vai "
+    "${{VARIAVEL}}, nunca o valor — e, se usou a credencial para configurar "
+    "algo, avise o dono para tirá-la de vista quando terminar."
 )
 
 VETO = (
@@ -678,6 +669,11 @@ def _testar_comportamento(falhas: list) -> None:
     caso("orienta leva additionalContext", "additionalContext" in orienta)
     caso("orienta NÃO decide permissão (allow auto-aprovaria)",
          "permissionDecision" not in orienta)
+    licao = ORIENTACAO.format(alvo=".env")
+    caso("a lição é curta — regra 8: ler é livre, aviso longo é ruído",
+         len(licao) < 260)
+    caso("a lição aponta o nome e o pós-uso",
+         "${VARIAVEL}" in licao and "tirá-la de vista" in licao)
     veta = resposta_json("veta", ".env")["hookSpecificOutput"]
     caso("veta nega", veta.get("permissionDecision") == "deny")
     caso("veta explica", bool(veta.get("permissionDecisionReason")))

@@ -32,10 +32,13 @@ Uso:
     recibo.py esquema-sessao
 
 `esquema-sessao` imprime o contrato sem o allOf de topo, para passar ao
-`claude -p --json-schema`: medido em 16/08/2026, a API recusa condicional de
-topo em input_schema (400: "does not support oneOf, allOf..."). O guia da
-sessão perde as condicionais; a LEI continua inteira aqui — quem materializa
-valida contra o contrato completo, e violação vira `para` sintético.
+`claude -p --json-schema`: medido em 16/08/2026, a API recusou o condicional
+de topo (400 citando "oneOf, allOf..."). Nuance da doc vigente: `allOf` em si
+é aceito com limitações — o que ela não lista é o `if/then/else`, que é
+exatamente o que o nosso allOf de topo carrega; tirar o bloco segue sendo o
+caminho. O guia da sessão perde as condicionais; a LEI continua inteira aqui
+— quem materializa valida contra o contrato completo, e violação vira `para`
+sintético.
 
 Saída: 0 = recibo válido/da etapa escrito; 3 = sintético escrito no lugar
 (o chamador lê o veredito no arquivo); 2 = erro de uso, de ambiente ou

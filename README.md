@@ -52,8 +52,7 @@ A atualização **só toca o que veio da camada**. `AGENTS.md`, `CLAUDE.md`, o
 fronteira completa está no
 [mapa do repositório](conhecimento/mapa-do-repositorio.md).
 Todo comando imprime `camada 0.N`: número menor que o da origem significa
-atualização pendente. As mudanças de cada versão estão no
-[CHANGELOG](CHANGELOG.md).
+atualização pendente.
 
 ## Regras da casa
 

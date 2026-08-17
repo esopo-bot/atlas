@@ -1,8 +1,7 @@
 # Rodar uma corrente
 
-O passo a passo do motor opcional: uma corrente de etapas, um recibo por
-etapa, do módulo `encadeador`. Quem só usa as skills não precisa desta
-página.
+O passo a passo do motor opcional (módulo `encadeador`): uma corrente de
+etapas, um recibo por etapa. Quem só usa as skills não precisa desta página.
 
 ## Antes de tudo — uma vez por casa
 
@@ -13,13 +12,9 @@ python .agents/conferir/conferir.py --testar
 python .agents/encadeador/encadeador.py --testar
 ```
 
-O módulo exige a camada no destino — ele usa `recibo.py` e `conferir.py`
-como estão. Os três `--testar` são o primeiro comando de qualquer retomada:
-se algum falhar, nada do resto vale.
+Os três `--testar` são o primeiro comando de qualquer retomada.
 
 ## 1 · O manifesto
-
-Um JSON com as etapas, as dependências e o teto de ciclos:
 
 ```json
 {
@@ -36,17 +31,15 @@ Um JSON com as etapas, as dependências e o teto de ciclos:
 }
 ```
 
-Quatro tipos de etapa:
-
 | Tipo | O que faz |
 | --- | --- |
 | `codigo` | roda um comando; o stdout tem de ser um recibo válido |
-| `sessao` | roda `claude -p` com o prompt — as regras da camada e a `configuracao-da-casa.md` entram na frente, por código |
+| `sessao` | roda `claude -p` — regras da camada e `configuracao-da-casa.md` entram na frente, por código |
 | `conferencia` | re-executa o `provado` dos recibos desta execução e acusa divergência |
-| `portao` | espera o arquivo de aprovação do dono — a corrente não decide por ele |
+| `portao` | espera o arquivo de aprovação do dono |
 
 Etapas sem dependência entre si rodam juntas (fork); `conferencia` e
-`portao` nunca dividem onda com ninguém.
+`portao` nunca dividem onda.
 
 ## 2 · O ensaio — sempre antes
 
@@ -54,8 +47,7 @@ Etapas sem dependência entre si rodam juntas (fork); `conferencia` e
 python .agents/encadeador/encadeador.py ensaio --manifesto corrente.json --trabalho meu-trabalho
 ```
 
-Lista as ondas inteiras sem executar **nada** — nem comando, nem sessão,
-nem leitura do arquivo de ambiente.
+Lista as ondas sem executar nada.
 
 ## 3 · Executar
 
@@ -63,30 +55,41 @@ nem leitura do arquivo de ambiente.
 python .agents/encadeador/encadeador.py executar --manifesto corrente.json --trabalho meu-trabalho --dir tmp/recibos
 ```
 
-**Rode em worktree ou clone descartável, nunca na árvore que importa** — a
-etapa de sessão herda da receita de rotina o pular de permissões, porque
-sessão agendada não tem quem responder prompt.
+**Rode em worktree ou clone descartável** — a etapa de sessão pula
+permissões, porque sessão agendada não tem quem responder prompt.
 
-Saída: `0` = corrente completa, tudo `segue` · `5` = parou num `para` ·
-`6` = parou num `pergunta`, aguardando o dono · `2` = erro de uso.
+Saída: `0` completa · `5` parou num `para` · `6` aguardando o dono ·
+`2` erro de uso.
 
-## 4 · Ler o resultado
+## 4 · Acompanhar o andamento
 
-Os recibos ficam em `<dir>/<trabalho>/`, um JSON por etapa, na ordem da
-lista — com o log da conferência ao lado. Recibo `para` traz as `faltas` e
-o `proximo` escrito por quem reprovou: reexecutar com ele é decisão de quem
-opera, nunca automática. Com `teto` recibos `para` no diretório, nada mais
-roda — a corrente escala para o dono em vez de insistir.
+```bash
+python .agents/encadeador/encadeador.py andamento --trabalho meu-trabalho --dir tmp/recibos
+```
+
+Fotografa os recibos e devolve JSON (contrato completo no docstring do
+`encadeador.py`): por etapa — `nome`, `veredito`, `ciclo {i, teto}`,
+`faltas`, `proximo` —, mais `estado`, `paras` (o contador do teto) e
+`proxima_acao`. Com `--manifesto corrente.json`, `completa` vira prova:
+toda etapa ligada precisa ter recibo `segue`.
+
+| `estado` | O que fazer |
+| --- | --- |
+| `completa` | nada — leia os recibos em `<dir>/<trabalho>/` |
+| `parada` | siga a `proxima_acao`: é o `proximo` de quem reprovou; reexecutar é decisão de quem opera |
+| `aguardando-portao` | a `proxima_acao` diz qual arquivo de aprovação criar — decisão do dono |
+| `em-curso` | nada rodou ainda (ou a foto pegou onda parcial — releia) |
+
+Com `teto` recibos `para`, nada mais roda — a corrente escala para o dono.
 
 ## O que o motor não faz — de propósito
 
-- Não isola etapas entre si: fork que escreve no mesmo arquivo é corrida —
-  o isolamento (worktree por etapa) é de quem escreve o manifesto.
-- Não reordena manifesto de trabalho já rodado: a numeração dos recibos vem
-  da posição na lista — reordenar começa outra série.
-- Não empurra, não publica e não toca na automação da casa: portão e
-  destrutivo são do dono.
+- Não isola etapas entre si: worktree por etapa é de quem escreve o
+  manifesto.
+- Não reordena manifesto de trabalho já rodado: a numeração vem da posição
+  — reordenar começa outra série.
+- Não empurra, não publica, não toca na automação da casa.
 
-A lista completa dos limites, com as medições, está no docstring de
+A lista completa dos limites está no docstring de
 `.agents/encadeador/encadeador.py`; o contrato do recibo, em
 `.agents/recibo/recibo.schema.json`.

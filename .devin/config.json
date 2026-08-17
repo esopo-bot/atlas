@@ -1,4 +1,5 @@
 {
+  "comentario": "O deny de leitura fica AQUI de propósito: a camada ainda não porta o professor de credencial para os hooks do Devin, então esta casa fica só com o muro. Muro só sai de onde CHEGOU instrumento melhor.",
   "read_config_from": {
     "claude": false
   },
@@ -8,7 +9,11 @@
       "Read(.env*)",
       "Read(**/.env*)",
       "Read(**/appsettings*)",
-      "Read(.credenciais/**)"
+      "Read(.credenciais/**)",
+      "Write(.env*)",
+      "Write(**/.env*)",
+      "Write(**/appsettings*)",
+      "Write(.credenciais/**)"
     ]
   }
 }

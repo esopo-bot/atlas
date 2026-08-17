@@ -3,7 +3,7 @@
   "titulo": "As regras da camada",
   "introducao": [
     "A lista numerada do que não muda sem decisão do dono. **Proponha; não aplique**: o protocolo de proposta está no fim da página.",
-    "Cada regra é a ordem, direta. O porquê e as medições moram nas páginas de procedência linkadas — leitura de consulta, não de sessão."
+    "Cada regra é a ordem, direta. A procedência mora nas páginas linkadas — leitura de consulta, não de sessão."
   ],
   "regras": [
     {
@@ -63,11 +63,12 @@
     },
     {
       "id": 8,
-      "regra": "Segredo não entra em git nenhum.",
+      "regra": "Segredo não entra em git nenhum — e ler credencial localmente é livre.",
       "faca": [
-        "Credencial não se abre; configuração carrega `${VARIAVEL}`, nunca o valor.",
-        "Endereço não é segredo, mas endereço que só exista dentro do arquivo de credencial fica invisível: a sessão não o abre, e para. O que ela precisa para medir se escreve onde ela lê.",
-        "O que aparece na tela entra na sessão: print, janela compartilhada e captura de erro carregam segredo sem passar por gancho, permissão ou varredura — instrumento nenhum vê imagem. Feche o que tem segredo antes de mandar imagem."
+        "Ler é reversível; publicar não é. Em texto rastreado — arquivo, commit, issue — vai `${VARIAVEL}`, nunca o valor. Vale para git público E privado.",
+        "O exemplo canônico: ler credencial para montar a camada MCP read-only do banco de produção, pode; o valor num `.mcp.json` rastreado, não.",
+        "Depois de usar credencial para configurar algo, avise o dono para tirá-la de vista — o backup é dele.",
+        "O que aparece na tela entra na sessão: print e janela compartilhada carregam segredo sem passar por instrumento nenhum. Feche o que tem segredo antes de mandar imagem."
       ],
       "procedencia": { "titulo": "ganchos", "endereco": "ganchos.md" }
     },
@@ -114,9 +115,10 @@
       ]
     }
   ],
-  "rodape_titulo": "Como propor mudança",
+  "rodape_titulo": "Como propor mudança — e como consultar por código",
   "rodape": [
     "No fechamento da sessão (o prompt de esfriamento pede): *\"regra N atrapalhou neste caso porque X; proponho trocar por Y\"* — ou *\"faltou uma regra para Z\"*. A proposta fica no relatório; o dono aceita, adapta ou recusa.",
-    "Regra nova ou mudada se edita em `conhecimento/regras.json` — esta página é gerada dali e qualquer edição aqui se perde na sincronização."
+    "Regra nova ou mudada se edita em `conhecimento/regras.json` — esta página é gerada dali e qualquer edição aqui se perde na sincronização.",
+    "Sessão ou script que precise das regras como dado lê a fonte direto: `conhecimento/regras.json`, campo `regras` — cada item tem `id`, `regra` (a frase imperativa) e `faca` (os itens). É o que o encadeador injeta em toda etapa de sessão; não há servidor nem API — o arquivo é o contrato."
   ]
 }

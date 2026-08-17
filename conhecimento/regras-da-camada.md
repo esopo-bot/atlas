@@ -5,13 +5,13 @@
 A lista numerada do que não muda sem decisão do dono. **Proponha; não
 aplique**: o protocolo de proposta está no fim da página.
 
-Cada regra é a ordem, direta. O porquê e as medições moram nas páginas de
-procedência linkadas — leitura de consulta, não de sessão.
+Cada regra é a ordem, direta. A procedência mora nas páginas linkadas — leitura
+de consulta, não de sessão.
 
 1. **Abra a sessão na raiz — a pasta que tem o `AGENTS.md`.**
     - O que decide é onde você abre, não onde o arquivo mora: numa subpasta, a
       sessão roda sem as skills da raiz, e nada avisa.
-    - Procedência e medições: [mapa do repositório](mapa-do-repositorio.md).
+    - Procedência: [mapa do repositório](mapa-do-repositorio.md).
 
 2. **Só é pronto o que um instrumento provou.**
     - Prova é build, teste ou listagem — "o modelo disse" não é prova, e saída
@@ -21,7 +21,7 @@ procedência linkadas — leitura de consulta, não de sessão.
     - Resultado negativo pede contraprova: zero, vazio e "sem permissão" viram
       prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa.
       Sem isso, escreva "não medido", nunca "não existe".
-    - Procedência e medições: [zero que mente](zero-que-mente.md).
+    - Procedência: [zero que mente](zero-que-mente.md).
 
 3. **Antes de criar, procure e cite.**
     - O que o conjunto já oferece não se reimplementa; aplicação nova imita a
@@ -45,17 +45,18 @@ procedência linkadas — leitura de consulta, não de sessão.
     - Chamada externa e MCP só quando a tarefa exigir, espaçadas.
     - No primeiro `403`/`429`, recue — não insista em rajada.
 
-8. **Segredo não entra em git nenhum.**
-    - Credencial não se abre; configuração carrega `${VARIAVEL}`, nunca o
-      valor.
-    - Endereço não é segredo, mas endereço que só exista dentro do arquivo de
-      credencial fica invisível: a sessão não o abre, e para. O que ela precisa
-      para medir se escreve onde ela lê.
-    - O que aparece na tela entra na sessão: print, janela compartilhada e
-      captura de erro carregam segredo sem passar por gancho, permissão ou
-      varredura — instrumento nenhum vê imagem. Feche o que tem segredo antes
-      de mandar imagem.
-    - Procedência e medições: [ganchos](ganchos.md).
+8. **Segredo não entra em git nenhum — e ler credencial localmente é livre.**
+    - Ler é reversível; publicar não é. Em texto rastreado — arquivo, commit,
+      issue — vai `${VARIAVEL}`, nunca o valor. Vale para git público E
+      privado.
+    - O exemplo canônico: ler credencial para montar a camada MCP read-only do
+      banco de produção, pode; o valor num `.mcp.json` rastreado, não.
+    - Depois de usar credencial para configurar algo, avise o dono para tirá-la
+      de vista — o backup é dele.
+    - O que aparece na tela entra na sessão: print e janela compartilhada
+      carregam segredo sem passar por instrumento nenhum. Feche o que tem
+      segredo antes de mandar imagem.
+    - Procedência: [ganchos](ganchos.md).
 
 9. **Destrutivo é do dono; commit e push seguem o que a casa autorizou.**
     - A permissão é de cada repositório e se grava no perfil dele; sem
@@ -96,7 +97,7 @@ procedência linkadas — leitura de consulta, não de sessão.
     - Publicação não se desfaz: reescrever a história tira das listagens, não
       do alcance de quem já copiou.
 
-## Como propor mudança
+## Como propor mudança — e como consultar por código
 
 No fechamento da sessão (o prompt de esfriamento pede): *"regra N atrapalhou
 neste caso porque X; proponho trocar por Y"* — ou *"faltou uma regra para Z"*.
@@ -104,3 +105,8 @@ A proposta fica no relatório; o dono aceita, adapta ou recusa.
 
 Regra nova ou mudada se edita em `conhecimento/regras.json` — esta página é
 gerada dali e qualquer edição aqui se perde na sincronização.
+
+Sessão ou script que precise das regras como dado lê a fonte direto:
+`conhecimento/regras.json`, campo `regras` — cada item tem `id`, `regra` (a
+frase imperativa) e `faca` (os itens). É o que o encadeador injeta em toda
+etapa de sessão; não há servidor nem API — o arquivo é o contrato.
