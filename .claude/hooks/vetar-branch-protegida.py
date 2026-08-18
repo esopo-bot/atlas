@@ -180,12 +180,126 @@ def branch_atual(raiz: Path):
     return nome if r.returncode == 0 and nome and nome != "head" else None
 
 
-def motivo_da_recusa(comando: str, protegidas: set, raiz: Path):
-    """Devolve o motivo se o comando é destrutivo sobre branch protegida."""
+def e_gh(token: str) -> bool:
+    """O `gh` do fabricante, por basename — como o `e_git` faz com o git."""
+    return Path(token).name.lower().removesuffix(".exe") == "gh"
+
+
+ARQUIVO_CONFIGURACAO = "nucleo/configuracao.json"
+# O que a automação faz sozinha se declara, e o padrão é NÃO. A camada viaja
+# para repositórios onde commitar é normal e para repositórios onde o dono
+# commita — um veto fixo quebraria metade deles, e um silêncio fixo é o que
+# temos hoje: `gh pr create`, `gh pr merge`, `gh release create` e
+# `git push origin main` passam todos sem serem tocados (medido 18/08/2026).
+ACOES = {
+    "commit": ("commit",),
+    "push": ("push",),
+    "publicar": ("pr", "release", "merge"),
+}
+PADRAO_NEGA = {"commit": False, "push": False, "publicar": False}
+
+
+# LIMITE DECLARADO, e ele é real: num comando composto em que o `cd` NÃO
+# abre a linha (`rm -rf x && mkdir x && cd x && git commit`), o gancho não
+# descobre o repositório alvo e cai na política do projeto — nega. É a falha
+# SEGURA (nega demais, nunca de menos), e foi medida no primeiro uso real em
+# 18/08/2026. Quem precisa da política do destino põe o `cd` na frente.
+def _cd_do_comando(comando: str) -> str:
+    """O `cd X` que abre o comando, quando há um.
+
+    Comando composto (`cd X && git commit`) roda noutro lugar, e o `cwd` que
+    o gancho recebe é o de ANTES. Sem ler o `cd`, a política aplicada é a do
+    projeto — falha segura, mas que barra trabalho legítimo em repositório
+    que autorizou. Só o `cd` de ABERTURA conta: `git commit && cd X` não muda
+    onde o commit aconteceu.
+    """
+    primeiro = separar(comando)[0].strip() if separar(comando) else ""
+    tokens = partir(primeiro)
+    if len(tokens) >= 2 and Path(tokens[0]).name == "cd":
+        return tokens[1]
+    return ""
+
+
+def repositorio_do_comando(onde: str, padrao: Path, comando: str = "") -> Path:
+    """A raiz do repositório em que o comando roda; sem ela, a do projeto."""
+    if (destino := _cd_do_comando(comando)):
+        alvo = Path(destino)
+        onde = str(alvo if alvo.is_absolute() else Path(onde or ".") / alvo)
+    if not onde:
+        return padrao
+    atual = Path(onde)
+    try:
+        atual = atual.resolve(strict=False)
+    except OSError:
+        return padrao
+    while True:
+        if (atual / ".git").exists():
+            return atual
+        if atual.parent == atual:
+            return padrao
+        atual = atual.parent
+
+
+def autorizacoes(raiz: Path) -> dict:
+    """O que este repositório autoriza a automação a fazer.
+
+    Ausente, ilegível ou ainda no molde: NEGA. Regra 9 — o que aciona
+    automação é do dono, e omissão não é permissão.
+    """
+    permitido = dict(PADRAO_NEGA)
+    try:
+        dado = json.loads((raiz / ARQUIVO_CONFIGURACAO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return permitido
+    declarado = dado.get("autorizacoes") if isinstance(dado, dict) else None
+    if not isinstance(declarado, dict):
+        return permitido
+    for acao in permitido:
+        valor = declarado.get(acao)
+        if isinstance(valor, bool):
+            permitido[acao] = valor
+    return permitido
+
+
+def acao_do_comando(tokens: list) -> str:
+    """Que ação este comando aciona: commit, push, publicar — ou ''."""
+    if not tokens:
+        return ""
+    programa = Path(tokens[0]).name.lower().removesuffix(".exe")
+    resto = [t for t in tokens[1:] if not t.startswith("-")]
+    if programa in ("git", "gh") and resto:
+        for acao, verbos in ACOES.items():
+            if resto[0].lower() in verbos:
+                return acao
+            # `gh pr create`, `gh pr merge`: o verbo é o segundo pedaço
+            if len(resto) > 1 and resto[0].lower() in ("pr", "release") \
+                    and acao == "publicar":
+                return acao
+    return ""
+
+
+def motivo_da_recusa(comando: str, protegidas: set, raiz: Path,
+                     permitido: dict = None):
+    """O motivo da recusa: destrutivo em branch protegida, ou ação
+    que este repositório não autorizou a automação a fazer."""
+    permitido = PADRAO_NEGA if permitido is None else permitido
+    sem_autorizacao = ""
     for segmento in separar(comando):
         tokens = partir(segmento.strip())
-        if not tokens or not e_git(tokens[0]):
+        # `gh` entra aqui junto com o `git`: sem isto, todo `gh pr merge` e
+        # `gh release create` passava sem ser olhado — o filtro exigia a
+        # palavra `git` e o comando do fabricante não a tem (medido).
+        if not tokens or not (e_git(tokens[0]) or e_gh(tokens[0])):
             continue
+        # A recusa por autorização fica PENDENTE: se este mesmo comando
+        # também for destrutivo sobre branch protegida, é isso que o dono
+        # precisa ler primeiro — ligar a autorização não liberaria mesmo.
+        acao = acao_do_comando(tokens)
+        if acao and not permitido.get(acao, False) and not sem_autorizacao:
+            sem_autorizacao = (f"{acao} sem autorização declarada — "
+                               f"`autorizacoes.{acao}` não está ligado em "
+                               f"{ARQUIVO_CONFIGURACAO}")
+
         verbo, resto = verbo_e_resto(tokens)
         if verbo not in {"push", "branch"}:
             continue
@@ -232,24 +346,34 @@ def motivo_da_recusa(comando: str, protegidas: set, raiz: Path):
             atual = branch_atual(raiz)
             if atual in protegidas:
                 return f"reescrever a história de '{atual}', a branch atual e protegida"
-    return None
+    # Nenhum segmento é destrutivo sobre protegida. Se algum pedia ação sem
+    # autorização, a recusa é essa — e só agora, para a regra mais dura ter
+    # falado primeiro.
+    return sem_autorizacao or None
 
 
 def main() -> int:
     try:
         entrada = json.load(sys.stdin)
         comando = entrada.get("tool_input", {}).get("command", "")
+        onde = entrada.get("cwd") or ""
     except (json.JSONDecodeError, AttributeError, TypeError):
         return 0  # falha aberto: entrada quebrada não prende a sessão
 
-    if not comando or "git" not in comando.lower():
+    baixo = (comando or "").lower()
+    if not comando or ("git" not in baixo and "gh " not in baixo):
         return 0
 
     # A raiz vem da declaração, nunca do cwd: o cwd anda com cada `cd` da
     # sessão, e a lista de branches protegidas mora na raiz do repositório.
     base = os.environ.get("CLAUDE_PROJECT_DIR")
     raiz = Path(base) if base else Path(__file__).resolve().parents[2]
-    motivo = motivo_da_recusa(comando, nomes_protegidos(raiz), raiz)
+    # A autorização é do repositório que o comando MUDA, não do projeto onde
+    # a sessão abriu: sem isto, uma sessão aberta aqui carregaria a política
+    # daqui para dentro de qualquer outro repositório — e o primeiro uso real
+    # do gancho tropeçou exatamente nisso (18/08/2026).
+    motivo = motivo_da_recusa(comando, nomes_protegidos(raiz), raiz,
+                              autorizacoes(repositorio_do_comando(onde, raiz, comando)))
     if not motivo:
         return 0  # passagem é silêncio: sair 0 sem imprimir nada
 
@@ -257,6 +381,14 @@ def main() -> int:
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
         "permissionDecisionReason": (
+            # Duas recusas, duas mensagens: mandar quem esbarrou na
+            # autorização "tirar o nome de branches-protegidas.txt" é
+            # conselho que não resolve — a branch dele nem está na lista.
+            (f"Regra 9 da camada: isto quer {motivo}. O que a automação faz "
+             "sozinha se declara — ligue a chave em `nucleo/configuracao.json`, "
+             "campo `autorizacoes`, ou peça ao dono que rode o comando. "
+             "Omissão não é permissão.")
+            if "sem autorização declarada" in motivo else
             f"Regra 12 da camada: isto quer {motivo}. Branch de longa duração "
             "é infraestrutura de outras pessoas — desfazer é público e caro. "
             "O caminho: trabalhe na sua branch e peça a promoção ao dono, que "
@@ -343,18 +475,46 @@ DEIXA_PASSAR = [
 ]
 
 
+# O que a automação NÃO pode fazer enquanto o repositório não autorizar.
+# Antes destes casos, os cinco passavam calados — e o silêncio era ausência
+# de regra, não permissão (medido em 18/08/2026).
+BARRA_SEM_AUTORIZACAO = [
+    ("commit sem autorização", "git commit -m x"),
+    ("push sem autorização", "git push origin feature/minha"),
+    ("abrir PR sem autorização", "gh pr create --fill"),
+    ("mesclar PR sem autorização", "gh pr merge 1 --merge"),
+    ("publicar release sem autorização", "gh release create v1"),
+]
+
+# O repositório que autorizou: a cerca não pode atrapalhar o trabalho dele.
+AUTORIZA_TUDO = {"commit": True, "push": True, "publicar": True}
+
+
 def testar() -> int:
     protegidas = set(PADRAO)
     raiz = Path.cwd()
     falhas = []
     for rotulo, comando in BARRA:
-        if not motivo_da_recusa(comando, protegidas, raiz):
+        if not motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO):
             falhas.append(f"  DEVIA BARRAR e passou — {rotulo}: {comando}")
     for rotulo, comando in DEIXA_PASSAR:
-        motivo = motivo_da_recusa(comando, protegidas, raiz)
+        motivo = motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO)
         if motivo:
             falhas.append(f"  DEVIA PASSAR e barrou — {rotulo}: {comando} ({motivo})")
-    total = len(BARRA) + len(DEIXA_PASSAR)
+    # Sem autorização declarada, os mesmos comandos são negados — e com ela,
+    # liberados. O par prova que a cerca é a DECLARAÇÃO, não o comando.
+    for rotulo, comando in BARRA_SEM_AUTORIZACAO:
+        if not motivo_da_recusa(comando, protegidas, raiz):
+            falhas.append(f"  DEVIA BARRAR sem autorização e passou — {rotulo}")
+        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO):
+            falhas.append(f"  DEVIA PASSAR com autorização e barrou — {rotulo}")
+    # E o destrutivo continua barrado MESMO com tudo autorizado: autorização
+    # é para o trabalho normal, nunca para reescrever branch de longa duração.
+    if not motivo_da_recusa("git push --force origin main", protegidas, raiz,
+                            AUTORIZA_TUDO):
+        falhas.append("  DEVIA BARRAR: força em protegida, mesmo autorizado")
+    total = (len(BARRA) + len(DEIXA_PASSAR)
+             + len(BARRA_SEM_AUTORIZACAO) * 2 + 1)
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
         print("\n".join(falhas))

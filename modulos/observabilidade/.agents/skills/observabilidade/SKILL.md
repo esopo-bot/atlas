@@ -92,7 +92,7 @@ conta: o desenho é entrada, não descoberta.
    diz quem fala com A — mande olhar a vizinha antes de o dono pensar nela. É
    a única coisa aqui que nenhum manual de ferramenta faz.
 
-A ordem dos nove passos está em `fluxos/investigacao-de-incidente.md`; a
+A ordem dos nove passos está em `conhecimento/investigacao-de-incidente.md`; a
 tradução deles para a ferramenta, em `conhecimento/observabilidade.md`. Não
 recontá-los aqui é de propósito — fato repetido em dois lugares envelhece
 torto e passa a mentir de um dos lados.

@@ -1,0 +1,43 @@
+{
+  "teto": 2,
+  "etapas": [
+    {
+      "nome": "abrir-branch",
+      "tipo": "codigo",
+      "comando": "python3 -c \"import json,os,subprocess,sys;cfg=json.load(open('nucleo/executor.json'));b=cfg['branches'];issue=os.environ.get('ISSUE','0');nome=b['padrao_de_trabalho'].replace('<numero>',issue).replace('<assunto-em-kebab>',os.environ.get('ASSUNTO','trabalho'));base=b['base'];g=lambda *a:subprocess.run(['git',*a],capture_output=True,text=True);g('fetch','origin',base);r=g('checkout','-b',nome,f'origin/{base}');atual=g('branch','--show-current').stdout.strip();print(json.dumps({'veredito':'segue' if atual==nome else 'para','provado':[{'afirmacao':f'a branch de trabalho nasceu de {base}','comando':'git branch --show-current','saida':atual},{'afirmacao':'e aponta para o mesmo commit da base','comando':f'git rev-parse --short HEAD origin/{base}','saida':g('rev-parse','--short','HEAD').stdout.strip()}],'suposto':[],'faltas':[] if atual==nome else [f'não consegui criar {nome}: {r.stderr.strip()[:200]}'],'proximo':None if atual==nome else 'Confira se a branch já existe e se o remoto responde, e reexecute.','etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}},default=str))\" | python3 -c \"import json,sys;d=json.load(sys.stdin);d={k:v for k,v in d.items() if v is not None};print(json.dumps(d))\"",
+      "tempo-limite": 300
+    },
+    {
+      "nome": "trabalhar",
+      "tipo": "sessao",
+      "depende": ["abrir-branch"],
+      "max-turnos": 40,
+      "prompt": "Faça o trabalho desta issue na branch que a etapa anterior abriu. O que fazer está no corpo da issue: leia o prompt refinado e siga por ele.\n\nO QUE VOCÊ NÃO PODE FAZER: mesclar em branch de longa duração, empurrar para ela, ou abrir e mesclar PR por conta própria — o gancho recusa, e a recusa é a regra 9 virando código. Commit e push seguem o que `autorizacoes` declara em nucleo/configuracao.json; onde não estiver declarado, deixe os arquivos e diga o que fez.\n\nA PROVA: cada afirmação do seu recibo tem comando e saída. Teste ANTES de dar por pronto — o teste que não falha quando o código quebra não é teste."
+    },
+    {
+      "nome": "testar-na-integracao",
+      "tipo": "codigo",
+      "depende": ["trabalhar"],
+      "comando": "python3 -c \"import json,subprocess;cfg=json.load(open('nucleo/executor.json'));i=cfg['branches']['integracao'];g=lambda *a:subprocess.run(['git',*a],capture_output=True,text=True);t=g('branch','--show-current').stdout.strip();g('fetch','origin',i);m=g('merge','--no-commit','--no-ff',f'origin/{i}');limpo=m.returncode==0;g('merge','--abort');print(json.dumps({'veredito':'segue' if limpo else 'para','provado':[{'afirmacao':f'o trabalho de {t} mescla em {i} sem conflito','comando':f'git merge --no-commit --no-ff origin/{i}','saida':'sem conflito' if limpo else m.stdout.strip()[:300]}],'suposto':['os testes do repositório rodam na integração, não aqui — quem os declara é o roteiro de quem instala'],'faltas':[] if limpo else ['conflito com a integração'],'proximo':'Resolva o conflito com a integração na sua branch e reexecute.' if not limpo else None,'etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}},default=str))\" | python3 -c \"import json,sys;d=json.load(sys.stdin);print(json.dumps({k:v for k,v in d.items() if v is not None}))\"",
+      "tempo-limite": 600
+    },
+    {
+      "nome": "verificacao",
+      "tipo": "conferencia",
+      "depende": ["testar-na-integracao"]
+    },
+    {
+      "nome": "corpo-do-pedido",
+      "tipo": "sessao",
+      "depende": ["verificacao"],
+      "max-turnos": 15,
+      "prompt": "Escreva o corpo do pedido de revisão desta entrega, em pt-BR, e grave em tmp/pedido-de-revisao.md. Quatro seções obrigatórias, nesta ordem e com estes títulos exatos:\n\n## O que foi testado\nO comando e a saída de cada verificação — o que passou e o que não foi medido. Sem comando e sem saída não é teste, é opinião.\n\n## Risco de quebrar em produção\nO que este diff pode derrubar, e por quê. \"Nenhum\" só vale com a razão medida.\n\n## Mitigação\nO que já está no lugar para o risco não virar incidente.\n\n## Plano de reversão\nO comando exato que desfaz, e o que ele NÃO desfaz (migração de dado, efeito em terceiro, aviso já enviado).\n\nO corpo cobre o que o diff entrega: confira as seções contra a lista real de commits. Corpo que não cobre o diff é revisão aprovando sem ver.\n\nVocê NÃO abre o pedido de revisão — quem abre é o dono, com o texto na mão. Seu recibo prova que o arquivo existe e tem as quatro seções."
+    },
+    {
+      "nome": "entregar",
+      "tipo": "portao",
+      "depende": ["corpo-do-pedido"],
+      "aprovacao": "aprovacoes/entrega.ok"
+    }
+  ]
+}

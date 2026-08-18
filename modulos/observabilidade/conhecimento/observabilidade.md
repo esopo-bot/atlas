@@ -113,7 +113,7 @@ arquitetura**.
 ### Os nove passos, traduzidos
 
 A ordem genérica está em [investigação de
-incidente](../fluxos/investigacao-de-incidente.md) e não se repete aqui. O que
+incidente](investigacao-de-incidente.md) e não se repete aqui. O que
 muda por ferramenta é onde se olha:
 
 | Passo | No Datadog |

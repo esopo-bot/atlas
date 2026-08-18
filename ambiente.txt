@@ -1,9 +1,0 @@
-# O que este workspace espera do ambiente da máquina — nomes, nunca valores.
-# O gancho .claude/hooks/conferir-ambiente.py confere na abertura da sessão.
-# Este arquivo é seu: a atualização da camada nunca o reescreve.
-receita conhecimento/estado-que-nao-viaja.md
-comando git
-comando gh
-comando python3
-comando node
-comando npm

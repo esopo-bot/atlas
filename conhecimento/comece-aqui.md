@@ -4,7 +4,7 @@ slug: /
 
 # Comece aqui
 
-A camada: instruções, fluxos e skills que qualquer agente de IA — Claude
+A camada: instruções, skills e conhecimento que qualquer agente de IA — Claude
 Code, Codex, Devin — passa a seguir no repositório onde ela for montada.
 
 ## O que a camada instala
@@ -20,18 +20,18 @@ Code, Codex, Devin — passa a seguir no repositório onde ela for montada.
 
 | Você quer                            | Abra                                                                       |
 | ------------------------------------ | -------------------------------------------------------------------------- |
-| Abrir e fechar o dia                 | [abrir e fechar a sessão](../fluxos/abrir-e-fechar-a-sessao.md)            |
+| Abrir e fechar o dia                 | [abrir e fechar a sessão](abrir-e-fechar-a-sessao.md)            |
 | Pedir automação, plugin ou skill     | [canivete](skills-da-camada.md) — metade já existe de fábrica              |
 | Saber onde cada coisa mora           | [mapa do repositório](mapa-do-repositorio.md)                              |
 | O que a sessão não muda sem você     | [as regras da camada](regras-da-camada.md)                                 |
 | Criar ou testar uma skill            | [skills: criar e testar](skills-criar-e-testar.md)                         |
-| Investigar quebra em produção        | [investigação de incidente](../fluxos/investigacao-de-incidente.md)        |
+| Investigar quebra em produção        | [investigação de incidente](investigacao-de-incidente.md)        |
 | Entender uma busca que devolveu zero | [zero que mente](zero-que-mente.md)                                        |
 
 Consulta, quando o assunto aparecer: [ganchos](ganchos.md) ·
-[plugins](plugins-oficiais-do-claude-code.md) · [MCP](mcp.md) ·
+[plugins](skills-da-camada.md#os-plugins-que-se-pagam) · [MCP](mcp.md) ·
 [subagentes](subagentes.md) ·
-[história em issue](../fluxos/historia-em-issue.md).
+[história em issue](historia-em-issue.md).
 
 ## As três que doem
 

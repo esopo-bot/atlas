@@ -10,7 +10,7 @@ não existe.** Toda sessão abre lendo a issue e fecha atualizando a issue —
 nessa ordem, sempre. É isso que permite investigar numa sessão, implementar
 noutra e verificar numa terceira sem ninguém reexplicar nada.
 
-O desenho e o porquê estão em `fluxos/historia-em-issue.md`. Aqui está o que
+O desenho e o porquê estão em `conhecimento/historia-em-issue.md`. Aqui está o que
 se executa.
 
 ## Passo zero: perguntar uma vez, gravar para sempre
@@ -21,7 +21,7 @@ disso é da skill.** É da casa, muda de casa para casa, e chutar é o começo d
 trabalho errado.
 
 1. **Leia a configuração da casa antes de criar issue:**
-   `configuracao-da-casa.md`, na raiz. É dela que saem o repositório onde a
+   `nucleo/configuracao.json`. É dela que saem o repositório onde a
    issue nasce, o padrão de nome e o fluxo do backlog — nunca de palpite, e
    nunca do repositório de código "porque era o que estava aberto". Arquivo
    ausente ou ainda com `${...}` por preencher? Pergunte ao dono e grave a
@@ -188,4 +188,4 @@ escolhida. Chamada de rede em rajada é o que derruba limite de taxa.
 
 Feche com motivo explícito (resolvido ou descartado) e pode o corpo — o
 obsoleto continua vivo no comentário. A lição que vale adiante sai para
-`conhecimento/`; o porquê do corte está em `fluxos/historia-em-issue.md`.
+`conhecimento/`; o porquê do corte está em `conhecimento/historia-em-issue.md`.

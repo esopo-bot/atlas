@@ -58,44 +58,35 @@ function subpastasDaCasa() {
 // toda sessão e não entrega a nenhuma.
 function paginasNaoCitadas(citadas) {
   const conhecidas = new Set(citadas);
-  return ['fluxos', 'conhecimento']
-    .flatMap((pasta) => {
-      const dir = path.join(raiz, pasta);
-      if (!fs.existsSync(dir)) return [];
-      return fs
-        .readdirSync(dir, { withFileTypes: true })
-        .filter((e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'LEIAME.md')
-        .map((e) => `${pasta}/${e.name.slice(0, -3)}`);
-    })
+  if (!fs.existsSync(CONHECIMENTO)) return [];
+  return fs
+    .readdirSync(CONHECIMENTO, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'LEIAME.md')
+    .map((e) => `conhecimento/${e.name.slice(0, -3)}`)
     .filter((id) => !conhecidas.has(id))
     .sort(); // ordem estável: o menu não dança entre construções
 }
 
-// A ordem é de leitura, não de assunto: o que se usa todo dia primeiro, o
-// que se consulta depois, e a placa por último. O canivete subiu para o
+// A ordem é de leitura, não de assunto: o que se usa todo dia primeiro e o
+// que se consulta depois. O canivete subiu para o
 // terceiro lugar de propósito — ele é o que evita reescrever o que já existe,
 // e página que resolve isso no fim da lista chega tarde demais.
 const daCamada = [
   'conhecimento/comece-aqui',
-  'fluxos/abrir-e-fechar-a-sessao',
+  'conhecimento/abrir-e-fechar-a-sessao',
   'conhecimento/skills-da-camada',
   'conhecimento/regras-da-camada',
   'conhecimento/mapa-do-repositorio',
-  'fluxos/investigacao-de-incidente',
+  'conhecimento/investigacao-de-incidente',
   'conhecimento/zero-que-mente',
-  'fluxos/historia-em-issue',
-  'fluxos/rodar-uma-corrente',
+  'conhecimento/historia-em-issue',
+  'conhecimento/rodar-uma-corrente',
   'conhecimento/skills-criar-e-testar',
   'conhecimento/ganchos',
-  'conhecimento/plugins-oficiais-do-claude-code',
   'conhecimento/estado-que-nao-viaja',
-  'fluxos/mudar-de-maquina',
+  'conhecimento/mudar-de-maquina',
   'conhecimento/mcp',
   'conhecimento/subagentes',
-  // Placa: só existe para não quebrar link antigo. Fica no fim porque não é
-  // caminho de leitura — e não sai do menu porque, fora dele, quem procura
-  // "templates" não acha nem a placa.
-  'fluxos/templates',
 ];
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */

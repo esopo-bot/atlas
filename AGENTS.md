@@ -1,49 +1,56 @@
+<!-- GERADO de nucleo/regras.json e nucleo/vocabulario.json pelo `montar.py --sincronizar`. Editar aqui se perde. -->
+
 # Instruções para agentes
 
-Instruções neutras para qualquer agente de IA (Claude, Devin ou outro)
-trabalhando neste repositório.
+Para qualquer agente de IA neste repositório.
 
-## O que é este repositório
+## O repositório
 
-Camada abstrata e compartilhável de skills, fluxos e conhecimento para
-sessões de IA. Todo o conteúdo é genérico e reutilizável.
+- Camada genérica de skills e conhecimento para sessões de IA; `montar.py` a
+  instala em outros repositórios.
+- Pastas de conteúdo, que viajam para quem instala: `conhecimento/` e
+  `.agents/skills/`.
+- Fonte que instrumento lê: `nucleo/`. `modulos/` não viaja — chega por
+  `--modulo <nome>`.
+- Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`.
+- Rode `python montar.py --sincronizar` depois de editar página, skill, módulo
+  ou `nucleo/`.
 
-- **Pastas de conteúdo:** `fluxos/` (processo), `conhecimento/` (técnica e
-  ferramenta), `.agents/skills/` (skill que roda). O que mora nelas viaja
-  para toda casa que montar a camada.
-- **Mapa completo** — o que existe, o que a atualização sobrescreve, onde
-  escrever cada coisa: `conhecimento/mapa-do-repositorio.md`. Este arquivo é
-  o centro neutro; `.claude/` e `.devin/` são adaptadores.
-- **`modulos/` é opcional e não viaja**: só chega por `--modulo <nome>`.
-  Como escrever um: `modulos/LEIAME.md`.
-- **Editou página ou skill? Rode `python montar.py --sincronizar`.** Sem
-  isso, quem montar noutro repositório recebe a versão velha.
+## Ordens desta casa
 
-## Regras de trabalho
+- Não commite, não empurre, não publique: deixe os arquivos para o dono
+  conferir. O teto é o ensaio, que mostra o que subiria sem subir. Destrutivo é
+  dele. Esta é a única casa desta regra: outro arquivo que disser diferente
+  está errado.
+- Repositório público: nada de nome de pessoa ou empresa, credencial ou caminho
+  de máquina em arquivo, commit, branch ou issue. Na dúvida, pergunte.
+- Não altere o que não foi pedido.
+- Escreva em pt-BR: conclusão primeiro, frases curtas.
 
-- **Este repositório é público.** Nada pessoal em arquivo, commit, branch ou
-  issue: nome de pessoa ou empresa, credencial, caminho de máquina. Na
-  dúvida: é pessoal — pergunte antes.
-- **Não invente passo onde já existe receita.** Procure o procedimento na
-  documentação da casa; não achou, peça o endereço — não improvise.
-- **Ler credencial localmente é livre. Segredo não entra em git nenhum** —
-  público ou privado: em texto rastreado, sempre `${VARIAVEL}`, nunca o
-  valor. Usou credencial para configurar algo? Avise o dono para tirá-la de
-  vista — o backup é dele.
-- Não altere o que existe sem que isso seja pedido.
-- **Aqui a sessão não commita, não empurra e não publica.** Deixa os
-  arquivos para o dono conferir; o teto é o ensaio — o comando que mostra o
-  que subiria sem subir. Destrutivo também é dele. **Esta é a única casa
-  desta regra** — outro arquivo que disser diferente está errado.
-- Só chame de pronto o que um instrumento provou (build, teste, listagem).
+## As regras da camada
 
-## Estilo
+Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 
-- Conteúdo e comunicação em pt-BR.
-- Conclusão primeiro, frases curtas, uma ideia por frase, sem jargão.
+1. Abra a sessão na raiz — a pasta que tem o `AGENTS.md`.
+2. Só é pronto o que um instrumento provou.
+3. Antes de criar, procure e cite.
+4. A memória mora no disco, não no contexto.
+5. Ao dar por pronto, faça a análise de promoção.
+6. Trabalhe econômico.
+7. Rede com cortesia.
+8. Segredo não entra em git nenhum — e ler credencial localmente é livre.
+9. Destrutivo é do dono; commit e push seguem o que a casa autorizou.
+10. Texto na régua.
+11. Não invente passo onde já existe receita.
+12. Branch de longa duração e configuração de esteira não se tocam.
+13. Publicar exige revisão semântica, não só varredura.
+14. Conhecimento nasce na língua de quem vai lê-lo.
 
-## As regras desta camada
+## Os nomes
 
-A lista numerada está em `conhecimento/regras-da-camada.md`. Leia antes de
-propor procedimento, de mexer em branch de longa duração e de tocar em
-configuração de esteira.
+O nome declara a responsabilidade da peça, em português puro. Os nomes
+aprovados, que toda peça NOVA usa: executor de roteiros, roteiro, execução,
+estágio, evidência, verificação, aprovação manual, catálogo, falso negativo,
+repositório, repositório vizinho, painel de controle. Onde o código ainda usar
+o nome velho, ele está esperando a renomeação — o par velho→novo, o sentido de
+cada um e as exceções estão em `nucleo/vocabulario.json`.

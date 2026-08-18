@@ -1,0 +1,29 @@
+{
+  "comentario": "O EXEMPLO da configuração do executor de roteiros. Copie para nucleo/executor.json, troque os ${...} pelos valores deste repositório, e mantenha o executor.json FORA do git — a linha `nucleo/executor.json` no .gitignore, que é rastreado e sobrevive ao próximo clone (o .git/info/exclude não: ele é local e um clone novo nasce sem ele). Sem executor.json válido o executor RECUSA disparar: a automação não adivinha onde a issue nasce nem para onde a branch aponta. O ensaio continua rodando sem ele — ensaio não toca o mundo.",
+  "modo": "${completo | so-issues}",
+  "issues": {
+    "repositorio": "${DONO}/${REPOSITORIO_DE_ISSUES}",
+    "conta_gh": "${CONTA_DA_AUTOMACAO}"
+  },
+  "projeto": {
+    "url": "${URL_DO_QUADRO}"
+  },
+  "branches": {
+    "padrao_de_trabalho": "${PADRAO_DO_NOME_DA_BRANCH}",
+    "base": "${BRANCH_BASE}",
+    "integracao": "${BRANCH_DE_INTEGRACAO}"
+  },
+  "diretorios_so_codigo": [
+    "${DIRETORIO_QUE_SO_GUARDA_CODIGO}"
+  ],
+  "existe_arquivo_limpeza": false,
+  "arquivo_limpeza": "${CAMINHO_DO_SCRIPT_QUANDO_EXISTE_FOR_TRUE}",
+  "notas": [
+    "modo: em `completo` o executor roda a corrente inteira; em `so-issues` ele SÓ abre issue — executar fica desligado, e o disparo recusa com recado.",
+    "conta_gh nomeia a conta, nunca a credencial: o token mora no gh da máquina. Segredo não entra em arquivo, nem neste.",
+    "branches.base e branches.integracao dizem para onde o trabalho APONTA. O que não se toca está em .claude/branches-protegidas.txt — outro arquivo, outro assunto. A validação avisa quando as duas não constam de lá.",
+    "diretorios_so_codigo e arquivo_limpeza são lidos por quem veta conhecimento em pasta de código e pela rotina de limpeza.",
+    "Enquanto houver ${...} sem valor, o disparo recusa e nomeia o campo.",
+    "As autorizações da automação NÃO moram aqui: elas ficam em nucleo/configuracao.json, campo `autorizacoes` ({commit, push, publicar}), porque são do repositório e não da automação. O padrão é não — o gancho nega o que não estiver declarado."
+  ]
+}

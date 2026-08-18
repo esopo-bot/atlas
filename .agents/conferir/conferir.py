@@ -118,7 +118,97 @@ def _texto_plano(texto: str) -> str:
     return " ".join(texto.lower().split())
 
 
-def _reexecutar(item: dict, cwd: str, tempo_limite: int) -> str:
+# A etapa anota a LINHA que importa; a re-execução captura tudo. Comparar os
+# dois por igualdade acusa a diferença de tamanho como se fosse divergência —
+# medido em 18/08/2026: 544 caracteres declarados contra 3.038 re-executados,
+# mesmo comando, mesma verdade, acusado. A régua passou a ser: o declarado
+# aparece na saída como BLOCO DE LINHAS INTEIRAS E SEGUIDAS.
+#
+# Por linha, e não por subcadeia, porque subcadeia aceita o que não deve:
+# "ok" está dentro de "not ok". Medido nas mesmas evidências: por subcadeia,
+# a única acusação que sumiria era justamente a única divergência real.
+ELISAO = "(...)"  # a linha com que a etapa declara "cortei um pedaço aqui"
+
+
+def _blocos_declarados(declarada: str) -> list:
+    """A saída declarada, partida nos marcadores de elisão."""
+    blocos, atual = [], []
+    for linha in declarada.split("\n"):
+        if linha.strip() == ELISAO:
+            if atual:
+                blocos.append(atual)
+            atual = []
+        else:
+            atual.append(linha)
+    if atual:
+        blocos.append(atual)
+    return blocos
+
+
+def _contem_blocos(real: str, declarada: str) -> bool:
+    """Cada bloco declarado aparece seguido na saída, e na ordem declarada."""
+    linhas = real.split("\n")
+    inicio = 0
+    for bloco in _blocos_declarados(declarada):
+        tamanho = len(bloco)
+        achou = -1
+        for i in range(inicio, len(linhas) - tamanho + 1):
+            if linhas[i:i + tamanho] == bloco:
+                achou = i
+                break
+        if achou < 0:
+            return False
+        inicio = achou + tamanho
+    return True
+
+
+def _confere_saida(real: str, declarada: str, igual: bool) -> bool:
+    """A saída declarada confere com a re-executada.
+
+    Declaração VAZIA exige igualdade mesmo sem `--igual`, e isso é o oposto
+    de um detalhe: o contrato ensina a fechar prova de ausência com
+    `|| true`, então saída vazia é o caso comum, e "contém" a aceitaria
+    contra qualquer coisa. Medido: sem esta regra, a única divergência real
+    das seis acusações do bloco 2 — um `grep` que passou a achar arquivo —
+    viraria silêncio.
+    """
+    if igual or not declarada:
+        return real == declarada
+    return _contem_blocos(real, declarada)
+
+
+def _linha_que_falta(declarada: str, real: str) -> str:
+    """Qual linha declarada não apareceu — a acusação sob a régua do contém."""
+    presentes = set(real.split("\n"))
+    for bloco in _blocos_declarados(declarada):
+        for linha in bloco:
+            if linha not in presentes:
+                return (f"a linha declarada {linha!r} não aparece na saída "
+                        f"({len(declarada)} contra {len(real)} caracteres)")
+    return ("as linhas declaradas aparecem, mas não seguidas e nesta ordem "
+            f"({len(declarada)} contra {len(real)} caracteres) — use "
+            f"{ELISAO!r} em linha própria para declarar o corte")
+
+
+# `grep` na sessão pode não ser o `grep` da re-execução: shell interativo
+# carrega perfil, e perfil pode embrulhar o comando num que respeita o
+# .gitignore. Mesma linha, dois números — medido em 18/08/2026. A conferência
+# não adivinha qual rodou lá: quando acusa divergência num comando com `grep`
+# nu, ela AVISA que o binário pode ser a causa. Aviso, não acusação inventada.
+_GREP_EXPLICITO = re.compile(r"(?:/(?:usr/)?bin/|command\s+|git\s+)grep\b")
+_GREP_NU = re.compile(r"(?<![\w/.-])grep\b")
+
+
+def _aviso_do_grep(comando: str) -> str:
+    if not _GREP_NU.search(_GREP_EXPLICITO.sub("", comando)):
+        return ""
+    return (" [aviso: o comando usa `grep` sem caminho — a sessão pode ter "
+            "rodado um embrulhado, que respeita o .gitignore, e esta "
+            "re-execução usou o do PATH. Declare /bin/grep ou git grep]")
+
+
+def _reexecutar(item: dict, cwd: str, tempo_limite: int,
+                igual: bool = False) -> str:
     """Re-executa um item do provado; devolve a acusação, ou '' se confere."""
     try:
         rodada = subprocess.run(item["comando"], shell=True, cwd=cwd,
@@ -137,15 +227,41 @@ def _reexecutar(item: dict, cwd: str, tempo_limite: int) -> str:
                 f"{item['comando']!r} — prova declarada termina em 0")
     real = _normalizar(rodada.stdout)
     declarada = _normalizar(item["saida"])
-    if real != declarada:
-        return (f"saída diverge em {item['comando']!r}: "
-                f"declarada {declarada[:80]!r}, re-executada agora {real[:80]!r}")
+    if not _confere_saida(real, declarada, igual):
+        porque = (_onde_diverge(declarada, real) if igual or not declarada
+                  else _linha_que_falta(declarada, real))
+        return (f"saída diverge em {item['comando']!r}: " + porque
+                + _aviso_do_grep(item["comando"]))
     return ""
+
+
+def _onde_diverge(declarada: str, real: str, janela: int = 60) -> str:
+    """Mostra o PONTO da diferença, não os primeiros 80 caracteres de cada.
+
+    Cortar as duas no mesmo tamanho esconde a divergência sempre que ela cai
+    depois do corte, e a acusação passa a exibir dois valores idênticos aos
+    olhos de quem lê. Medido em 18/08/2026: duas saídas que diferiam só em
+    "0.108" contra "0.109", no caractere 118, apareceram como o mesmo texto.
+    Acusação que mostra X diferente de X é pior que acusação nenhuma — manda
+    procurar justamente o que ela deveria ter apontado.
+    """
+    i = 0
+    while i < min(len(declarada), len(real)) and declarada[i] == real[i]:
+        i += 1
+    inicio = max(0, i - 12)
+
+    def recorte(texto):
+        return (("…" if inicio else "") + texto[inicio:i + janela]
+                + ("…" if len(texto) > i + janela else ""))
+
+    return (f"diferem a partir do caractere {i} — declarada "
+            f"{recorte(declarada)!r}, agora {recorte(real)!r} "
+            f"({len(declarada)} contra {len(real)} caracteres)")
 
 
 def conferir_recibo(dado: dict, esquema: dict, cwd: str, amostra: int,
                     exigencias: list, ensaio: bool, tempo_limite: int,
-                    rotulo: str) -> list:
+                    rotulo: str, igual: bool = False) -> list:
     """Todas as acusações de um recibo; lista vazia = confere."""
     erros = _recibo.validar_recibo(dado, esquema)
     if erros:
@@ -180,7 +296,7 @@ def conferir_recibo(dado: dict, esquema: dict, cwd: str, amostra: int,
         if ensaio:
             print(f"    ensaio: re-executaria {item['comando']!r}")
             continue
-        acusacao = _reexecutar(item, cwd, tempo_limite)
+        acusacao = _reexecutar(item, cwd, tempo_limite, igual)
         if acusacao:
             acusacoes.append(f"[{rotulo}] {acusacao}")
 
@@ -243,6 +359,9 @@ def montar_parser() -> argparse.ArgumentParser:
                        help="termo que o provado precisa citar (do manifesto)")
         p.add_argument("--ensaio", action="store_true",
                        help="lista o que re-executaria, sem executar nada")
+        p.add_argument("--igual", action="store_true",
+                       help="exige saída idêntica; o padrão é o declarado "
+                            "aparecer na saída como bloco de linhas")
         p.add_argument("--tempo-limite", type=int, default=60)
 
     comuns(sub.add_parser("recibo", help="confere um recibo"))
@@ -309,7 +428,8 @@ def main(argv) -> int:
             continue
         acusacoes += conferir_recibo(dado, esquema, args.cwd, args.amostra,
                                      args.exigir, args.ensaio,
-                                     args.tempo_limite, arquivo.name)
+                                     args.tempo_limite, arquivo.name,
+                                     args.igual)
 
     if acusacoes:
         for acusacao in acusacoes:
@@ -364,6 +484,19 @@ CONFERE = [
     ("contraprova negativa com a convenção do || true", _base(provado=[
         {"afirmacao": "não há segredo no arquivo",
          "comando": "grep -c segredo /dev/null || true", "saida": "0"}]), []),
+    # A etapa anota a linha que importa; a re-execução captura tudo. Era a
+    # acusação falsa mais comum — 544 caracteres contra 3.038, medido.
+    ("trecho anotado confere contra a saída inteira", _base(provado=[
+        {"afirmacao": "o meio da saída é o que importa",
+         "comando": r"printf 'cabeçalho\nlinha que importa\nrodapé\n'",
+         "saida": "linha que importa"}]), []),
+    ("bloco de linhas seguidas confere no meio da saída", _base(provado=[
+        {"afirmacao": "duas linhas seguidas",
+         "comando": r"printf 'a\nb\nc\nd\n'", "saida": "b\nc"}]), []),
+    ("elisão declara o corte e as duas pontas conferem", _base(provado=[
+        {"afirmacao": "começo e fim, com o meio cortado",
+         "comando": r"printf 'a\nb\nc\nd\n'",
+         "saida": "a\n(...)\nd"}]), []),
 ]
 
 ACUSA = [
@@ -399,6 +532,22 @@ ACUSA = [
         veredito="pergunta", pergunta="Sigo com A? Recomendo A."),
      [], "recomendação primeiro"),
     ("recibo fora do contrato", _base(veredito="quase"), [], "fora do contrato"),
+    # Os pontos cegos que o "contém" abriria, e que ficam fechados. O
+    # primeiro é o mais caro: o contrato ensina a fechar prova de ausência
+    # com `|| true`, então saída vazia é o caso COMUM — aceitá-la contra
+    # qualquer coisa trocaria cinco gritos errados por um silêncio errado.
+    ("saída vazia declarada não aceita saída que apareceu", _base(provado=[
+        {"afirmacao": "não achou nada", "comando": "echo achou",
+         "saida": ""}]), [], "saída diverge"),
+    ("contém é por linha inteira: 'ok' não passa dentro de 'not ok'",
+     _base(provado=[{"afirmacao": "passou", "comando": "echo 'not ok'",
+                     "saida": "ok"}]), [], "não aparece na saída"),
+    ("linha declarada que não existe na saída ainda acusa", _base(provado=[
+        {"afirmacao": "tem a linha", "comando": r"printf 'a\nb\n'",
+         "saida": "z"}]), [], "não aparece na saída"),
+    ("linhas certas fora da ordem declarada acusam", _base(provado=[
+        {"afirmacao": "duas linhas", "comando": r"printf 'a\nb\nc\n'",
+         "saida": "c\na"}]), [], "saída diverge"),
 ]
 
 
@@ -512,6 +661,21 @@ def _comportamento(pasta, esquema):
              and "não é arquivo comum" in resposta.stdout
              and "saída diverge" in resposta.stdout)
 
+    # Acusação que corta as duas saídas no mesmo tamanho esconde a diferença
+    # quando ela cai depois do corte — e passa a exibir X diferente de X.
+    longa = "x" * 100 + "0.108"
+    outra = "x" * 100 + "0.109"
+    aponta = _onde_diverge(longa, outra)
+    caso("a acusação diz em que caractere as saídas divergem",
+         "caractere 104" in aponta)
+    caso("e o recorte mostra os dois lados DIFERENTES",
+         "0.108" in aponta and "0.109" in aponta)
+    caso("e conta o tamanho de cada uma", "105 contra 105" in aponta)
+    caso("diferença no começo também é apontada",
+         "caractere 0" in _onde_diverge("abc", "zbc"))
+    caso("sobra no fim é apontada pelo tamanho",
+         "3 contra 5" in _onde_diverge("abc", "abcde"))
+
     # k) forja com extensão .JSON não escapa em silêncio: ganha a linha
     (Path(pasta) / "misto" / "01-forja-c1.JSON").write_text(
         json.dumps(_base()), encoding="utf-8")
@@ -519,6 +683,42 @@ def _comportamento(pasta, esquema):
     caso("nome fora do padrão (.JSON) aparece como ignorado",
          "ignorado (não tem nome de recibo): 01-forja-c1.JSON"
          in resposta.stdout)
+
+    # m) --igual restaura a igualdade estrita para quem a quiser
+    trecho = _gravar(pasta, "igual/01-fantoche-c1.json", _base(provado=[
+        {"afirmacao": "o meio da saída",
+         "comando": r"printf 'antes\nmiolo\ndepois\n'", "saida": "miolo"}]))
+    caso("por padrão o trecho anotado confere contra a saída inteira",
+         _cli(["recibo", str(trecho)]).returncode == 0)
+    resposta = _cli(["recibo", str(trecho), "--igual"])
+    caso("com --igual o mesmo trecho volta a ser acusado",
+         resposta.returncode == 4 and "saída diverge" in resposta.stdout)
+    caso("e a acusação estrita mostra o caractere da divergência",
+         "a partir do caractere" in resposta.stdout)
+
+    # n) o aviso do grep vem colado na acusação, e só onde cabe
+    nu = _gravar(pasta, "grep/01-fantoche-c1.json", _base(provado=[
+        {"afirmacao": "não achou nada",
+         "comando": "grep -c naoexiste /dev/null || true", "saida": "9"}]))
+    resposta = _cli(["recibo", str(nu)])
+    caso("acusação de comando com grep nu carrega o aviso do binário",
+         resposta.returncode == 4 and "grep` sem caminho" in resposta.stdout)
+    explicito = _gravar(pasta, "grep/02-fantoche-c1.json", _base(provado=[
+        {"afirmacao": "não achou nada",
+         "comando": "/bin/grep -c naoexiste /dev/null || true",
+         "saida": "9"}]))
+    resposta = _cli(["recibo", str(explicito)])
+    caso("com /bin/grep declarado a acusação NÃO carrega o aviso",
+         resposta.returncode == 4 and "sem caminho" not in resposta.stdout)
+
+    # o) as funções da régua nova, direto
+    caso("bloco seguido é achado no meio", _contem_blocos("a\nb\nc", "b"))
+    caso("bloco fora de ordem não é achado",
+         not _contem_blocos("a\nb\nc", "c\na"))
+    caso("elisão pula o meio", _contem_blocos("a\nb\nc\nd", "a\n(...)\nd"))
+    caso("declaração vazia exige igualdade, mesmo sem --igual",
+         not _confere_saida("apareceu", "", False)
+         and _confere_saida("", "", False))
 
     # l) bashismo confere quando a máquina tem bash (o shell das sessões)
     if SHELL_DA_REEXECUCAO:

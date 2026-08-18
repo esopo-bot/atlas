@@ -34,7 +34,7 @@ Os três `--testar` são o primeiro comando de qualquer retomada.
 | Tipo | O que faz |
 | --- | --- |
 | `codigo` | roda um comando; o stdout tem de ser um recibo válido |
-| `sessao` | roda `claude -p` — regras da camada e `configuracao-da-casa.md` entram na frente, por código |
+| `sessao` | roda `claude -p` — regras da camada e `nucleo/configuracao.json` entram na frente, por código |
 | `conferencia` | re-executa o `provado` dos recibos desta execução e acusa divergência |
 | `portao` | espera o arquivo de aprovação do dono |
 
@@ -78,9 +78,49 @@ toda etapa ligada precisa ter recibo `segue`.
 | `completa` | nada — leia os recibos em `<dir>/<trabalho>/` |
 | `parada` | siga a `proxima_acao`: é o `proximo` de quem reprovou; reexecutar é decisão de quem opera |
 | `aguardando-portao` | a `proxima_acao` diz qual arquivo de aprovação criar — decisão do dono |
+| `dormindo` | o motor bateu num limite de uso e espera; a `proxima_acao` diz até quando — **não dispare de novo** |
 | `em-curso` | nada rodou ainda (ou a foto pegou onda parcial — releia) |
 
 Com `teto` recibos `para`, nada mais roda — a corrente escala para o dono.
+
+## 5 · Perguntar, e continuar do ponto exato
+
+Uma etapa que precisa de decisão humana **não reprova**: devolve veredito
+`pergunta`. Vale para os dois casos que param um trabalho sem ninguém ter
+errado:
+
+- **decisão do dono** — dois caminhos válidos, e escolher é dele;
+- **impedimento externo** — falta acesso, falta resposta de terceiro, o
+  ambiente não tem o que a etapa precisa. O `para` fica sendo reprovação e
+  defeito; o impedimento é `pergunta`.
+
+Se o manifesto declarar `"issue": <número>`, o motor **comenta a pergunta na
+issue** com a conta que a configuração nomeia, e grava o estado ao lado das
+evidências. Quem responde é o dono, num comentário dele — a distinção é por
+autor.
+
+```bash
+# vê se respondeu, grava a resposta e diz como retomar
+python .agents/encadeador/encadeador.py respostas --trabalho meu-trabalho --dir tmp/recibos
+# com a resposta na mão, continua do ponto exato
+python .agents/encadeador/encadeador.py executar --manifesto corrente.json \
+  --trabalho meu-trabalho --dir tmp/recibos --retomar
+```
+
+**`--retomar` não paga a execução de novo:** etapa com evidência `segue`
+não roda outra vez; a que perguntou roda com a resposta injetada no prompt. Sem
+isso, reexecutar cobrava tudo desde o começo e perdia a resposta no caminho.
+
+**A issue conta a história passo a passo.** Com `"issue"` declarada, cada
+etapa vira um comentário assim que fecha: o veredito, o que foi testado —
+com o comando e a saída — o que ficou como suposto, as faltas, e quantas
+etapas faltam. Não é combinado, é código: combinado se esquece, e issue
+muda enquanto o trabalho anda é o mesmo que trabalho perdido.
+
+Trabalho longo pede **pausa combinada**: uma etapa `portao` depois de um
+commit — para reverter um passo sem perder os anteriores — e de uma rodada
+do cético contra o plano. O disparo avisa quando a aprovação manual não vem
+depois das duas.
 
 ## O que o motor não faz — de propósito
 

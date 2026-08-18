@@ -1,15 +1,15 @@
 # atlas
 
-Camada compartilhável de skills, fluxos e conhecimento para agentes de IA.
+Camada compartilhável de skills e conhecimento para agentes de IA.
 
 Em linguagem comum: isto instala, em qualquer repositório seu, um conjunto de
-instruções, fluxos e skills que Claude Code, Codex, Devin ou outro agente
+instruções, skills e conhecimento que Claude Code, Codex, Devin ou outro agente
 passam a seguir — o mesmo jeito de trabalhar, em toda máquina. Todo o conteúdo
 é genérico: serve a qualquer pessoa.
 
 ## O que vem dentro
 
-- **Um guia curto** ([fluxos](fluxos/) e [conhecimento](conhecimento/)):
+- **Um guia curto** ([conhecimento](conhecimento/)):
   comece por [Comece aqui](conhecimento/comece-aqui.md).
 - **Skills prontas** ([.agents/skills](.agents/skills/)): padrão de qualidade
   de código (injetado por gancho), wiki local de projetos, procurar antes de
@@ -41,7 +41,7 @@ npm run build
 
 ## Atualizar uma máquina que já tem a camada
 
-Substitua os dois scripts pelos novos e rode:
+Substitua o `montar.py` pelo novo e rode:
 
 ```bash
 python montar.py --atualizar

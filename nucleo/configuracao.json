@@ -1,0 +1,15 @@
+{
+  "comentario": "A configuração DESTA casa: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores da sua casa. O desenho e o porquê: conhecimento/historia-em-issue.md. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar.",
+  "repositorio_das_issues": "ver nucleo/executor.json",
+  "padrao_de_nome": "${PADRAO_DO_NOME_DA_ISSUE}",
+  "regras": [
+    "Enquanto houver ${...} sem valor nesta configuração, não se cria issue — pergunta-se ao dono.",
+    "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código.",
+    "A automação deste repositório não commita, não empurra e não publica: `autorizacoes` acima está toda em false, e o gancho recusa. Quem grava história aqui é o dono."
+  ],
+  "autorizacoes": {
+    "commit": false,
+    "push": false,
+    "publicar": false
+  }
+}

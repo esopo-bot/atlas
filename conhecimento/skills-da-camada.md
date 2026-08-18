@@ -1,12 +1,11 @@
 # O canivete
 
-Tudo o que já existe, para você não escrever de novo. **Abra esta página
-antes de escrever qualquer automação.**
+Tudo o que já existe, para você não escrever de novo. **Abra esta página antes
+de escrever qualquer automação.**
 
 ## As skills da camada
 
-A fonte da verdade é a descrição de cada `SKILL.md`, em
-`.agents/skills/<nome>/`.
+A fonte da verdade é a descrição de cada `SKILL.md`, em `.agents/skills/<nome>/`.
 
 | Skill | Para quê | Como entra |
 | --- | --- | --- |
@@ -18,14 +17,15 @@ A fonte da verdade é a descrição de cada `SKILL.md`, em
 | `esfriamento` | fechar a sessão colhendo o que o dia ensinou | "O trabalho terminou. Rode o esfriamento." |
 | `documentar-processo` | documentar processo no padrão do repositório de docs | ao documentar ou atualizar documentação |
 | `trabalho-por-issue` | conduzir o trabalho pela issue, com recibo e retomada | ao abrir, retomar ou encerrar issue |
+| `iniciar-pedido` | pedido cru vira issue que uma sessão sem cabeça executa | ao começar trabalho novo; "abre uma issue disso" |
 
 A parte opcional não chega sem ser pedida:
-[mapa](mapa-do-repositorio.md#a-parte-opcional).
+[mapa](mapa-do-repositorio.md#os-comandos).
 
 Três caminhos de entrada, do mais frágil ao mais firme: pela **descrição**
-(falha para skill de padrão), pelo **nome** no pedido, por **gancho**
-(único que não depende de ninguém lembrar). Gancho é de cada ferramenta:
-onde não há, cite `qualidade` pelo nome. Criar a sua:
+(falha para skill de padrão), pelo **nome** no pedido, por **gancho** (único que
+não depende de ninguém lembrar). Gancho é de cada ferramenta: onde não há, cite
+`qualidade` pelo nome. Criar a sua:
 [skills: criar e testar](skills-criar-e-testar.md).
 
 ## O que vem de fábrica
@@ -41,16 +41,11 @@ onde não há, cite `qualidade` pelo nome. Criar a sua:
 | `/dataviz` | gráfico e painel que se leem |
 | `/claude-api` | referência da API: modelos, preço, cache |
 
-- O `/code-review` pode ser iniciado pelo próprio Claude; para deixá-lo só
-  manual: `skillOverrides {"code-review": "user-invocable-only"}` nas
-  settings.
-- Esta tabela envelhece a cada versão — a fonte é `/help` numa sessão
-  interativa.
+`/code-review` pode ser iniciado pelo próprio Claude; para deixá-lo só manual,
+`skillOverrides {"code-review": "user-invocable-only"}`. A tabela envelhece a
+cada versão — a fonte é `/help` numa sessão interativa.
 
 ## Os plugins que se pagam
-
-Curadoria, não catálogo — o critério para ler o catálogo:
-[plugins oficiais](plugins-oficiais-do-claude-code.md).
 
 | Plugin | Quando vale |
 | --- | --- |
@@ -65,6 +60,26 @@ Curadoria, não catálogo — o critério para ler o catálogo:
 | `claude-md-management` | quando as instruções não batem mais com o código |
 | `claude-code-setup` | começar num projeto novo |
 
+Curadoria, não catálogo. **Estar no catálogo oficial não quer dizer ser da
+Anthropic** — o corte é medível, `author.name == "Anthropic"` no manifesto, e
+o caso a conhecer é o `superpowers`: distribuído pelo catálogo, código de
+terceiro. Quantos são hoje, na sua máquina:
+
+```bash
+python -c "
+import json,io,os
+p=os.path.expanduser('~/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json')
+d=json.load(io.open(p,encoding='utf-8'))
+a=lambda q:(q.get('author') or {}).get('name','') if isinstance(q.get('author'),dict) else ''
+n=[q['name'] for q in d['plugins'] if a(q)=='Anthropic']
+print(len(n),'da Anthropic de',len(d['plugins']),'no total'); print(', '.join(sorted(n)))
+"
+```
+
+**O comando é a fonte; lista escrita é foto velha.** No corte oficial há
+também um plugin por linguagem (exigem o servidor da linguagem, e sem ele não
+sobem), kits da plataforma, relatórios e estilos de resposta.
+
 ## Ligar um plugin
 
 ```json
@@ -74,12 +89,40 @@ Curadoria, não catálogo — o critério para ler o catálogo:
       "source": { "source": "github", "repo": "anthropics/claude-plugins-official" }
     }
   },
-  "enabledPlugins": {
-    "code-review@claude-plugins-official": true
-  }
+  "enabledPlugins": { "code-review@claude-plugins-official": true }
 }
 ```
 
-**Ligue pouco**: plugin ativo ocupa contexto, e o que depende de programa
-externo falha sem barulho quando a dependência falta — o erro fica na aba
-Errors do `/plugin`.
+**Ligue por projeto, não por máquina.** O mesmo bloco vale em três escopos, e o
+de baixo vence o de cima:
+
+| Escopo | Arquivo | Vale onde |
+| --- | --- | --- |
+| usuário | `~/.claude/settings.json` | em toda pasta da máquina |
+| projeto | `.claude/settings.json` | só naquele repositório |
+| local | `.claude/settings.local.json` | naquele repositório, fora do git |
+
+Plugin de uma tecnologia só mora no repositório que a usa. No escopo de
+usuário ele cobra contexto em toda sessão de todo projeto — inclusive nos que
+nunca vão chamá-lo.
+
+**Ligue pouco.** Plugin que depende de programa externo falha sem barulho
+quando a dependência falta; o erro fica na aba Errors do `/plugin`. Sem depender
+da aba:
+
+```bash
+python -c "
+import json,glob,os,shutil
+s=os.path.expanduser('~/.claude/settings.json')
+lig={k.split('@')[0] for k,v in json.load(open(s)).get('enabledPlugins',{}).items() if v}
+for f in glob.glob(os.path.expanduser('~/.claude/plugins/cache/*/*/*/.mcp.json')):
+    p=f.split(os.sep)[-3]
+    if p in lig:
+        for _,c in (json.load(open(f)).get('mcpServers') or {}).items():
+            d=c.get('command')
+            print('falta' if d and not shutil.which(d) else 'http' if not d else 'ok', d or c.get('url'), '<-', p)
+"
+```
+
+`falta` = o servidor não sobe e você paga a descrição sem receber ferramenta.
+`http` = servidor remoto, ainda pode exigir autorização.

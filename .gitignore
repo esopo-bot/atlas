@@ -3,8 +3,15 @@ node_modules/
 site/build/
 site/.docusaurus/
 
-# A cópia das skills fica fora do git pelo .claude/.gitignore, escrito pelo
-# montar.py — aqui não se repete.
+# A cópia em .claude/skills/ ENTRA no git de propósito: sessão na nuvem só
+# enxerga o que está commitado. O .claude/.gitignore esconde só o
+# settings.local.json.
+#
+# Os arquivos que existem só neste disco (PORTAO.md, CONTINUAR.md,
+# verificar-agentes.py, publicar.py, nucleo/executor.json) estão no
+# .git/info/exclude — que é LOCAL e não sobrevive a um clone novo. Nome de
+# arquivo ignorado não é segredo: quem quiser a trava durável põe aqui.
+nucleo/executor.json
 
 # Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
 # lado do log quando o verificador roda com --debug-file: artefato dela, não

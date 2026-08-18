@@ -8,10 +8,11 @@ educativo em todo o resto.*
 
 Três respostas, decididas por segmento (o alvo manda, nunca o verbo):
 
-1. **CALA** — o alvo não é credencial, ou o comando só lê NOME (`ls`,
-   `test`, `find`, `stat`, `git status`, `git ls-files`...). Aviso que
-   aparece sempre ensina a ignorar aviso — metade dos testes prova o
-   silêncio.
+1. **CALA** — o alvo não é credencial, o comando só lê NOME (`ls`,
+   `test`, `find`, `stat`, `du`, `git status`, `git ls-files`...), ou o
+   NOMEIA para deixá-lo de FORA (`--exclude`, glob negado, pathspec
+   `:(exclude)`, a linha do `.gitignore`). Aviso que aparece sempre ensina a
+   ignorar aviso — metade dos testes prova o silêncio.
 2. **ORIENTA** — o comando LÊ O CONTEÚDO de credencial (`cat`, `grep`,
    `cp`...). Passa, com uma lição de UMA linha por `additionalContext`:
    `${VARIAVEL}` no rastreado; tire a credencial de vista quando terminar.
@@ -83,7 +84,9 @@ MARCAS = (".env", "appsettings", PASTA_DE_CREDENCIAL)
 # se pode listá-los; já o conjunto que só olha metadado é pequeno e fechado.
 # `file` fica de FORA: ele lê alguns bytes para adivinhar o tipo, e a régua
 # aqui é nome/existência, não "quase nada do conteúdo".
-VERBOS_SO_DE_NOME = {"ls", "test", "[", "stat", "find",
+# `du` entra pelo mesmo motivo do `stat`: mede TAMANHO, que é metadado — a
+# régua aqui é nome/existência, e byte contado não é byte lido.
+VERBOS_SO_DE_NOME = {"ls", "test", "[", "stat", "find", "du",
                      "readlink", "realpath", "dirname", "basename"}
 
 # Os verbos do que NÃO SE DESFAZ: gravam história ou publicam. `git` grava
@@ -115,6 +118,27 @@ BANDEIRAS_QUE_COMEM = {"-C", "-c", "--git-dir", "--work-tree", "--namespace",
 # `cat`), e `-fprint*`/`-fls` escrevem no arquivo apontado. Com qualquer um
 # desses, o `find` deixa de ser só-de-nome.
 FIND_LE_OU_ESCREVE = re.compile(r"-(?:exec|execdir|ok|okdir|fprint|fprintf|fls)\b")
+
+# NOMEAR PARA DEIXAR DE FORA não é ler: nestes lugares o alvo aparece no
+# comando justamente para NÃO ser tocado. Quem decide é o que o comando faz
+# com o alvo, não o alvo aparecer no comando — e aviso onde não devia ensina
+# a ignorar aviso. Duas formas, as duas medidas em 17/08/2026:
+#
+# 1. A bandeira que come o alvo: `--exclude`, `--exclude-dir`, coladas por
+#    `=` ou separadas por espaço. Lista fechada de propósito — `--glob` NÃO
+#    entra, porque `--glob '.credenciais/*'` procura DENTRO da gaveta.
+# 2. O prefixo de negação no próprio pedaço: `!` (glob negado do rg e do
+#    fd), `#` (negação do markdownlint) e as três formas do pathspec de
+#    exclusão do git (`:(exclude)`, `:!`, `:^`). É o prefixo que nega, não a
+#    bandeira — por isso o `--glob '!x'` cai aqui, e o `--glob 'x'` não.
+BANDEIRAS_QUE_EXCLUEM = {"--exclude", "--exclude-dir"}
+PREFIXOS_QUE_EXCLUEM = ("!", "#", ":(exclude)", ":!", ":^")
+
+# Escrever o NOME no `.gitignore` é PROTEGER: a linha existe para o arquivo
+# nunca subir. Só vale com verbo que não abre arquivo nenhum — `cat .env >>
+# .gitignore` despejaria o VALOR lá dentro, e esse continua orientando.
+VERBOS_QUE_SO_ESCREVEM_NOME = {"echo", "printf"}
+ESCREVE_NO_GITIGNORE = re.compile(r">>?\s*(?:\S*[/\\])?\.gitignore\b")
 
 # Prefixos que só antecedem o verbo de verdade — some com eles para achá-lo.
 # Tirá-los nunca transforma perigoso em seguro: `sudo cat .env` continua
@@ -219,6 +243,54 @@ def tirar_atribuicoes_literais(segmento: str) -> str:
         if not atribuicao or EXECUTA_DENTRO.search(atribuicao.group(0)):
             return s
         s = s[atribuicao.end():]
+
+
+def tirar_exclusoes(segmento: str) -> str:
+    """Apaga os pedaços que nomeiam o alvo só para deixá-lo de FORA.
+
+    Medido em 17/08/2026: de 12 comandos que nomeiam credencial sem ler o
+    conteúdo, 10 disparavam o gancho. O pior era `git add . --
+    ":(exclude)<pasta>"` — a forma MAIS segura do comando era a única que o
+    gancho recusava, e trava na versão segura empurra a sessão para a
+    insegura.
+
+    A varredura corre por palavra, depois de as aspas saírem: some a
+    bandeira de exclusão junto com o valor que ela come, e some o pedaço que
+    já nasce negado por prefixo. Tirar daqui nunca inocenta o resto — o que
+    sobra continua sendo julgado igual, e `grep -r SENHA .credenciais/
+    --exclude-dir=node_modules` segue orientando.
+    """
+    sobra = []
+    comer_proxima = False
+    for palavra in sem_aspas(segmento).split():
+        if comer_proxima:
+            comer_proxima = False
+            continue
+        if palavra in BANDEIRAS_QUE_EXCLUEM:
+            comer_proxima = True
+            continue
+        if any(palavra.startswith(b + "=") for b in BANDEIRAS_QUE_EXCLUEM):
+            continue
+        if palavra.startswith(PREFIXOS_QUE_EXCLUEM):
+            continue
+        sobra.append(palavra)
+    return " ".join(sobra)
+
+
+def protege_pelo_nome(segmento: str) -> bool:
+    """O segmento só ESCREVE o nome da credencial no `.gitignore`?
+
+    `echo ".credenciais/" >> .gitignore` é a linha que impede o arquivo de
+    subir: nomear para proteger é o contrário de ler. O verbo é que segura a
+    régua — `cat .env >> .gitignore` despejaria o VALOR lá dentro, e esse
+    continua orientando. Substituição de comando derruba a garantia, como
+    em todo o resto da casa.
+    """
+    if EXECUTA_DENTRO.search(segmento):
+        return False
+    if primeiro_verbo(segmento) not in VERBOS_QUE_SO_ESCREVEM_NOME:
+        return False
+    return bool(ESCREVE_NO_GITIGNORE.search(sem_aspas(segmento)))
 
 
 def e_credencial(pedaco: str) -> str:
@@ -349,7 +421,8 @@ def decisao(comando: str) -> tuple:
     A ordem é o desenho herdado da trava: tira o que é DADO — corpo de
     documento literal e mensagem —, quebra em segmentos por separador de
     comando, e julga cada um sozinho. Um segmento conta quando aponta
-    credencial E não é só-de-nome; aí o verbo decide o grau — `git`/`gh`
+    credencial que não foi nomeada para ficar de FORA, E não é só-de-nome
+    nem proteção pelo nome; aí o verbo decide o grau — `git`/`gh`
     veta na hora (o veto vence a orientação: basta um segmento que publica
     para o comando inteiro não poder rodar), o resto orienta. A exceção é o
     subcomando de leitura do `git`, que desce um degrau em vez de vetar.
@@ -362,8 +435,8 @@ def decisao(comando: str) -> tuple:
     resposta, alvo_achado = "", ""
     for segmento in SEPARADORES.split(texto):
         segmento = tirar_atribuicoes_literais(segmento)
-        alvo = e_credencial(sem_aspas(segmento))
-        if not alvo or so_le_o_nome(segmento):
+        alvo = e_credencial(tirar_exclusoes(segmento))
+        if not alvo or so_le_o_nome(segmento) or protege_pelo_nome(segmento):
             continue
         if (primeiro_verbo(segmento) in VERBOS_QUE_NAO_SE_DESFAZEM
                 and not so_le_pelo_git(segmento)):
@@ -585,7 +658,7 @@ CALA = [
     ("abrir arquivo comum", "cat README.md"),
     ("abrir arquivo comum com aspas", "cat 'README.md'"),
     ("buscar palavra no conhecimento", "rg TOKEN conhecimento/"),
-    ("buscar palavra parecida", 'grep -rn "environment" fluxos/'),
+    ("buscar palavra parecida", 'grep -rn "environment" conhecimento/'),
     ("pasta que só começa parecido", "ls .credenciais-explicado/"),
     ("página que fala do assunto", "cat conhecimento/appsettings-explicado.md"),
     ("nome que só começa parecido", "cat .envision.md"),
@@ -639,6 +712,22 @@ CALA = [
     ("listar a árvore versionada", "git ls-tree HEAD .credenciais/"),
     ("git de nome com bandeira global que come valor",
      "git -C ../casa ls-files .credenciais/"),
+    # Nomear a credencial para EXCLUIR ou PROTEGER não é ler: o alvo aparece
+    # no comando justamente para ficar de FORA dele. Medidos em 17/08/2026:
+    # de 12 comandos assim, 10 disparavam o gancho — e o pior era o último,
+    # a forma MAIS segura do `git add`, a única que o gancho recusava.
+    ("excluir a gaveta do linter",
+     'npx markdownlint-cli2 "**/*.md" "#.credenciais"'),
+    ("medir tamanho não abre arquivo", "du -sh projetos .credenciais tmp"),
+    ("glob negado no rg", "rg --glob '!.credenciais' TODO"),
+    ("exclude-dir no grep", "grep -r foo . --exclude-dir=.credenciais"),
+    ("exclude no rsync", "rsync -a --exclude .credenciais/ . /backup"),
+    ("exclude colado no tar", "tar --exclude=.credenciais -cf x.tar ."),
+    ("escrever só o NOME no .gitignore é PROTEGER",
+     'echo ".credenciais/" >> .gitignore'),
+    # O mais caro: a forma mais segura de `git add` era a única vetada.
+    ("pathspec de exclusão no git add",
+     'git add . -- ":(exclude).credenciais"'),
 ]
 
 

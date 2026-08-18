@@ -7,18 +7,20 @@ cara de defeito novo. Este gancho é o aviso que faltou, na primeira sessão.
 
 Ele confere só o que dá para provar barato, sem abrir conteúdo nenhum: as
 variáveis `${VAR}` que o .mcp.json usa existem no ambiente? O que o
-ambiente.txt da raiz declara — comando, pasta, arquivo, variável — existe?
+nucleo/ambiente.json declara — comando, pasta, arquivo, variável — existe?
 Nomes e existência, nunca valores. E cala quando está tudo lá: aviso que
 aparece sempre ensina a ignorar aviso.
 
-O ambiente.txt é do dono da casa (a atualização nunca o reescreve). Uma
-exigência por linha; `#` comenta:
+O nucleo/ambiente.json é do dono da casa (a atualização nunca o reescreve).
+Uma lista por tipo; valor solto vale por lista de um:
 
-    receita conhecimento/notas/maquina-nova.md
-    comando git
-    pasta ~/.config/ferramenta-x
-    arquivo scripts/preparar.sh
-    variavel FERRAMENTA_X_TOKEN
+    {
+      "receita": "conhecimento/notas/maquina-nova.md",
+      "comando": ["git", "python3"],
+      "pasta": ["~/.config/ferramenta-x"],
+      "arquivo": ["scripts/preparar.sh"],
+      "variavel": ["FERRAMENTA_X_TOKEN"]
+    }
 
 O porquê está em conhecimento/estado-que-nao-viaja.md.
 
@@ -48,16 +50,29 @@ def variaveis_exigidas(texto: str) -> list:
     return nomes
 
 
-def declaracoes(texto: str) -> list:
-    """Pares (tipo, valor) do ambiente.txt. Linha vazia e comentário ficam de fora."""
+ARQUIVO_AMBIENTE = "nucleo/ambiente.json"
+ARQUIVO_ANTIGO = "ambiente.txt"
+TIPOS = ("receita", "comando", "pasta", "arquivo", "variavel")
+
+
+def declaracoes(dados: dict) -> list:
+    """Pares (tipo, valor) do nucleo/ambiente.json, na ordem dos TIPOS.
+
+    Valor solto vale por lista de um — `"receita": "pagina.md"` é o caso
+    comum, e exigir `["pagina.md"]` só deixaria o arquivo mais feio. O que
+    não é texto fica de fora: exigência que ninguém sabe conferir não vira
+    aviso, e chave desconhecida é comentário da casa, não erro.
+    """
     pares = []
-    for linha in texto.splitlines():
-        linha = linha.strip()
-        if not linha or linha.startswith("#"):
+    for tipo in TIPOS:
+        valores = dados.get(tipo) or []
+        if isinstance(valores, str):
+            valores = [valores]
+        if not isinstance(valores, list):
             continue
-        partes = linha.split(None, 1)
-        if len(partes) == 2:
-            pares.append((partes[0].lower(), partes[1].strip()))
+        for valor in valores:
+            if isinstance(valor, str) and valor.strip():
+                pares.append((tipo, valor.strip()))
     return pares
 
 
@@ -80,9 +95,19 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
                     f"- variável `{nome}` ausente do ambiente (o .mcp.json a usa)")
                 ja_acusadas.add(nome)
 
-    declarado = raiz / "ambiente.txt"
+    declarado = raiz / ARQUIVO_AMBIENTE
     if declarado.is_file():
-        for tipo, valor in declaracoes(declarado.read_text(encoding="utf-8")):
+        try:
+            dados = json.loads(declarado.read_text(encoding="utf-8"))
+            if not isinstance(dados, dict):
+                raise ValueError("o topo tem de ser um objeto")
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as erro:
+            # Aqui não se cala: arquivo ilegível é a perda silenciosa que este
+            # gancho existe para acusar — calar devolveria o defeito.
+            problemas.append(f"- `{ARQUIVO_AMBIENTE}` ilegível ({erro}) — "
+                             "nenhuma exigência da casa foi conferida")
+            dados = {}
+        for tipo, valor in declaracoes(dados):
             if tipo == "receita":
                 receita = valor
                 if not alvo_no_disco(raiz, valor).is_file():
@@ -100,6 +125,14 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
             elif tipo == "variavel":
                 if valor not in env and valor not in ja_acusadas:
                     problemas.append(f"- variável `{valor}` ausente do ambiente")
+
+    # A casa que montou a camada antiga tem o arquivo no endereço velho, e o
+    # gancho não o lê mais. Calar aqui apagaria em silêncio o que ela declarou
+    # — exatamente o defeito que este gancho existe para acusar.
+    if (raiz / ARQUIVO_ANTIGO).is_file():
+        problemas.append(
+            f"- `{ARQUIVO_ANTIGO}` virou `{ARQUIVO_AMBIENTE}`: mova as "
+            "declarações para lá — o gancho não lê mais o .txt")
     return problemas, receita
 
 
@@ -117,8 +150,8 @@ def main() -> int:
         return 0  # tudo no lugar é silêncio
 
     fecho = (f"A receita para repor: {receita}" if receita else
-             "Nenhuma receita declarada — a primeira linha do ambiente.txt "
-             "pode apontar a página que ensina a repor (receita <página>).")
+             f"Nenhuma receita declarada — a chave `receita` do "
+             f"{ARQUIVO_AMBIENTE} pode apontar a página que ensina a repor.")
     aviso = (
         "AVISO do gancho conferir-ambiente: esta máquina não tem tudo o que "
         "a casa declara precisar. Perda de migração é silenciosa — este é o "
@@ -154,28 +187,43 @@ def testar() -> int:
 
         ambiente = {"SINO_DE_VENTO_TOKEN": "presente"}
 
-        def caso(mcp=None, declarado=None):
-            for nome, conteudo in ((".mcp.json", mcp), ("ambiente.txt", declarado)):
+        def caso(mcp=None, declarado=None, antigo=None):
+            """Monta a casa do caso e devolve o que o gancho acha nela.
+
+            Dado vira JSON; texto vai como está — é assim que o caso do
+            arquivo ilegível entra sem uma segunda porta só para ele.
+            """
+            for nome, conteudo in ((".mcp.json", mcp),
+                                   (ARQUIVO_AMBIENTE, declarado),
+                                   (ARQUIVO_ANTIGO, antigo)):
                 alvo = raiz / nome
+                alvo.parent.mkdir(parents=True, exist_ok=True)
                 if conteudo is None:
                     alvo.unlink(missing_ok=True)
-                else:
+                elif isinstance(conteudo, str):
                     alvo.write_text(conteudo, encoding="utf-8")
+                else:
+                    alvo.write_text(json.dumps(conteudo, ensure_ascii=False),
+                                    encoding="utf-8")
             return faltas(raiz, env=ambiente, caminho_path=str(caixa))
 
         ACUSA = [
             ("variável do .mcp.json ausente",
              dict(mcp='{"x": "${TAMBOR_MAIOR}"}')),
             ("variável declarada ausente",
-             dict(declarado="variavel CAIXA_DE_MUSICA\n")),
+             dict(declarado={"variavel": ["CAIXA_DE_MUSICA"]})),
             ("comando fora do PATH",
-             dict(declarado="comando regador-automatico\n")),
+             dict(declarado={"comando": ["regador-automatico"]})),
             ("pasta que não existe",
-             dict(declarado="pasta estufa/inverno\n")),
+             dict(declarado={"pasta": ["estufa/inverno"]})),
             ("arquivo que não existe",
-             dict(declarado="arquivo estufa/inventario.md\n")),
+             dict(declarado={"arquivo": ["estufa/inventario.md"]})),
             ("receita apontando página morta",
-             dict(declarado="receita cadernos/plantio.md\n")),
+             dict(declarado={"receita": "cadernos/plantio.md"})),
+            ("declaração ilegível não passa batido",
+             dict(declarado="{quebrado")),
+            ("o endereço velho ainda no disco acusa a mudança",
+             dict(antigo="comando prensa-de-flores\n")),
         ]
 
         CALA = [
@@ -184,16 +232,18 @@ def testar() -> int:
             ("variável com padrão se vira sem valor",
              dict(mcp='{"x": "${TAMBOR_MAIOR:-surdo}"}')),
             ("comando que está no PATH",
-             dict(declarado="comando prensa-de-flores\n")),
+             dict(declarado={"comando": ["prensa-de-flores"]})),
             ("pasta que existe",
-             dict(declarado="pasta estufa\n")),
+             dict(declarado={"pasta": ["estufa"]})),
             ("arquivo que existe",
-             dict(declarado="arquivo estufa/regras.md\n")),
+             dict(declarado={"arquivo": ["estufa/regras.md"]})),
             ("receita que existe",
-             dict(declarado="receita estufa/regras.md\n")),
+             dict(declarado={"receita": "estufa/regras.md"})),
             ("sem declaração nenhuma", dict()),
-            ("comentário e linha vazia ignorados",
-             dict(declarado="# nota da casa\n\n")),
+            ("comentário da casa e chave desconhecida ficam de fora",
+             dict(declarado={"comentario": "nota da casa", "receita": None})),
+            ("lista vazia não inventa exigência",
+             dict(declarado={"comando": [], "pasta": [], "variavel": []})),
         ]
 
         falhas = []

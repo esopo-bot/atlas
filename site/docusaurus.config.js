@@ -4,7 +4,7 @@
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Camada de IA',
-  tagline: 'Skills, fluxos e conhecimento genéricos para sessões de IA',
+  tagline: 'Skills e conhecimento genéricos para sessões de IA',
   url: 'http://localhost',
   baseUrl: '/',
 
@@ -36,11 +36,11 @@ const config = {
           // onde moram a wiki e as notas da casa. O caminho do preset é a
           // raiz do repositório, então um `**` arrastaria os repositórios de
           // código e o material de terceiro junto: por isso, um nível só.
-          include: ['fluxos/*.md', 'conhecimento/*.md', 'conhecimento/*/*.md'],
+          include: ['conhecimento/*.md', 'conhecimento/*/*.md'],
           // O LEIAME do primeiro nível diz ao repositório o que entra na
           // pasta — não é página. O de uma subpasta costuma ser conteúdo (o
           // mapa da wiki, por exemplo), e esse entra.
-          exclude: ['fluxos/LEIAME.md', 'conhecimento/LEIAME.md'],
+          exclude: ['conhecimento/LEIAME.md'],
         },
         blog: false,
         theme: { customCss: './src/css/custom.css' },

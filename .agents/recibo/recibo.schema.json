@@ -39,7 +39,7 @@
           "saida": { "type": "string" }
         }
       },
-      "$comment": "Item só entra com comando + saida — o que não tem os dois, o modelo escreve em suposto. Item incompleto torna o recibo inteiro inválido, e o encadeador o troca por um para sintético. A prova precisa ser RE-EXECUTÁVEL: a conferência roda o comando de novo no diretório da etapa e acusa se o stdout divergir OU se o exit não for 0 — declare comando idempotente, de saída estável (nada de relógio, hash de artefato apagado, subir serviço) e que não dependa de efeito de outro item. Armadilha comum: grep e diff respondem com exit 1 quando a resposta honesta é 'não achei'/'é diferente' — quando a SAÍDA já é a prova, encerre com ' || true'. E âncora ESTÁVEL: prova de git presa a ref móvel (origin/homolog..HEAD) envelhece quando a rodada é entregue — ancore em SHA."
+      "$comment": "Item só entra com comando + saida — o que não tem os dois, o modelo escreve em suposto. Item incompleto torna o recibo inteiro inválido, e o encadeador o troca por um para sintético. A prova precisa ser RE-EXECUTÁVEL: a conferência roda o comando de novo no diretório da etapa e acusa se o stdout divergir OU se o exit não for 0 — declare comando idempotente, de saída estável (nada de relógio, hash de artefato apagado, subir serviço) e que não dependa de efeito de outro item. Armadilha comum: grep e diff respondem com exit 1 quando a resposta honesta é 'não achei'/'é diferente' — quando a SAÍDA já é a prova, encerre com ' || true'. E âncora ESTÁVEL: prova de git presa a ref móvel (origin/<branch de integração>..HEAD) envelhece quando a rodada é entregue — ancore em SHA."
     },
     "suposto": {
       "type": "array",

@@ -15,11 +15,11 @@ sessão, recibo — está na skill `trabalho-por-issue`. Um fato, uma casa.
 ## A fila e o nome
 
 - Onde a issue nasce, o padrão de nome e a fila são configuração da casa:
-  `configuracao-da-casa.md`, na raiz. Sem o arquivo preenchido,
+  `nucleo/configuracao.json`. Sem o arquivo preenchido,
   pergunte ao dono — nunca decida de cabeça.
-- Achado novo não fura a fila: entra na próxima posição.
-- Uma sessão termina um trabalho. Épico vira pergunta ao dono antes de
-  entrar na fila.
+- O fluxo da fila é de cada repositório e se escreve lá: o que acontece com
+  achado no meio do trabalho, e o que vira pergunta ao dono antes de entrar.
+  A camada não opina — ela só garante que a resposta esteja escrita.
 
 ## As leis do corpo
 

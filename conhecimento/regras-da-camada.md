@@ -1,4 +1,4 @@
-<!-- GERADA de conhecimento/regras.json pelo `montar.py --sincronizar`. Edite lá: o que for escrito aqui se perde na próxima sincronização. -->
+<!-- GERADA de nucleo/regras.json pelo `montar.py --sincronizar`. Edite lá: o que for escrito aqui se perde na próxima sincronização. -->
 
 # As regras da camada
 
@@ -21,6 +21,10 @@ de consulta, não de sessão.
     - Resultado negativo pede contraprova: zero, vazio e "sem permissão" viram
       prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa.
       Sem isso, escreva "não medido", nunca "não existe".
+    - Prova só vale se re-executa: `grep` e `diff` respondem exit 1 para "não
+      achei", e o conferidor acusa exit diferente de zero — quando a saída já é
+      a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e
+      `origin/<branch>` envelhecem entre a prova e a conferência.
     - Procedência: [zero que mente](zero-que-mente.md).
 
 3. **Antes de criar, procure e cite.**
@@ -56,11 +60,17 @@ de consulta, não de sessão.
     - O que aparece na tela entra na sessão: print e janela compartilhada
       carregam segredo sem passar por instrumento nenhum. Feche o que tem
       segredo antes de mandar imagem.
+    - Nomear credencial para EXCLUIR ou PROTEGER não é ler: `--exclude`,
+      `--glob '!...'`, `#pasta`, `du -sh`, pathspec `:(exclude)` e a linha que
+      escreve só o NOME no `.gitignore` passam calados. Quem decide é o que o
+      comando faz com o alvo, não o alvo aparecer no comando.
     - Procedência: [ganchos](ganchos.md).
 
 9. **Destrutivo é do dono; commit e push seguem o que a casa autorizou.**
-    - A permissão é de cada repositório e se grava no perfil dele; sem
-      registro, a sessão não grava e não empurra.
+    - O que a automação pode fazer sozinha se declara em
+      `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`,
+      `publicar`) — é de cada repositório, e o gancho de veto lê dali. Sem
+      declaração, nega: omissão não é permissão.
     - O que aciona automação — esteira, implantação, aviso a outras pessoas — é
       sempre do dono, mesmo onde o resto é liberado: sincronizar não é
       entregar.
@@ -101,16 +111,29 @@ de consulta, não de sessão.
     - Publicação não se desfaz: reescrever a história tira das listagens, não
       do alcance de quem já copiou.
 
+14. **Conhecimento nasce na língua de quem vai lê-lo.**
+    - O que a IA consome nasce em linguagem de máquina — dado estruturado, como
+      `nucleo/regras.json`: campo com nome, valor sem prosa em volta, um fato
+      por chave. Instrumento lê dado; prosa ele adivinha.
+    - O que a pessoa lê nasce organizado para leitura e pesquisa: por assunto,
+      denso, o máximo de informação útil por página. Página que obriga a abrir
+      outras três para entender uma está mal cortada.
+    - Todo arquivo tem um dos dois destinos, e o destino se declara. Texto que
+      serve aos dois serve mal aos dois: vira dado, e a página que a pessoa lê
+      é gerada dele.
+    - Conhecimento não nasce em pasta de código — lá ninguém o procura, e ele
+      viaja por engano no commit do repositório errado.
+
 ## Como propor mudança — e como consultar por código
 
 No fechamento da sessão (o prompt de esfriamento pede): *"regra N atrapalhou
 neste caso porque X; proponho trocar por Y"* — ou *"faltou uma regra para Z"*.
 A proposta fica no relatório; o dono aceita, adapta ou recusa.
 
-Regra nova ou mudada se edita em `conhecimento/regras.json` — esta página é
-gerada dali e qualquer edição aqui se perde na sincronização.
+Regra nova ou mudada se edita em `nucleo/regras.json` — esta página é gerada
+dali e qualquer edição aqui se perde na sincronização.
 
 Sessão ou script que precise das regras como dado lê a fonte direto:
-`conhecimento/regras.json`, campo `regras` — cada item tem `id`, `regra` (a
-frase imperativa) e `faca` (os itens). É o que o encadeador injeta em toda
-etapa de sessão; não há servidor nem API — o arquivo é o contrato.
+`nucleo/regras.json`, campo `regras` — cada item tem `id`, `regra` (a frase
+imperativa) e `faca` (os itens). É o que o encadeador injeta em toda etapa de
+sessão; não há servidor nem API — o arquivo é o contrato.

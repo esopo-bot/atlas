@@ -36,9 +36,11 @@ Uso:
 de topo (400 citando "oneOf, allOf..."). Nuance da doc vigente: `allOf` em si
 é aceito com limitações — o que ela não lista é o `if/then/else`, que é
 exatamente o que o nosso allOf de topo carrega; tirar o bloco segue sendo o
-caminho. O guia da sessão perde as condicionais; a LEI continua inteira aqui
-— quem materializa valida contra o contrato completo, e violação vira `para`
-sintético.
+caminho. Junto com o allOf saem os `$comment` (arqueologia escrita para
+humano) e, de `required`, os quatro campos que o código sobrescreve — eles
+continuam em `properties`. O guia da sessão perde as condicionais; a LEI
+continua inteira aqui — quem materializa valida contra o contrato completo,
+e violação vira `para` sintético.
 
 Saída: 0 = recibo válido/da etapa escrito; 3 = sintético escrito no lugar
 (o chamador lê o veredito no arquivo); 2 = erro de uso, de ambiente ou
@@ -173,6 +175,59 @@ def carregar_esquema(caminho: Path = ESQUEMA_PADRAO) -> dict:
         print(f"não consegui ler o contrato em {caminho}: {erro}",
               file=sys.stderr)
         sys.exit(2)
+
+
+CAMPOS_DO_CODIGO = ("etapa", "trabalho", "quando", "ciclo")
+
+# Campos que o allOf libera ou proíbe conforme o veredito e a origem. A
+# projeção não leva o allOf, então a regra de cada um viaja como `description`
+# — senão a sessão é julgada por lei que não recebeu.
+CAMPOS_CONDICIONAIS = ("proximo", "pergunta", "motivo", "origem")
+
+
+def _sem_comentario(no):
+    """O esquema sem nenhum $comment, em qualquer profundidade."""
+    if isinstance(no, dict):
+        return {chave: _sem_comentario(valor) for chave, valor in no.items()
+                if chave != "$comment"}
+    if isinstance(no, list):
+        return [_sem_comentario(item) for item in no]
+    return no
+
+
+def projetar_para_sessao(esquema: dict) -> dict:
+    """O contrato como a sessão o recebe — o mesmo contrato, mais enxuto.
+
+    Sai o allOf de topo (a API recusa o if/then/else que ele carrega), sai a
+    arqueologia dos $comment (escrita para humano, e este texto viaja em TODO
+    prompt de etapa) e saem de `required` os quatro campos que o encadeador
+    sobrescreve logo depois: pedir ao modelo o que vai ser descartado só
+    gasta contexto e convida a inventar relógio e contagem. Os quatro
+    continuam em `properties`, então mandá-los segue sendo válido.
+
+    O que NÃO sai é a regra condicional. Tirar o allOf tira o enunciado de
+    "proximo só existe no para" — e `proximo` continua visível em
+    `properties`, com `additionalProperties: false`. A sessão via um campo
+    legítimo, sem nada dizendo quando vale, e apanhava de uma regra que
+    nunca lhe foi mostrada: medido em 18/08/2026, a etapa que fundiu
+    `fluxos/` fez o trabalho inteiro e foi reprovada por anexar um `proximo`
+    prestativo a um `veredito: segue`. Enquanto os $comment viajavam, a
+    regra chegava em prosa por acaso; agora ela chega de propósito, como
+    `description` — que é campo de contrato, não arqueologia, e a API aceita.
+
+    A LEI é o recibo.schema.json e continua inteira: quem materializa valida
+    contra o contrato completo, e violação vira `para` sintético. O arquivo
+    ao lado não muda um byte — a regra é promovida aqui, na projeção.
+    """
+    guia = _sem_comentario({chave: valor for chave, valor in esquema.items()
+                            if chave != "allOf"})
+    guia["required"] = [campo for campo in guia["required"]
+                        if campo not in CAMPOS_DO_CODIGO]
+    for campo in CAMPOS_CONDICIONAIS:
+        regra = esquema["properties"].get(campo, {}).get("$comment")
+        if regra:
+            guia["properties"][campo]["description"] = regra
+    return guia
 
 
 def validar_recibo(dado, esquema: dict) -> list:
@@ -373,7 +428,7 @@ def montar_parser() -> argparse.ArgumentParser:
     sintetiza.add_argument("--detalhe", default="")
 
     sub.add_parser("esquema-sessao",
-                   help="o contrato sem o allOf de topo, para --json-schema")
+                   help="o contrato enxuto da sessão, para --json-schema")
     return parser
 
 
@@ -382,8 +437,7 @@ def main(argv) -> int:
     esquema = carregar_esquema()
 
     if args.comando == "esquema-sessao":
-        guia = {chave: valor for chave, valor in esquema.items()
-                if chave != "allOf"}
+        guia = projetar_para_sessao(esquema)
         try:
             print(json.dumps(guia, ensure_ascii=False))
             sys.stdout.flush()
@@ -533,7 +587,7 @@ EXEMPLO_DA_ISSUE = r'''
   "quando": "2026-08-16T16:02:47-03:00",
   "veredito": "para",
   "provado": [
-    { "afirmacao": "o endpoint responde 200 em homolog",
+    { "afirmacao": "o endpoint responde 200 no ambiente de teste",
       "comando": "curl -s -o /dev/null -w '%{http_code}' \"$URL_HOMOLOG/relatorio\"",
       "saida": "200" }
   ],
@@ -766,6 +820,33 @@ def _comportamento(pasta, esquema):
     caso("esquema-sessao tira o allOf e mantém o resto",
          "allOf" not in guia and "properties" in guia
          and "allOf" in carregar_esquema())
+
+    # k3) o guia é enxuto: sem a arqueologia e sem exigir do modelo os quatro
+    # campos que o código sobrescreve — eles ficam em properties, saem de
+    # required. A LEI segue inteira: o contrato ao lado não muda um byte.
+    do_codigo = ("etapa", "trabalho", "quando", "ciclo")
+    lei = carregar_esquema()
+    caso("esquema-sessao não manda $comment nem exige campo do código",
+         '"$comment"' not in resposta.stdout
+         and not set(do_codigo) & set(guia["required"])
+         and all(campo in guia["properties"] for campo in do_codigo)
+         and "$comment" in lei
+         and set(do_codigo) <= set(lei["required"]))
+
+    # k2b) o contrato que a sessão VÊ tem de enunciar a regra que a JULGA.
+    # A projeção tira o allOf (a API recusa if/then/else), e é lá que mora
+    # "proximo só existe no para". Enquanto os $comment viajavam, a regra
+    # chegava em prosa. Sem eles, a sessão via `proximo` em properties e
+    # nada dizendo quando vale — medido em 18/08/2026: a etapa que fundiu
+    # `fluxos/` fez o trabalho inteiro, devolveu `veredito: segue` com um
+    # `proximo` prestativo, e foi reprovada por uma regra que ninguém lhe
+    # mostrou. Contrato que julga por regra escondida é armadilha.
+    condicionais = ("proximo", "pergunta", "motivo", "origem")
+    caso("o contrato da sessão diz QUANDO cada campo condicional vale",
+         all(guia["properties"][campo].get("description")
+             for campo in condicionais))
+    caso("a regra do proximo chega na sessão, não só no allOf",
+         "para" in guia["properties"]["proximo"].get("description", ""))
 
     # k) fantoche que morre (exit != 0): o encadeador registra morta
     _encadear(pasta, "t-morte", [(1, "alfa", FANTOCHE),

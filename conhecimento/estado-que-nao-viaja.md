@@ -25,17 +25,19 @@ sessão gráfica lê está em [MCP](mcp.md).
   por instrumento — é o `conferir-ambiente.py`.
 - O resto se assume perdido a cada mudança.
 
-## A declaração: `ambiente.txt`
+## A declaração: `nucleo/ambiente.json`
 
-Na raiz, **seu** — a atualização nunca o reescreve. Uma exigência por
-linha; `#` comenta:
+**Seu** — a atualização nunca o reescreve. Uma lista por tipo; valor solto
+vale por lista de um:
 
-```text
-receita conhecimento/notas/maquina-nova.md
-comando git
-pasta ~/.config/ferramenta-x
-arquivo scripts/preparar.sh
-variavel FERRAMENTA_X_TOKEN
+```json
+{
+  "receita": "conhecimento/notas/maquina-nova.md",
+  "comando": ["git", "python3"],
+  "pasta": ["~/.config/ferramenta-x"],
+  "arquivo": ["scripts/preparar.sh"],
+  "variavel": ["FERRAMENTA_X_TOKEN"]
+}
 ```
 
 - `receita` — a página da casa que ensina a repor; é o endereço que o aviso
@@ -54,4 +56,4 @@ O gancho roda na abertura, só avisa e cala quando está tudo lá:
 - A fronteira da credencial: instalar é da sessão; configurar segredo é do
   dono.
 - O caminho de mudança inteiro:
-  [mudar de máquina](../fluxos/mudar-de-maquina.md).
+  [mudar de máquina](mudar-de-maquina.md).
