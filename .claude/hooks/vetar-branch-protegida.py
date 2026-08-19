@@ -1,18 +1,3 @@
-"""Gancho PreToolUse: nega apagar, renomear e forçar branch de longa duração.
-
-Regra 12 da camada. Regra de texto erra dos dois lados — `git push origin
-+feature/x` é push forçado e `git push origin feature/x` não é, e nenhum
-padrão separa os dois. Este gancho lê o comando e separa.
-
-Ele nega só o destrutivo sobre branch protegida: apagar, renomear e reescrever.
-Push normal, commit, checkout e branch nova passam sem saber que ele existe.
-
-Os nomes vêm de `.claude/branches-protegidas.txt` (um por linha). Sem o
-arquivo, vale a lista embutida — o gancho nunca fica sem lista.
-
-Rode os testes com:  python .claude/hooks/vetar-branch-protegida.py --testar
-"""
-
 import json
 import os
 import re
@@ -20,146 +5,209 @@ import subprocess
 import sys
 from pathlib import Path
 
-PADRAO = {
+PROTEGIDAS_EMBUTIDAS = {
     "main", "master", "trunk",
     "develop", "development",
     "homolog", "homologacao", "staging", "stage", "hml", "qa", "uat",
     "release", "prod", "producao", "production",
 }
+ARQUIVO_DE_BRANCHES_PROTEGIDAS = ".claude/branches-protegidas.txt"
+ARQUIVO_CONFIGURACAO = "nucleo/configuracao.json"
+CHAVE_DAS_AUTORIZACOES = "autorizacoes"
+MARCA_DE_COMENTARIO = "#"
+PASTA_DO_GIT = ".git"
 
-# Bandeiras globais do git que vêm ANTES do verbo. As da segunda lista comem o
-# token seguinte — sem isso, `git -C /tmp push` faz o verbo virar "/tmp".
-GLOBAIS_SIMPLES = {"--no-pager", "--paginate", "-p", "--bare", "--literal-pathspecs"}
-GLOBAIS_COM_VALOR = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
+NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 
-# Quebra de linha separa comando tanto quanto `;` — e `$(`, `` ` `` e `)`
-# abrem e fecham comando dentro de comando. Sem eles, `git status` numa linha
-# e o destrutivo na seguinte viram um comando só, cujo verbo é `status`.
-SEPARADORES = re.compile(r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
+BANDEIRAS_GLOBAIS_SIMPLES = {"--no-pager", "--paginate", "-p", "--bare",
+                             "--literal-pathspecs"}
+BANDEIRAS_GLOBAIS_QUE_COMEM_O_TOKEN_SEGUINTE = {
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
 
-# Dentro de aspas duplas o shell ainda executa `$(...)` e crase — só `;` e
-# `&&` viram texto. Tratar os dois tipos de aspa igual abriria uma porta:
-# `git status "$(git push --force origin main)"` reescreve a branch de verdade.
-SO_EXPANSAO = re.compile(r"\$\(|`|\)")
+SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
+EXPANSAO_QUE_ASPA_DUPLA_NAO_SEGURA = re.compile(r"\$\(|`|\)")
+DOCUMENTO_LITERAL_QUE_NAO_EXPANDE = re.compile(
+    r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
+ASPA_SIMPLES = "'"
+ASPA_DUPLA = '"'
+ASPAS = "\"'"
 
-# Documento entregue com o delimitador entre aspas (`<<'FIM'`) é dado literal:
-# o shell não expande nada ali dentro. Sem esta exceção, o gancho barra quem
-# escreve a evidência dele. Já `<<FIM`, sem aspas, expande — e continua valendo.
-DOCUMENTO_LITERAL = re.compile(r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
+VERBO_PUSH = "push"
+VERBO_BRANCH = "branch"
+VERBOS_QUE_MEXEM_EM_BRANCH = {VERBO_PUSH, VERBO_BRANCH}
+BANDEIRAS_DE_APAGAR = {"-d", "--delete"}
+BANDEIRAS_DE_RENOMEAR = {"-m", "--move"}
+BANDEIRAS_DE_FORCA = {"-f", "--force"}
+BANDEIRAS_DE_FORCA_COM_RESSALVA = ("--force-with-lease", "--force-if-includes")
+BANDEIRA_DE_ESPELHO = "--mirror"
+PREFIXO_DE_APAGAR_POR_REFSPEC = ":"
+PREFIXO_DE_FORCAR_POR_REFSPEC = "+"
+ACAO_APAGAR = "apagar"
+ACAO_RENOMEAR = "renomear"
+
+NOMES_DO_GIT = {"git", "git.exe"}
+NOME_DO_GH = "gh"
+EXTENSAO_EXE = ".exe"
+PROGRAMAS_QUE_ACIONAM = ("git", "gh")
+COMANDO_CD = "cd"
+COMANDO_DA_BRANCH_ATUAL = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+TEMPO_LIMITE_DO_GIT = 5
+HEAD_SOLTA = "head"
+PREFIXO_DE_REFS_DE_BRANCH = re.compile(r"^refs/heads/")
+
+VERBOS_POR_ACAO = {
+    "commit": ("commit",),
+    "push": ("push",),
+    "publicar": ("pr", "release", "merge"),
+}
+OMISSAO_NAO_E_PERMISSAO = {"commit": False, "push": False, "publicar": False}
+
+MARCA_DO_GIT = "git"
+MARCA_DO_GH = "gh "
+EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
+DECISAO_DE_NEGAR = "deny"
+BANDEIRA_DE_TESTE = "--testar"
+SEM_ACAO = ""
+SEM_RECUSA = ""
+SILENCIO = 0
+FALHA_ABERTO = 0
+
+MOTIVO_BRANCH_PROTEGIDA = "{} a branch protegida '{}'"
+MOTIVO_ESPELHO = ("reescrever todas as refs do remoto de uma vez (--mirror), "
+                  "as protegidas inclusive")
+MOTIVO_APAGAR_POR_REFSPEC = (
+    "apagar a branch protegida '{}' (refspec com dois-pontos)")
+MOTIVO_FORCAR_POR_REFSPEC = (
+    "reescrever a branch protegida '{}' (refspec com mais)")
+MOTIVO_REESCREVER_HISTORIA = (
+    "reescrever a história da branch protegida '{}'")
+MOTIVO_REESCREVER_A_BRANCH_ATUAL = (
+    "reescrever a história de '{}', a branch atual e protegida")
+MOTIVO_SEM_AUTORIZACAO = (
+    "{} sem autorização declarada — `autorizacoes.{}` não está ligado em {}")
+MARCA_DA_RECUSA_POR_AUTORIZACAO = "sem autorização declarada"
+
+RECUSA_POR_AUTORIZACAO = (
+    "Regra 9 da camada: isto quer {}. O que a automação faz sozinha se "
+    "declara — ligue a chave em `nucleo/configuracao.json`, campo "
+    "`autorizacoes`, ou peça ao dono que rode o comando. Omissão não é "
+    "permissão."
+)
+RECUSA_POR_BRANCH_PROTEGIDA = (
+    "Regra 12 da camada: isto quer {}. Branch de longa duração é "
+    "infraestrutura de outras pessoas — desfazer é público e caro. O "
+    "caminho: trabalhe na sua branch e peça a promoção ao dono, que roda o "
+    "comando ele mesmo. Se esta branch não deveria estar protegida, tire o "
+    "nome de .claude/branches-protegidas.txt."
+)
+
+FALHA_DEVIA_BARRAR = "  DEVIA BARRAR e passou — {}: {}"
+FALHA_DEVIA_PASSAR = "  DEVIA PASSAR e barrou — {}: {} ({})"
+FALHA_DEVIA_BARRAR_SEM_AUTORIZACAO = (
+    "  DEVIA BARRAR sem autorização e passou — {}")
+FALHA_DEVIA_PASSAR_COM_AUTORIZACAO = (
+    "  DEVIA PASSAR com autorização e barrou — {}")
+FALHA_FORCA_MESMO_AUTORIZADO = (
+    "  DEVIA BARRAR: força em protegida, mesmo autorizado")
+RESUMO_FALHOU = "FALHOU: {} de {} casos"
+RESUMO_OK = "OK: {} casos — {} barrados, {} liberados"
 
 
-def _cortar_respeitando_aspas(comando: str):
-    """Parte em segmentos, dando a cada tipo de aspa o que ele protege.
-
-    Um comando que apenas CITA outro não o executa — e sem essa distinção o
-    gancho barra quem escreve a evidência dele. Mas as duas aspas protegem
-    coisas diferentes, e tratá-las igual seria trocar um falso positivo por
-    um furo: `$(...)` continua executando dentro de aspas duplas.
-
-    Devolve None quando as aspas não fecham: aí quem chama volta ao corte
-    cego, que erra para o lado seguro em vez de virar porta dos fundos.
-    """
-    segmentos, atual, aspa = [], [], None
+def cortar_respeitando_aspas(comando: str):
+    segmentos, atual, aspa_aberta = [], [], None
     i = 0
     while i < len(comando):
         c = comando[i]
-        if aspa == "'":                       # protege tudo
+        if aspa_aberta == ASPA_SIMPLES:
             atual.append(c)
-            aspa = None if c == "'" else aspa
+            aspa_aberta = None if c == ASPA_SIMPLES else aspa_aberta
             i += 1
-        elif aspa == '"' and c == '"':
+        elif aspa_aberta == ASPA_DUPLA and c == ASPA_DUPLA:
             atual.append(c)
-            aspa = None
+            aspa_aberta = None
             i += 1
-        elif aspa is None and c in "\"'":
+        elif aspa_aberta is None and c in ASPAS:
             atual.append(c)
-            aspa = c
+            aspa_aberta = c
             i += 1
-        elif corte := (SO_EXPANSAO if aspa else SEPARADORES).match(comando, i):
+        elif corte := (EXPANSAO_QUE_ASPA_DUPLA_NAO_SEGURA if aspa_aberta
+                       else SEPARADORES_DE_COMANDO).match(comando, i):
             segmentos.append("".join(atual))
             atual = []
             i = corte.end()
         else:
             atual.append(c)
             i += 1
-    if aspa is not None:
+    if aspa_aberta is not None:
         return None
     segmentos.append("".join(atual))
     return segmentos
 
 
 def separar(comando: str) -> list:
-    """Os pedaços do comando que podem ser um git de verdade."""
-    comando = DOCUMENTO_LITERAL.sub(" ", comando)
-    fora = _cortar_respeitando_aspas(comando)
-    return SEPARADORES.split(comando) if fora is None else fora
+    sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
+    segmentos = cortar_respeitando_aspas(sem_documento)
+    aspas_nao_fecharam = segmentos is None
+    if aspas_nao_fecharam:
+        return SEPARADORES_DE_COMANDO.split(sem_documento)
+    return segmentos
 
 
 def nomes_protegidos(raiz: Path) -> set:
-    arquivo = raiz / ".claude/branches-protegidas.txt"
+    arquivo = raiz / ARQUIVO_DE_BRANCHES_PROTEGIDAS
     try:
         linhas = arquivo.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return set(PADRAO)
+        return set(PROTEGIDAS_EMBUTIDAS)
     nomes = {l.strip().lower() for l in linhas
-             if l.strip() and not l.strip().startswith("#")}
-    return nomes or set(PADRAO)
+             if l.strip() and not l.strip().startswith(MARCA_DE_COMENTARIO)}
+    return nomes or set(PROTEGIDAS_EMBUTIDAS)
 
 
-def alvo_do_ref(ref: str) -> str:
-    """De um refspec para o nome da branch de DESTINO, em minúsculas.
-
-    `+origem:destino` empurra em destino; `:destino` apaga destino; `nome`
-    empurra em nome. É sempre o lado direito que sofre.
-    """
-    ref = ref.strip().lstrip("+")
-    if ":" in ref:
-        ref = ref.split(":", 1)[1]
-    ref = re.sub(r"^refs/heads/", "", ref)
+def branch_de_destino_do_ref(ref: str) -> str:
+    ref = ref.strip().lstrip(PREFIXO_DE_FORCAR_POR_REFSPEC)
+    if PREFIXO_DE_APAGAR_POR_REFSPEC in ref:
+        ref = ref.split(PREFIXO_DE_APAGAR_POR_REFSPEC, 1)[1]
+    ref = PREFIXO_DE_REFS_DE_BRANCH.sub("", ref)
     return ref.strip().lower()
 
 
 def e_git(token: str) -> bool:
-    """O nome do programa é o basename, em minúsculas.
-
-    Comparar o token inteiro com "git" deixa passar `git.exe`, `/usr/bin/git`
-    e o caminho absoluto com espaço no meio.
-    """
-    return Path(token.replace("\\", "/")).name.lower() in {"git", "git.exe"}
+    return Path(token.replace("\\", "/")).name.lower() in NOMES_DO_GIT
 
 
-def sem_aspas(token: str) -> str:
-    """Tira o par de aspas que envolve o token inteiro.
+def e_gh(token: str) -> bool:
+    return Path(token).name.lower().removesuffix(EXTENSAO_EXE) == NOME_DO_GH
 
-    O `shlex` roda em modo não-posix de propósito: em modo posix ele comeria a
-    contrabarra de um caminho do Windows. O preço é que as aspas ficam
-    coladas no token, e aí `"main"` deixa de ser igual a `main` na hora de
-    comparar o nome da branch.
-    """
-    for aspa in ('"', "'"):
+
+def sem_o_par_de_aspas_que_envolve(token: str) -> str:
+    for aspa in (ASPA_DUPLA, ASPA_SIMPLES):
         if len(token) >= 2 and token.startswith(aspa) and token.endswith(aspa):
             return token[1:-1]
     return token
 
 
-def partir(segmento: str) -> list:
+def partir_em_tokens(segmento: str) -> list:
     try:
         import shlex
         tokens = shlex.split(segmento, posix=False)
     except ValueError:
         tokens = segmento.split()
-    return [sem_aspas(t) for t in tokens]
+    return [sem_o_par_de_aspas_que_envolve(t) for t in tokens]
 
 
 def verbo_e_resto(tokens: list):
-    """Pula as bandeiras globais e devolve (verbo, argumentos depois dele)."""
     i = 1
     while i < len(tokens):
         t = tokens[i]
-        if t in GLOBAIS_COM_VALOR:
+        if t in BANDEIRAS_GLOBAIS_QUE_COMEM_O_TOKEN_SEGUINTE:
             i += 2
             continue
-        if any(t.startswith(g + "=") for g in GLOBAIS_COM_VALOR) or t in GLOBAIS_SIMPLES:
+        colada_por_igual = any(
+            t.startswith(g + "=")
+            for g in BANDEIRAS_GLOBAIS_QUE_COMEM_O_TOKEN_SEGUINTE)
+        if colada_por_igual or t in BANDEIRAS_GLOBAIS_SIMPLES:
             i += 1
             continue
         if t.startswith("-"):
@@ -170,59 +218,28 @@ def verbo_e_resto(tokens: list):
 
 
 def branch_atual(raiz: Path):
-    """Só é consultada quando o comando força sem dizer qual ref."""
     try:
-        r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                           cwd=raiz, capture_output=True, text=True, timeout=5)
+        r = subprocess.run(COMANDO_DA_BRANCH_ATUAL, cwd=raiz,
+                           capture_output=True, text=True,
+                           timeout=TEMPO_LIMITE_DO_GIT)
     except (OSError, subprocess.SubprocessError):
         return None
     nome = r.stdout.strip().lower()
-    return nome if r.returncode == 0 and nome and nome != "head" else None
+    return nome if r.returncode == 0 and nome and nome != HEAD_SOLTA else None
 
 
-def e_gh(token: str) -> bool:
-    """O `gh` do fabricante, por basename — como o `e_git` faz com o git."""
-    return Path(token).name.lower().removesuffix(".exe") == "gh"
-
-
-ARQUIVO_CONFIGURACAO = "nucleo/configuracao.json"
-# O que a automação faz sozinha se declara, e o padrão é NÃO. A camada viaja
-# para repositórios onde commitar é normal e para repositórios onde o dono
-# commita — um veto fixo quebraria metade deles, e um silêncio fixo é o que
-# temos hoje: `gh pr create`, `gh pr merge`, `gh release create` e
-# `git push origin main` passam todos sem serem tocados (medido 18/08/2026).
-ACOES = {
-    "commit": ("commit",),
-    "push": ("push",),
-    "publicar": ("pr", "release", "merge"),
-}
-PADRAO_NEGA = {"commit": False, "push": False, "publicar": False}
-
-
-# LIMITE DECLARADO, e ele é real: num comando composto em que o `cd` NÃO
-# abre a linha (`rm -rf x && mkdir x && cd x && git commit`), o gancho não
-# descobre o repositório alvo e cai na política do projeto — nega. É a falha
-# SEGURA (nega demais, nunca de menos), e foi medida no primeiro uso real em
-# 18/08/2026. Quem precisa da política do destino põe o `cd` na frente.
-def _cd_do_comando(comando: str) -> str:
-    """O `cd X` que abre o comando, quando há um.
-
-    Comando composto (`cd X && git commit`) roda noutro lugar, e o `cwd` que
-    o gancho recebe é o de ANTES. Sem ler o `cd`, a política aplicada é a do
-    projeto — falha segura, mas que barra trabalho legítimo em repositório
-    que autorizou. Só o `cd` de ABERTURA conta: `git commit && cd X` não muda
-    onde o commit aconteceu.
-    """
-    primeiro = separar(comando)[0].strip() if separar(comando) else ""
-    tokens = partir(primeiro)
-    if len(tokens) >= 2 and Path(tokens[0]).name == "cd":
+def cd_que_abre_o_comando(comando: str) -> str:
+    segmentos = separar(comando)
+    primeiro = segmentos[0].strip() if segmentos else ""
+    tokens = partir_em_tokens(primeiro)
+    if len(tokens) >= 2 and Path(tokens[0]).name == COMANDO_CD:
         return tokens[1]
     return ""
 
 
-def repositorio_do_comando(onde: str, padrao: Path, comando: str = "") -> Path:
-    """A raiz do repositório em que o comando roda; sem ela, a do projeto."""
-    if (destino := _cd_do_comando(comando)):
+def repositorio_que_o_comando_muda(onde: str, padrao: Path,
+                                   comando: str = "") -> Path:
+    if (destino := cd_que_abre_o_comando(comando)):
         alvo = Path(destino)
         onde = str(alvo if alvo.is_absolute() else Path(onde or ".") / alvo)
     if not onde:
@@ -233,7 +250,7 @@ def repositorio_do_comando(onde: str, padrao: Path, comando: str = "") -> Path:
     except OSError:
         return padrao
     while True:
-        if (atual / ".git").exists():
+        if (atual / PASTA_DO_GIT).exists():
             return atual
         if atual.parent == atual:
             return padrao
@@ -241,17 +258,14 @@ def repositorio_do_comando(onde: str, padrao: Path, comando: str = "") -> Path:
 
 
 def autorizacoes(raiz: Path) -> dict:
-    """O que este repositório autoriza a automação a fazer.
-
-    Ausente, ilegível ou ainda no molde: NEGA. Regra 9 — o que aciona
-    automação é do dono, e omissão não é permissão.
-    """
-    permitido = dict(PADRAO_NEGA)
+    permitido = dict(OMISSAO_NAO_E_PERMISSAO)
     try:
-        dado = json.loads((raiz / ARQUIVO_CONFIGURACAO).read_text(encoding="utf-8"))
+        dado = json.loads(
+            (raiz / ARQUIVO_CONFIGURACAO).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return permitido
-    declarado = dado.get("autorizacoes") if isinstance(dado, dict) else None
+    declarado = (dado.get(CHAVE_DAS_AUTORIZACOES)
+                 if isinstance(dado, dict) else None)
     if not isinstance(declarado, dict):
         return permitido
     for acao in permitido:
@@ -262,94 +276,97 @@ def autorizacoes(raiz: Path) -> dict:
 
 
 def acao_do_comando(tokens: list) -> str:
-    """Que ação este comando aciona: commit, push, publicar — ou ''."""
     if not tokens:
-        return ""
-    programa = Path(tokens[0]).name.lower().removesuffix(".exe")
-    resto = [t for t in tokens[1:] if not t.startswith("-")]
-    if programa in ("git", "gh") and resto:
-        for acao, verbos in ACOES.items():
-            if resto[0].lower() in verbos:
-                return acao
-            # `gh pr create`, `gh pr merge`: o verbo é o segundo pedaço
-            if len(resto) > 1 and resto[0].lower() in ("pr", "release") \
-                    and acao == "publicar":
-                return acao
-    return ""
+        return SEM_ACAO
+    programa = Path(tokens[0]).name.lower().removesuffix(EXTENSAO_EXE)
+    if programa not in PROGRAMAS_QUE_ACIONAM:
+        return SEM_ACAO
+    argumentos = [t for t in tokens[1:] if not t.startswith("-")]
+    if not argumentos:
+        return SEM_ACAO
+    for acao, verbos in VERBOS_POR_ACAO.items():
+        if argumentos[0].lower() in verbos:
+            return acao
+    return SEM_ACAO
+
+
+def recusa_do_verbo_branch(bandeiras: set, atingidas: list) -> str:
+    apaga = bool(bandeiras & BANDEIRAS_DE_APAGAR)
+    renomeia = bool(bandeiras & BANDEIRAS_DE_RENOMEAR)
+    if (apaga or renomeia) and atingidas:
+        return MOTIVO_BRANCH_PROTEGIDA.format(
+            ACAO_APAGAR if apaga else ACAO_RENOMEAR, atingidas[0])
+    return SEM_RECUSA
+
+
+def recusa_do_verbo_push(bandeiras: set, resto: list, refs: list,
+                         atingidas: list, protegidas: set, raiz: Path) -> str:
+    if BANDEIRA_DE_ESPELHO in bandeiras:
+        return MOTIVO_ESPELHO
+
+    apaga = bool(bandeiras & BANDEIRAS_DE_APAGAR)
+    forca = bool(bandeiras & BANDEIRAS_DE_FORCA) or any(
+        b.startswith(BANDEIRAS_DE_FORCA_COM_RESSALVA) for b in bandeiras)
+
+    def destinos_com_prefixo(prefixo):
+        return [branch_de_destino_do_ref(t) for t in resto
+                if not t.startswith("-") and t.startswith(prefixo)]
+
+    for nome in destinos_com_prefixo(PREFIXO_DE_APAGAR_POR_REFSPEC):
+        if nome in protegidas:
+            return MOTIVO_APAGAR_POR_REFSPEC.format(nome)
+    for nome in destinos_com_prefixo(PREFIXO_DE_FORCAR_POR_REFSPEC):
+        if nome in protegidas:
+            return MOTIVO_FORCAR_POR_REFSPEC.format(nome)
+    if apaga and atingidas:
+        return MOTIVO_BRANCH_PROTEGIDA.format(ACAO_APAGAR, atingidas[0])
+    if forca and atingidas:
+        return MOTIVO_REESCREVER_HISTORIA.format(atingidas[0])
+    if forca and not refs:
+        atual = branch_atual(raiz)
+        if atual in protegidas:
+            return MOTIVO_REESCREVER_A_BRANCH_ATUAL.format(atual)
+    return SEM_RECUSA
 
 
 def motivo_da_recusa(comando: str, protegidas: set, raiz: Path,
                      permitido: dict = None):
-    """O motivo da recusa: destrutivo em branch protegida, ou ação
-    que este repositório não autorizou a automação a fazer."""
-    permitido = PADRAO_NEGA if permitido is None else permitido
-    sem_autorizacao = ""
+    permitido = OMISSAO_NAO_E_PERMISSAO if permitido is None else permitido
+    recusa_por_autorizacao_pendente = SEM_RECUSA
     for segmento in separar(comando):
-        tokens = partir(segmento.strip())
-        # `gh` entra aqui junto com o `git`: sem isto, todo `gh pr merge` e
-        # `gh release create` passava sem ser olhado — o filtro exigia a
-        # palavra `git` e o comando do fabricante não a tem (medido).
+        tokens = partir_em_tokens(segmento.strip())
         if not tokens or not (e_git(tokens[0]) or e_gh(tokens[0])):
             continue
-        # A recusa por autorização fica PENDENTE: se este mesmo comando
-        # também for destrutivo sobre branch protegida, é isso que o dono
-        # precisa ler primeiro — ligar a autorização não liberaria mesmo.
+
         acao = acao_do_comando(tokens)
-        if acao and not permitido.get(acao, False) and not sem_autorizacao:
-            sem_autorizacao = (f"{acao} sem autorização declarada — "
-                               f"`autorizacoes.{acao}` não está ligado em "
-                               f"{ARQUIVO_CONFIGURACAO}")
+        if (acao and not permitido.get(acao, False)
+                and not recusa_por_autorizacao_pendente):
+            recusa_por_autorizacao_pendente = MOTIVO_SEM_AUTORIZACAO.format(
+                acao, acao, ARQUIVO_CONFIGURACAO)
 
         verbo, resto = verbo_e_resto(tokens)
-        if verbo not in {"push", "branch"}:
+        if verbo not in VERBOS_QUE_MEXEM_EM_BRANCH:
             continue
 
         bandeiras = {t.lower() for t in resto if t.startswith("-")}
-        refs = [alvo_do_ref(t) for t in resto if not t.startswith("-")]
+        refs = [branch_de_destino_do_ref(t)
+                for t in resto if not t.startswith("-")]
         atingidas = [r for r in refs if r in protegidas]
 
-        if verbo == "branch":
-            apaga = bandeiras & {"-d", "-D".lower(), "--delete"} or "-D" in resto
-            renomeia = bandeiras & {"-m", "-M".lower(), "--move"} or "-M" in resto
-            if (apaga or renomeia) and atingidas:
-                acao = "apagar" if apaga else "renomear"
-                return f"{acao} a branch protegida '{atingidas[0]}'"
-            continue
+        recusa = (recusa_do_verbo_branch(bandeiras, atingidas)
+                  if verbo == VERBO_BRANCH else
+                  recusa_do_verbo_push(bandeiras, resto, refs, atingidas,
+                                       protegidas, raiz))
+        if recusa:
+            return recusa
+    return recusa_por_autorizacao_pendente or None
 
-        # push
-        # `--mirror` não cita ref nenhuma e mesmo assim reescreve todas as do
-        # remoto, apagando as que sumiram daqui. É força sobre tudo, inclusive
-        # o que está na lista — por isso não depende de `atingidas`.
-        if "--mirror" in bandeiras:
-            return ("reescrever todas as refs do remoto de uma vez (--mirror), "
-                    "as protegidas inclusive")
-        apaga = bool(bandeiras & {"-d", "--delete"})
-        forca = bool(bandeiras & {"-f", "--force"}) or any(
-            b.startswith("--force-with-lease") or b.startswith("--force-if-includes")
-            for b in bandeiras)
-        apaga_por_refspec = [alvo_do_ref(t) for t in resto
-                             if not t.startswith("-") and t.startswith(":")]
-        forca_por_refspec = [alvo_do_ref(t) for t in resto
-                             if not t.startswith("-") and t.startswith("+")]
 
-        for nome in apaga_por_refspec:
-            if nome in protegidas:
-                return f"apagar a branch protegida '{nome}' (refspec com dois-pontos)"
-        for nome in forca_por_refspec:
-            if nome in protegidas:
-                return f"reescrever a branch protegida '{nome}' (refspec com mais)"
-        if apaga and atingidas:
-            return f"apagar a branch protegida '{atingidas[0]}'"
-        if forca and atingidas:
-            return f"reescrever a história da branch protegida '{atingidas[0]}'"
-        if forca and not refs:
-            atual = branch_atual(raiz)
-            if atual in protegidas:
-                return f"reescrever a história de '{atual}', a branch atual e protegida"
-    # Nenhum segmento é destrutivo sobre protegida. Se algum pedia ação sem
-    # autorização, a recusa é essa — e só agora, para a regra mais dura ter
-    # falado primeiro.
-    return sem_autorizacao or None
+def raiz_do_projeto_nunca_o_cwd() -> Path:
+    declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+    if declarada:
+        return Path(declarada)
+    return Path(__file__).resolve().parents[NIVEIS_DO_GANCHO_ATE_A_RAIZ]
 
 
 def main() -> int:
@@ -358,50 +375,31 @@ def main() -> int:
         comando = entrada.get("tool_input", {}).get("command", "")
         onde = entrada.get("cwd") or ""
     except (json.JSONDecodeError, AttributeError, TypeError):
-        return 0  # falha aberto: entrada quebrada não prende a sessão
+        return FALHA_ABERTO
 
     baixo = (comando or "").lower()
-    if not comando or ("git" not in baixo and "gh " not in baixo):
-        return 0
+    nada_de_git_nem_de_gh = (MARCA_DO_GIT not in baixo
+                             and MARCA_DO_GH not in baixo)
+    if not comando or nada_de_git_nem_de_gh:
+        return SILENCIO
 
-    # A raiz vem da declaração, nunca do cwd: o cwd anda com cada `cd` da
-    # sessão, e a lista de branches protegidas mora na raiz do repositório.
-    base = os.environ.get("CLAUDE_PROJECT_DIR")
-    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
-    # A autorização é do repositório que o comando MUDA, não do projeto onde
-    # a sessão abriu: sem isto, uma sessão aberta aqui carregaria a política
-    # daqui para dentro de qualquer outro repositório — e o primeiro uso real
-    # do gancho tropeçou exatamente nisso (18/08/2026).
-    motivo = motivo_da_recusa(comando, nomes_protegidos(raiz), raiz,
-                              autorizacoes(repositorio_do_comando(onde, raiz, comando)))
+    raiz = raiz_do_projeto_nunca_o_cwd()
+    motivo = motivo_da_recusa(
+        comando, nomes_protegidos(raiz), raiz,
+        autorizacoes(repositorio_que_o_comando_muda(onde, raiz, comando)))
     if not motivo:
-        return 0  # passagem é silêncio: sair 0 sem imprimir nada
+        return SILENCIO
 
+    e_recusa_por_autorizacao = MARCA_DA_RECUSA_POR_AUTORIZACAO in motivo
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse",
-        "permissionDecision": "deny",
+        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+        "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": (
-            # Duas recusas, duas mensagens: mandar quem esbarrou na
-            # autorização "tirar o nome de branches-protegidas.txt" é
-            # conselho que não resolve — a branch dele nem está na lista.
-            (f"Regra 9 da camada: isto quer {motivo}. O que a automação faz "
-             "sozinha se declara — ligue a chave em `nucleo/configuracao.json`, "
-             "campo `autorizacoes`, ou peça ao dono que rode o comando. "
-             "Omissão não é permissão.")
-            if "sem autorização declarada" in motivo else
-            f"Regra 12 da camada: isto quer {motivo}. Branch de longa duração "
-            "é infraestrutura de outras pessoas — desfazer é público e caro. "
-            "O caminho: trabalhe na sua branch e peça a promoção ao dono, que "
-            "roda o comando ele mesmo. Se esta branch não deveria estar "
-            "protegida, tire o nome de .claude/branches-protegidas.txt."
-        ),
+            RECUSA_POR_AUTORIZACAO.format(motivo) if e_recusa_por_autorizacao
+            else RECUSA_POR_BRANCH_PROTEGIDA.format(motivo)),
     }}))
-    return 0
+    return SILENCIO
 
-
-# --- Testes -----------------------------------------------------------------
-# Duas listas, e a segunda é a que importa: veto largo demais é desligado na
-# primeira semana. Metade dos casos existe para provar que ele NÃO atrapalha.
 
 BARRA = [
     ("apagar local, forma óbvia", "git branch -d homolog"),
@@ -410,7 +408,8 @@ BARRA = [
     ("apagar por refspec", "git push origin :homolog"),
     ("forçar, forma óbvia", "git push --force origin main"),
     ("forçar, o que o glob não pega", "git push origin +homolog"),
-    ("forçar com lease ainda reescreve", "git push --force-with-lease origin develop"),
+    ("forçar com lease ainda reescreve",
+     "git push --force-with-lease origin develop"),
     ("escondida depois de &&", "git status && git push --force origin homolog"),
     ("bandeira antes do verbo", "git -C /tmp/x push --force origin main"),
     ("configuração antes do verbo", "git -c user.name=x branch -D main"),
@@ -419,20 +418,19 @@ BARRA = [
     ("renomear a protegida", "git branch -m develop develop-velha"),
     ("refs/heads explícito", "git push origin +refs/heads/main"),
     ("forçar na forma curta", "git push -f origin homolog"),
-    ("caminho do Windows antes do verbo", r"git -C C:\repo push --force origin main"),
-    # Os cinco furos medidos em 14/08/2026, um caso para cada.
-    ("escondido depois da quebra de linha", "git status\ngit push --force origin main"),
+    ("caminho do Windows antes do verbo",
+     r"git -C C:\repo push --force origin main"),
+    ("escondido depois da quebra de linha",
+     "git status\ngit push --force origin main"),
     ("aspas duplas no nome da branch", 'git branch -D "main"'),
     ("aspas simples no nome da branch", "git push origin --delete 'homolog'"),
     ("espelhar reescreve tudo", "git push --mirror origin"),
-    ("escondido dentro de subcomando", "git status $(git push --force origin main)"),
-    # Aspas que não fecham voltam ao corte cego, de propósito: assim uma aspa
-    # solta não vira porta dos fundos.
-    ("aspa solta não abre porta", "git status ' && git push --force origin main"),
-    # Aspa dupla não protege subcomando: isto executa mesmo.
+    ("escondido dentro de subcomando",
+     "git status $(git push --force origin main)"),
+    ("aspa solta não abre porta",
+     "git status ' && git push --force origin main"),
     ("aspas duplas não seguram o subcomando",
      'git status "$(git push --force origin main)"'),
-    # Documento sem aspas no delimitador expande — logo, executa.
     ("documento que expande ainda executa",
      "cat <<FIM\n$(git push --force origin main)\nFIM"),
 ]
@@ -443,41 +441,31 @@ DEIXA_PASSAR = [
     ("apagar branch de trabalho", "git branch -d feature/x"),
     ("forçar branch de trabalho", "git push --force origin feature/x"),
     ("nome que só parece", "git branch -d develop-antiga"),
-    ("nome que contém a protegida", "git push origin --delete feature/main-menu"),
+    ("nome que contém a protegida",
+     "git push origin --delete feature/main-menu"),
     ("outro programa", "docker push imagem:main"),
     ("commit comum", "git commit -m 'apaga develop do texto'"),
     ("criar branch a partir da protegida", "git branch feature/nova develop"),
     ("checkout da protegida", "git checkout main"),
     ("buscar do remoto", "git fetch origin main"),
     ("listar branches", "git branch -a"),
-    # O limite declarado: push normal para branch protegida PASSA aqui. Quem
-    # decide isso é a regra 9 e o perfil do repositório — este gancho cuida do
-    # destrutivo. Veto largo demais é desligado na primeira semana.
     ("push normal para a protegida", "git push origin main"),
-    # O par de cada furo novo: mesmo mecanismo, alvo que não é protegido. Sem
-    # esta metade, o conserto vira veto largo e é desligado na primeira semana.
     ("quebra de linha, trabalho comum", "git status\ngit push origin feature/x"),
     ("aspas duplas em branch de trabalho", 'git branch -D "feature/x"'),
-    ("aspas simples em nome que só parece", "git push origin --delete 'feature/homolog-antiga'"),
-    ("espelhar em clone não é push", "git clone --mirror https://exemplo.invalido/r.git"),
+    ("aspas simples em nome que só parece",
+     "git push origin --delete 'feature/homolog-antiga'"),
+    ("espelhar em clone não é push",
+     "git clone --mirror https://exemplo.invalido/r.git"),
     ("subcomando que não empurra nada", "git status $(git rev-parse HEAD)"),
-    # Citar o destrutivo não é executá-lo. Estes dois casos nasceram de um
-    # falso positivo real: o gancho barrou o comando que escrevia a evidência dele.
     ("mensagem de commit que cita o veto",
      'git commit -m "não rode git push --force origin main"'),
-    # Aspa simples protege tudo: ali dentro é texto, não comando.
     ("aspas simples seguram o comando inteiro",
      "echo 'git push --force origin main'"),
-    # E o par do documento: com aspas no delimitador, é dado que vai para a
-    # entrada de outro programa. Foi este caso que barrou a evidência do gancho.
     ("documento literal é dado, não comando",
-     "gh issue comment 13 --body-file - <<'FIM'\ngit push --force origin main\nFIM"),
+     "gh issue comment 13 --body-file - <<'FIM'\ngit push --force origin main"
+     "\nFIM"),
 ]
 
-
-# O que a automação NÃO pode fazer enquanto o repositório não autorizar.
-# Antes destes casos, os cinco passavam calados — e o silêncio era ausência
-# de regra, não permissão (medido em 18/08/2026).
 BARRA_SEM_AUTORIZACAO = [
     ("commit sem autorização", "git commit -m x"),
     ("push sem autorização", "git push origin feature/minha"),
@@ -486,42 +474,39 @@ BARRA_SEM_AUTORIZACAO = [
     ("publicar release sem autorização", "gh release create v1"),
 ]
 
-# O repositório que autorizou: a cerca não pode atrapalhar o trabalho dele.
 AUTORIZA_TUDO = {"commit": True, "push": True, "publicar": True}
+FORCA_EM_PROTEGIDA = "git push --force origin main"
 
 
 def testar() -> int:
-    protegidas = set(PADRAO)
+    protegidas = set(PROTEGIDAS_EMBUTIDAS)
     raiz = Path.cwd()
     falhas = []
     for rotulo, comando in BARRA:
         if not motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO):
-            falhas.append(f"  DEVIA BARRAR e passou — {rotulo}: {comando}")
+            falhas.append(FALHA_DEVIA_BARRAR.format(rotulo, comando))
     for rotulo, comando in DEIXA_PASSAR:
         motivo = motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO)
         if motivo:
-            falhas.append(f"  DEVIA PASSAR e barrou — {rotulo}: {comando} ({motivo})")
-    # Sem autorização declarada, os mesmos comandos são negados — e com ela,
-    # liberados. O par prova que a cerca é a DECLARAÇÃO, não o comando.
+            falhas.append(FALHA_DEVIA_PASSAR.format(rotulo, comando, motivo))
     for rotulo, comando in BARRA_SEM_AUTORIZACAO:
         if not motivo_da_recusa(comando, protegidas, raiz):
-            falhas.append(f"  DEVIA BARRAR sem autorização e passou — {rotulo}")
+            falhas.append(FALHA_DEVIA_BARRAR_SEM_AUTORIZACAO.format(rotulo))
         if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO):
-            falhas.append(f"  DEVIA PASSAR com autorização e barrou — {rotulo}")
-    # E o destrutivo continua barrado MESMO com tudo autorizado: autorização
-    # é para o trabalho normal, nunca para reescrever branch de longa duração.
-    if not motivo_da_recusa("git push --force origin main", protegidas, raiz,
+            falhas.append(FALHA_DEVIA_PASSAR_COM_AUTORIZACAO.format(rotulo))
+    if not motivo_da_recusa(FORCA_EM_PROTEGIDA, protegidas, raiz,
                             AUTORIZA_TUDO):
-        falhas.append("  DEVIA BARRAR: força em protegida, mesmo autorizado")
+        falhas.append(FALHA_FORCA_MESMO_AUTORIZADO)
+
     total = (len(BARRA) + len(DEIXA_PASSAR)
              + len(BARRA_SEM_AUTORIZACAO) * 2 + 1)
     if falhas:
-        print(f"FALHOU: {len(falhas)} de {total} casos")
+        print(RESUMO_FALHOU.format(len(falhas), total))
         print("\n".join(falhas))
         return 1
-    print(f"OK: {total} casos — {len(BARRA)} barrados, {len(DEIXA_PASSAR)} liberados")
+    print(RESUMO_OK.format(total, len(BARRA), len(DEIXA_PASSAR)))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(testar() if "--testar" in sys.argv else main())
+    sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

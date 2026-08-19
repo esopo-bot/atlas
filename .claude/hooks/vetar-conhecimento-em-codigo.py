@@ -1,41 +1,3 @@
-#!/usr/bin/env python3
-"""Impede que conhecimento nasça em diretório que só guarda código.
-
-O PORQUÊ: num workspace, o diretório dos repositórios é território do
-código. Nota, análise e anotação que aparecem lá se perdem — ninguém as
-procura ali, e elas viajam por engano no commit do repositório errado.
-Conhecimento tem endereço próprio, e este gancho é a cerca desse endereço.
-
-A RÉGUA — o `.git` é a fronteira, e o alvo é conhecimento NASCENDO no lugar
-errado, nunca edição do que já existe:
-
-| Ação                                              | Veredito |
-| ------------------------------------------------- | -------- |
-| criar `.md`/`.txt` na raiz do diretório declarado | barra    |
-| criar `.md`/`.txt` em subpasta SEM `.git`         | barra    |
-| criar ou editar `.md` DENTRO de repositório git   | passa    |
-| qualquer arquivo de código, em qualquer lugar     | passa    |
-| editar `.md`/`.txt` que já existe                 | passa    |
-
-Dentro de um repositório, README e docs são do repositório: quem julga é o
-fluxo de revisão dele, não este gancho.
-
-DE ONDE VEM A LISTA: `nucleo/executor.json`, campo `diretorios_so_codigo` —
-arquivo local, que não viaja. **Sem configuração, tudo passa**: repositório
-que não declarou nada não ganha cerca de fantasma.
-
-DUAS PORTAS, porque uma só deixaria a outra aberta: as ferramentas de
-escrita (Write, Edit) e o shell (`echo > nota.md`, `tee`, heredoc). Fora das
-ferramentas do agente — um editor aberto à mão — nada impede, e isso está
-dito aqui em vez de prometido.
-
-Falha ABERTO: entrada quebrada ou configuração ilegível não prendem a
-sessão. Gancho que trava o trabalho por defeito próprio é desligado na
-primeira semana.
-
-Rode os testes com:  python .claude/hooks/vetar-conhecimento-em-codigo.py --testar
-"""
-
 import json
 import os
 import re
@@ -44,48 +6,72 @@ import sys
 from pathlib import Path
 
 ARQUIVO_EXECUTOR = "nucleo/executor.json"
-# O que conta como conhecimento. Configurável por `extensoes_de_conhecimento`
-# no mesmo arquivo; estes são o padrão.
-EXTENSOES = (".md", ".txt")
+CHAVE_DOS_DIRETORIOS_SO_CODIGO = "diretorios_so_codigo"
+CHAVE_DAS_EXTENSOES = "extensoes_de_conhecimento"
+EXTENSOES_DE_CONHECIMENTO = (".md", ".txt")
+MARCA_DE_MOLDE_NAO_PREENCHIDO = "${"
+PASTA_DO_GIT = ".git"
 
-# Redirecionamento e escrita por shell: `> nota.md`, `>> nota.md`, e os
-# comandos que gravam sem seta. Sem isto, o veto das ferramentas seria
-# contornado por `bash -c` — e um veto contornável é pior que nenhum,
-# porque promete o que não cumpre.
-_REDIRECIONA = re.compile(r">>?\s*([^\s;|&]+)")
-_ESCREVEM = ("tee", "cp", "mv", "install", "touch")
+FERRAMENTAS_DE_ESCRITA = ("Write", "Edit", "NotebookEdit")
+CAMPOS_DE_CAMINHO = ("file_path", "notebook_path")
+REDIRECIONAMENTO_DE_SHELL = re.compile(r">>?\s*([^\s;|&]+)")
+COMANDOS_QUE_ESCREVEM_SEM_SETA = ("tee", "cp", "mv", "install", "touch")
+
+VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
+NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
+
+EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
+DECISAO_DE_NEGAR = "deny"
+BANDEIRA_DE_TESTE = "--testar"
+PASSA = ""
+SILENCIO = 0
+FALHA_ABERTO = 0
+
+MOTIVO_NASCE_EM_PASTA_DE_CODIGO = (
+    "criar {!r} em {!r}, que a configuração declara como diretório só de "
+    "código")
+RECUSA = (
+    "Isto quer {}. Conhecimento não nasce em pasta de código: lá ninguém o "
+    "procura, e ele viaja por engano no commit do repositório errado. "
+    "Escreva em `conhecimento/`, ou — se o texto é DAQUELE repositório "
+    "(README, docs/) — crie dentro dele, que o fluxo de revisão dele julga. "
+    "Para mudar a cerca: `diretorios_so_codigo` em {}."
+)
+
+FALHA_BARRA = "BARRA [{}]: deixou passar"
+FALHA_DEIXA_PASSAR = "DEIXA_PASSAR [{}]: barrou — {}"
+FALHA_COMPORTAMENTO = "COMPORTAMENTO [{}]"
+LINHA_DE_FALHA = "FALHOU: {}"
+RESUMO_FALHOU = "FALHOU: {} de {} casos"
+RESUMO_OK = "OK: {} casos — {} barrados, {} liberados, {} de comportamento"
 
 
-def _configuracao(raiz: Path):
-    """{diretorios, extensoes} do executor.json, ou None se não há."""
+def configuracao_da_cerca(raiz: Path):
     try:
-        dado = json.loads((raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
+        dado = json.loads(
+            (raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(dado, dict):
         return None
-    diretorios = [d for d in (dado.get("diretorios_so_codigo") or [])
+    diretorios = [d for d in (dado.get(CHAVE_DOS_DIRETORIOS_SO_CODIGO) or [])
                   if isinstance(d, str) and d.strip()
-                  and "${" not in d]
+                  and MARCA_DE_MOLDE_NAO_PREENCHIDO not in d]
     if not diretorios:
         return None
-    extensoes = tuple(dado.get("extensoes_de_conhecimento") or EXTENSOES)
+    extensoes = tuple(dado.get(CHAVE_DAS_EXTENSOES)
+                      or EXTENSOES_DE_CONHECIMENTO)
     return {"diretorios": diretorios, "extensoes": extensoes}
 
 
-def _e_conhecimento(caminho: str, extensoes) -> bool:
+def e_arquivo_de_conhecimento(caminho: str, extensoes) -> bool:
     return caminho.lower().endswith(tuple(e.lower() for e in extensoes))
 
 
-def _dentro_de_repositorio(alvo: Path, fronteira: Path) -> bool:
-    """Há um `.git` entre o arquivo e o diretório declarado?
-
-    Sobe do arquivo até a fronteira, sem passar dela: repositório clonado
-    lá dentro é território do fluxo de revisão dele, não deste gancho.
-    """
+def e_de_um_repositorio_com_fluxo_proprio(alvo: Path, fronteira: Path) -> bool:
     atual = alvo.parent
     while True:
-        if (atual / ".git").exists():
+        if (atual / PASTA_DO_GIT).exists():
             return True
         if atual == fronteira or atual.parent == atual:
             return False
@@ -93,20 +79,20 @@ def _dentro_de_repositorio(alvo: Path, fronteira: Path) -> bool:
 
 
 def motivo_da_recusa(caminho: str, raiz: Path, configuracao) -> str:
-    """A recusa, ou '' quando passa."""
     if not configuracao or not caminho:
-        return ""
-    if not _e_conhecimento(caminho, configuracao["extensoes"]):
-        return ""
+        return PASSA
+    if not e_arquivo_de_conhecimento(caminho, configuracao["extensoes"]):
+        return PASSA
     alvo = Path(caminho)
     if not alvo.is_absolute():
         alvo = (raiz / alvo)
     try:
         alvo = alvo.resolve(strict=False)
     except OSError:
-        return ""
-    if alvo.exists():
-        return ""  # editar o que já existe não é fazer nascer no lugar errado
+        return PASSA
+    e_edicao_do_que_ja_existe = alvo.exists()
+    if e_edicao_do_que_ja_existe:
+        return PASSA
     for declarado in configuracao["diretorios"]:
         fronteira = (raiz / declarado).resolve(strict=False) \
             if not Path(declarado).is_absolute() else Path(declarado).resolve()
@@ -114,79 +100,73 @@ def motivo_da_recusa(caminho: str, raiz: Path, configuracao) -> str:
             continue
         if fronteira not in alvo.parents:
             continue
-        if _dentro_de_repositorio(alvo, fronteira):
-            return ""  # é do repositório; o fluxo dele julga
-        return (f"criar {alvo.name!r} em {declarado!r}, que a configuração "
-                "declara como diretório só de código")
-    return ""
+        if e_de_um_repositorio_com_fluxo_proprio(alvo, fronteira):
+            return PASSA
+        return MOTIVO_NASCE_EM_PASTA_DE_CODIGO.format(alvo.name, declarado)
+    return PASSA
 
 
-def alvos_do_pedido(entrada: dict) -> list:
-    """Todo caminho que este pedido tentaria criar."""
+def caminhos_que_o_pedido_criaria(entrada: dict) -> list:
     ferramenta = entrada.get("tool_name", "")
     dado = entrada.get("tool_input", {}) or {}
-    if ferramenta in ("Write", "Edit", "NotebookEdit"):
-        caminho = dado.get("file_path") or dado.get("notebook_path") or ""
-        return [caminho] if caminho else []
+    if ferramenta in FERRAMENTAS_DE_ESCRITA:
+        for campo in CAMPOS_DE_CAMINHO:
+            if dado.get(campo):
+                return [dado[campo]]
+        return []
     comando = dado.get("command", "")
     if not comando:
         return []
-    achados = [m.group(1) for m in _REDIRECIONA.finditer(comando)]
+    achados = [m.group(1) for m in REDIRECIONAMENTO_DE_SHELL.finditer(comando)]
     try:
         pedacos = shlex.split(comando)
     except ValueError:
         pedacos = comando.split()
-    if pedacos and Path(pedacos[0]).name in _ESCREVEM:
+    if pedacos and Path(pedacos[0]).name in COMANDOS_QUE_ESCREVEM_SEM_SETA:
         achados += pedacos[1:]
     return [a.strip("\"'") for a in achados if a and not a.startswith("-")]
+
+
+def raiz_do_projeto_nunca_o_cwd() -> Path:
+    declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+    if declarada:
+        return Path(declarada)
+    return Path(__file__).resolve().parents[NIVEIS_DO_GANCHO_ATE_A_RAIZ]
 
 
 def main() -> int:
     try:
         entrada = json.load(sys.stdin)
     except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
-        return 0  # falha aberto: entrada quebrada não prende a sessão
+        return FALHA_ABERTO
 
-    base = os.environ.get("CLAUDE_PROJECT_DIR")
-    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
-    configuracao = _configuracao(raiz)
+    raiz = raiz_do_projeto_nunca_o_cwd()
+    configuracao = configuracao_da_cerca(raiz)
     if not configuracao:
-        return 0  # sem declaração, sem cerca
+        return SILENCIO
 
-    for caminho in alvos_do_pedido(entrada):
+    for caminho in caminhos_que_o_pedido_criaria(entrada):
         motivo = motivo_da_recusa(caminho, raiz, configuracao)
         if motivo:
             print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    f"Isto quer {motivo}. Conhecimento não nasce em pasta de "
-                    "código: lá ninguém o procura, e ele viaja por engano no "
-                    "commit do repositório errado. Escreva em "
-                    "`conhecimento/`, ou — se o texto é DAQUELE repositório "
-                    "(README, docs/) — crie dentro dele, que o fluxo de "
-                    "revisão dele julga. Para mudar a cerca: "
-                    f"`diretorios_so_codigo` em {ARQUIVO_EXECUTOR}."
-                ),
+                "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+                "permissionDecision": DECISAO_DE_NEGAR,
+                "permissionDecisionReason": RECUSA.format(
+                    motivo, ARQUIVO_EXECUTOR),
             }}))
-            return 0
-    return 0
+            return SILENCIO
+    return SILENCIO
 
 
-# --- Testes -----------------------------------------------------------------
-# Duas listas, e a segunda é a que importa: veto largo é desligado na
-# primeira semana. Metade dos casos existe para provar que ele NÃO atrapalha.
-
-def _cenario(pasta: Path):
-    """Um workspace de mentira: projetos/ declarado, um repo git dentro."""
+def montar_workspace_de_mentira(pasta: Path):
     (pasta / "nucleo").mkdir(parents=True, exist_ok=True)
     (pasta / "nucleo" / "executor.json").write_text(json.dumps({
-        "diretorios_so_codigo": ["projetos"]}), encoding="utf-8")
+        CHAVE_DOS_DIRETORIOS_SO_CODIGO: ["projetos"]}), encoding="utf-8")
     (pasta / "projetos" / "app" / ".git").mkdir(parents=True, exist_ok=True)
     (pasta / "projetos" / "solta").mkdir(parents=True, exist_ok=True)
     (pasta / "projetos" / "ja-existe.md").write_text("velho", encoding="utf-8")
     (pasta / "conhecimento").mkdir(exist_ok=True)
-    return _configuracao(pasta)
+    return configuracao_da_cerca(pasta)
 
 
 BARRA = [
@@ -209,66 +189,69 @@ def testar() -> int:
     falhas = []
     with tempfile.TemporaryDirectory(prefix="veto-conhecimento-") as tmp:
         raiz = Path(tmp)
-        configuracao = _cenario(raiz)
+        configuracao = montar_workspace_de_mentira(raiz)
         for rotulo, caminho in BARRA:
             if not motivo_da_recusa(caminho, raiz, configuracao):
-                falhas.append(f"BARRA [{rotulo}]: deixou passar")
+                falhas.append(FALHA_BARRA.format(rotulo))
         for rotulo, caminho in DEIXA_PASSAR:
             motivo = motivo_da_recusa(caminho, raiz, configuracao)
             if motivo:
-                falhas.append(f"DEIXA_PASSAR [{rotulo}]: barrou — {motivo}")
+                falhas.append(FALHA_DEIXA_PASSAR.format(rotulo, motivo))
 
         comportamento = []
 
         def caso(rotulo, condicao):
             comportamento.append((rotulo, bool(condicao)))
 
-        # sem configuração, nada é barrado
         caso("sem executor.json a cerca não existe",
              not motivo_da_recusa("projetos/nota.md", raiz, None))
         (raiz / "nucleo" / "executor.json").write_text(json.dumps({
-            "diretorios_so_codigo": ["${DIRETORIO}"]}), encoding="utf-8")
+            CHAVE_DOS_DIRETORIOS_SO_CODIGO: ["${DIRETORIO}"]}),
+            encoding="utf-8")
         caso("diretório ainda no molde não vira cerca",
-             _configuracao(raiz) is None)
-        _cenario(raiz)
+             configuracao_da_cerca(raiz) is None)
+        montar_workspace_de_mentira(raiz)
 
-        # a porta do shell
         caso("redirecionamento por shell é alcançado",
-             alvos_do_pedido({"tool_name": "Bash", "tool_input": {
+             caminhos_que_o_pedido_criaria({"tool_name": "Bash", "tool_input": {
                  "command": "echo oi > projetos/nota.md"}})
              == ["projetos/nota.md"])
         caso("append também",
-             "projetos/n.md" in alvos_do_pedido({"tool_name": "Bash",
+             "projetos/n.md" in caminhos_que_o_pedido_criaria({
+                 "tool_name": "Bash",
                  "tool_input": {"command": "echo a >> projetos/n.md"}}))
         caso("tee também",
-             "projetos/t.md" in alvos_do_pedido({"tool_name": "Bash",
+             "projetos/t.md" in caminhos_que_o_pedido_criaria({
+                 "tool_name": "Bash",
                  "tool_input": {"command": "tee projetos/t.md"}}))
         caso("a ferramenta Write é alcançada",
-             alvos_do_pedido({"tool_name": "Write", "tool_input": {
+             caminhos_que_o_pedido_criaria({"tool_name": "Write", "tool_input": {
                  "file_path": "projetos/nota.md"}}) == ["projetos/nota.md"])
         caso("comando sem escrita nenhuma não devolve alvo",
-             alvos_do_pedido({"tool_name": "Bash",
-                              "tool_input": {"command": "ls projetos"}}) == [])
+             caminhos_que_o_pedido_criaria({
+                 "tool_name": "Bash",
+                 "tool_input": {"command": "ls projetos"}}) == [])
         caso("entrada quebrada não prende a sessão (falha aberto)",
-             alvos_do_pedido({}) == [])
+             caminhos_que_o_pedido_criaria({}) == [])
         caso("aspas desbalanceadas não derrubam o gancho",
-             isinstance(alvos_do_pedido({"tool_name": "Bash", "tool_input": {
-                 "command": "echo 'sem fechar > projetos/x.md"}}), list))
-        falhas += [f"COMPORTAMENTO [{r}]" for r, ok in comportamento if not ok]
+             isinstance(caminhos_que_o_pedido_criaria({
+                 "tool_name": "Bash", "tool_input": {
+                     "command": "echo 'sem fechar > projetos/x.md"}}), list))
+        falhas += [FALHA_COMPORTAMENTO.format(rotulo)
+                   for rotulo, passou in comportamento if not passou]
 
     total = len(BARRA) + len(DEIXA_PASSAR) + len(comportamento)
     if falhas:
         for falha in falhas:
-            print(f"FALHOU: {falha}")
-        print(f"FALHOU: {len(falhas)} de {total} casos")
+            print(LINHA_DE_FALHA.format(falha))
+        print(RESUMO_FALHOU.format(len(falhas), total))
         return 1
-    print(f"OK: {total} casos — {len(BARRA)} barrados, "
-          f"{len(DEIXA_PASSAR)} liberados, {len(comportamento)} de "
-          "comportamento")
+    print(RESUMO_OK.format(total, len(BARRA), len(DEIXA_PASSAR),
+                           len(comportamento)))
     return 0
 
 
 if __name__ == "__main__":
-    if "--testar" in sys.argv:
+    if BANDEIRA_DE_TESTE in sys.argv:
         sys.exit(testar())
     sys.exit(main())

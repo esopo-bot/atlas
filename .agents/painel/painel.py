@@ -1,36 +1,3 @@
-#!/usr/bin/env python3
-"""painel de controle — dispara sessão headless e mostra o estado do
-executor de roteiros, no navegador.
-
-O que ele é: um servidor HTTP de biblioteca padrão, sem dependência nenhuma,
-que faz três coisas e para:
-
-1. serve uma página com uma caixa de prompt e um botão;
-2. no disparo, escreve um roteiro de UMA etapa e chama o `encadeador.py`
-   em segundo plano — execução de verdade, com evidência e verificação, não um
-   `claude -p` solto;
-3. pergunta o estado ao `andamento` do encadeador e devolve o JSON dele.
-
-O que ele NÃO faz, de propósito: não fala com o modelo (quem fala é o
-encadeador), não inventa estado (o `andamento` é a única fonte), não commita,
-não empurra, não publica, não apaga trabalho. O painel de controle é vidro,
-não motor.
-
-Por que roteiro de uma etapa em vez de chamar `claude -p` direto: assim o
-prompt livre e a execução inteira passam pelo MESMO caminho — evidência por
-código, verificação re-executando as provas, teto de ciclos. Um caminho só
-para manter, e o que vale para um vale para o outro.
-
-A sessão herda `--dangerously-skip-permissions` do encadeador. Por isso o
-`--cwd` deve ser worktree ou clone descartável, NUNCA a árvore que importa —
-o painel de controle recusa subir se o `--cwd` for um repositório com
-mudança não commitada, que é o sinal barato de "esta árvore importa".
-
-Uso:
-    painel.py --cwd <worktree> [--porta 4000] [--dir tmp/evidencias]
-    painel.py --testar
-"""
-
 import argparse
 import errno
 import hashlib
@@ -48,138 +15,226 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-def _raiz_da_camada() -> Path:
-    """Sobe até achar o encadeador — nunca `Path.cwd()`.
+DESCRICAO_DA_CLI = ("painel de controle — dispara sessão headless e mostra o "
+                    "estado do executor de roteiros, no navegador")
+AJUDA_CWD = "worktree ou clone descartável onde a sessão roda"
+AJUDA_ROTEIROS = ("pastas de roteiro, por vírgula; a primeira vence "
+                  "o nome repetido")
+AJUDA_FORCAR_ARVORE_SUJA = "sobe mesmo com mudança não commitada no --cwd"
 
-    O painel de controle roda de dois lugares: instalado em
-    `.agents/painel/` e, no repositório que PRODUZ o módulo, direto de
-    `modulos/painel/.agents/painel/`. Contar pastas para cima só acerta o
-    primeiro caso, e o segundo falharia achando que a camada não existe.
-    Procurar o alvo acerta os dois.
-    """
-    aqui = Path(__file__).resolve()
-    for pasta in aqui.parents:
+ERRO_CWD_OBRIGATORIO = (
+    "erro de uso: --cwd é obrigatório (worktree ou clone descartável);\n"
+    "a sessão da execução pula permissões e não deve tocar a árvore "
+    "que importa.")
+ERRO_CWD_NAO_E_PASTA = "erro de uso: --cwd não é pasta: {}"
+ERRO_SEM_ENCADEADOR = ("erro de ambiente: falta o encadeador — rode\n"
+                       "  python montar.py --modulo encadeador")
+ERRO_SEM_O_COMANDO_CLAUDE = (
+    "erro de ambiente: o comando claude não está no PATH; a etapa de "
+    "sessão morreria.")
+ERRO_ARVORE_SUJA = (
+    "PAREI — {} tem mudança não commitada.\n"
+    "A sessão da execução roda com permissões puladas: numa árvore com "
+    "trabalho seu dentro, um erro dela custa caro.\n"
+    "Use um worktree descartável:\n"
+    "  git worktree add /tmp/executor HEAD\n"
+    "Se você sabe o que está fazendo: --forcar-arvore-suja")
+ERRO_PORTA_NAO_ABRIU = "erro de ambiente: não consegui abrir a porta {}: {}"
+
+RECADO_PORTA_JA_E_DESTE_REPOSITORIO = (
+    "o painel de controle deste repositório já está no ar: "
+    "http://127.0.0.1:{porta}\n"
+    "  (nada a fazer — abra o endereço acima)")
+RECADO_PORTA_DE_OUTRO_REPOSITORIO = (
+    "PAREI — a porta {porta} é do painel de controle de OUTRO repositório:\n"
+    "  {ocupante}\n"
+    "Uma porta por repositório é o desenho. Suba este noutra:\n"
+    "  --porta {proxima_porta}")
+RECADO_PORTA_DE_ESTRANHO = (
+    "PAREI — a porta {porta} está ocupada, e não por um painel de controle.\n"
+    "Quem está nela:\n"
+    "  ss -ltnp | grep :{porta}\n"
+    "Encerre aquele, ou suba este noutra porta:\n"
+    "  --porta {outra_porta}")
+
+ANUNCIO_NO_AR = "painel de controle em http://127.0.0.1:{} — camada {}"
+ANUNCIO_REPOSITORIO = "  repositório (o painel de controle): {}"
+ANUNCIO_SESSOES = "  sessões rodam em:                   {}"
+ANUNCIO_EVIDENCIAS = "  evidências em:                         {}"
+ANUNCIO_ROTEIROS = "  roteiros de:                      {} ({} encontrados)"
+ANUNCIO_COMO_ENCERRAR = "Ctrl+C encerra."
+ANUNCIO_ENCERRADO = "\nencerrado."
+
+ERRO_ROTA_DESCONHECIDA = "rota desconhecida"
+ERRO_CORPO_INVALIDO = "corpo inválido"
+ERRO_NOME_DE_TRABALHO = ("nome de trabalho inválido: minúsculo, sem barra nem "
+                         "espaço, até 64")
+ERRO_ALVO_OCUPADO = (
+    "já existe execução rodando neste alvo: {}. "
+    "Uma por vez — duas sessões na mesma árvore se atropelam. "
+    "Espere terminar, ou suba outro painel de controle "
+    "apontando para outro repositório.")
+ERRO_SEM_PEDIDO = "escreva um pedido ou escolha um roteiro"
+ERRO_ROTEIRO_COLADO_NO_LUGAR_DO_PEDIDO = (
+    "isso é um roteiro, não um pedido. Salve-o como .json "
+    "na pasta de roteiros e escolha-o na lista — colado "
+    "aqui, o JSON inteiro viraria o texto de UMA sessão.")
+ERRO_ROTEIRO_DESCONHECIDO = "roteiro desconhecido: {}"
+ERRO_ROTEIRO_ILEGIVEL = "roteiro ilegível: {}"
+ERRO_ROTEIRO_SEM_ETAPAS = "roteiro sem lista de etapas"
+ERRO_ANDAMENTO_SEM_JSON = "o andamento não devolveu JSON"
+ERRO_ANDAMENTO_FALHOU = "o andamento falhou: {}"
+ERRO_DISPARO_FALHOU = "não consegui disparar: {}"
+
+RECADO_TRAVA_DE_OUTRO_PAINEL = "{} (outro painel de controle, pid {})"
+RECADO_SEM_REPOSITORIO_DE_ISSUES = "sem repositório de issues configurado"
+RECADO_GH_MUDO = "sem dado (o gh não respondeu)"
+RECADO_SEM_REDE_OU_GH = "sem dado (rede ou gh indisponível)"
+PROXIMA_ACAO_JA_ESTA_NO_AR = (
+    "rodando agora — espere. A etapa só escreve evidência quando termina, "
+    "então pasta vazia no começo é o esperado. Não dispare de novo: a "
+    "trava recusaria.")
+
+RESULTADO_DO_CASO_FALHO = "FALHOU: {}"
+RESUMO_DOS_CASOS = "{}: {} casos"
+RESUMO_DAS_FALHAS = " — {} falharam"
+VEREDITO_OK = "OK"
+VEREDITO_FALHOU = "FALHOU"
+
+CODIGO_NADA_A_FAZER = 0
+CODIGO_ERRO_DE_USO = 2
+
+VERSAO_DESCONHECIDA = "desconhecida"
+PREFIXO_DA_VERSAO_NO_MONTAR = "VERSAO = "
+ABERTURAS_DO_CABECALHO_DO_MONTAR = ("#", '"', "'")
+
+TIMEOUT_DA_PERGUNTA_A_PORTA_S = 3
+TIMEOUT_DO_GIT_S = 20
+TIMEOUT_DO_GH_S = 30
+TIMEOUT_DO_ANDAMENTO_S = 60
+
+TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR = 3600
+SITUACOES_GRAVADAS_QUE_VENCEM_A_INFERENCIA = ("dormindo", "aguardando-resposta")
+CHAVES_DA_ESPERA_GRAVADA = ("desde", "ate", "porque", "issue", "etapa")
+SITUACAO_DESCONHECIDA = "desconhecida"
+SITUACAO_ENCERRADO = "encerrado"
+SITUACAO_TRABALHANDO = "trabalhando"
+PROCESSO_RODANDO = "rodando"
+PROCESSO_ENCERRADO = "encerrado"
+PROCESSO_DESCONHECIDO = "desconhecido"
+ESTADO_EM_CURSO = "em-curso"
+
+ARQUIVO_ESTADO = "estado.json"
+ARQUIVO_EXECUTOR = "nucleo/executor.json"
+SUFIXO_DO_ROTEIRO = ".roteiro.json"
+SUFIXO_DO_LOG = ".log"
+PREFIXO_DA_TRAVA = ".trava-"
+DIGITOS_DO_RESUMO_DO_ALVO = 12
+INTERVALO_DO_QUADRO_S_POR_CORTESIA_DE_REDE = 120
+LIMITE_DE_ISSUES_NO_QUADRO = 30
+MARCA_DE_MOLDE_NAO_PREENCHIDO = "${"
+CAUDA_DO_LOG_NA_TELA = 4000
+CAUDA_DO_ERRO_DO_ANDAMENTO = 400
+
+TETO_PADRAO_DE_CICLOS, TETO_MINIMO, TETO_MAXIMO = 3, 1, 9
+TURNOS_PADRAO_ACIMA_DO_TETO_DO_MOTOR, TURNOS_MINIMO, TURNOS_MAXIMO = 24, 4, 120
+ETAPA_DO_PEDIDO = "pedido"
+ETAPA_DA_VERIFICACAO = "verifica"
+PREFIXO_DO_PEDIDO_DO_PAINEL = "painel"
+PREFIXO_DA_EXECUCAO_SEM_NOME = "execucao"
+NOME_QUE_PODE_VIRAR_PASTA = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+PORTA_PADRAO = 4000
+DIR_EVIDENCIAS_PADRAO = "tmp/evidencias"
+ROTEIROS_PADRAO = "execucoes,tmp"
+ENDERECO_LOCAL = "127.0.0.1"
+SILENCIO_DO_SERVIDOR = None
+
+
+def raiz_da_camada_procurando_o_encadeador() -> Path:
+    este_arquivo = Path(__file__).resolve()
+    for pasta in este_arquivo.parents:
         if (pasta / ".agents" / "encadeador" / "encadeador.py").exists():
             return pasta
-    return aqui.parents[2]
+    return este_arquivo.parents[2]
 
 
-RAIZ = _raiz_da_camada()
+RAIZ = raiz_da_camada_procurando_o_encadeador()
 ENCADEADOR = RAIZ / ".agents" / "encadeador" / "encadeador.py"
 
 
-def casa_do_painel_na_porta(porta: int) -> str | None:
-    """Quem atende nesta porta é painel de controle? De que repositório? None
-    se não for.
-
-    Pergunta-se ao próprio servidor, em vez de investigar PID: a resposta
-    dele é a prova, e um processo com o nome parecido não engana.
-    """
+def repositorio_que_responde_na_porta(porta: int) -> str | None:
     try:
         with urllib.request.urlopen(
-                f"http://127.0.0.1:{porta}/trabalhos", timeout=3) as resposta:
+                f"http://{ENDERECO_LOCAL}:{porta}/trabalhos",
+                timeout=TIMEOUT_DA_PERGUNTA_A_PORTA_S) as resposta:
             return json.loads(resposta.read()).get("repositorio")
     except (OSError, ValueError, json.JSONDecodeError):
         return None
 
 
-TETO_SESSAO_S = 3600  # espelha TEMPO_SESSAO do encadeador
-
-
-def descendentes(pai: int) -> list:
-    """PIDs abaixo de `pai`, lendo /proc. Fora do Linux, devolve [].
-
-    Sem dependência de fora: o painel de controle é de biblioteca padrão, e
-    psutil resolveria isto ao custo de uma instalação que a camada não exige.
-    Onde /proc não existe, o painel de controle diz "não medido" em vez de
-    inventar.
-    """
-    filhos = {}
+def descendentes_lendo_proc(pai: int) -> list:
+    filhos_por_pai = {}
     try:
         for entrada in os.listdir("/proc"):
             if not entrada.isdigit():
                 continue
             try:
-                with open(f"/proc/{entrada}/stat", encoding="utf-8") as f:
-                    campos = f.read().rsplit(")", 1)[1].split()
-                filhos.setdefault(int(campos[1]), []).append(int(entrada))
+                with open(f"/proc/{entrada}/stat", encoding="utf-8") as arquivo:
+                    campos = arquivo.read().rsplit(")", 1)[1].split()
+                filhos_por_pai.setdefault(int(campos[1]), []).append(int(entrada))
             except (OSError, IndexError, ValueError):
                 continue
     except OSError:
         return []
     fila, achados = [pai], []
     while fila:
-        for pid in filhos.get(fila.pop(), []):
+        for pid in filhos_por_pai.get(fila.pop(), []):
             achados.append(pid)
             fila.append(pid)
     return achados
 
 
-def vivacidade(proc, inicio: float | None, gravado: dict = None) -> dict:
-    """Os sinais que decidem se a execução trabalha, e o que cada um vale.
-
-    Medido em 18/08/2026: sessão de modelo passa a vida esperando a API —
-    443s de relógio para 5s de CPU. Logo, CPU parada NÃO é sinal de morte, e
-    um painel de controle que dissesse "travado" por isso estaria mentindo.
-    O sinal que vale é composto: o processo existe, quantas sessões ainda
-    respiram, e quanto falta para o teto que mata sozinho.
-    """
-    if proc is None:
-        # Execução disparada fora da mesa (pela linha de comando, por um
-        # agendador) não tem processo aqui — mas TEM estado gravado, e é
-        # ele que sabe. Sem isto a mesa dizia "desconhecida" com o motor
-        # trabalhando ao lado.
-        if gravado and gravado.get("situacao"):
-            return {"situacao": gravado["situacao"], "de_fora": True,
-                    "desde": gravado.get("desde"), "ate": gravado.get("ate"),
-                    "porque": gravado.get("porque"),
-                    "issue": gravado.get("issue"),
-                    "etapa": gravado.get("etapa")}
-        return {"situacao": "desconhecida"}
-    if proc.poll() is not None:
-        return {"situacao": "encerrado", "codigo": proc.returncode}
-    filhos = descendentes(proc.pid)
-    sessoes = 0
-    for pid in filhos:
+def sessoes_de_modelo_entre(pids: list) -> int:
+    vivas = 0
+    for pid in pids:
         try:
-            with open(f"/proc/{pid}/cmdline", "rb") as f:
-                if b"claude" in f.read():
-                    sessoes += 1
+            with open(f"/proc/{pid}/cmdline", "rb") as arquivo:
+                if b"claude" in arquivo.read():
+                    vivas += 1
         except OSError:
             continue
+    return vivas
+
+
+def vivacidade_do_que_o_motor_gravou(gravado: dict, **acrescimo) -> dict:
+    espera = {chave: gravado.get(chave) for chave in CHAVES_DA_ESPERA_GRAVADA}
+    return {"situacao": gravado["situacao"], **espera, **acrescimo}
+
+
+def vivacidade(proc, inicio: float | None, gravado: dict = None) -> dict:
+    if proc is None:
+        if gravado and gravado.get("situacao"):
+            return vivacidade_do_que_o_motor_gravou(gravado, de_fora=True)
+        return {"situacao": SITUACAO_DESCONHECIDA}
+    if proc.poll() is not None:
+        return {"situacao": SITUACAO_ENCERRADO, "codigo": proc.returncode}
+    filhos = descendentes_lendo_proc(proc.pid)
+    sessoes = sessoes_de_modelo_entre(filhos) if filhos else None
     decorrido = int(time.time() - inicio) if inicio else None
-    # O motor grava o que está fazendo; quando ele diz que espera, ele VENCE
-    # a inferência. Sem isto a mesa dizia "trabalhando" com o motor dormindo
-    # seis horas — e `sessoes: None` ao lado denunciava a mentira sem
-    # corrigi-la (defeito 4 de 18/08/2026).
-    if gravado and gravado.get("situacao") in ("dormindo", "aguardando-resposta"):
-        return {"situacao": gravado["situacao"],
-                "desde": gravado.get("desde"),
-                "ate": gravado.get("ate"),
-                "porque": gravado.get("porque"),
-                "issue": gravado.get("issue"),
-                "etapa": gravado.get("etapa"),
-                "sessoes": sessoes if filhos else None,
-                "decorrido_s": decorrido}
-    return {"situacao": "trabalhando",
-            "sessoes": sessoes if filhos else None,
+    situacao_gravada = gravado.get("situacao") if gravado else None
+    if situacao_gravada in SITUACOES_GRAVADAS_QUE_VENCEM_A_INFERENCIA:
+        return vivacidade_do_que_o_motor_gravou(
+            gravado, sessoes=sessoes, decorrido_s=decorrido)
+    return {"situacao": SITUACAO_TRABALHANDO,
+            "sessoes": sessoes,
             "decorrido_s": decorrido,
-            "teto_s": TETO_SESSAO_S,
-            "resta_s": (max(0, TETO_SESSAO_S - decorrido)
+            "teto_s": TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR,
+            "resta_s": (max(0, TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR - decorrido)
                         if decorrido is not None else None)}
 
 
-ARQUIVO_ESTADO = "estado.json"
-
-
-ARQUIVO_EXECUTOR = "nucleo/executor.json"
-INTERVALO_DO_QUADRO_S = 120  # regra 7: rede com cortesia, longe do polling
-
-
-def configuracao_do_executor(cwd):
-    """O executor.json do alvo — ou None. O painel de controle não valida,
-    só lê.
-    """
+def configuracao_do_executor_sem_validar(cwd) -> dict | None:
     try:
         dado = json.loads((Path(cwd) / ARQUIVO_EXECUTOR)
                           .read_text(encoding="utf-8"))
@@ -188,13 +243,7 @@ def configuracao_do_executor(cwd):
         return None
 
 
-def estado_gravado(dir_evidencias, trabalho):
-    """O que o motor gravou sobre este trabalho — ou None.
-
-    O painel de controle continua sendo vidro: ele não inventa este estado,
-    lê o que o motor escreveu. É a única fonte que sabe de espera, porque
-    espera não deixa rastro em evidência nenhuma.
-    """
+def estado_que_o_motor_gravou(dir_evidencias, trabalho) -> dict | None:
     try:
         dado = json.loads((Path(dir_evidencias) / trabalho / ARQUIVO_ESTADO)
                           .read_text(encoding="utf-8"))
@@ -203,130 +252,93 @@ def estado_gravado(dir_evidencias, trabalho):
         return None
 
 
-def corrigir_proxima_acao(estado: dict) -> dict:
-    """Cala o convite a disparar quando a execução JÁ está disparada.
-
-    O `andamento` é honesto dentro do contrato dele: sem evidência no disco, ele
-    conclui "nada rodou ainda" e manda executar. Só que o painel de controle
-    sabe uma coisa que ele não sabe — se o processo está vivo. Repassar
-    aquele convite é mandar disparar o que já está no ar, e foi o que quase
-    provocou um disparo duplo. Quem tem a informação a mais corrige a
-    mensagem.
-    """
-    esperando = (estado.get("vivacidade") or {}).get("situacao") in (
-        "dormindo", "aguardando-resposta")
-    if estado.get("processo") == "rodando" and not esperando \
-            and estado.get("estado") == "em-curso":
-        estado["proxima_acao"] = (
-            "rodando agora — espere. A etapa só escreve evidência quando termina, "
-            "então pasta vazia no começo é o esperado. Não dispare de novo: a "
-            "trava recusaria.")
+def calar_o_convite_a_disparar_o_que_ja_esta_no_ar(estado: dict) -> dict:
+    situacao = (estado.get("vivacidade") or {}).get("situacao")
+    esperando_alguem = situacao in SITUACOES_GRAVADAS_QUE_VENCEM_A_INFERENCIA
+    if (estado.get("processo") == PROCESSO_RODANDO and not esperando_alguem
+            and estado.get("estado") == ESTADO_EM_CURSO):
+        estado["proxima_acao"] = PROXIMA_ACAO_JA_ESTA_NO_AR
     return estado
 
 
 def decidir_porta_ocupada(porta: int, repositorio: str,
                           ocupante: str | None) -> tuple:
-    """(código, recado) para a porta ocupada. Função pura, para ser testada.
-
-    O caso comum — F5 duas vezes no mesmo repositório — NÃO é erro: o que se
-    queria
-    já está no ar. Sair 0 diz a verdade e, de quebra, apaga o popup de
-    SystemExit do depurador, que só interrompe em código diferente de zero.
-    """
     if ocupante == repositorio:
-        return 0, (f"o painel de controle deste repositório já está no ar: "
-                   f"http://127.0.0.1:{porta}\n"
-                   "  (nada a fazer — abra o endereço acima)")
+        return CODIGO_NADA_A_FAZER, RECADO_PORTA_JA_E_DESTE_REPOSITORIO.format(
+            porta=porta)
     if ocupante:
-        return 2, (f"PAREI — a porta {porta} é do painel de controle de "
-                   "OUTRO repositório:\n"
-                   f"  {ocupante}\n"
-                   "Uma porta por repositório é o desenho. Suba este "
-                   "noutra:\n"
-                   f"  --porta {porta + 1}")
-    return 2, (f"PAREI — a porta {porta} está ocupada, e não por um "
-               "painel de controle.\n"
-               "Quem está nela:\n"
-               f"  ss -ltnp | grep :{porta}\n"
-               "Encerre aquele, ou suba este noutra porta:\n"
-               f"  --porta {porta + 10}")
+        return CODIGO_ERRO_DE_USO, RECADO_PORTA_DE_OUTRO_REPOSITORIO.format(
+            porta=porta, ocupante=ocupante, proxima_porta=porta + 1)
+    return CODIGO_ERRO_DE_USO, RECADO_PORTA_DE_ESTRANHO.format(
+        porta=porta, outra_porta=porta + 10)
 
 
-def versao_da_camada() -> str:
-    """A versão sai do montar.py, que é onde ela já mora.
-
-    O painel de controle não carrega número próprio de propósito: duas
-    versões para a mesma camada divergem no primeiro dia em que alguém
-    esquece de subir uma delas. Aqui há uma fonte só, e ela é a que o
-    `--versao` também imprime.
-    """
+def versao_da_camada_declarada_no_topo_do_montar() -> str:
     try:
-        for linha in (RAIZ / "montar.py").read_text(encoding="utf-8").splitlines():
-            if linha.startswith("VERSAO = "):
-                return linha.split("=", 1)[1].strip().strip("\"'")
-            if not linha.startswith(("#", "\"", "'")) and linha.strip():
-                break  # a declaração é do topo; não varra o arquivo inteiro
+        linhas = (RAIZ / "montar.py").read_text(encoding="utf-8").splitlines()
     except OSError:
-        pass
-    return "desconhecida"
-NOME_OK = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+        return VERSAO_DESCONHECIDA
+    for linha in linhas:
+        if linha.startswith(PREFIXO_DA_VERSAO_NO_MONTAR):
+            return linha.split("=", 1)[1].strip().strip("\"'")
+        if linha.strip() and not linha.startswith(ABERTURAS_DO_CABECALHO_DO_MONTAR):
+            break
+    return VERSAO_DESCONHECIDA
 
 
-def agora() -> str:
+def carimbo_utc_de_agora() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
 
-def nome_de_trabalho(prefixo: str = "painel") -> str:
-    return f"{prefixo}-{agora()}"
+def nome_de_trabalho(prefixo: str = PREFIXO_DO_PEDIDO_DO_PAINEL) -> str:
+    return f"{prefixo}-{carimbo_utc_de_agora()}"
 
 
-def validar_trabalho(nome: str) -> str | None:
-    """O nome vira pasta — a mesma régua do contrato da evidência."""
-    if not NOME_OK.match(nome or ""):
-        return "nome de trabalho inválido: minúsculo, sem barra nem espaço, até 64"
+def recusa_do_nome_de_trabalho(nome: str) -> str | None:
+    if not NOME_QUE_PODE_VIRAR_PASTA.match(nome or ""):
+        return ERRO_NOME_DE_TRABALHO
     return None
 
 
-def roteiro_de_um_prompt(prompt: str, teto: int = 3,
-                           turnos: int = 24, issue: int = None) -> dict:
-    """Prompt livre vira execução de uma etapa mais a verificação.
+def inteiro_na_faixa_ou_padrao(valor, minimo: int, maximo: int,
+                               padrao: int) -> int:
+    esta_na_faixa = isinstance(valor, int) and minimo <= valor <= maximo
+    return valor if esta_na_faixa else padrao
 
-    A verificação entra sempre: sem ela o painel de controle mostraria
-    'segue' para uma sessão que provou o que não se re-executa, que é o erro
-    que o executor de roteiros inteiro existe para não cometer.
-    """
+
+def parece_roteiro(dado) -> bool:
+    return isinstance(dado, dict) and isinstance(dado.get("etapas"), list)
+
+
+def roteiro_do_pedido_com_verificacao(
+        prompt: str, teto: int = TETO_PADRAO_DE_CICLOS,
+        turnos: int = TURNOS_PADRAO_ACIMA_DO_TETO_DO_MOTOR,
+        issue: int = None) -> dict:
     roteiro = {
         "teto": teto,
         "etapas": [
-            # `max-turnos` é o que decide se a sessão entrega ou morre no
-            # teto, então ele é controle de tela. O padrão do motor (16)
-            # matou o primeiro pedido disparado pelo painel de controle; 24
-            # dá folga ao pedido comum sem convidar ao pedido caro, que é
-            # caso de execução.
-            {"nome": "pedido", "tipo": "sessao", "prompt": prompt,
+            {"nome": ETAPA_DO_PEDIDO, "tipo": "sessao", "prompt": prompt,
              "max-turnos": turnos},
-            {"nome": "verifica", "tipo": "verificacao", "depende": ["pedido"]},
+            {"nome": ETAPA_DA_VERIFICACAO, "tipo": "verificacao",
+             "depende": [ETAPA_DO_PEDIDO]},
         ],
     }
-    # O vínculo com a issue é o que faz a execução contar a história lá: com
-    # ele, cada etapa vira comentário e a pergunta chega em quem decide.
     if issue:
         roteiro["issue"] = int(issue)
     return roteiro
 
 
-def arvore_suja(cwd: Path) -> bool:
-    """Mudança não commitada = árvore que importa. Fora do git, não opina."""
+def tem_mudanca_nao_commitada(cwd: Path) -> bool:
     try:
         r = subprocess.run(["git", "status", "--porcelain"], cwd=cwd,
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True,
+                           timeout=TIMEOUT_DO_GIT_S)
     except (OSError, subprocess.SubprocessError):
         return False
     return r.returncode == 0 and bool(r.stdout.strip())
 
 
-class Motor:
-    """A ponte para o encadeador. Um lugar só chama subprocesso."""
+class PonteParaOEncadeador:
 
     def __init__(self, cwd: Path, dir_evidencias: Path, dirs_roteiros: list):
         self.cwd = cwd
@@ -337,100 +349,76 @@ class Motor:
         self.trava = threading.Lock()
         self._quadro, self._quadro_em = None, 0.0
 
-    def _arquivo_de_trava(self) -> Path:
-        """Uma trava por ALVO, e o nome vem do caminho do alvo.
+    def _arquivo_de_trava_deste_alvo(self) -> Path:
+        resumo_do_caminho_do_alvo = hashlib.sha256(
+            str(self.cwd).encode()).hexdigest()[:DIGITOS_DO_RESUMO_DO_ALVO]
+        return self.dir / f"{PREFIXO_DA_TRAVA}{resumo_do_caminho_do_alvo}.json"
 
-        Fica no diretório de evidências, que já é o estado deste executor de
-        roteiros. O resumo do caminho evita nome ilegal de arquivo sem
-        perder unicidade.
-        """
-        marca = hashlib.sha256(str(self.cwd).encode()).hexdigest()[:12]
-        return self.dir / f".trava-{marca}.json"
-
-    def ocupado(self) -> str | None:
-        """Uma execução por vez neste alvo. Duas na mesma árvore se atropelam.
-
-        O motor já garante um escritor por TRABALHO; o que falta é impedir
-        dois TRABALHOS diferentes na mesma árvore. Sessões pulam permissões e
-        editam arquivo: duas ao mesmo tempo no mesmo lugar é corrida, e o
-        evidência de cada uma descreveria um disco que a outra já mudou.
-
-        A trava é de ARQUIVO, não de memória: dois painéis de controle do
-        mesmo alvo — o que acontece quando um F5 sobe o segundo sem o
-        primeiro ter morrido — teriam duas travas de memória e nenhuma
-        proteção. Trava morta (o dono já não existe) não segura ninguém: só
-        o PID vivo conta.
-        """
+    def _trabalho_desta_sessao_ainda_no_ar(self) -> str | None:
         with self.trava:
             for nome, proc in self.rodando.items():
                 if proc.poll() is None:
                     return nome
-        arquivo = self._arquivo_de_trava()
+        return None
+
+    def _dono_vivo_da_trava_em_arquivo(self) -> str | None:
         try:
-            dono = json.loads(arquivo.read_text(encoding="utf-8"))
+            dono = json.loads(self._arquivo_de_trava_deste_alvo()
+                              .read_text(encoding="utf-8"))
             os.kill(int(dono["pid"]), 0)
         except (OSError, ValueError, KeyError, json.JSONDecodeError):
-            return None  # sem trava, ilegível, ou dono morto
-        return (f"{dono.get('trabalho', '?')} "
-                f"(outro painel de controle, pid {dono['pid']})")
+            return None
+        return RECADO_TRAVA_DE_OUTRO_PAINEL.format(
+            dono.get("trabalho", "?"), dono["pid"])
 
-    def _travar(self, pid: int, trabalho: str) -> None:
-        self._arquivo_de_trava().write_text(
-            json.dumps({"pid": pid, "trabalho": trabalho, "cwd": str(self.cwd)}),
+    def ocupado(self) -> str | None:
+        return (self._trabalho_desta_sessao_ainda_no_ar()
+                or self._dono_vivo_da_trava_em_arquivo())
+
+    def gravar_trava(self, pid: int, trabalho: str) -> None:
+        self._arquivo_de_trava_deste_alvo().write_text(
+            json.dumps({"pid": pid, "trabalho": trabalho,
+                        "cwd": str(self.cwd)}),
             encoding="utf-8")
 
-    def _achados(self) -> dict:
-        """nome exibido -> caminho. A primeira pasta da lista vence o nome.
-
-        São duas pastas por desenho: a versionada, das execuções oficiais que
-        viajam com a camada, e a de rascunho, que é sua e não viaja. Nome
-        repetido nas duas fica com a oficial — rascunho não sequestra o nome
-        de uma execução que o repositório inteiro usa.
-        """
+    def _roteiros_por_nome_com_a_primeira_pasta_vencendo(self) -> dict:
         achados = {}
         for pasta in self.roteiros:
             if not pasta.is_dir():
                 continue
-            for p in sorted(pasta.glob("*.json")):
-                # Nem todo .json da pasta é roteiro: a síntese escreve
-                # proposta de regra ali, e ela aparecia no seletor como se
-                # fosse execução. Escolher aquela só falhava no disparo.
-                # A marca é ter lista de etapas — barata de verificar.
-                if not p.is_file() or p.name in achados:
+            for candidato in sorted(pasta.glob("*.json")):
+                if not candidato.is_file() or candidato.name in achados:
                     continue
                 try:
-                    dado = json.loads(p.read_text(encoding="utf-8"))
+                    dado = json.loads(candidato.read_text(encoding="utf-8"))
                 except (OSError, json.JSONDecodeError):
                     continue
-                if isinstance(dado, dict) and isinstance(dado.get("etapas"), list):
-                    achados[p.name] = p
+                if parece_roteiro(dado):
+                    achados[candidato.name] = candidato
         return achados
 
     def catalogo(self) -> list:
-        """Os roteiros que existem para escolher — nome puro, sem caminho."""
-        return sorted(self._achados())
+        return sorted(self._roteiros_por_nome_com_a_primeira_pasta_vencendo())
 
-    def ler_roteiro(self, nome: str) -> tuple[dict | None, str | None]:
-        """Nome puro só: o painel de controle nunca abre caminho que o
-        navegador montou.
-        """
-        alvo = self._achados().get(nome)
+    def ler_roteiro_do_catalogo(self, nome: str) -> tuple[dict | None, str | None]:
+        alvo = self._roteiros_por_nome_com_a_primeira_pasta_vencendo().get(nome)
         if alvo is None:
-            return None, f"roteiro desconhecido: {nome}"
+            return None, ERRO_ROTEIRO_DESCONHECIDO.format(nome)
         try:
             dado = json.loads(alvo.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
-            return None, f"roteiro ilegível: {e}"
-        if not isinstance(dado, dict) or not isinstance(dado.get("etapas"), list):
-            return None, "roteiro sem lista de etapas"
+            return None, ERRO_ROTEIRO_ILEGIVEL.format(e)
+        if not parece_roteiro(dado):
+            return None, ERRO_ROTEIRO_SEM_ETAPAS
         return dado, None
 
     def disparar(self, roteiro: dict, trabalho: str) -> dict:
         self.dir.mkdir(parents=True, exist_ok=True)
-        alvo = self.dir / f"{trabalho}.roteiro.json"
+        alvo = self.dir / f"{trabalho}{SUFIXO_DO_ROTEIRO}"
         alvo.write_text(json.dumps(roteiro, ensure_ascii=False, indent=2),
                         encoding="utf-8")
-        log = (self.dir / f"{trabalho}.log").open("w", encoding="utf-8")
+        log = (self.dir / f"{trabalho}{SUFIXO_DO_LOG}").open("w",
+                                                             encoding="utf-8")
         proc = subprocess.Popen(
             [sys.executable, str(ENCADEADOR), "executar",
              "--roteiro", str(alvo), "--trabalho", trabalho,
@@ -439,99 +427,82 @@ class Motor:
         with self.trava:
             self.rodando[trabalho] = proc
             self.inicio[trabalho] = time.time()
-        self._travar(proc.pid, trabalho)
+        self.gravar_trava(proc.pid, trabalho)
         return {"trabalho": trabalho, "roteiro": alvo.name}
 
     def andamento(self, trabalho: str, roteiro: Path | None = None) -> dict:
-        cmd = [sys.executable, str(ENCADEADOR), "andamento",
-               "--trabalho", trabalho, "--dir", str(self.dir)]
+        comando = [sys.executable, str(ENCADEADOR), "andamento",
+                   "--trabalho", trabalho, "--dir", str(self.dir)]
         if roteiro and roteiro.exists():
-            cmd += ["--roteiro", str(roteiro)]
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           cwd=str(self.cwd), timeout=60)
+            comando += ["--roteiro", str(roteiro)]
+        r = subprocess.run(comando, capture_output=True, text=True,
+                           cwd=str(self.cwd), timeout=TIMEOUT_DO_ANDAMENTO_S)
         if r.returncode != 0:
-            return {"erro": (r.stderr or r.stdout).strip()[:400]}
+            return {"erro": (r.stderr or r.stdout)
+                    .strip()[:CAUDA_DO_ERRO_DO_ANDAMENTO]}
         try:
             estado = json.loads(r.stdout)
         except json.JSONDecodeError:
-            return {"erro": "o andamento não devolveu JSON"}
+            return {"erro": ERRO_ANDAMENTO_SEM_JSON}
         with self.trava:
             proc = self.rodando.get(trabalho)
-        estado["processo"] = ("rodando" if proc and proc.poll() is None
-                              else "encerrado" if proc else "desconhecido")
-        gravado = estado_gravado(self.dir, trabalho)
+        estado["processo"] = (PROCESSO_RODANDO if proc and proc.poll() is None
+                              else PROCESSO_ENCERRADO if proc
+                              else PROCESSO_DESCONHECIDO)
+        gravado = estado_que_o_motor_gravou(self.dir, trabalho)
         estado["gravado"] = gravado
         estado["vivacidade"] = vivacidade(proc, self.inicio.get(trabalho),
                                           gravado)
-        corrigir_proxima_acao(estado)
-        log = self.dir / f"{trabalho}.log"
-        estado["log"] = (log.read_text(encoding="utf-8", errors="replace")[-4000:]
+        calar_o_convite_a_disparar_o_que_ja_esta_no_ar(estado)
+        log = self.dir / f"{trabalho}{SUFIXO_DO_LOG}"
+        estado["log"] = (log.read_text(encoding="utf-8",
+                                       errors="replace")[-CAUDA_DO_LOG_NA_TELA:]
                          if log.exists() else "")
         return estado
 
-    def backlog(self) -> dict:
-        """As issues abertas do repositório configurado, com cache.
+    def _issues_abertas_do_repositorio(self, repositorio: str) -> dict:
+        try:
+            r = subprocess.run(
+                ["gh", "issue", "list", "--repo", repositorio, "--state",
+                 "open", "--limit", str(LIMITE_DE_ISSUES_NO_QUADRO),
+                 "--json", "number,title"],
+                capture_output=True, text=True, timeout=TIMEOUT_DO_GH_S)
+            if r.returncode != 0:
+                return {"issues": [], "recado": RECADO_GH_MUDO}
+            return {"issues": json.loads(r.stdout), "repositorio": repositorio}
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return {"issues": [], "recado": RECADO_SEM_REDE_OU_GH}
 
-        A mesa redesenha a cada 2,5s; a rede, não. O cache é o que faz a
-        regra 7 (rede com cortesia) valer aqui — sem ele, o polling da tela
-        viraria rajada no GitHub. Falha de rede não derruba a mesa: devolve
-        'sem dado' e a página segue servindo.
-        """
-        agora = time.time()
+    def backlog_das_issues_com_cache(self) -> dict:
+        momento = time.time()
         with self.trava:
-            if self._quadro and agora - self._quadro_em < INTERVALO_DO_QUADRO_S:
+            fresco = momento - self._quadro_em
+            if self._quadro and fresco < INTERVALO_DO_QUADRO_S_POR_CORTESIA_DE_REDE:
                 return self._quadro
-        cfg = configuracao_do_executor(self.cwd) or {}
-        repositorio = ((cfg.get("issues") or {}).get("repositorio") or "")
-        if not repositorio or "${" in repositorio:
-            achado = {"issues": [], "recado": "sem repositório de issues "
-                                              "configurado"}
+        configuracao = configuracao_do_executor_sem_validar(self.cwd) or {}
+        repositorio = (configuracao.get("issues") or {}).get("repositorio") or ""
+        if not repositorio or MARCA_DE_MOLDE_NAO_PREENCHIDO in repositorio:
+            achado = {"issues": [], "recado": RECADO_SEM_REPOSITORIO_DE_ISSUES}
         else:
-            try:
-                r = subprocess.run(
-                    ["gh", "issue", "list", "--repo", repositorio, "--state",
-                     "open", "--limit", "30", "--json", "number,title"],
-                    capture_output=True, text=True, timeout=30)
-                achado = ({"issues": json.loads(r.stdout), "repositorio":
-                           repositorio} if r.returncode == 0 else
-                          {"issues": [], "recado": "sem dado (o gh não "
-                                                   "respondeu)"})
-            except (OSError, subprocess.SubprocessError, ValueError):
-                achado = {"issues": [], "recado": "sem dado (rede ou gh "
-                                                  "indisponível)"}
+            achado = self._issues_abertas_do_repositorio(repositorio)
         with self.trava:
-            self._quadro, self._quadro_em = achado, agora
+            self._quadro, self._quadro_em = achado, momento
         return achado
 
-    def trabalhos(self) -> list:
-        """Trabalho do executor de roteiros e evidência avulsa não são a mesma coisa.
+    def _resumo_do_trabalho(self, nome: str) -> dict:
+        gravado = estado_que_o_motor_gravou(self.dir, nome) or {}
+        tem_roteiro_ao_lado = (self.dir / f"{nome}{SUFIXO_DO_ROTEIRO}").exists()
+        return {"nome": nome,
+                "execucao": bool(gravado) or tem_roteiro_ao_lado,
+                "situacao": gravado.get("situacao"),
+                "issue": gravado.get("issue")}
 
-        O diretório de evidências também recebe trilha de gancho — o professor
-        de credencial escreve lá, uma evidência por decisão, todos com a MESMA
-        ordem. Lidos como execução, viram 'ciclo 8 de teto 1, parada': alarme
-        falso sobre coisa que funcionou. A marca de execução é ter roteiro
-        ao lado; sem ele, o painel de controle mostra como avulso e não
-        opina sobre estado.
-        """
+    def trabalhos(self) -> list:
         if not self.dir.is_dir():
             return []
-        saida = []
-        for p in sorted((d for d in self.dir.iterdir() if d.is_dir()),
-                        key=lambda d: d.name, reverse=True):
-            gravado = estado_gravado(self.dir, p.name) or {}
-            saida.append({"nome": p.name,
-                          # Roteiro ao lado OU estado gravado: quem disparou
-                          # pela linha de comando não deixa o primeiro, e a
-                          # mesa o tratava como trilha avulsa — recusando-se a
-                          # opinar sobre uma execução de verdade.
-                          "execucao": bool(gravado) or
-                          (self.dir / f"{p.name}.roteiro.json").exists(),
-                          # A situação sai do disco, não de um subprocesso por
-                          # trabalho: a lista é redesenhada a cada ciclo, e
-                          # pagar `andamento` por item derrubaria a mesa.
-                          "situacao": gravado.get("situacao"),
-                          "issue": gravado.get("issue")})
-        return saida
+        pastas = sorted((d for d in self.dir.iterdir() if d.is_dir()),
+                        key=lambda d: d.name, reverse=True)
+        return [self._resumo_do_trabalho(pasta.name) for pasta in pastas]
 
 
 PAGINA = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
@@ -925,12 +896,54 @@ setInterval(()=>{if(!parado||Math.random()<.25)ciclo()},2500);
 </script></body></html>"""
 
 
-def fazer_handler(motor: Motor):
+def corpo_com_coordenadas_modo_e_quadro(ponte: PonteParaOEncadeador) -> dict:
+    configuracao = configuracao_do_executor_sem_validar(ponte.cwd) or {}
+    return {"versao": versao_da_camada_declarada_no_topo_do_montar(),
+            "repositorio": str(RAIZ),
+            "alvo": str(ponte.cwd),
+            "evidencias": str(ponte.dir),
+            "trabalhos": ponte.trabalhos(),
+            "roteiros": ponte.catalogo(),
+            "modo": configuracao.get("modo"),
+            "quadro": ponte.backlog_das_issues_com_cache()}
+
+
+def prefixo_do_nome_do_roteiro(escolhido: str) -> str:
+    limpo = re.sub(r"[^a-z0-9]+", "-", Path(escolhido).stem.lower()).strip("-")
+    return limpo or PREFIXO_DA_EXECUCAO_SEM_NOME
+
+
+def roteiro_e_prefixo_do_corpo(ponte: PonteParaOEncadeador,
+                               corpo: dict) -> tuple:
+    escolhido = (corpo.get("roteiro") or "").strip()
+    if escolhido:
+        roteiro, erro = ponte.ler_roteiro_do_catalogo(escolhido)
+        if erro:
+            return None, None, erro
+        return roteiro, prefixo_do_nome_do_roteiro(escolhido), None
+    prompt = (corpo.get("prompt") or "").strip()
+    if not prompt:
+        return None, None, ERRO_SEM_PEDIDO
+    if prompt.lstrip().startswith("{") and '"etapas"' in prompt:
+        return None, None, ERRO_ROTEIRO_COLADO_NO_LUGAR_DO_PEDIDO
+    teto = inteiro_na_faixa_ou_padrao(corpo.get("teto"), TETO_MINIMO,
+                                      TETO_MAXIMO, TETO_PADRAO_DE_CICLOS)
+    turnos = inteiro_na_faixa_ou_padrao(
+        corpo.get("turnos"), TURNOS_MINIMO, TURNOS_MAXIMO,
+        TURNOS_PADRAO_ACIMA_DO_TETO_DO_MOTOR)
+    issue = corpo.get("issue")
+    issue = issue if isinstance(issue, int) and issue > 0 else None
+    prefixo = f"issue-{issue}" if issue else PREFIXO_DO_PEDIDO_DO_PAINEL
+    return roteiro_do_pedido_com_verificacao(prompt, teto, turnos, issue), \
+        prefixo, None
+
+
+def fazer_handler(ponte: PonteParaOEncadeador):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
-        def log_message(self, *a):  # silêncio: o log do trabalho é o que importa
-            pass
+        def log_message(self, *_):
+            return SILENCIO_DO_SERVIDOR
 
         def _envia(self, corpo: bytes, tipo: str, codigo: int = 200):
             self.send_response(codigo)
@@ -948,99 +961,54 @@ def fazer_handler(motor: Motor):
             if rota.path == "/":
                 return self._envia(PAGINA.encode(), "text/html; charset=utf-8")
             if rota.path == "/trabalhos":
-                cfg = configuracao_do_executor(motor.cwd) or {}
-                return self._json({"trabalhos": motor.trabalhos(),
-                                   "roteiros": motor.catalogo(),
-                                   "versao": versao_da_camada(),
-                                   "repositorio": str(RAIZ),
-                                   "alvo": str(motor.cwd),
-                                   "evidencias": str(motor.dir),
-                                   # `so-issues` desliga o disparo na mesa,
-                                   # como o motor já o desliga por código.
-                                   "modo": cfg.get("modo"),
-                                   "quadro": motor.backlog()})
+                return self._json(corpo_com_coordenadas_modo_e_quadro(ponte))
             if rota.path == "/estado":
-                # Uma chamada em vez de duas. O ciclo antigo disparava um
-                # subprocesso para /trabalhos e outro para /andamento a cada
-                # 2,5s — o dobro do custo para desenhar uma tela só, e com as
-                # duas metades podendo discordar entre si.
-                q = urllib.parse.parse_qs(rota.query)
-                nome = (q.get("trabalho") or [""])[0]
-                cfg = configuracao_do_executor(motor.cwd) or {}
-                corpo = {"versao": versao_da_camada(), "repositorio": str(RAIZ),
-                         "alvo": str(motor.cwd), "evidencias": str(motor.dir),
-                         "trabalhos": motor.trabalhos(),
-                         "roteiros": motor.catalogo(),
-                         # O backlog e o modo vêm por AQUI, e não só pelo
-                         # /trabalhos: é esta a rota que a página consulta a
-                         # cada ciclo — na outra, ninguém os leria.
-                         "modo": cfg.get("modo"),
-                         "quadro": motor.backlog()}
-                if nome and not validar_trabalho(nome):
+                consulta = urllib.parse.parse_qs(rota.query)
+                nome = (consulta.get("trabalho") or [""])[0]
+                corpo = corpo_com_coordenadas_modo_e_quadro(ponte)
+                if nome and not recusa_do_nome_de_trabalho(nome):
                     try:
-                        corpo["andamento"] = motor.andamento(
-                            nome, motor.dir / f"{nome}.roteiro.json")
+                        corpo["andamento"] = ponte.andamento(
+                            nome, ponte.dir / f"{nome}{SUFIXO_DO_ROTEIRO}")
                     except (OSError, subprocess.SubprocessError) as e:
-                        corpo["andamento"] = {"erro": f"o andamento falhou: {e}"}
+                        corpo["andamento"] = {
+                            "erro": ERRO_ANDAMENTO_FALHOU.format(e)}
                 return self._json(corpo)
             if rota.path == "/andamento":
-                q = urllib.parse.parse_qs(rota.query)
-                nome = (q.get("trabalho") or [""])[0]
-                if erro := validar_trabalho(nome):
+                consulta = urllib.parse.parse_qs(rota.query)
+                nome = (consulta.get("trabalho") or [""])[0]
+                if erro := recusa_do_nome_de_trabalho(nome):
                     return self._json({"erro": erro}, 400)
-                m = motor.dir / f"{nome}.roteiro.json"
+                roteiro = ponte.dir / f"{nome}{SUFIXO_DO_ROTEIRO}"
                 try:
-                    return self._json(motor.andamento(nome, m))
+                    return self._json(ponte.andamento(nome, roteiro))
                 except (OSError, subprocess.SubprocessError) as e:
-                    return self._json({"erro": f"o andamento falhou: {e}"}, 500)
-            return self._json({"erro": "rota desconhecida"}, 404)
+                    return self._json(
+                        {"erro": ERRO_ANDAMENTO_FALHOU.format(e)}, 500)
+            return self._json({"erro": ERRO_ROTA_DESCONHECIDA}, 404)
 
         def do_POST(self):
             if urllib.parse.urlparse(self.path).path != "/disparar":
-                return self._json({"erro": "rota desconhecida"}, 404)
+                return self._json({"erro": ERRO_ROTA_DESCONHECIDA}, 404)
             try:
-                n = int(self.headers.get("Content-Length") or 0)
-                corpo = json.loads(self.rfile.read(n) or b"{}")
+                tamanho = int(self.headers.get("Content-Length") or 0)
+                corpo = json.loads(self.rfile.read(tamanho) or b"{}")
             except (ValueError, json.JSONDecodeError):
-                return self._json({"erro": "corpo inválido"}, 400)
-            if ocupado := motor.ocupado():
-                return self._json({"erro":
-                    f"já existe execução rodando neste alvo: {ocupado}. "
-                    "Uma por vez — duas sessões na mesma árvore se atropelam. "
-                    "Espere terminar, ou suba outro painel de controle "
-                    "apontando para outro repositório."}, 409)
-            escolhido = (corpo.get("roteiro") or "").strip()
-            if escolhido:
-                roteiro, erro = motor.ler_roteiro(escolhido)
-                if erro:
-                    return self._json({"erro": erro}, 400)
-                prefixo = re.sub(r"[^a-z0-9]+", "-",
-                                 Path(escolhido).stem.lower()).strip("-") or "execucao"
-            else:
-                prompt = (corpo.get("prompt") or "").strip()
-                if not prompt:
-                    return self._json(
-                        {"erro": "escreva um pedido ou escolha um roteiro"}, 400)
-                if prompt.lstrip().startswith("{") and '"etapas"' in prompt:
-                    return self._json({"erro":
-                        "isso é um roteiro, não um pedido. Salve-o como .json "
-                        "na pasta de roteiros e escolha-o na lista — colado "
-                        "aqui, o JSON inteiro viraria o texto de UMA sessão."}, 400)
-                teto = corpo.get("teto")
-                teto = teto if isinstance(teto, int) and 1 <= teto <= 9 else 3
-                turnos = corpo.get("turnos")
-                turnos = turnos if isinstance(turnos, int) and 4 <= turnos <= 120 else 24
-                issue = corpo.get("issue")
-                issue = issue if isinstance(issue, int) and issue > 0 else None
-                roteiro = roteiro_de_um_prompt(prompt, teto, turnos, issue)
-                prefixo = f"issue-{issue}" if issue else "painel"
+                return self._json({"erro": ERRO_CORPO_INVALIDO}, 400)
+            if ocupado := ponte.ocupado():
+                return self._json(
+                    {"erro": ERRO_ALVO_OCUPADO.format(ocupado)}, 409)
+            roteiro, prefixo, erro = roteiro_e_prefixo_do_corpo(ponte, corpo)
+            if erro:
+                return self._json({"erro": erro}, 400)
             trabalho = nome_de_trabalho(prefixo)
-            if erro := validar_trabalho(trabalho):
+            if erro := recusa_do_nome_de_trabalho(trabalho):
                 return self._json({"erro": erro}, 400)
             try:
-                return self._json(motor.disparar(roteiro, trabalho))
+                return self._json(ponte.disparar(roteiro, trabalho))
             except (OSError, subprocess.SubprocessError) as e:
-                return self._json({"erro": f"não consegui disparar: {e}"}, 500)
+                return self._json(
+                    {"erro": ERRO_DISPARO_FALHOU.format(e)}, 500)
 
     return Handler
 
@@ -1054,7 +1022,6 @@ def testar() -> int:
         if not ok:
             falhas.append(nome)
 
-    # --- a mesa deixa de mentir sobre espera, e conta a issue -------------
     import tempfile as _tmp
     with _tmp.TemporaryDirectory(prefix="painel-h6-") as tmp:
         base = Path(tmp)
@@ -1073,60 +1040,63 @@ def testar() -> int:
 
         class ProcVivo:
             pid = 1
-            def poll(self): return None
+
+            def poll(self):
+                return None
 
         v = vivacidade(ProcVivo(), time.time() - 60,
-                       estado_gravado(base / "evidencias", "t-dorme"))
+                       estado_que_o_motor_gravou(base / "evidencias", "t-dorme"))
         caso("motor dormindo NÃO é 'trabalhando' na mesa",
              v["situacao"] == "dormindo" and v["ate"] == "12:36")
         v = vivacidade(ProcVivo(), time.time() - 60,
-                       estado_gravado(base / "evidencias", "t-espera"))
+                       estado_que_o_motor_gravou(base / "evidencias", "t-espera"))
         caso("aguardando resposta aparece com o número da issue",
              v["situacao"] == "aguardando-resposta" and v["issue"] == 39)
         v = vivacidade(ProcVivo(), time.time() - 60, None)
         caso("sem estado gravado, a mesa segue como era",
              v["situacao"] == "trabalhando")
         caso("estado ilegível não derruba a leitura",
-             estado_gravado(base / "evidencias", "nao-existe") is None)
+             estado_que_o_motor_gravou(base / "evidencias", "nao-existe") is None)
 
-        motor = Motor(base, base / "evidencias", [])
-        situacoes = {x["nome"]: x["situacao"] for x in motor.trabalhos()}
+        ponte = PonteParaOEncadeador(base, base / "evidencias", [])
+        situacoes = {x["nome"]: x["situacao"] for x in ponte.trabalhos()}
         caso("a lista de trabalhos carrega a situação de cada um",
              situacoes == {"t-dorme": "dormindo",
                            "t-espera": "aguardando-resposta",
                            "t-pronta": "completa"})
         caso("e ela sai do disco, sem um subprocesso por trabalho",
-             motor.trabalhos() == motor.trabalhos())
+             ponte.trabalhos() == ponte.trabalhos())
 
-        # a correção da próxima ação não cala quem espera
-        e = corrigir_proxima_acao({"processo": "rodando", "estado": "em-curso",
-                                   "proxima_acao": "responda na issue",
-                                   "vivacidade": {"situacao": "aguardando-resposta"}})
+        e = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
+            "processo": "rodando", "estado": "em-curso",
+            "proxima_acao": "responda na issue",
+            "vivacidade": {"situacao": "aguardando-resposta"}})
         caso("quem espera não recebe 'rodando agora — espere'",
              e["proxima_acao"] == "responda na issue")
-        e = corrigir_proxima_acao({"processo": "rodando", "estado": "em-curso",
-                                   "proxima_acao": "execute", "vivacidade": {}})
+        e = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
+            "processo": "rodando", "estado": "em-curso",
+            "proxima_acao": "execute", "vivacidade": {}})
         caso("mas o convite a disparar de novo continua calado",
              "ão dispare de novo" in e["proxima_acao"])
 
-        # o backlog: sem configuração, recado em vez de rajada de rede
         caso("sem repositório configurado o quadro devolve recado, não erro",
-             motor.backlog()["issues"] == []
-             and "sem repositório" in motor.backlog()["recado"])
+             ponte.backlog_das_issues_com_cache()["issues"] == []
+             and "sem repositório" in ponte.backlog_das_issues_com_cache()["recado"])
         (base / "nucleo").mkdir()
         (base / "nucleo" / "executor.json").write_text(json.dumps({
             "modo": "so-issues",
             "issues": {"repositorio": "${DONO}/${REPO}"}}), encoding="utf-8")
-        motor._quadro = None
+        ponte._quadro = None
         caso("repositório ainda no molde também não vira chamada de rede",
-             "sem repositório" in motor.backlog()["recado"])
+             "sem repositório" in ponte.backlog_das_issues_com_cache()["recado"])
         caso("o modo do executor é lido para a mesa esconder o disparo",
-             (configuracao_do_executor(base) or {}).get("modo") == "so-issues")
+             (configuracao_do_executor_sem_validar(base) or {}).get("modo")
+             == "so-issues")
 
     caso("o vínculo com a issue viaja no roteiro do pedido",
-         roteiro_de_um_prompt("x", 3, 24, 39)["issue"] == 39)
+         roteiro_do_pedido_com_verificacao("x", 3, 24, 39)["issue"] == 39)
     caso("e sem issue o roteiro não inventa o campo",
-         "issue" not in roteiro_de_um_prompt("x"))
+         "issue" not in roteiro_do_pedido_com_verificacao("x"))
     caso("o botão de disparar fecha com execução no ar",
          "b.disabled=ocupada.length>0" in PAGINA
          and "'rodando','dormindo','aguardando-resposta'" in PAGINA)
@@ -1139,19 +1109,22 @@ def testar() -> int:
          '.passo.segue' in PAGINA and '.passo.agora' in PAGINA)
 
     caso("nome de trabalho passa na régua da evidência",
-         validar_trabalho(nome_de_trabalho()) is None)
-    caso("nome com barra é recusado", validar_trabalho("a/b") is not None)
-    caso("nome com maiúscula é recusado", validar_trabalho("Painel") is not None)
-    caso("nome vazio é recusado", validar_trabalho("") is not None)
-    caso("nome de 65 é recusado", validar_trabalho("a" * 65) is not None)
+         recusa_do_nome_de_trabalho(nome_de_trabalho()) is None)
+    caso("nome com barra é recusado",
+         recusa_do_nome_de_trabalho("a/b") is not None)
+    caso("nome com maiúscula é recusado",
+         recusa_do_nome_de_trabalho("Painel") is not None)
+    caso("nome vazio é recusado", recusa_do_nome_de_trabalho("") is not None)
+    caso("nome de 65 é recusado",
+         recusa_do_nome_de_trabalho("a" * 65) is not None)
 
-    m = roteiro_de_um_prompt("olhe o repositório")
+    m = roteiro_do_pedido_com_verificacao("olhe o repositório")
     caso("prompt livre vira etapa de sessão", m["etapas"][0]["tipo"] == "sessao")
     caso("o prompt viaja inteiro", m["etapas"][0]["prompt"] == "olhe o repositório")
     caso("a verificação entra sempre", m["etapas"][1]["tipo"] == "verificacao")
     caso("a verificação depende da sessão",
          m["etapas"][1]["depende"] == ["pedido"])
-    caso("o teto viaja", roteiro_de_um_prompt("x", 7)["teto"] == 7)
+    caso("o teto viaja", roteiro_do_pedido_com_verificacao("x", 7)["teto"] == 7)
 
     caso("o encadeador está no lugar esperado", ENCADEADOR.exists())
     caso("a página cita o disparo", 'id="b"' in PAGINA and "/disparar" in PAGINA)
@@ -1163,11 +1136,9 @@ def testar() -> int:
     caso("porta ocupada vira recado, não traceback",
          "EADDRINUSE" in fonte and "PAREI — a porta" in fonte)
     caso("porta livre não tem painel de controle atendendo",
-         casa_do_painel_na_porta(1) is None)
-    # Segundo F5 no mesmo repositório: sair 0 é o que apaga o popup do
-    # depurador,
-    # e é a verdade — o painel de controle que se queria já está no ar.
-    caso("segundo F5 do MESMO repositório sai 0",
+         repositorio_que_responde_na_porta(1) is None)
+    caso("segundo F5 do MESMO repositório sai 0 — o que se queria já está no "
+         "ar, e sair 0 apaga o popup do depurador",
          decidir_porta_ocupada(4000, "/casa", "/casa")[0] == 0)
     caso("e o recado dá o endereço em vez de reclamar",
          "http://127.0.0.1:4000" in decidir_porta_ocupada(4000, "/casa", "/casa")[1])
@@ -1190,15 +1161,13 @@ def testar() -> int:
     caso("foco de teclado é visível", ":focus-visible" in PAGINA)
     caso("tem tema claro e escuro", "prefers-color-scheme:dark" in PAGINA)
     caso("a versão sai do montar.py, e é a mesma que o --versao imprime",
-         versao_da_camada() == subprocess.run(
+         versao_da_camada_declarada_no_topo_do_montar() == subprocess.run(
              [sys.executable, str(RAIZ / "montar.py"), "--versao"],
              capture_output=True, text=True, timeout=60
          ).stdout.split("camada")[-1].strip().split()[0])
     caso("a página tem onde mostrar a versão", 'id="versao"' in PAGINA)
-    # Pergunta no meio da execução trava tudo até alguém responder. Se o
-    # aviso morar só na página, quem trocou de aba não fica sabendo — o
-    # título é o que atravessa a aba em segundo plano.
-    caso("o título da aba grita a pergunta",
+    caso("o título da aba grita a pergunta, para quem trocou de aba ficar "
+         "sabendo que a execução travou esperando resposta",
          "aguardando-aprovacao':'❓ PERGUNTA" in PAGINA)
     caso("o título distingue os quatro estados",
          all(e in PAGINA for e in ("parada", "completa", "em-curso")))
@@ -1206,11 +1175,13 @@ def testar() -> int:
     caso("a pergunta tem caixa própria, separada da próxima ação",
          "recado perg" in PAGINA and ".recado.perg{" in PAGINA)
 
-    # Vivacidade: o painel de controle precisa distinguir "esperando a API"
-    # de "morto", e CPU não serve — medido, 443s de relógio para 5s de CPU.
     class ProcFalso:
-        def __init__(self, vivo, pid=1): self._v, self.pid, self.returncode = vivo, pid, 0
-        def poll(self): return None if self._v else 0
+        def __init__(self, esta_vivo, pid=1):
+            self._esta_vivo, self.pid, self.returncode = esta_vivo, pid, 0
+
+        def poll(self):
+            return None if self._esta_vivo else 0
+
     caso("sem processo, a situação é desconhecida — não 'morto'",
          vivacidade(None, None)["situacao"] == "desconhecida")
     caso("processo encerrado é dito encerrado",
@@ -1219,13 +1190,13 @@ def testar() -> int:
     caso("processo vivo é dito trabalhando", vv["situacao"] == "trabalhando")
     caso("mostra quanto tempo já corre", vv["decorrido_s"] >= 120)
     caso("e quanto falta para o teto que mata sozinho",
-         vv["resta_s"] == TETO_SESSAO_S - vv["decorrido_s"])
+         vv["resta_s"] == TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR - vv["decorrido_s"])
     caso("o teto do painel de controle espelha o do encadeador",
-         f"TEMPO_SESSAO = {TETO_SESSAO_S}" in
+         f"TEMPO_SESSAO = {TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR}" in
          (ENCADEADOR.read_text(encoding="utf-8") if ENCADEADOR.exists() else
-          f"TEMPO_SESSAO = {TETO_SESSAO_S}"))
+          f"TEMPO_SESSAO = {TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR}"))
     caso("este processo enxerga os próprios descendentes ou diz que não mede",
-         isinstance(descendentes(os.getpid()), list))
+         isinstance(descendentes_lendo_proc(os.getpid()), list))
     caso("a página mostra a vivacidade", "vivo(d.vivacidade)" in PAGINA)
 
     import tempfile
@@ -1236,205 +1207,208 @@ def testar() -> int:
         (base / "evidencias" / "vinda-de-execucao.roteiro.json").write_text("{}")
         (base / "roteiros").mkdir()
         (base / "roteiros" / "boa.json").write_text(
-            json.dumps(roteiro_de_um_prompt("oi")), encoding="utf-8")
+            json.dumps(roteiro_do_pedido_com_verificacao("oi")), encoding="utf-8")
         (base / "roteiros" / "quebrada.json").write_text("{isso não é json",
-                                                           encoding="utf-8")
+                                                         encoding="utf-8")
         (base / "roteiros" / "sem-etapas.json").write_text('{"teto":3}',
-                                                             encoding="utf-8")
+                                                           encoding="utf-8")
         (base / "oficiais").mkdir()
         (base / "oficiais" / "boa.json").write_text(
-            json.dumps(roteiro_de_um_prompt("sou a oficial")), encoding="utf-8")
+            json.dumps(roteiro_do_pedido_com_verificacao("sou a oficial")),
+            encoding="utf-8")
         (base / "oficiais" / "so-daqui.json").write_text(
-            json.dumps(roteiro_de_um_prompt("x")), encoding="utf-8")
-        m = Motor(base, base / "evidencias",
-                  [base / "oficiais", base / "roteiros"])
+            json.dumps(roteiro_do_pedido_com_verificacao("x")), encoding="utf-8")
+        ponte = PonteParaOEncadeador(base, base / "evidencias",
+                                     [base / "oficiais", base / "roteiros"])
 
-        marcas = {t["nome"]: t["execucao"] for t in m.trabalhos()}
+        marcas = {t["nome"]: t["execucao"] for t in ponte.trabalhos()}
         caso("trabalho com roteiro é execução", marcas["vinda-de-execucao"])
-        caso("trilha de gancho NÃO é execução", marcas["trilha-de-gancho"] is False)
+        caso("trilha de gancho NÃO é execução",
+             marcas["trilha-de-gancho"] is False)
 
-        # Só roteiro de verdade entra: o quebrado e o sem-etapas ficam de
-        # fora, e é por isso que a lista tem dois nomes e não quatro.
-        caso("o catálogo junta as duas pastas, e só o que é roteiro",
-             m.catalogo() == sorted(["boa.json", "so-daqui.json"]))
+        caso("o catálogo junta as duas pastas, e só o que é roteiro — a "
+             "quebrada e a sem-etapas ficam de fora",
+             ponte.catalogo() == sorted(["boa.json", "so-daqui.json"]))
         caso("nome repetido fica com a pasta oficial",
-             m.ler_roteiro("boa.json")[0]["etapas"][0]["prompt"]
+             ponte.ler_roteiro_do_catalogo("boa.json")[0]["etapas"][0]["prompt"]
              == "sou a oficial")
         caso("pasta de roteiros que não existe não derruba",
-             Motor(base, base / "evidencias", [base / "nao-existe"]).catalogo() == [])
-        caso("nada rodando, nada ocupado", m.ocupado() is None)
-        caso("roteiro bom é lido", m.ler_roteiro("boa.json")[0] is not None)
+             PonteParaOEncadeador(base, base / "evidencias",
+                                  [base / "nao-existe"]).catalogo() == [])
+        caso("nada rodando, nada ocupado", ponte.ocupado() is None)
+        caso("roteiro bom é lido",
+             ponte.ler_roteiro_do_catalogo("boa.json")[0] is not None)
         caso("roteiro ilegível vira erro, não exceção",
-             m.ler_roteiro("quebrada.json")[1] is not None)
+             ponte.ler_roteiro_do_catalogo("quebrada.json")[1] is not None)
         caso("roteiro sem etapas é recusado",
-             m.ler_roteiro("sem-etapas.json")[1] is not None)
+             ponte.ler_roteiro_do_catalogo("sem-etapas.json")[1] is not None)
         caso("nome fora do catálogo é recusado",
-             m.ler_roteiro("../../etc/passwd")[1] is not None)
+             ponte.ler_roteiro_do_catalogo("../../etc/passwd")[1] is not None)
         caso("caminho absoluto é recusado",
-             m.ler_roteiro("/etc/passwd")[1] is not None)
+             ponte.ler_roteiro_do_catalogo("/etc/passwd")[1] is not None)
 
-        # .json que não é roteiro aparecia no seletor como se fosse
-        # execução — a proposta de regra que a síntese escreve, por exemplo.
         (base / "roteiros" / "nao-e-roteiro.json").write_text(
             '{"regras": [{"id": 1}]}', encoding="utf-8")
-        caso("json sem etapas fica fora do catálogo",
-             "nao-e-roteiro.json" not in m.catalogo())
+        caso("json sem etapas fica fora do catálogo — a proposta de regra que "
+             "a síntese escreve não é execução",
+             "nao-e-roteiro.json" not in ponte.catalogo())
         caso("json quebrado também fica fora",
-             "quebrada.json" not in m.catalogo())
+             "quebrada.json" not in ponte.catalogo())
         caso("roteiro de verdade continua no catálogo",
-             "boa.json" in m.catalogo())
+             "boa.json" in ponte.catalogo())
 
-        # A trava tem de sobreviver a outro PROCESSO, não só a outra thread:
-        # dois painéis de controle do mesmo alvo é o caso que a trava de
-        # memória perde.
-        m._travar(os.getpid(), "trabalho-vivo")
-        caso("trava de dono vivo segura", m.ocupado() is not None)
-        caso("a trava diz de quem é", "pid" in (m.ocupado() or ""))
-        m._travar(2 ** 22, "trabalho-fantasma")  # PID que não existe
-        caso("trava de dono morto não segura ninguém", m.ocupado() is None)
-        m._arquivo_de_trava().write_text("isso não é json", encoding="utf-8")
-        caso("trava ilegível não trava o repositório", m.ocupado() is None)
-        m._arquivo_de_trava().unlink()
+        pid_que_nao_existe = 2 ** 22
+        ponte.gravar_trava(os.getpid(), "trabalho-vivo")
+        caso("trava de dono vivo segura, mesmo sendo de OUTRO processo",
+             ponte.ocupado() is not None)
+        caso("a trava diz de quem é", "pid" in (ponte.ocupado() or ""))
+        ponte.gravar_trava(pid_que_nao_existe, "trabalho-fantasma")
+        caso("trava de dono morto não segura ninguém", ponte.ocupado() is None)
+        ponte._arquivo_de_trava_deste_alvo().write_text("isso não é json",
+                                                        encoding="utf-8")
+        caso("trava ilegível não trava o repositório", ponte.ocupado() is None)
+        ponte._arquivo_de_trava_deste_alvo().unlink()
         caso("alvos diferentes, travas diferentes",
-             m._arquivo_de_trava()
-             != Motor(base / "outro", base / "evidencias", [])._arquivo_de_trava())
+             ponte._arquivo_de_trava_deste_alvo()
+             != PonteParaOEncadeador(base / "outro", base / "evidencias", [])
+             ._arquivo_de_trava_deste_alvo())
 
-    # O primeiro pedido disparado pelo painel de controle morreu no teto de
-    # 16 turnos do motor, sem ninguém poder mudá-lo pela tela.
     caso("o pedido do painel de controle declara os turnos, em vez de herdar "
-         "o padrão",
-         roteiro_de_um_prompt("x")["etapas"][0]["max-turnos"] == 24)
+         "o padrão do motor, que matava o pedido no teto",
+         roteiro_do_pedido_com_verificacao("x")["etapas"][0]["max-turnos"] == 24)
     caso("e quem dispara pode escolher",
-         roteiro_de_um_prompt("x", 3, 60)["etapas"][0]["max-turnos"] == 60)
+         roteiro_do_pedido_com_verificacao("x", 3, 60)["etapas"][0]["max-turnos"]
+         == 60)
     caso("turnos aparece na tela, não só ciclos",
          'id="turnos"' in PAGINA and "turnos:+$('turnos').value" in PAGINA)
 
-    # A tela dizia "nada rodou ainda — rode: ... executar" COM as quatro
-    # sessões no ar. Convite a disparar o que já está disparado.
-    rodando = corrigir_proxima_acao({
+    rodando = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
         "processo": "rodando", "estado": "em-curso",
         "proxima_acao": "nada rodou ainda — rode: python ... executar ..."})
     caso("processo vivo: a próxima ação para de mandar executar",
          "executar" not in rodando["proxima_acao"])
     caso("e diz que pasta vazia no começo é o esperado",
          "evidência quando termina" in rodando["proxima_acao"])
-    parado = corrigir_proxima_acao({
+    encerrado = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
         "processo": "encerrado", "estado": "em-curso",
         "proxima_acao": "nada rodou ainda — rode: ... executar ..."})
     caso("processo morto: o convite a executar FICA — ali ele é verdade",
-         "executar" in parado["proxima_acao"])
-    completa = corrigir_proxima_acao({
-        "processo": "rodando", "estado": "completa", "proxima_acao": "leia as evidências"})
+         "executar" in encerrado["proxima_acao"])
+    completa = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
+        "processo": "rodando", "estado": "completa",
+        "proxima_acao": "leia as evidências"})
     caso("execução completa não tem a mensagem trocada",
          completa["proxima_acao"] == "leia as evidências")
 
-    # O ensaio do encadeador prova que o roteiro gerado é aceito de verdade —
-    # sem isso o painel de controle só testaria a própria opinião sobre o
-    # formato.
     if ENCADEADOR.exists() and shutil.which("git"):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "m.json"
-            p.write_text(json.dumps(roteiro_de_um_prompt("oi")), encoding="utf-8")
+            p.write_text(json.dumps(roteiro_do_pedido_com_verificacao("oi")),
+                         encoding="utf-8")
             r = subprocess.run(
                 [sys.executable, str(ENCADEADOR), "ensaio", "--roteiro", str(p),
                  "--trabalho", "teste-painel", "--dir", tmp, "--cwd", str(RAIZ)],
                 capture_output=True, text=True, timeout=60)
-            caso("o encadeador aceita o roteiro que o painel de controle "
-                 "escreve",
+            caso("o encadeador aceita de verdade o roteiro que o painel de "
+                 "controle escreve",
                  r.returncode == 0)
             caso("o ensaio lista as duas etapas",
                  "pedido" in r.stdout and "verifica" in r.stdout)
 
     for f in falhas:
-        print(f"FALHOU: {f}")
-    print(f"{'FALHOU' if falhas else 'OK'}: {casos} casos"
-          + (f" — {len(falhas)} falharam" if falhas else ""))
+        print(RESULTADO_DO_CASO_FALHO.format(f))
+    print(RESUMO_DOS_CASOS.format(VEREDITO_FALHOU if falhas else VEREDITO_OK,
+                                  casos)
+          + (RESUMO_DAS_FALHAS.format(len(falhas)) if falhas else ""))
     return 1 if falhas else 0
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--cwd", help="worktree ou clone descartável onde a sessão roda")
-    ap.add_argument("--porta", type=int, default=4000)
-    ap.add_argument("--dir", default="tmp/evidencias")
-    ap.add_argument("--roteiros", default="execucoes,tmp",
-                    help="pastas de roteiro, por vírgula; a primeira vence "
-                         "o nome repetido")
+def ler_argumentos():
+    ap = argparse.ArgumentParser(description=DESCRICAO_DA_CLI)
+    ap.add_argument("--cwd", help=AJUDA_CWD)
+    ap.add_argument("--porta", type=int, default=PORTA_PADRAO)
+    ap.add_argument("--dir", default=DIR_EVIDENCIAS_PADRAO)
+    ap.add_argument("--roteiros", default=ROTEIROS_PADRAO, help=AJUDA_ROTEIROS)
     ap.add_argument("--forcar-arvore-suja", action="store_true",
-                    help="sobe mesmo com mudança não commitada no --cwd")
+                    help=AJUDA_FORCAR_ARVORE_SUJA)
     ap.add_argument("--testar", action="store_true")
-    a = ap.parse_args()
+    return ap.parse_args()
 
-    if a.testar:
-        return testar()
-    if not a.cwd:
-        print("erro de uso: --cwd é obrigatório (worktree ou clone descartável);\n"
-              "a sessão da execução pula permissões e não deve tocar a árvore "
-              "que importa.", file=sys.stderr)
-        return 2
-    cwd = Path(a.cwd).expanduser().resolve()
+
+def recusa_do_ambiente(cwd: Path, forcar_arvore_suja: bool) -> str | None:
     if not cwd.is_dir():
-        print(f"erro de uso: --cwd não é pasta: {cwd}", file=sys.stderr)
-        return 2
+        return ERRO_CWD_NAO_E_PASTA.format(cwd)
     if not ENCADEADOR.exists():
-        print("erro de ambiente: falta o encadeador — rode\n"
-              "  python montar.py --modulo encadeador", file=sys.stderr)
-        return 2
+        return ERRO_SEM_ENCADEADOR
     if not shutil.which("claude"):
-        print("erro de ambiente: o comando claude não está no PATH; a etapa de "
-              "sessão morreria.", file=sys.stderr)
-        return 2
-    if arvore_suja(cwd) and not a.forcar_arvore_suja:
-        print(f"PAREI — {cwd} tem mudança não commitada.\n"
-              "A sessão da execução roda com permissões puladas: numa árvore com "
-              "trabalho seu dentro, um erro dela custa caro.\n"
-              "Use um worktree descartável:\n"
-              f"  git worktree add /tmp/executor HEAD\n"
-              "Se você sabe o que está fazendo: --forcar-arvore-suja",
-              file=sys.stderr)
-        return 2
+        return ERRO_SEM_O_COMANDO_CLAUDE
+    if tem_mudanca_nao_commitada(cwd) and not forcar_arvore_suja:
+        return ERRO_ARVORE_SUJA.format(cwd)
+    return None
 
-    def sob_a_raiz(valor: str) -> Path:
-        p = Path(valor)
-        return p.resolve() if p.is_absolute() else (RAIZ / p).resolve()
 
-    dir_evidencias = sob_a_raiz(a.dir)
-    dirs_roteiros = [sob_a_raiz(p) for p in a.roteiros.split(",") if p.strip()]
-    motor = Motor(cwd, dir_evidencias, dirs_roteiros)
-    # Servidor de UMA conexão prende tudo: a página fala HTTP/1.1 e a aba
-    # aberta segura a conexão viva entre um polling e o próximo. Medido — com
-    # o navegador aberto, qualquer segundo cliente ficava esperando para
-    # sempre. Uma thread por conexão resolve, e o custo é nenhum para uma
-    # ferramenta de mesa.
+def caminho_sob_a_raiz(valor: str) -> Path:
+    caminho = Path(valor)
+    return (caminho.resolve() if caminho.is_absolute()
+            else (RAIZ / caminho).resolve())
+
+
+def servidor_de_uma_thread_por_conexao(porta: int, handler):
+    return ThreadingHTTPServer((ENDERECO_LOCAL, porta), handler)
+
+
+def recusar_porta(porta: int, erro: OSError) -> int:
+    if erro.errno == errno.EADDRINUSE:
+        codigo, recado = decidir_porta_ocupada(
+            porta, str(RAIZ), repositorio_que_responde_na_porta(porta))
+        print(recado, file=sys.stdout if codigo == CODIGO_NADA_A_FAZER
+              else sys.stderr)
+        return codigo
+    print(ERRO_PORTA_NAO_ABRIU.format(porta, erro), file=sys.stderr)
+    return CODIGO_ERRO_DE_USO
+
+
+def anunciar_a_subida(porta: int, cwd: Path, dir_evidencias: Path,
+                      dirs_roteiros: list, roteiros_achados: int) -> None:
+    print(ANUNCIO_NO_AR.format(
+        porta, versao_da_camada_declarada_no_topo_do_montar()))
+    print(ANUNCIO_REPOSITORIO.format(RAIZ))
+    print(ANUNCIO_SESSOES.format(cwd))
+    print(ANUNCIO_EVIDENCIAS.format(dir_evidencias))
+    print(ANUNCIO_ROTEIROS.format(", ".join(str(p) for p in dirs_roteiros),
+                                  roteiros_achados))
+    print(ANUNCIO_COMO_ENCERRAR)
+
+
+def main() -> int:
+    argumentos = ler_argumentos()
+    if argumentos.testar:
+        return testar()
+    if not argumentos.cwd:
+        print(ERRO_CWD_OBRIGATORIO, file=sys.stderr)
+        return CODIGO_ERRO_DE_USO
+    cwd = Path(argumentos.cwd).expanduser().resolve()
+    if recusa := recusa_do_ambiente(cwd, argumentos.forcar_arvore_suja):
+        print(recusa, file=sys.stderr)
+        return CODIGO_ERRO_DE_USO
+
+    dir_evidencias = caminho_sob_a_raiz(argumentos.dir)
+    dirs_roteiros = [caminho_sob_a_raiz(p)
+                     for p in argumentos.roteiros.split(",") if p.strip()]
+    ponte = PonteParaOEncadeador(cwd, dir_evidencias, dirs_roteiros)
     try:
-        servidor = ThreadingHTTPServer(("127.0.0.1", a.porta),
-                                       fazer_handler(motor))
+        servidor = servidor_de_uma_thread_por_conexao(argumentos.porta,
+                                                      fazer_handler(ponte))
     except OSError as e:
-        # Porta ocupada é o erro mais comum aqui, e o traceback cru não diz
-        # nada de útil: quem lê precisa saber QUEM ocupou e como sair disso.
-        if e.errno == errno.EADDRINUSE:
-            codigo, recado = decidir_porta_ocupada(
-                a.porta, str(RAIZ), casa_do_painel_na_porta(a.porta))
-            print(recado, file=sys.stdout if codigo == 0 else sys.stderr)
-            return codigo
-        print(f"erro de ambiente: não consegui abrir a porta {a.porta}: {e}",
-              file=sys.stderr)
-        return 2
+        return recusar_porta(argumentos.porta, e)
     servidor.daemon_threads = True
-    print(f"painel de controle em http://127.0.0.1:{a.porta} "
-          f"— camada {versao_da_camada()}")
-    print(f"  repositório (o painel de controle): {RAIZ}")
-    print(f"  sessões rodam em:                   {cwd}")
-    print(f"  evidências em:                         {dir_evidencias}")
-    print("  roteiros de:                      "
-          f"{', '.join(str(p) for p in dirs_roteiros)} "
-          f"({len(motor.catalogo())} encontrados)")
-    print("Ctrl+C encerra.")
+    anunciar_a_subida(argumentos.porta, cwd, dir_evidencias, dirs_roteiros,
+                      len(ponte.catalogo()))
     try:
         servidor.serve_forever()
     except KeyboardInterrupt:
-        print("\nencerrado.")
+        print(ANUNCIO_ENCERRADO)
     return 0
 
 

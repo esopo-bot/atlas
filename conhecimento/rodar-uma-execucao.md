@@ -67,11 +67,10 @@ Saída: `0` completa · `5` parou num `para` · `6` aguardando o dono ·
 python .agents/encadeador/encadeador.py andamento --trabalho meu-trabalho --dir tmp/evidencias
 ```
 
-Fotografa as evidências e devolve JSON (contrato completo no docstring do
-`encadeador.py`): por etapa — `nome`, `veredito`, `ciclo {i, teto}`,
-`faltas`, `proximo` —, mais `estado`, `paras` (o contador do teto) e
-`proxima_acao`. Com `--roteiro execucao.json`, `completa` vira prova:
-toda etapa ligada precisa ter evidência `segue`.
+Fotografa as evidências e devolve JSON: por etapa — `nome`, `veredito`,
+`ciclo {i, teto}`, `faltas`, `proximo` —, mais `estado`, `paras` (o
+contador do teto) e `proxima_acao`. Com `--roteiro execucao.json`,
+`completa` vira prova: toda etapa ligada precisa ter evidência `segue`.
 
 | `estado` | O que fazer |
 | --- | --- |
@@ -130,6 +129,6 @@ não vem depois das duas.
   — reordenar começa outra série.
 - Não empurra, não publica, não toca na automação do repositório.
 
-A lista completa dos limites está no docstring de
-`.agents/encadeador/encadeador.py`; o contrato da evidência, em
+Esta lista é a que existe: os limites não estão escritos em outro lugar.
+O contrato da evidência, esse sim, está em
 `.agents/evidencia/recibo.schema.json`.

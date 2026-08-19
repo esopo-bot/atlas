@@ -1,72 +1,3 @@
-#!/usr/bin/env python3
-"""verificar — casa o declarado de uma evidência com o executado e acusa os dois lados.
-
-DE ONDE VEM "O EXECUTADO" de uma etapa de sessão (a crítica da issue #22
-cobrou este nome, e ele fica aqui, às claras):
-
-1. da RE-EXECUÇÃO, aqui e agora, de cada par comando/saida do `provado` —
-   o verificar roda o comando de novo, no diretório de trabalho da etapa
-   (`--cwd`), acusa exit diferente de 0 e compara o stdout real com a saída
-   declarada (o contrato manda a etapa declarar prova re-executável,
-   idempotente e de saída estável — está no $comment do provado);
-2. do exit code e do structured_output da sessão, que o encadeador já
-   materializou por código na evidência (degrau 1) — etapa morta ou evidência
-   inválido nem chegam aqui: viraram `para` sintético antes;
-3. das EXIGÊNCIAS do roteiro (`--exigir`): o que a etapa DEVIA ter provado.
-
-Os dois lados da acusação:
-
-- **declarado sem executado** — comando do `provado` que, re-executado,
-  devolve outra saída, não roda ou estoura o tempo;
-- **executado sem declarado** — exigência do roteiro sem item
-  correspondente no `provado`. Sem trace de execução da sessão, este lado
-  só é acusável pelo que o roteiro exige — dito às claras, não em nota.
-
-O que ele FAZ: valida a evidência contra o contrato (reusa o validador do
-evidencia.py — regra 3, nada se reimplementa); re-executa o `provado` (tudo,
-ou `--amostra N`); verifica as exigências; aplica os cheques de conteúdo
-herdados do degrau 1 (`segue` sem prova nenhuma; `proximo` banal ou curto;
-`pergunta` mais de uma, ou pergunta antes da recomendação); pula evidência
-sintético (origem encadeador — skip simétrico: quem não executou não deve
-prova); e com `--ensaio` LISTA o que re-executaria sem executar nada.
-
-O que ele NÃO FAZ — e confessa (os refutadores mediram cada limite):
-- não protege contra comando destrutivo declarado no `provado` — ele
-  RE-EXECUTA o que está declarado; rode a verificação no mesmo isolamento
-  da etapa (worktree descartável);
-- não distingue prova de eco: `echo "42 passed"` re-executa perfeito para
-  sempre — o MÉRITO da prova é de quem verifica e de quem aprova;
-- não autentica evidência sintética: `origem=encadeador` lido do arquivo é
-  SUPOSIÇÃO de que só o encadeador escreve ali (a invariante de escritor
-  único do degrau 1; o materializar descarta origem/motivo vindos do
-  modelo) — forja gravada à mão no disco pula a verificação, e disco
-  adulterado está fora do modelo de ameaça desta camada;
-- re-executa os itens NA ORDEM: efeito colateral de um item pode fabricar
-  o seguinte — prova independente é responsabilidade da etapa (contrato);
-- não julga "suposto no mesmo volume" nem o mérito da recomendação; os
-  cheques de pergunta/proximo são HEURÍSTICA DE PONTUAÇÃO ("Sr." engana a
-  ordem; paráfrase de banalidade escapa) — barram o descuido, não o dolo;
-- não compara stderr — a saída declarada é o stdout; comando que sobe
-  serviço nunca bate (o filho segura o pipe até o tempo-limite):
-  declare a SONDA do serviço, não a subida;
-- re-executa no bash quando ele existe (o shell das sessões), senão no
-  /bin/sh; exit diferente de 0 acusa — a convenção honesta do grep/diff
-  (exit 1 = "não achei"/"é diferente") pede o ` || true` que o $comment
-  do contrato ensina;
-- não conserta nem escreve evidência (escrever é do encadeador, com evidencia.py).
-
-Uso:
-    verificar.py evidência <arquivo.json> [opções]
-    verificar.py trabalho <pasta-do-trabalho> [opções]
-    opções: --cwd D | --amostra N | --exigir TERMO (repetível)
-            --ensaio | --tempo-limite SEGUNDOS
-
-Saída: 0 = tudo bate; 4 = acusação (lista no stdout); 2 = erro de
-uso ou de ambiente.
-
-Rode os testes com:  python .agents/verificar/verificar.py --testar
-"""
-
 import argparse
 import hashlib
 import json
@@ -81,57 +12,105 @@ from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(AQUI.parent / "evidencia"))
-import evidencia as _evidencia  # noqa: E402 — o validador e o contrato moram lá
+import evidencia as _evidencia
 
 PROXIMO_BANAL = ("tente de novo", "tente novamente", "tenta de novo",
                  "tenta novamente", "tente outra vez", "tente denovo")
-PROXIMO_MINIMO = 20  # menos que isto não é instrução, é acenar com a mão
-
-# O que encerra uma frase de recomendação — só "." deixava "Recomendo A!"
-# virar acusação falsa (medido pelo refutador).
+PROXIMO_MINIMO = 20
 FIM_DE_FRASE = ".;:!…"
-RECOMENDACAO_MINIMA = 15  # "Dúvida:" antes do "?" não é recomendação (medido)
-
-# A re-execução roda no bash quando ele existe — o shell das sessões. Com o
-# /bin/sh puro, prova honesta com bashismo saía 127 e virava acusação falsa
-# (medido). Sem bash na máquina, cai no /bin/sh e a etapa declara POSIX.
+RECOMENDACAO_MINIMA = 15
 SHELL_DA_REEXECUCAO = shutil.which("bash")
-
-# O nome que o degrau 1 dá a evidência: NN-etapa-cN.json. O modo trabalho só
-# olha o que casa — roteiro.json ao lado não é evidência e não vira acusação.
 NOME_DE_EVIDENCIA = re.compile(r"[0-9]{2}-[a-z0-9-]+-c[0-9]+\.json\Z")
+ORIGEM_SINTETICA = "encadeador"
+ELISAO = "(...)"
+TEMPO_LIMITE_PADRAO = 60
+QUANTAS_ACUSACOES_DO_CONTRATO = 3
+
+GREP_COM_CAMINHO = re.compile(r"(?:/(?:usr/)?bin/|command\s+|git\s+)grep\b")
+GREP_NU = re.compile(r"(?<![\w/.-])grep\b")
+
+ROTULADA = "[{}] {}"
+ACUSA_FORA_DO_CONTRATO = "evidência fora do contrato: {}"
+ACUSA_SEGUE_SEM_PROVA = ("veredito segue com provado vazio — só é pronto o "
+                         "que um instrumento provou (regra 2)")
+ACUSA_TEMPO_ESGOTADO = ("não reexecutável em {}s: {!r} — declarado que não se "
+                        "mede aqui")
+ACUSA_NAO_REEXECUTAVEL = "não reexecutável: {!r} — {}"
+ACUSA_EXIT_DIFERENTE_DE_ZERO = ("comando re-executado falhou (exit {}): {!r} "
+                                "— prova declarada termina em 0")
+ACUSA_SAIDA_DIVERGE = "saída diverge em {!r}: {}"
+ACUSA_LINHA_AUSENTE = ("a linha declarada {!r} não aparece na saída "
+                       "({} contra {} caracteres)")
+ACUSA_ORDEM_DAS_LINHAS = ("as linhas declaradas aparecem, mas não seguidas e "
+                          "nesta ordem ({} contra {} caracteres) — use {!r} "
+                          "em linha própria para declarar o corte")
+ACUSA_PONTO_DA_DIVERGENCIA = ("diferem a partir do caractere {} — declarada "
+                              "{!r}, agora {!r} ({} contra {} caracteres)")
+ACUSA_EXIGENCIA_SEM_COMANDO = ("o roteiro exige {!r} e nenhum comando do "
+                               "provado o cita — executado (ou omitido) sem "
+                               "declaração")
+ACUSA_PROXIMO_BANAL = ("proximo começa em banalidade ({!r}) — a regra do "
+                       "contrato: nunca 'tente de novo'")
+ACUSA_PROXIMO_CURTO = ("proximo curto demais ({!r}) — não é instrução de "
+                       "retomada")
+ACUSA_PERGUNTA_SEM_PERGUNTA = ("campo pergunta sem pergunta nenhuma — a "
+                               "regra: uma, com recomendação")
+ACUSA_MAIS_DE_UMA_PERGUNTA = "mais de uma pergunta — a regra: uma por vez"
+ACUSA_RECOMENDACAO_DEPOIS = ("a pergunta vem antes da recomendação (ou a "
+                             "recomendação não tem corpo) — a regra: "
+                             "recomendação primeiro")
+ACUSA_NAO_E_ARQUIVO_COMUM = "evidência ilegível: não é arquivo comum"
+ACUSA_EVIDENCIA_ILEGIVEL = "evidência ilegível: {}"
+
+AVISO_DO_GREP = (" [aviso: o comando usa `grep` sem caminho — a sessão pode "
+                 "ter rodado um embrulhado, que respeita o .gitignore, e esta "
+                 "re-execução usou o do PATH. Declare /bin/grep ou git grep]")
+
+LINHA_DO_ENSAIO = "    ensaio: re-executaria {!r}"
+LINHA_IGNORADO = "    ignorado (não tem nome de evidência): {}"
+LINHA_ACUSA = "ACUSA {}"
+RESUMO_ACUSACOES = "\n{} acusações em {} evidências."
+RESUMO_TUDO_BATE = "tudo bate: {} evidências ({}), nenhuma acusação."
+MODO_ENSAIO = "ensaio — nada re-executado"
+MODO_REEXECUTADO = "re-executado"
+
+ERRO_CWD_INEXISTENTE = "erro de uso: --cwd {} não existe"
+ERRO_EXIGIR_POR_ETAPA = ("erro de uso: --exigir é por etapa — use o modo "
+                         "evidência, um arquivo por vez")
+ERRO_ALVO_INEXISTENTE = "erro de uso: {} não existe"
+ERRO_ALVO_NAO_E_PASTA = "erro de uso: {} não é uma pasta de trabalho"
+ERRO_PASTA_SEM_EVIDENCIA = "erro de uso: nenhuma evidência em {}"
+ERRO_DE_AMBIENTE = "erro de ambiente: {}"
+
+AJUDA_MODO_EVIDENCIA = "verifica uma evidência"
+AJUDA_MODO_TRABALHO = "verifica todos os *.json de uma pasta"
+AJUDA_CWD = "diretório de trabalho da etapa (onde re-executar)"
+AJUDA_AMOSTRA = "re-executa só N itens do provado; 0 = todos"
+AJUDA_EXIGIR = "termo que o provado precisa citar (do roteiro)"
+AJUDA_ENSAIO = "lista o que re-executaria, sem executar nada"
+AJUDA_IGUAL = ("exige saída idêntica; o padrão é o declarado aparecer na "
+               "saída como bloco de linhas")
+
+TESTE_BATE_ACUSOU = "BATE [{}]: acusou — {}"
+TESTE_ACUSA_DEIXOU_PASSAR = "ACUSA [{}]: deixou passar"
+TESTE_ACUSA_MOTIVO_ERRADO = "ACUSA [{}]: acusou pelo motivo errado — {}"
+TESTE_COMPORTAMENTO = "COMPORTAMENTO [{}]"
+TESTE_FALHA = "FALHOU: {}"
+TESTE_RESUMO_FALHA = "FALHOU: {} de {} casos"
+TESTE_RESUMO_OK = ("OK: {} casos — {} batem, {} acusados, {} de "
+                   "comportamento")
 
 
 def _normalizar(texto: str) -> str:
-    """Compara sem o ruído de transcrição: CRLF→LF e cada linha sem cauda.
-
-    O rstrip por linha vale para os DOIS lados — transcrição de terminal
-    perde espaço de fim de linha, e a leniência de um lado só era
-    assimétrica (medido).
-    """
     linhas = texto.replace("\r\n", "\n").split("\n")
     return "\n".join(linha.rstrip() for linha in linhas).strip()
 
 
 def _texto_plano(texto: str) -> str:
-    """minúsculo e espaço colapsado — a régua dos cheques de conteúdo."""
     return " ".join(texto.lower().split())
 
 
-# A etapa anota a LINHA que importa; a re-execução captura tudo. Comparar os
-# dois por igualdade acusa a diferença de tamanho como se fosse divergência —
-# medido em 18/08/2026: 544 caracteres declarados contra 3.038 re-executados,
-# mesmo comando, mesma verdade, acusado. A régua passou a ser: o declarado
-# aparece na saída como BLOCO DE LINHAS INTEIRAS E SEGUIDAS.
-#
-# Por linha, e não por subcadeia, porque subcadeia aceita o que não deve:
-# "ok" está dentro de "not ok". Medido nas mesmas evidências: por subcadeia,
-# a única acusação que sumiria era justamente a única divergência real.
-ELISAO = "(...)"  # a linha com que a etapa declara "cortei um pedaço aqui"
-
-
 def _blocos_declarados(declarada: str) -> list:
-    """A saída declarada, partida nos marcadores de elisão."""
     blocos, atual = [], []
     for linha in declarada.split("\n"):
         if linha.strip() == ELISAO:
@@ -146,7 +125,6 @@ def _blocos_declarados(declarada: str) -> list:
 
 
 def _contem_blocos(real: str, declarada: str) -> bool:
-    """Cada bloco declarado aparece seguido na saída, e na ordem declarada."""
     linhas = real.split("\n")
     inicio = 0
     for bloco in _blocos_declarados(declarada):
@@ -163,88 +141,28 @@ def _contem_blocos(real: str, declarada: str) -> bool:
 
 
 def _verifica_saida(real: str, declarada: str, igual: bool) -> bool:
-    """A saída declarada bate com a re-executada.
-
-    Declaração VAZIA exige igualdade mesmo sem `--igual`, e isso é o oposto
-    de um detalhe: o contrato ensina a fechar prova de ausência com
-    `|| true`, então saída vazia é o caso comum, e "contém" a aceitaria
-    contra qualquer coisa. Medido: sem esta regra, a única divergência real
-    das seis acusações do bloco 2 — um `grep` que passou a achar arquivo —
-    viraria silêncio.
-    """
     if igual or not declarada:
         return real == declarada
     return _contem_blocos(real, declarada)
 
 
 def _linha_que_falta(declarada: str, real: str) -> str:
-    """Qual linha declarada não apareceu — a acusação sob a régua do contém."""
     presentes = set(real.split("\n"))
     for bloco in _blocos_declarados(declarada):
         for linha in bloco:
             if linha not in presentes:
-                return (f"a linha declarada {linha!r} não aparece na saída "
-                        f"({len(declarada)} contra {len(real)} caracteres)")
-    return ("as linhas declaradas aparecem, mas não seguidas e nesta ordem "
-            f"({len(declarada)} contra {len(real)} caracteres) — use "
-            f"{ELISAO!r} em linha própria para declarar o corte")
-
-
-# `grep` na sessão pode não ser o `grep` da re-execução: shell interativo
-# carrega perfil, e perfil pode embrulhar o comando num que respeita o
-# .gitignore. Mesma linha, dois números — medido em 18/08/2026. A verificação
-# não adivinha qual rodou lá: quando acusa divergência num comando com `grep`
-# nu, ela AVISA que o binário pode ser a causa. Aviso, não acusação inventada.
-_GREP_EXPLICITO = re.compile(r"(?:/(?:usr/)?bin/|command\s+|git\s+)grep\b")
-_GREP_NU = re.compile(r"(?<![\w/.-])grep\b")
+                return ACUSA_LINHA_AUSENTE.format(linha, len(declarada),
+                                                  len(real))
+    return ACUSA_ORDEM_DAS_LINHAS.format(len(declarada), len(real), ELISAO)
 
 
 def _aviso_do_grep(comando: str) -> str:
-    if not _GREP_NU.search(_GREP_EXPLICITO.sub("", comando)):
+    if not GREP_NU.search(GREP_COM_CAMINHO.sub("", comando)):
         return ""
-    return (" [aviso: o comando usa `grep` sem caminho — a sessão pode ter "
-            "rodado um embrulhado, que respeita o .gitignore, e esta "
-            "re-execução usou o do PATH. Declare /bin/grep ou git grep]")
-
-
-def _reexecutar(item: dict, cwd: str, tempo_limite: int,
-                igual: bool = False) -> str:
-    """Re-executa um item do provado; devolve a acusação, ou '' se bate."""
-    try:
-        rodada = subprocess.run(item["comando"], shell=True, cwd=cwd,
-                                capture_output=True, text=True,
-                                timeout=tempo_limite,
-                                executable=SHELL_DA_REEXECUCAO)
-    except subprocess.TimeoutExpired:
-        return (f"não reexecutável em {tempo_limite}s: {item['comando']!r} "
-                "— declarado que não se mede aqui")
-    except OSError as erro:
-        return f"não reexecutável: {item['comando']!r} — {erro}"
-    if rodada.returncode != 0:
-        # Prova que falha não prova: `false` com saida vazia "batia"
-        # qualquer afirmação de sucesso (medido pelo refutador).
-        return (f"comando re-executado falhou (exit {rodada.returncode}): "
-                f"{item['comando']!r} — prova declarada termina em 0")
-    real = _normalizar(rodada.stdout)
-    declarada = _normalizar(item["saida"])
-    if not _verifica_saida(real, declarada, igual):
-        porque = (_onde_diverge(declarada, real) if igual or not declarada
-                  else _linha_que_falta(declarada, real))
-        return (f"saída diverge em {item['comando']!r}: " + porque
-                + _aviso_do_grep(item["comando"]))
-    return ""
+    return AVISO_DO_GREP
 
 
 def _onde_diverge(declarada: str, real: str, janela: int = 60) -> str:
-    """Mostra o PONTO da diferença, não os primeiros 80 caracteres de cada.
-
-    Cortar as duas no mesmo tamanho esconde a divergência sempre que ela cai
-    depois do corte, e a acusação passa a exibir dois valores idênticos aos
-    olhos de quem lê. Medido em 18/08/2026: duas saídas que diferiam só em
-    "0.108" contra "0.109", no caractere 118, apareceram como o mesmo texto.
-    Acusação que mostra X diferente de X é pior que acusação nenhuma — manda
-    procurar justamente o que ela deveria ter apontado.
-    """
     i = 0
     while i < min(len(declarada), len(real)) and declarada[i] == real[i]:
         i += 1
@@ -254,94 +172,130 @@ def _onde_diverge(declarada: str, real: str, janela: int = 60) -> str:
         return (("…" if inicio else "") + texto[inicio:i + janela]
                 + ("…" if len(texto) > i + janela else ""))
 
-    return (f"diferem a partir do caractere {i} — declarada "
-            f"{recorte(declarada)!r}, agora {recorte(real)!r} "
-            f"({len(declarada)} contra {len(real)} caracteres)")
+    return ACUSA_PONTO_DA_DIVERGENCIA.format(i, recorte(declarada),
+                                             recorte(real), len(declarada),
+                                             len(real))
 
 
-def verificar_evidencia(dado: dict, esquema: dict, cwd: str, amostra: int,
-                     exigencias: list, ensaio: bool, tempo_limite: int,
-                     rotulo: str, igual: bool = False) -> list:
-    """Todas as acusações de uma evidência; lista vazia = bate."""
-    erros = _evidencia.validar_evidencia(dado, esquema)
-    if erros:
-        return [f"[{rotulo}] evidência fora do contrato: " + "; ".join(erros[:3])]
+def _porque_diverge(declarada: str, real: str, igual: bool) -> str:
+    if igual or not declarada:
+        return _onde_diverge(declarada, real)
+    return _linha_que_falta(declarada, real)
 
-    if dado.get("origem") == "encadeador":
-        # Sintético: quem não executou não deve prova (skip simétrico) — e
-        # o conteúdo dele foi escrito por código já validado no degrau 1.
-        return []
 
+def _reexecutar(item: dict, cwd: str, tempo_limite: int,
+                igual: bool = False) -> str:
+    try:
+        rodada = subprocess.run(item["comando"], shell=True, cwd=cwd,
+                                capture_output=True, text=True,
+                                timeout=tempo_limite,
+                                executable=SHELL_DA_REEXECUCAO)
+    except subprocess.TimeoutExpired:
+        return ACUSA_TEMPO_ESGOTADO.format(tempo_limite, item["comando"])
+    except OSError as erro:
+        return ACUSA_NAO_REEXECUTAVEL.format(item["comando"], erro)
+    if rodada.returncode != 0:
+        return ACUSA_EXIT_DIFERENTE_DE_ZERO.format(rodada.returncode,
+                                                   item["comando"])
+    real = _normalizar(rodada.stdout)
+    declarada = _normalizar(item["saida"])
+    if not _verifica_saida(real, declarada, igual):
+        return (ACUSA_SAIDA_DIVERGE.format(
+            item["comando"], _porque_diverge(declarada, real, igual))
+            + _aviso_do_grep(item["comando"]))
+    return ""
+
+
+def _sintetica_do_encadeador(dado: dict) -> bool:
+    return dado.get("origem") == ORIGEM_SINTETICA
+
+
+def _amostra_deterministica(dado: dict, provado: list, quantos: int) -> list:
+    if not 0 < quantos < len(provado):
+        return provado
+    semente = int(hashlib.sha256(
+        json.dumps(dado, sort_keys=True, ensure_ascii=False)
+        .encode("utf-8")).hexdigest(), 16)
+    return random.Random(semente).sample(provado, quantos)
+
+
+def _acusacoes_da_reexecucao(itens: list, cwd: str, tempo_limite: int,
+                             igual: bool, ensaio: bool, rotulo: str) -> list:
     acusacoes = []
-    provado = dado["provado"]
-
-    # A regra 2 da camada, instrumentada: segue sem instrumento não é pronto.
-    if dado["veredito"] == "segue" and not provado:
-        acusacoes.append(f"[{rotulo}] veredito segue com provado vazio — "
-                         "só é pronto o que um instrumento provou (regra 2)")
-
-    # Lado 1: declarado sem executado — a re-execução decide. A amostra é
-    # DETERMINÍSTICA por conteúdo (semente = hash da evidência): o mesmo evidência
-    # dá sempre o mesmo veredito — sem semente era loteria, o mesmo comando
-    # ora acusava, ora não (medido). O custo confessado: quem forja
-    # conhecendo o algoritmo pode prever a amostra — amostra é troca de
-    # custo aceita pelo dono, nunca o padrão (o padrão é tudo).
-    itens = provado
-    if 0 < amostra < len(provado):
-        semente = int(hashlib.sha256(
-            json.dumps(dado, sort_keys=True, ensure_ascii=False)
-            .encode("utf-8")).hexdigest(), 16)
-        itens = random.Random(semente).sample(provado, amostra)
     for item in itens:
         if ensaio:
-            print(f"    ensaio: re-executaria {item['comando']!r}")
+            print(LINHA_DO_ENSAIO.format(item["comando"]))
             continue
         acusacao = _reexecutar(item, cwd, tempo_limite, igual)
         if acusacao:
-            acusacoes.append(f"[{rotulo}] {acusacao}")
+            acusacoes.append(ROTULADA.format(rotulo, acusacao))
+    return acusacoes
 
-    # Lado 2: executado sem declarado — o roteiro exige, o provado cala.
-    # O termo tem de estar no COMANDO de um item (a prova executável):
-    # menção na afirmação satisfazia a exigência sem execução nenhuma, e a
-    # concatenação deixava o termo casar atravessando campos (medido).
+
+def _acusacoes_das_exigencias(provado: list, exigencias: list,
+                              rotulo: str) -> list:
+    acusacoes = []
     for termo in exigencias:
         if not any(_texto_plano(termo) in _texto_plano(item["comando"])
                    for item in provado):
-            acusacoes.append(f"[{rotulo}] o roteiro exige {termo!r} e "
-                             "nenhum comando do provado o cita — executado "
-                             "(ou omitido) sem declaração")
+            acusacoes.append(ROTULADA.format(
+                rotulo, ACUSA_EXIGENCIA_SEM_COMANDO.format(termo)))
+    return acusacoes
 
-    # Conteúdo herdado do degrau 1: forma o contrato já cobre; mérito é aqui.
-    proximo = dado.get("proximo", "")
-    if proximo:
-        plano = _texto_plano(proximo)
-        if any(plano.startswith(banal) for banal in PROXIMO_BANAL):
-            acusacoes.append(f"[{rotulo}] proximo começa em banalidade "
-                             f"({proximo[:40]!r}) — a regra do contrato: "
-                             "nunca 'tente de novo'")
-        elif len(plano) < PROXIMO_MINIMO:
-            acusacoes.append(f"[{rotulo}] proximo curto demais ({proximo!r}) "
-                             "— não é instrução de retomada")
-    pergunta = dado.get("pergunta", "")
-    if pergunta:
-        if "?" not in pergunta:
-            acusacoes.append(f"[{rotulo}] campo pergunta sem pergunta "
-                             "nenhuma — a regra: uma, com recomendação")
-        elif pergunta.count("?") > 1:
-            acusacoes.append(f"[{rotulo}] mais de uma pergunta — a regra: "
-                             "uma por vez")
-        else:
-            # A recomendação é o texto antes do primeiro fim-de-frase que
-            # preceda o "?" — e precisa de corpo: um "Dúvida:" de seis
-            # letras satisfazia a pontuação sem recomendar nada (medido).
-            interrogacao = pergunta.find("?")
-            fins = [pergunta.find(fim) for fim in FIM_DE_FRASE
-                    if 0 <= pergunta.find(fim) < interrogacao]
-            recomendacao = pergunta[:min(fins)] if fins else ""
-            if len(_texto_plano(recomendacao)) < RECOMENDACAO_MINIMA:
-                acusacoes.append(f"[{rotulo}] a pergunta vem antes da "
-                                 "recomendação (ou a recomendação não tem "
-                                 "corpo) — a regra: recomendação primeiro")
+
+def _acusacoes_do_proximo(proximo: str, rotulo: str) -> list:
+    if not proximo:
+        return []
+    plano = _texto_plano(proximo)
+    if any(plano.startswith(banal) for banal in PROXIMO_BANAL):
+        return [ROTULADA.format(rotulo,
+                                ACUSA_PROXIMO_BANAL.format(proximo[:40]))]
+    if len(plano) < PROXIMO_MINIMO:
+        return [ROTULADA.format(rotulo, ACUSA_PROXIMO_CURTO.format(proximo))]
+    return []
+
+
+def _recomendacao_antes_da_pergunta(pergunta: str) -> str:
+    interrogacao = pergunta.find("?")
+    fins = [pergunta.find(fim) for fim in FIM_DE_FRASE
+            if 0 <= pergunta.find(fim) < interrogacao]
+    return pergunta[:min(fins)] if fins else ""
+
+
+def _acusacoes_da_pergunta(pergunta: str, rotulo: str) -> list:
+    if not pergunta:
+        return []
+    if "?" not in pergunta:
+        return [ROTULADA.format(rotulo, ACUSA_PERGUNTA_SEM_PERGUNTA)]
+    if pergunta.count("?") > 1:
+        return [ROTULADA.format(rotulo, ACUSA_MAIS_DE_UMA_PERGUNTA)]
+    recomendacao = _recomendacao_antes_da_pergunta(pergunta)
+    if len(_texto_plano(recomendacao)) < RECOMENDACAO_MINIMA:
+        return [ROTULADA.format(rotulo, ACUSA_RECOMENDACAO_DEPOIS)]
+    return []
+
+
+def verificar_evidencia(dado: dict, esquema: dict, cwd: str, amostra: int,
+                        exigencias: list, ensaio: bool, tempo_limite: int,
+                        rotulo: str, igual: bool = False) -> list:
+    erros = _evidencia.validar_evidencia(dado, esquema)
+    if erros:
+        juntos = "; ".join(erros[:QUANTAS_ACUSACOES_DO_CONTRATO])
+        return [ROTULADA.format(rotulo, ACUSA_FORA_DO_CONTRATO.format(juntos))]
+
+    if _sintetica_do_encadeador(dado):
+        return []
+
+    provado = dado["provado"]
+    acusacoes = []
+    if dado["veredito"] == "segue" and not provado:
+        acusacoes.append(ROTULADA.format(rotulo, ACUSA_SEGUE_SEM_PROVA))
+    acusacoes += _acusacoes_da_reexecucao(
+        _amostra_deterministica(dado, provado, amostra),
+        cwd, tempo_limite, igual, ensaio, rotulo)
+    acusacoes += _acusacoes_das_exigencias(provado, exigencias, rotulo)
+    acusacoes += _acusacoes_do_proximo(dado.get("proximo", ""), rotulo)
+    acusacoes += _acusacoes_da_pergunta(dado.get("pergunta", ""), rotulo)
     return acusacoes
 
 
@@ -351,100 +305,90 @@ def montar_parser() -> argparse.ArgumentParser:
 
     def comuns(p):
         p.add_argument("alvo")
-        p.add_argument("--cwd", default=".",
-                       help="diretório de trabalho da etapa (onde re-executar)")
-        p.add_argument("--amostra", type=int, default=0,
-                       help="re-executa só N itens do provado; 0 = todos")
+        p.add_argument("--cwd", default=".", help=AJUDA_CWD)
+        p.add_argument("--amostra", type=int, default=0, help=AJUDA_AMOSTRA)
         p.add_argument("--exigir", action="append", default=[],
-                       help="termo que o provado precisa citar (do roteiro)")
-        p.add_argument("--ensaio", action="store_true",
-                       help="lista o que re-executaria, sem executar nada")
-        p.add_argument("--igual", action="store_true",
-                       help="exige saída idêntica; o padrão é o declarado "
-                            "aparecer na saída como bloco de linhas")
-        p.add_argument("--tempo-limite", type=int, default=60)
+                       help=AJUDA_EXIGIR)
+        p.add_argument("--ensaio", action="store_true", help=AJUDA_ENSAIO)
+        p.add_argument("--igual", action="store_true", help=AJUDA_IGUAL)
+        p.add_argument("--tempo-limite", type=int,
+                       default=TEMPO_LIMITE_PADRAO)
 
-    comuns(sub.add_parser("evidencia", help="verifica uma evidência"))
-    comuns(sub.add_parser("trabalho",
-                          help="verifica todos os *.json de uma pasta"))
+    comuns(sub.add_parser("evidencia", help=AJUDA_MODO_EVIDENCIA))
+    comuns(sub.add_parser("trabalho", help=AJUDA_MODO_TRABALHO))
     return parser
+
+
+def _evidencias_da_pasta(alvo: Path) -> list:
+    arquivos = sorted(a for a in alvo.iterdir()
+                      if NOME_DE_EVIDENCIA.fullmatch(a.name))
+    for fora in sorted(alvo.iterdir()):
+        if not NOME_DE_EVIDENCIA.fullmatch(fora.name):
+            print(LINHA_IGNORADO.format(fora.name))
+    return arquivos
+
+
+def _acusacoes_dos_arquivos(arquivos: list, esquema: dict, args) -> list:
+    acusacoes = []
+    for arquivo in arquivos:
+        if not arquivo.is_file():
+            acusacoes.append(ROTULADA.format(arquivo.name,
+                                             ACUSA_NAO_E_ARQUIVO_COMUM))
+            continue
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError, RecursionError) as erro:
+            acusacoes.append(ROTULADA.format(
+                arquivo.name, ACUSA_EVIDENCIA_ILEGIVEL.format(erro)))
+            continue
+        acusacoes += verificar_evidencia(dado, esquema, args.cwd, args.amostra,
+                                         args.exigir, args.ensaio,
+                                         args.tempo_limite, arquivo.name,
+                                         args.igual)
+    return acusacoes
+
+
+def _dizer_o_veredito(acusacoes: list, quantas_evidencias: int,
+                      ensaio: bool) -> int:
+    if acusacoes:
+        for acusacao in acusacoes:
+            print(LINHA_ACUSA.format(acusacao))
+        print(RESUMO_ACUSACOES.format(len(acusacoes), quantas_evidencias))
+        return 4
+    print(RESUMO_TUDO_BATE.format(quantas_evidencias,
+                                  MODO_ENSAIO if ensaio else MODO_REEXECUTADO))
+    return 0
 
 
 def main(argv) -> int:
     args = montar_parser().parse_args(argv)
     esquema = _evidencia.carregar_esquema()
 
-    # Erro se trata na fronteira: cwd que não existe é defeito do CHAMADOR
-    # (exit 2) — antes, virava acusação falsa contra evidência honesta (medido).
     if not Path(args.cwd).is_dir():
-        print(f"erro de uso: --cwd {args.cwd} não existe", file=sys.stderr)
+        print(ERRO_CWD_INEXISTENTE.format(args.cwd), file=sys.stderr)
         return 2
     if args.comando == "trabalho" and args.exigir:
-        # Exigência é POR ETAPA (vem do roteiro): aplicada à pasta inteira
-        # acusava etapa honesta alheia à exigência (medido).
-        print("erro de uso: --exigir é por etapa — use o modo evidência, "
-              "um arquivo por vez", file=sys.stderr)
+        print(ERRO_EXIGIR_POR_ETAPA, file=sys.stderr)
         return 2
 
     alvo = Path(args.alvo)
     if args.comando == "evidencia":
         if not alvo.is_file():
-            print(f"erro de uso: {alvo} não existe", file=sys.stderr)
+            print(ERRO_ALVO_INEXISTENTE.format(alvo), file=sys.stderr)
             return 2
         arquivos = [alvo]
     else:
         if not alvo.is_dir():
-            print(f"erro de uso: {alvo} não é uma pasta de trabalho",
-                  file=sys.stderr)
+            print(ERRO_ALVO_NAO_E_PASTA.format(alvo), file=sys.stderr)
             return 2
-        # Só o que tem NOME de evidência do degrau 1 — roteiro.json ao lado
-        # não é evidência e não vira acusação (medido). O aviso cobre TODO
-        # nome fora do padrão: forja em .JSON escapava sem uma linha porque
-        # o glob é sensível a caixa (medido).
-        arquivos = sorted(a for a in alvo.iterdir()
-                          if NOME_DE_EVIDENCIA.fullmatch(a.name))
-        for fora in sorted(alvo.iterdir()):
-            if not NOME_DE_EVIDENCIA.fullmatch(fora.name):
-                print(f"    ignorado (não tem nome de evidência): {fora.name}")
+        arquivos = _evidencias_da_pasta(alvo)
         if not arquivos:
-            print(f"erro de uso: nenhuma evidência em {alvo}", file=sys.stderr)
+            print(ERRO_PASTA_SEM_EVIDENCIA.format(alvo), file=sys.stderr)
             return 2
 
-    acusacoes = []
-    for arquivo in arquivos:
-        if not arquivo.is_file():
-            # FIFO plantado com nome de evidência pendurava a leitura para
-            # sempre e calava a acusação dos vizinhos (medido).
-            acusacoes.append(f"[{arquivo.name}] evidência ilegível: "
-                             "não é arquivo comum")
-            continue
-        try:
-            dado = json.loads(arquivo.read_text(encoding="utf-8"))
-        except (OSError, ValueError, RecursionError) as erro:
-            # Evidência ilegível na pasta é ACUSAÇÃO, não parada: abortar aqui
-            # descartava as acusações dos vizinhos e o forjador escapava
-            # largando um arquivo de lixo ao lado (medido).
-            acusacoes.append(f"[{arquivo.name}] evidência ilegível: {erro}")
-            continue
-        acusacoes += verificar_evidencia(dado, esquema, args.cwd,
-                                      args.amostra, args.exigir,
-                                      args.ensaio, args.tempo_limite,
-                                      arquivo.name, args.igual)
+    return _dizer_o_veredito(_acusacoes_dos_arquivos(arquivos, esquema, args),
+                             len(arquivos), args.ensaio)
 
-    if acusacoes:
-        for acusacao in acusacoes:
-            print(f"ACUSA {acusacao}")
-        print(f"\n{len(acusacoes)} acusações em {len(arquivos)} evidências.")
-        return 4
-    modo = "ensaio — nada re-executado" if args.ensaio else "re-executado"
-    print(f"tudo bate: {len(arquivos)} evidências ({modo}), nenhuma acusação.")
-    return 0
-
-
-# ---------------------------------------------------------------------------
-# Os testes: as duas listas (o que bate, o que é acusado) e o
-# comportamento — inclusive a forja do pronto-quando e a sentinela do ensaio.
-# ---------------------------------------------------------------------------
 
 def _base(**troca):
     dado = {
@@ -484,8 +428,6 @@ BATE = [
     ("contraprova negativa com a convenção do || true", _base(provado=[
         {"afirmacao": "não há segredo no arquivo",
          "comando": "grep -c segredo /dev/null || true", "saida": "0"}]), []),
-    # A etapa anota a linha que importa; a re-execução captura tudo. Era a
-    # acusação falsa mais comum — 544 caracteres contra 3.038, medido.
     ("trecho anotado bate contra a saída inteira", _base(provado=[
         {"afirmacao": "o meio da saída é o que importa",
          "comando": r"printf 'cabeçalho\nlinha que importa\nrodapé\n'",
@@ -532,10 +474,6 @@ ACUSA = [
         veredito="pergunta", pergunta="Sigo com A? Recomendo A."),
      [], "recomendação primeiro"),
     ("evidência fora do contrato", _base(veredito="quase"), [], "fora do contrato"),
-    # Os pontos cegos que o "contém" abriria, e que ficam fechados. O
-    # primeiro é o mais caro: o contrato ensina a fechar prova de ausência
-    # com `|| true`, então saída vazia é o caso COMUM — aceitá-la contra
-    # qualquer coisa trocaria cinco gritos errados por um silêncio errado.
     ("saída vazia declarada não aceita saída que apareceu", _base(provado=[
         {"afirmacao": "não achou nada", "comando": "echo achou",
          "saida": ""}]), [], "saída diverge"),
@@ -564,13 +502,7 @@ def _gravar(pasta, nome, dado):
     return caminho
 
 
-def _comportamento(pasta, esquema):
-    resultados = []
-
-    def caso(rotulo, condicao):
-        resultados.append((rotulo, bool(condicao)))
-
-    # a) a forja acusada pela linha de comando, com exit 4 — e o honesto, 0
+def _a_forja_e_acusada_com_exit_4(pasta, caso):
     forjado = _gravar(pasta, "forja/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "o eco responde", "comando": "echo ola",
          "saida": "adeus"}]))
@@ -581,7 +513,8 @@ def _comportamento(pasta, esquema):
     resposta = _cli(["evidencia", str(honesto)])
     caso("evidência honesta bate com exit 0", resposta.returncode == 0)
 
-    # b) sentinela do ensaio: com --ensaio NADA executa; sem, executa
+
+def _o_ensaio_nao_executa_nada(pasta, caso):
     sentinela = Path(pasta) / "sentinela.txt"
     vigiado = _gravar(pasta, "vigia/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "a sentinela grava",
@@ -594,28 +527,28 @@ def _comportamento(pasta, esquema):
     caso("contraprova: sem --ensaio a sentinela aparece",
          sentinela.exists() and resposta.returncode == 0)
 
-    # c) pasta de trabalho inteira: a acusação nomeia o arquivo forjado
+
+def _o_trabalho_inteiro_nomeia_o_forjado(pasta, caso):
     resposta = _cli(["trabalho", str(Path(pasta) / "forja")])
     caso("no trabalho inteiro a acusação nomeia o arquivo",
          resposta.returncode == 4 and "01-fantoche-c1.json" in resposta.stdout
          and "02-fantoche-c1.json" not in resposta.stdout)
-
-    # d) amostra maior que o provado re-executa tudo e ainda acusa
+    forjado = Path(pasta) / "forja" / "01-fantoche-c1.json"
     resposta = _cli(["evidencia", str(forjado), "--amostra", "5"])
     caso("amostra maior que o provado ainda acusa", resposta.returncode == 4)
 
-    # e) tempo-limite: comando lento vira acusação, não trava
+
+def _comando_lento_acusa_por_tempo(pasta, caso):
     lento = _gravar(pasta, "lento/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "dorme", "comando": "sleep 5", "saida": ""}]))
     resposta = _cli(["evidencia", str(lento), "--tempo-limite", "1"])
     caso("comando lento acusa por tempo, não trava",
          resposta.returncode == 4 and "não reexecutável" in resposta.stdout)
-
-    # f) alvo que não existe é erro de uso, não acusação
     resposta = _cli(["trabalho", str(Path(pasta) / "nao-existe")])
     caso("pasta inexistente é erro de uso (exit 2)", resposta.returncode == 2)
 
-    # g) pasta mista: lixo ilegível vira acusação e NÃO cala o forjado
+
+def _o_lixo_ilegivel_nao_cala_os_vizinhos(pasta, caso):
     _gravar(pasta, "misto/01-honesta-c1.json", _base())
     _gravar(pasta, "misto/02-forjada-c1.json", _base(provado=[
         {"afirmacao": "eco", "comando": "echo ola", "saida": "adeus"}]))
@@ -631,7 +564,8 @@ def _comportamento(pasta, esquema):
          "ignorado (não tem nome de evidência): roteiro.json"
          in resposta.stdout)
 
-    # h) amostra é determinística: mesmo evidência, mesmo veredito, 3 rodadas
+
+def _a_amostra_e_deterministica(pasta, caso):
     amostrado = _gravar(pasta, "amostra/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "a", "comando": "echo a", "saida": "a"},
         {"afirmacao": "b", "comando": "echo b", "saida": "b"},
@@ -641,7 +575,8 @@ def _comportamento(pasta, esquema):
     caso("amostra determinística: três rodadas, um só veredito",
          len(exits) == 1)
 
-    # i) fronteiras novas: --exigir no modo trabalho e --cwd fantasma
+
+def _as_fronteiras_de_uso(pasta, caso):
     resposta = _cli(["trabalho", str(Path(pasta) / "misto"),
                      "--exigir", "echo"])
     caso("--exigir no modo trabalho é erro de uso", resposta.returncode == 2)
@@ -650,19 +585,21 @@ def _comportamento(pasta, esquema):
     caso("--cwd inexistente é erro de uso, não acusação falsa",
          resposta.returncode == 2)
 
-    # j) FIFO plantado com nome de evidência não pendura nem cala os vizinhos
-    if hasattr(os, "mkfifo"):
-        _gravar(pasta, "fifo/01-forjada-c1.json", _base(provado=[
-            {"afirmacao": "eco", "comando": "echo ola", "saida": "adeus"}]))
-        os.mkfifo(Path(pasta) / "fifo" / "00-fifo-c1.json")
-        resposta = _cli(["trabalho", str(Path(pasta) / "fifo")])
-        caso("FIFO vira acusação e a forja vizinha ainda é acusada",
-             resposta.returncode == 4
-             and "não é arquivo comum" in resposta.stdout
-             and "saída diverge" in resposta.stdout)
 
-    # Acusação que corta as duas saídas no mesmo tamanho esconde a diferença
-    # quando ela cai depois do corte — e passa a exibir X diferente de X.
+def _o_fifo_nao_pendura_nem_cala(pasta, caso):
+    if not hasattr(os, "mkfifo"):
+        return
+    _gravar(pasta, "fifo/01-forjada-c1.json", _base(provado=[
+        {"afirmacao": "eco", "comando": "echo ola", "saida": "adeus"}]))
+    os.mkfifo(Path(pasta) / "fifo" / "00-fifo-c1.json")
+    resposta = _cli(["trabalho", str(Path(pasta) / "fifo")])
+    caso("FIFO vira acusação e a forja vizinha ainda é acusada",
+         resposta.returncode == 4
+         and "não é arquivo comum" in resposta.stdout
+         and "saída diverge" in resposta.stdout)
+
+
+def _a_acusacao_aponta_onde_diverge(caso):
     longa = "x" * 100 + "0.108"
     outra = "x" * 100 + "0.109"
     aponta = _onde_diverge(longa, outra)
@@ -676,7 +613,8 @@ def _comportamento(pasta, esquema):
     caso("sobra no fim é apontada pelo tamanho",
          "3 contra 5" in _onde_diverge("abc", "abcde"))
 
-    # k) forja com extensão .JSON não escapa em silêncio: ganha a linha
+
+def _nome_fora_do_padrao_aparece_como_ignorado(pasta, caso):
     (Path(pasta) / "misto" / "01-forja-c1.JSON").write_text(
         json.dumps(_base()), encoding="utf-8")
     resposta = _cli(["trabalho", str(Path(pasta) / "misto")])
@@ -684,7 +622,8 @@ def _comportamento(pasta, esquema):
          "ignorado (não tem nome de evidência): 01-forja-c1.JSON"
          in resposta.stdout)
 
-    # m) --igual restaura a igualdade estrita para quem a quiser
+
+def _igual_restaura_a_igualdade_estrita(pasta, caso):
     trecho = _gravar(pasta, "igual/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "o meio da saída",
          "comando": r"printf 'antes\nmiolo\ndepois\n'", "saida": "miolo"}]))
@@ -696,7 +635,8 @@ def _comportamento(pasta, esquema):
     caso("e a acusação estrita mostra o caractere da divergência",
          "a partir do caractere" in resposta.stdout)
 
-    # n) o aviso do grep vem colado na acusação, e só onde cabe
+
+def _o_aviso_do_grep_so_onde_cabe(pasta, caso):
     nu = _gravar(pasta, "grep/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "não achou nada",
          "comando": "grep -c naoexiste /dev/null || true", "saida": "9"}]))
@@ -711,7 +651,8 @@ def _comportamento(pasta, esquema):
     caso("com /bin/grep declarado a acusação NÃO carrega o aviso",
          resposta.returncode == 4 and "sem caminho" not in resposta.stdout)
 
-    # o) as funções da régua nova, direto
+
+def _a_regua_do_contem(caso):
     caso("bloco seguido é achado no meio", _contem_blocos("a\nb\nc", "b"))
     caso("bloco fora de ordem não é achado",
          not _contem_blocos("a\nb\nc", "c\na"))
@@ -720,14 +661,37 @@ def _comportamento(pasta, esquema):
          not _verifica_saida("apareceu", "", False)
          and _verifica_saida("", "", False))
 
-    # l) bashismo bate quando a máquina tem bash (o shell das sessões)
-    if SHELL_DA_REEXECUCAO:
-        bashista = _gravar(pasta, "bash/01-fantoche-c1.json", _base(provado=[
-            {"afirmacao": "o teste composto do bash roda",
-             "comando": "[[ 1 -eq 1 ]] && echo ok", "saida": "ok"}]))
-        resposta = _cli(["evidencia", str(bashista)])
-        caso("bashismo honesto bate no bash", resposta.returncode == 0)
 
+def _o_bashismo_bate_no_bash(pasta, caso):
+    if not SHELL_DA_REEXECUCAO:
+        return
+    bashista = _gravar(pasta, "bash/01-fantoche-c1.json", _base(provado=[
+        {"afirmacao": "o teste composto do bash roda",
+         "comando": "[[ 1 -eq 1 ]] && echo ok", "saida": "ok"}]))
+    resposta = _cli(["evidencia", str(bashista)])
+    caso("bashismo honesto bate no bash", resposta.returncode == 0)
+
+
+def _comportamento(pasta):
+    resultados = []
+
+    def caso(rotulo, condicao):
+        resultados.append((rotulo, bool(condicao)))
+
+    _a_forja_e_acusada_com_exit_4(pasta, caso)
+    _o_ensaio_nao_executa_nada(pasta, caso)
+    _o_trabalho_inteiro_nomeia_o_forjado(pasta, caso)
+    _comando_lento_acusa_por_tempo(pasta, caso)
+    _o_lixo_ilegivel_nao_cala_os_vizinhos(pasta, caso)
+    _a_amostra_e_deterministica(pasta, caso)
+    _as_fronteiras_de_uso(pasta, caso)
+    _o_fifo_nao_pendura_nem_cala(pasta, caso)
+    _a_acusacao_aponta_onde_diverge(caso)
+    _nome_fora_do_padrao_aparece_como_ignorado(pasta, caso)
+    _igual_restaura_a_igualdade_estrita(pasta, caso)
+    _o_aviso_do_grep_so_onde_cabe(pasta, caso)
+    _a_regua_do_contem(caso)
+    _o_bashismo_bate_no_bash(pasta, caso)
     return resultados
 
 
@@ -737,32 +701,31 @@ def testar() -> int:
 
     for rotulo, dado, exigencias in BATE:
         achadas = verificar_evidencia(dado, esquema, ".", 0, exigencias,
-                                   False, 60, "t")
+                                      False, 60, "t")
         if achadas:
-            falhas.append(f"BATE [{rotulo}]: acusou — {achadas[0]}")
+            falhas.append(TESTE_BATE_ACUSOU.format(rotulo, achadas[0]))
 
     for rotulo, dado, exigencias, trecho in ACUSA:
         achadas = verificar_evidencia(dado, esquema, ".", 0, exigencias,
-                                   False, 60, "t")
+                                      False, 60, "t")
         if not achadas:
-            falhas.append(f"ACUSA [{rotulo}]: deixou passar")
+            falhas.append(TESTE_ACUSA_DEIXOU_PASSAR.format(rotulo))
         elif not any(trecho in acusacao for acusacao in achadas):
-            falhas.append(f"ACUSA [{rotulo}]: acusou pelo motivo errado — "
-                          f"{achadas[0]}")
+            falhas.append(TESTE_ACUSA_MOTIVO_ERRADO.format(rotulo, achadas[0]))
 
     with tempfile.TemporaryDirectory(prefix="verificar-teste-") as pasta:
-        comportamento = _comportamento(pasta, esquema)
-    falhas += [f"COMPORTAMENTO [{rotulo}]"
+        comportamento = _comportamento(pasta)
+    falhas += [TESTE_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]
 
     total = len(BATE) + len(ACUSA) + len(comportamento)
     if falhas:
         for falha in falhas:
-            print(f"FALHOU: {falha}")
-        print(f"FALHOU: {len(falhas)} de {total} casos")
+            print(TESTE_FALHA.format(falha))
+        print(TESTE_RESUMO_FALHA.format(len(falhas), total))
         return 1
-    print(f"OK: {total} casos — {len(BATE)} batem, {len(ACUSA)} "
-          f"acusados, {len(comportamento)} de comportamento")
+    print(TESTE_RESUMO_OK.format(total, len(BATE), len(ACUSA),
+                                 len(comportamento)))
     return 0
 
 
@@ -772,5 +735,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except OSError as ambiente:
-        print(f"erro de ambiente: {ambiente}", file=sys.stderr)
+        print(ERRO_DE_AMBIENTE.format(ambiente), file=sys.stderr)
         sys.exit(2)

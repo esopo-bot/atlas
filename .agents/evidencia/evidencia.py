@@ -1,57 +1,3 @@
-#!/usr/bin/env python3
-"""evidência — escreve e valida a evidência que toda etapa do executor de
-roteiros deixa.
-
-O contrato é o recibo.schema.json ao lado deste script. A regra de fundação
-(a emenda do degrau 1): **evidência é materializada só por código**. A etapa de
-sessão devolve o conteúdo em structured_output; quem escreve o arquivo é o
-encadeador, chamando este script. Os campos que identificam a evidência nunca
-vêm do modelo:
-
-- `etapa` e `trabalho` vêm dos argumentos (o roteiro);
-- `quando` vem do relógio daqui;
-- `ciclo.i` vem da contagem de arquivos no diretório, nunca do JSON;
-- `origem`/`motivo` são reservados à evidência sintética — se o modelo os
-  mandar, são descartados antes da validação.
-
-O que este script FAZ: valida contra o contrato (com erro dizendo onde);
-materializa evidência de etapa a partir do stdout da sessão; escreve atômico
-(tmp + rename no mesmo diretório); sintetiza evidência de etapa desligada
-(skip), morta, inválida ou de teto esgotado — inválida/ausente vira `para`.
-
-O que ele NÃO FAZ: não roda etapa nenhuma (o encadeador é o degrau 3); não
-re-executa comando de `provado` (a verificação é o degrau 2); não impõe o
-teto de ciclos (é do encadeador, contando evidências `para`); não escreve
-colheita; não toca rede nem API; e não aceita dois escritores — a regra do
-desenho é UM escritor só (o encadeador): evidência da mesma etapa escrita em
-paralelo colide e falha alto, nunca sobrescreve.
-
-Uso:
-    evidencia.py validar <arquivo.json | ->
-    evidencia.py materializar --dir D --trabalho T --etapa E --ordem N --teto K [--entrada ARQ]
-    evidencia.py sintetico   --dir D --trabalho T --etapa E --ordem N --teto K --motivo M [--detalhe TEXTO]
-    evidencia.py esquema-sessao
-
-`esquema-sessao` imprime o contrato sem o allOf de topo, para passar ao
-`claude -p --json-schema`: medido em 16/08/2026, a API recusou o condicional
-de topo (400 citando "oneOf, allOf..."). Nuance da doc vigente: `allOf` em si
-é aceito com limitações — o que ela não lista é o `if/then/else`, que é
-exatamente o que o nosso allOf de topo carrega; tirar o bloco segue sendo o
-caminho. Junto com o allOf saem os `$comment` (arqueologia escrita para
-humano) e, de `required`, os quatro campos que o código sobrescreve — eles
-continuam em `properties`. O guia da sessão perde as condicionais; a LEI
-continua inteira aqui — quem materializa valida contra o contrato completo,
-e violação vira `para` sintético.
-
-Saída: 0 = evidência válida/da etapa escrita; 3 = sintética escrita no lugar
-(o chamador lê o veredito no arquivo); 2 = erro de uso, de ambiente ou
-colisão de escritor — em regra nada foi escrito; a exceção é falha de
-stdout DEPOIS da escrita, e aí o stderr diz o caminho da evidência que já
-existe. Antes de re-executar por um exit 2, confira o diretório.
-
-Rode os testes com:  python .agents/evidencia/evidencia.py --testar
-"""
-
 import argparse
 import json
 import os
@@ -65,137 +11,227 @@ from pathlib import Path
 AQUI = Path(__file__).resolve().parent
 ESQUEMA_PADRAO = AQUI / "recibo.schema.json"
 
-MOTIVOS = ("desligada", "morta", "recibo-invalido", "teto-esgotado")
+MOTIVO_DESLIGADA = "desligada"
+MOTIVO_MORTA = "morta"
+MOTIVO_RECIBO_INVALIDO = "recibo-invalido"
+MOTIVO_TETO_ESGOTADO = "teto-esgotado"
+MOTIVOS = (MOTIVO_DESLIGADA, MOTIVO_MORTA, MOTIVO_RECIBO_INVALIDO,
+           MOTIVO_TETO_ESGOTADO)
 
-# ---------------------------------------------------------------------------
-# O validador. Cobre só o que o contrato usa — e recusa alto o que não
-# conhece: palavra nova no esquema sem suporte aqui viraria validação que
-# ignora em silêncio, o mesmo furo do painel de controle que morreu por um
-# P maiúsculo.
-# ---------------------------------------------------------------------------
+VEREDITO_SEGUE = "segue"
+VEREDITO_PARA = "para"
+ORIGEM_ENCADEADOR = "encadeador"
 
 SUPORTADAS = {"type", "required", "properties", "additionalProperties", "enum",
               "const", "pattern", "minimum", "minLength", "maxLength", "items",
               "allOf", "if", "then", "else", "not"}
 ANOTACOES = {"$schema", "$id", "title", "$comment", "description"}
-
 TIPOS = {"object": dict, "array": list, "string": str,
          "integer": int, "boolean": bool}
 
+CAMPOS_DO_CODIGO = ("etapa", "trabalho", "quando", "ciclo")
+CAMPOS_CONDICIONAIS = ("proximo", "pergunta", "motivo", "origem", "provado")
+CAMPOS_RESERVADOS_AO_SINTETICO = ("origem", "motivo")
+
+ORDEM_MINIMA = 1
+ORDEM_MAXIMA = 99
+QUANTOS_ERROS_NO_DETALHE = 5
+PREFIXO_TEMPORARIO = ".evidencia-"
+SUFIXO_TEMPORARIO = ".tmp"
+
+ROTULO_DA_EVIDENCIA = "evidência"
+ROTULO_ARG_ETAPA = "argumento --etapa"
+ROTULO_ARG_TRABALHO = "argumento --trabalho"
+ROTULO_ARG_TETO = "argumento --teto"
+
+ERRO_PALAVRA_DESCONHECIDA = ("{}: o validador não conhece {} — atualize "
+                             "evidencia.py junto com o contrato")
+ERRO_TIPO = "{}: deveria ser {}"
+ERRO_ENUM = "{}: {!r} não está em {}"
+ERRO_CONST = "{}: deveria ser {!r}"
+ERRO_PATTERN = "{}: {!r} não casa com {}"
+ERRO_MIN_LENGTH = "{}: precisa de ao menos {} caractere"
+ERRO_MAX_LENGTH = "{}: passa de {} caracteres"
+ERRO_MINIMO = "{}: {} é menor que o mínimo {}"
+ERRO_CAMPO_OBRIGATORIO = "{}: falta o campo obrigatório {!r}"
+ERRO_CAMPO_FORA_DO_CONTRATO = "{}: campo fora do contrato: {}"
+ERRO_CAMPO_PROIBIDO = "{}: campo proibido neste contexto: {}"
+ERRO_ESQUEMA_PROIBIDO = "{}: casa com um esquema proibido"
+ERRO_CALENDARIO = ("evidencia.quando: {!r} não existe no calendário real "
+                   "(regra escrita no contrato: fromisoformat além do "
+                   "padrão)")
+
+DETALHE_AUSENTE = "sem detalhe registrado"
+FALTA_DESLIGADA = ("etapa desligada no roteiro — nada executou, nada foi "
+                   "colhido (skip simétrico)")
+FALTA_MORTA = "a etapa morreu sem deixar evidência: {}"
+PROXIMO_MORTA = ("A etapa {} terminou sem evidência ({}). Leia o log da "
+                 "etapa, corrija a causa e reexecute o trabalho {} a partir "
+                 "dela.")
+FALTA_RECIBO_INVALIDO = "a evidência devolvida não segue o contrato: {}"
+PROXIMO_RECIBO_INVALIDO = ("A etapa {} devolveu evidência fora do contrato "
+                           "({}). Corrija a etapa para devolver o "
+                           "structured_output no contrato recibo.schema.json "
+                           "e reexecute o trabalho {} a partir dela.")
+FALTA_TETO_ESGOTADO = "o teto de {} ciclos esgotou"
+PROXIMO_TETO_ESGOTADO = ("O teto de {} ciclos esgotou no trabalho {}. Este "
+                         "para é do dono: releia as evidências para "
+                         "anteriores e decida se o trabalho continua, muda de "
+                         "rumo ou morre.")
+
+ERRO_MOTIVO_DESCONHECIDO = "motivo desconhecido: {!r} (vale: {})"
+ERRO_DEFEITO_NO_SINTETICO = ("defeito na evidência sintética — corrija "
+                             "evidencia.py: {}")
+ERRO_ENTRADA_VAZIA = "entrada vazia — a etapa não devolveu evidência nenhuma"
+ERRO_NAO_E_OBJETO = "a entrada não é um objeto JSON de evidência"
+ERRO_JSON_QUEBRADO = "JSON quebrado: {}"
+
+ERRO_CONTRATO_ILEGIVEL = "não consegui ler o contrato em {}: {}"
+ERRO_LEITURA = "não consegui ler {}: {}"
+ERRO_STDOUT = "o stdout falhou: {}"
+ERRO_STDOUT_APOS_VALIDA = "evidência válida, mas o stdout falhou: {}"
+ERRO_STDOUT_APOS_ESCRITA = "evidência escrita em {}, mas o stdout falhou: {}"
+ERRO_DE_USO = "erro de uso: {}"
+PROBLEMA_ORDEM = ("argumento --ordem: {} fora de 1..99 (vira o prefixo de "
+                  "dois dígitos do arquivo)")
+PROBLEMA_DIR = ("argumento --dir: vazio ou com quebra de linha — o caminho "
+                "impresso no stdout é lido linha a linha")
+ERRO_AMBIENTE_NA_ENTRADA = ("erro de ambiente ao ler --entrada {}: {} — nada "
+                            "escrito")
+ERRO_COLISAO = ("colisão de evidência — o arquivo já existe, e sobrescrever "
+                "seria perder evidência em silêncio (a regra é um escritor "
+                "só): {}")
+ERRO_AMBIENTE_NADA_ESCRITO = "erro de ambiente — nada escrito: {}"
+ERRO_DE_AMBIENTE = "erro de ambiente: {}"
+OK_EVIDENCIA_VALIDA = "evidência válida"
+
+AJUDA_VALIDAR = "valida uma evidência contra o contrato"
+AJUDA_ARQUIVO = "caminho do JSON, ou - para stdin"
+AJUDA_DIR = "diretório-base das evidências"
+AJUDA_MATERIALIZAR = "escreve a evidência a partir do stdout da sessão"
+AJUDA_ENTRADA = "arquivo com o stdout da sessão; - = stdin"
+AJUDA_SINTETICO = "escreve a evidência de etapa desligada/morta/teto"
+AJUDA_ESQUEMA_SESSAO = "o contrato enxuto da sessão, para --json-schema"
+
+DETALHE_EXIT = "exit {}"
+TESTE_ACEITA_RECUSOU = "ACEITA [{}]: recusou — {}"
+TESTE_RECUSA_ACEITOU = "RECUSA [{}]: aceitou o que devia recusar"
+TESTE_RECUSA_MOTIVO_ERRADO = "RECUSA [{}]: recusou pelo motivo errado — {}"
+TESTE_COMPORTAMENTO = "COMPORTAMENTO [{}]"
+TESTE_FALHA = "FALHOU: {}"
+TESTE_RESUMO_FALHA = "FALHOU: {} de {} casos"
+TESTE_RESUMO_OK = ("OK: {} casos — {} aceitos, {} recusados, {} de "
+                   "comportamento")
+
 
 def _casa_padrao(padrao: str, dado: str) -> bool:
-    """O pattern do JSON Schema tem semântica ECMA: `$` é fim de verdade.
-
-    O `$` do Python casa antes de um `\\n` final — por ele, "cetico\\n"
-    validaria e viraria arquivo com quebra de linha no nome (medido pelo
-    refutador). A tradução para `\\Z` fecha o furo.
-    """
     if padrao.endswith("$") and not padrao.endswith(r"\$"):
         padrao = padrao[:-1] + r"\Z"
     return re.search(padrao, dado) is not None
 
 
-def _erros(esquema: dict, dado, caminho: str) -> list:
-    desconhecidas = set(esquema) - SUPORTADAS - ANOTACOES
-    if desconhecidas:
-        return [f"{caminho}: o validador não conhece {sorted(desconhecidas)} "
-                "— atualize evidencia.py junto com o contrato"]
+def _tipo_certo(tipo: str, dado) -> bool:
+    if tipo == "integer":
+        if isinstance(dado, bool):
+            return False
+        if isinstance(dado, float):
+            return dado.is_integer()
+    return isinstance(dado, TIPOS[tipo])
 
-    tipo = esquema.get("type")
-    if tipo:
-        certo = isinstance(dado, TIPOS[tipo])
-        # bool é subclasse de int em Python; sem o corte, true passaria por inteiro.
-        if tipo == "integer" and isinstance(dado, bool):
-            certo = False
-        # draft-07: inteiro é número de fração zero — 1.0 vale (medido no
-        # jsonschema de referência pelo refutador).
-        if tipo == "integer" and isinstance(dado, float) and dado.is_integer():
-            certo = True
-        if not certo:
-            return [f"{caminho}: deveria ser {tipo}"]
 
+def _erros_de_valor(esquema: dict, dado, caminho: str) -> list:
     erros = []
     if "enum" in esquema and dado not in esquema["enum"]:
-        erros.append(f"{caminho}: {dado!r} não está em {esquema['enum']}")
+        erros.append(ERRO_ENUM.format(caminho, dado, esquema["enum"]))
     if "const" in esquema and dado != esquema["const"]:
-        erros.append(f"{caminho}: deveria ser {esquema['const']!r}")
+        erros.append(ERRO_CONST.format(caminho, esquema["const"]))
     if "pattern" in esquema and isinstance(dado, str) \
             and not _casa_padrao(esquema["pattern"], dado):
-        erros.append(f"{caminho}: {dado!r} não casa com {esquema['pattern']}")
+        erros.append(ERRO_PATTERN.format(caminho, dado, esquema["pattern"]))
     if "minLength" in esquema and isinstance(dado, str) \
             and len(dado) < esquema["minLength"]:
-        erros.append(f"{caminho}: precisa de ao menos "
-                     f"{esquema['minLength']} caractere")
+        erros.append(ERRO_MIN_LENGTH.format(caminho, esquema["minLength"]))
     if "maxLength" in esquema and isinstance(dado, str) \
             and len(dado) > esquema["maxLength"]:
-        erros.append(f"{caminho}: passa de {esquema['maxLength']} caracteres")
+        erros.append(ERRO_MAX_LENGTH.format(caminho, esquema["maxLength"]))
     if "minimum" in esquema and isinstance(dado, (int, float)) \
             and not isinstance(dado, bool) and dado < esquema["minimum"]:
-        erros.append(f"{caminho}: {dado} é menor que o mínimo {esquema['minimum']}")
+        erros.append(ERRO_MINIMO.format(caminho, dado, esquema["minimum"]))
+    return erros
 
-    if isinstance(dado, dict):
-        for exigido in esquema.get("required", []):
-            if exigido not in dado:
-                erros.append(f"{caminho}: falta o campo obrigatório {exigido!r}")
-        propriedades = esquema.get("properties", {})
-        if esquema.get("additionalProperties") is False:
-            sobras = sorted(set(dado) - set(propriedades))
-            if sobras:
-                erros.append(f"{caminho}: campo fora do contrato: {sobras}")
-        for nome, sub in propriedades.items():
-            if nome in dado:
-                erros += _erros(sub, dado[nome], f"{caminho}.{nome}")
 
-    if isinstance(dado, list) and "items" in esquema:
-        for n, item in enumerate(dado):
-            erros += _erros(esquema["items"], item, f"{caminho}[{n}]")
+def _erros_de_objeto(esquema: dict, dado, caminho: str) -> list:
+    if not isinstance(dado, dict):
+        return []
+    erros = []
+    for exigido in esquema.get("required", []):
+        if exigido not in dado:
+            erros.append(ERRO_CAMPO_OBRIGATORIO.format(caminho, exigido))
+    propriedades = esquema.get("properties", {})
+    if esquema.get("additionalProperties") is False:
+        sobras = sorted(set(dado) - set(propriedades))
+        if sobras:
+            erros.append(ERRO_CAMPO_FORA_DO_CONTRATO.format(caminho, sobras))
+    for nome, sub in propriedades.items():
+        if nome in dado:
+            erros += _erros(sub, dado[nome], f"{caminho}.{nome}")
+    return erros
 
+
+def _erros_de_lista(esquema: dict, dado, caminho: str) -> list:
+    if not isinstance(dado, list) or "items" not in esquema:
+        return []
+    erros = []
+    for n, item in enumerate(dado):
+        erros += _erros(esquema["items"], item, f"{caminho}[{n}]")
+    return erros
+
+
+def _erros_do_proibido(proibido: dict, dado, caminho: str) -> list:
+    if _erros(proibido, dado, caminho):
+        return []
+    if set(proibido) == {"required"}:
+        return [ERRO_CAMPO_PROIBIDO.format(caminho, proibido["required"])]
+    return [ERRO_ESQUEMA_PROIBIDO.format(caminho)]
+
+
+def _erros_de_combinacao(esquema: dict, dado, caminho: str) -> list:
+    erros = []
     for sub in esquema.get("allOf", []):
         erros += _erros(sub, dado, caminho)
-
     if "if" in esquema:
         casa = not _erros(esquema["if"], dado, caminho)
         ramo = esquema.get("then") if casa else esquema.get("else")
         if ramo:
             erros += _erros(ramo, dado, caminho)
-
     if "not" in esquema:
-        proibido = esquema["not"]
-        if not _erros(proibido, dado, caminho):
-            if set(proibido) == {"required"}:
-                erros.append(f"{caminho}: campo proibido neste contexto: "
-                             f"{proibido['required']}")
-            else:
-                erros.append(f"{caminho}: casa com um esquema proibido")
+        erros += _erros_do_proibido(esquema["not"], dado, caminho)
     return erros
+
+
+def _erros(esquema: dict, dado, caminho: str) -> list:
+    desconhecidas = set(esquema) - SUPORTADAS - ANOTACOES
+    if desconhecidas:
+        return [ERRO_PALAVRA_DESCONHECIDA.format(caminho,
+                                                 sorted(desconhecidas))]
+    tipo = esquema.get("type")
+    if tipo and not _tipo_certo(tipo, dado):
+        return [ERRO_TIPO.format(caminho, tipo)]
+    return (_erros_de_valor(esquema, dado, caminho)
+            + _erros_de_objeto(esquema, dado, caminho)
+            + _erros_de_lista(esquema, dado, caminho)
+            + _erros_de_combinacao(esquema, dado, caminho))
 
 
 def carregar_esquema(caminho: Path = ESQUEMA_PADRAO) -> dict:
     try:
         return json.loads(caminho.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as erro:
-        print(f"não consegui ler o contrato em {caminho}: {erro}",
-              file=sys.stderr)
+        print(ERRO_CONTRATO_ILEGIVEL.format(caminho, erro), file=sys.stderr)
         sys.exit(2)
 
 
-CAMPOS_DO_CODIGO = ("etapa", "trabalho", "quando", "ciclo")
-
-# Campos que o allOf libera ou proíbe conforme o veredito e a origem. A
-# projeção não leva o allOf, então a regra de cada um viaja como `description`
-# — senão a sessão é julgada por lei que não recebeu.
-CAMPOS_CONDICIONAIS = ("proximo", "pergunta", "motivo", "origem")
-# O `provado` entra na mesma lista, e por um motivo medido: em 18/08/2026,
-# 10 de 11 acusações de uma execução real foram prova mal ESCRITA — prosa no
-# campo `comando`, saída redigida à mão, ausência declarada entre parênteses.
-# A regra que julga tudo isso morava só no $comment, que a projeção descarta:
-# a sessão era reprovada por norma que ninguém lhe mostrava. É o defeito 11
-# de novo, noutro campo.
-CAMPOS_CONDICIONAIS = CAMPOS_CONDICIONAIS + ("provado",)
-
-
 def _sem_comentario(no):
-    """O esquema sem nenhum $comment, em qualquer profundidade."""
     if isinstance(no, dict):
         return {chave: _sem_comentario(valor) for chave, valor in no.items()
                 if chave != "$comment"}
@@ -205,29 +241,6 @@ def _sem_comentario(no):
 
 
 def projetar_para_sessao(esquema: dict) -> dict:
-    """O contrato como a sessão o recebe — o mesmo contrato, mais enxuto.
-
-    Sai o allOf de topo (a API recusa o if/then/else que ele carrega), sai a
-    arqueologia dos $comment (escrita para humano, e este texto viaja em TODO
-    prompt de etapa) e saem de `required` os quatro campos que o encadeador
-    sobrescreve logo depois: pedir ao modelo o que vai ser descartado só
-    gasta contexto e convida a inventar relógio e contagem. Os quatro
-    continuam em `properties`, então mandá-los segue sendo válido.
-
-    O que NÃO sai é a regra condicional. Tirar o allOf tira o enunciado de
-    "proximo só existe no para" — e `proximo` continua visível em
-    `properties`, com `additionalProperties: false`. A sessão via um campo
-    legítimo, sem nada dizendo quando vale, e apanhava de uma regra que
-    nunca lhe foi mostrada: medido em 18/08/2026, a etapa que fundiu
-    `fluxos/` fez o trabalho inteiro e foi reprovada por anexar um `proximo`
-    prestativo a um `veredito: segue`. Enquanto os $comment viajavam, a
-    regra chegava em prosa por acaso; agora ela chega de propósito, como
-    `description` — que é campo de contrato, não arqueologia, e a API aceita.
-
-    A LEI é o recibo.schema.json e continua inteira: quem materializa valida
-    contra o contrato completo, e violação vira `para` sintético. O arquivo
-    ao lado não muda um byte — a regra é promovida aqui, na projeção.
-    """
     guia = _sem_comentario({chave: valor for chave, valor in esquema.items()
                             if chave != "allOf"})
     guia["required"] = [campo for campo in guia["required"]
@@ -239,41 +252,27 @@ def projetar_para_sessao(esquema: dict) -> dict:
     return guia
 
 
+def _data_existe_no_calendario(quando: str) -> bool:
+    try:
+        datetime.fromisoformat(quando)
+    except ValueError:
+        return False
+    return True
+
+
 def validar_evidencia(dado, esquema: dict) -> list:
-    """Erros da evidência contra o contrato; lista vazia = válido."""
-    erros = _erros(esquema, dado, "evidência")
-    if not erros:
-        # O padrão do esquema aceita 2026-13-99; só o relógio sabe que não existe.
-        try:
-            datetime.fromisoformat(dado["quando"])
-        except ValueError:
-            erros.append(f"evidencia.quando: {dado['quando']!r} não existe no "
-                         "calendário real (regra escrita no contrato: "
-                         "fromisoformat além do padrão)")
+    erros = _erros(esquema, dado, ROTULO_DA_EVIDENCIA)
+    if not erros and not _data_existe_no_calendario(dado["quando"]):
+        erros.append(ERRO_CALENDARIO.format(dado["quando"]))
     return erros
 
-
-# ---------------------------------------------------------------------------
-# A materialização — o lado do encadeador.
-# ---------------------------------------------------------------------------
 
 def agora() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def caminho_da_evidencia(dir_base: str, trabalho: str, ordem: int, etapa: str):
-    """O arquivo da próxima evidência desta etapa, com o ciclo pela contagem.
-
-    `c<i>` vem das evidências desta etapa já no diretório — nunca do campo do
-    JSON, que a etapa poderia congelar em 1 para sempre. A conta é máximo+1
-    com casamento exato, nunca len(): len fura com buraco na sequência
-    (evidência removida faria a conta reusar um nome existente) e glob por
-    prefixo confundiria a etapa "a" com a etapa "a-c1" (os dois medidos
-    pelos refutadores).
-    """
     pasta = Path(dir_base) / trabalho
-    # [0-9] e não \d: o \d do Python casa dígito Unicode, e um arquivo
-    # intruso "01-alfa-c１０.json" dirigiria a contagem (medido).
     padrao = re.compile(rf"{ordem:02d}-{re.escape(etapa)}-c([0-9]+)\.json\Z")
     existentes = [int(casado.group(1)) for arquivo in pasta.glob("*.json")
                   if (casado := padrao.fullmatch(arquivo.name))]
@@ -282,19 +281,16 @@ def caminho_da_evidencia(dir_base: str, trabalho: str, ordem: int, etapa: str):
 
 
 def escrever_atomico(caminho: Path, evidencia: dict) -> Path:
-    """tmp + rename no mesmo diretório: quem lê em polling nunca vê metade."""
     caminho.parent.mkdir(parents=True, exist_ok=True)
     texto = json.dumps(evidencia, ensure_ascii=False, indent=2) + "\n"
     descritor, tmp = tempfile.mkstemp(dir=caminho.parent,
-                                      prefix=".evidencia-", suffix=".tmp")
+                                      prefix=PREFIXO_TEMPORARIO,
+                                      suffix=SUFIXO_TEMPORARIO)
     try:
         with os.fdopen(descritor, "w", encoding="utf-8") as arquivo:
             arquivo.write(texto)
             arquivo.flush()
             os.fsync(arquivo.fileno())
-        # link exclusivo, nunca replace: se o caminho já existe, sobrescrever
-        # seria perda silenciosa de evidência (dois escritores, ou contagem
-        # furada) — medido pelo refutador. Colisão falha ALTO.
         os.link(tmp, caminho)
         os.unlink(tmp)
     finally:
@@ -303,94 +299,68 @@ def escrever_atomico(caminho: Path, evidencia: dict) -> Path:
     return caminho
 
 
-def sintetizar(dir_base, trabalho, etapa, ordem, teto, motivo, detalhe, esquema):
-    """A evidência que o encadeador escreve quando a etapa não deixou o dela.
+def _corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe) -> dict:
+    dito = detalhe or DETALHE_AUSENTE
+    if motivo == MOTIVO_DESLIGADA:
+        return {"faltas": [FALTA_DESLIGADA]}
+    if motivo == MOTIVO_MORTA:
+        return {"faltas": [FALTA_MORTA.format(dito)],
+                "proximo": PROXIMO_MORTA.format(etapa, dito, trabalho)}
+    if motivo == MOTIVO_RECIBO_INVALIDO:
+        return {"faltas": [FALTA_RECIBO_INVALIDO.format(dito)],
+                "proximo": PROXIMO_RECIBO_INVALIDO.format(etapa, dito,
+                                                          trabalho)}
+    return {"faltas": [FALTA_TETO_ESGOTADO.format(teto)],
+            "proximo": PROXIMO_TETO_ESGOTADO.format(teto, trabalho)}
 
-    `desligada` registra o skip e deixa o executor de roteiros seguir
-    (skip simétrico: nada executou, nada se colhe). Os outros três motivos
-    param — e o `proximo` diz o que houve e por onde recomeçar, nunca
-    "tente de novo".
-    """
+
+def sintetizar(dir_base, trabalho, etapa, ordem, teto, motivo, detalhe,
+               esquema):
     if motivo not in MOTIVOS:
-        sys.exit(f"motivo desconhecido: {motivo!r} (vale: {', '.join(MOTIVOS)})")
+        sys.exit(ERRO_MOTIVO_DESCONHECIDO.format(motivo, ", ".join(MOTIVOS)))
     caminho, i = caminho_da_evidencia(dir_base, trabalho, ordem, etapa)
     evidencia = {
         "etapa": etapa,
         "trabalho": trabalho,
         "quando": agora(),
-        "veredito": "segue" if motivo == "desligada" else "para",
+        "veredito": (VEREDITO_SEGUE if motivo == MOTIVO_DESLIGADA
+                     else VEREDITO_PARA),
         "provado": [],
         "suposto": [],
         "faltas": [],
-        "origem": "encadeador",
+        "origem": ORIGEM_ENCADEADOR,
         "motivo": motivo,
         "ciclo": {"i": i, "teto": teto},
     }
-    if motivo == "desligada":
-        evidencia["faltas"] = ["etapa desligada no roteiro — nada executou, "
-                            "nada foi colhido (skip simétrico)"]
-    elif motivo == "morta":
-        evidencia["faltas"] = [f"a etapa morreu sem deixar evidência: "
-                            f"{detalhe or 'sem detalhe registrado'}"]
-        evidencia["proximo"] = (
-            f"A etapa {etapa} terminou sem evidência "
-            f"({detalhe or 'sem detalhe registrado'}). Leia o log da etapa, "
-            f"corrija a causa e reexecute o trabalho {trabalho} a partir dela.")
-    elif motivo == "recibo-invalido":
-        evidencia["faltas"] = [f"a evidência devolvida não segue o contrato: "
-                            f"{detalhe or 'sem detalhe registrado'}"]
-        evidencia["proximo"] = (
-            f"A etapa {etapa} devolveu evidência fora do contrato "
-            f"({detalhe or 'sem detalhe registrado'}). Corrija a etapa para "
-            f"devolver o structured_output no contrato recibo.schema.json e "
-            f"reexecute o trabalho {trabalho} a partir dela.")
-    else:  # teto-esgotado
-        evidencia["faltas"] = [f"o teto de {teto} ciclos esgotou"]
-        evidencia["proximo"] = (
-            f"O teto de {teto} ciclos esgotou no trabalho {trabalho}. Este "
-            f"para é do dono: releia as evidências para anteriores e decida se "
-            f"o trabalho continua, muda de rumo ou morre.")
+    evidencia.update(_corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe))
 
     erros = validar_evidencia(evidencia, esquema)
     if erros:
-        # Com os argumentos validados na fronteira do main(), chegar aqui é
-        # defeito DESTE script — nunca da etapa nem do chamador.
-        print("defeito na evidência sintética — corrija evidencia.py: "
-              + "; ".join(erros), file=sys.stderr)
+        print(ERRO_DEFEITO_NO_SINTETICO.format("; ".join(erros)),
+              file=sys.stderr)
         sys.exit(2)
     return escrever_atomico(caminho, evidencia)
 
 
-def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema):
-    """Do stdout da sessão ao arquivo. Devolve (caminho, código de saída).
-
-    Aceita o envelope do `claude -p --output-format json` (pega o
-    structured_output) ou a evidência pura. Entrada vazia, JSON quebrado ou
-    evidência fora do contrato viram `para` sintético com o erro registrado —
-    a invariante "falha vira para" com dono. `morta` não nasce aqui: quem
-    conhece exit code e timeout da sessão é o encadeador, que chama
-    `sintetico --motivo morta`.
-    """
-    candidato, erro = None, ""
+def _candidato_da_entrada(texto: str):
     texto = (texto or "").strip()
     if not texto:
-        erro = "entrada vazia — a etapa não devolveu evidência nenhuma"
-    else:
-        try:
-            bruto = json.loads(texto)
-            if isinstance(bruto, dict) and "structured_output" in bruto:
-                bruto = bruto["structured_output"]
-            if isinstance(bruto, dict):
-                candidato = bruto
-            else:
-                erro = "a entrada não é um objeto JSON de evidência"
-        except (ValueError, RecursionError) as decodificacao:
-            # RecursionError entra junto: JSON fundo demais derrubaria o
-            # materializar sem evidência nenhuma — e o stdout é terreno da etapa.
-            erro = f"JSON quebrado: {decodificacao}"
+        return None, ERRO_ENTRADA_VAZIA
+    try:
+        bruto = json.loads(texto)
+    except (ValueError, RecursionError) as decodificacao:
+        return None, ERRO_JSON_QUEBRADO.format(decodificacao)
+    if isinstance(bruto, dict) and "structured_output" in bruto:
+        bruto = bruto["structured_output"]
+    if isinstance(bruto, dict):
+        return bruto, ""
+    return None, ERRO_NAO_E_OBJETO
 
+
+def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema):
+    candidato, erro = _candidato_da_entrada(texto)
     if candidato is not None:
-        for reservado in ("origem", "motivo"):
+        for reservado in CAMPOS_RESERVADOS_AO_SINTETICO:
             candidato.pop(reservado, None)
         caminho, i = caminho_da_evidencia(dir_base, trabalho, ordem, etapa)
         candidato["etapa"] = etapa
@@ -400,165 +370,41 @@ def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema):
         erros = validar_evidencia(candidato, esquema)
         if not erros:
             return escrever_atomico(caminho, candidato), 0
-        erro = "; ".join(erros[:5])
+        erro = "; ".join(erros[:QUANTOS_ERROS_NO_DETALHE])
 
     caminho = sintetizar(dir_base, trabalho, etapa, ordem, teto,
-                         "recibo-invalido", erro, esquema)
+                         MOTIVO_RECIBO_INVALIDO, erro, esquema)
     return caminho, 3
 
-
-# ---------------------------------------------------------------------------
-# A linha de comando.
-# ---------------------------------------------------------------------------
 
 def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="evidencia.py", add_help=True)
     sub = parser.add_subparsers(dest="comando", required=True)
 
-    valida = sub.add_parser("validar", help="valida uma evidência contra o contrato")
-    valida.add_argument("arquivo", help="caminho do JSON, ou - para stdin")
+    valida = sub.add_parser("validar", help=AJUDA_VALIDAR)
+    valida.add_argument("arquivo", help=AJUDA_ARQUIVO)
 
     def comuns(p):
-        p.add_argument("--dir", required=True, help="diretório-base das evidências")
+        p.add_argument("--dir", required=True, help=AJUDA_DIR)
         p.add_argument("--trabalho", required=True)
         p.add_argument("--etapa", required=True)
         p.add_argument("--ordem", required=True, type=int)
         p.add_argument("--teto", required=True, type=int)
 
-    materializa = sub.add_parser(
-        "materializar", help="escreve a evidência a partir do stdout da sessão")
+    materializa = sub.add_parser("materializar", help=AJUDA_MATERIALIZAR)
     comuns(materializa)
-    materializa.add_argument("--entrada", default="-",
-                             help="arquivo com o stdout da sessão; - = stdin")
+    materializa.add_argument("--entrada", default="-", help=AJUDA_ENTRADA)
 
-    sintetiza = sub.add_parser(
-        "sintetico", help="escreve a evidência de etapa desligada/morta/teto")
+    sintetiza = sub.add_parser("sintetico", help=AJUDA_SINTETICO)
     comuns(sintetiza)
     sintetiza.add_argument("--motivo", required=True, choices=MOTIVOS)
     sintetiza.add_argument("--detalhe", default="")
 
-    sub.add_parser("esquema-sessao",
-                   help="o contrato enxuto da sessão, para --json-schema")
+    sub.add_parser("esquema-sessao", help=AJUDA_ESQUEMA_SESSAO)
     return parser
 
 
-def main(argv) -> int:
-    args = montar_parser().parse_args(argv)
-    esquema = carregar_esquema()
-
-    if args.comando == "esquema-sessao":
-        guia = projetar_para_sessao(esquema)
-        try:
-            print(json.dumps(guia, ensure_ascii=False))
-            sys.stdout.flush()
-        except OSError as saida:
-            print(f"o stdout falhou: {saida}", file=sys.stderr)
-            _descartar_stdout()
-            return 2
-        return 0
-
-    if args.comando == "validar":
-        if args.arquivo == "-":
-            texto = sys.stdin.read()
-        else:
-            try:
-                texto = Path(args.arquivo).read_text(encoding="utf-8")
-            except OSError as erro:
-                print(f"não consegui ler {args.arquivo}: {erro}", file=sys.stderr)
-                return 2
-        try:
-            dado = json.loads(texto)
-        except (ValueError, RecursionError) as erro:
-            print(f"JSON quebrado: {erro}", file=sys.stderr)
-            return 2
-        erros = validar_evidencia(dado, esquema)
-        if erros:
-            for linha in erros:
-                print(linha, file=sys.stderr)
-            return 2
-        try:
-            print("evidência válida")
-            sys.stdout.flush()
-        except OSError as saida:
-            print(f"evidência válida, mas o stdout falhou: {saida}",
-                  file=sys.stderr)
-            _descartar_stdout()
-            return 2
-        return 0
-
-    # Erro se trata na fronteira: argumento fora do contrato é erro de USO,
-    # com exit 2 e nada escrito — nunca um traceback culpando o script
-    # (medido pelos refutadores). A régua dos argumentos é o próprio
-    # contrato, para não nascer segunda lista que dessincroniza.
-    if args.comando in ("materializar", "sintetico"):
-        problemas = _erros(esquema["properties"]["etapa"], args.etapa,
-                           "argumento --etapa")
-        problemas += _erros(esquema["properties"]["trabalho"], args.trabalho,
-                            "argumento --trabalho")
-        problemas += _erros(esquema["properties"]["ciclo"]["properties"]["teto"],
-                            args.teto, "argumento --teto")
-        if not 1 <= args.ordem <= 99:
-            problemas.append(f"argumento --ordem: {args.ordem} fora de 1..99 "
-                             "(vira o prefixo de dois dígitos do arquivo)")
-        if not args.dir or "\n" in args.dir or "\r" in args.dir:
-            problemas.append("argumento --dir: vazio ou com quebra de linha — "
-                             "o caminho impresso no stdout é lido linha a linha")
-        if problemas:
-            for problema in problemas:
-                print(f"erro de uso: {problema}", file=sys.stderr)
-            return 2
-
-    if args.comando == "materializar":
-        if args.entrada == "-":
-            texto = sys.stdin.read()
-        else:
-            try:
-                texto = Path(args.entrada).read_text(encoding="utf-8")
-            except FileNotFoundError:
-                # Entrada que NÃO EXISTE = a etapa não deixou saída: vira
-                # sintético. Qualquer outro erro é do AMBIENTE (permissão,
-                # diretório no lugar do arquivo...) e não pode virar
-                # diagnóstico falso da etapa num evidência permanente (medido).
-                texto = ""
-            except OSError as ambiente:
-                print(f"erro de ambiente ao ler --entrada {args.entrada}: "
-                      f"{ambiente} — nada escrito", file=sys.stderr)
-                return 2
-        try:
-            caminho, codigo = materializar(args.dir, args.trabalho, args.etapa,
-                                           args.ordem, args.teto, texto, esquema)
-        except FileExistsError as colisao:
-            print("colisão de evidência — o arquivo já existe, e sobrescrever "
-                  "seria perder evidência em silêncio (a regra é um escritor "
-                  f"só): {colisao}", file=sys.stderr)
-            return 2
-        except OSError as ambiente:
-            print(f"erro de ambiente — nada escrito: {ambiente}",
-                  file=sys.stderr)
-            return 2
-        return _dizer_caminho(caminho, codigo)
-
-    # sintetico
-    try:
-        caminho = sintetizar(args.dir, args.trabalho, args.etapa, args.ordem,
-                             args.teto, args.motivo, args.detalhe, esquema)
-    except FileExistsError as colisao:
-        print("colisão de evidência — o arquivo já existe, e sobrescrever seria "
-              f"perder evidência em silêncio (a regra é um escritor só): {colisao}",
-              file=sys.stderr)
-        return 2
-    except OSError as ambiente:
-        print(f"erro de ambiente — nada escrito: {ambiente}", file=sys.stderr)
-        return 2
-    return _dizer_caminho(caminho, 0)
-
-
 def _descartar_stdout():
-    """Aponta o fd 1 para /dev/null depois de uma falha de stdout.
-
-    O buffer ainda guarda o que não coube; sem isto, o flush da saída do
-    interpretador falharia DE NOVO e trocaria o exit 2 por 120 (medido).
-    """
     try:
         os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
     except OSError:
@@ -566,30 +412,133 @@ def _descartar_stdout():
 
 
 def _dizer_caminho(caminho: Path, codigo: int) -> int:
-    """Imprime o caminho e só então devolve o código.
-
-    Se o stdout falhar DEPOIS da escrita, a evidência já existe no disco — o
-    exit 2 sem esta distinção mandaria o chamador re-executar e fabricar um
-    ciclo a mais (medido). O flush explícito força o erro para dentro deste
-    guarda.
-    """
     try:
         print(caminho)
         sys.stdout.flush()
     except OSError as saida:
-        print(f"evidência escrita em {caminho}, mas o stdout falhou: {saida}",
-              file=sys.stderr)
+        print(ERRO_STDOUT_APOS_ESCRITA.format(caminho, saida), file=sys.stderr)
         _descartar_stdout()
         return 2
     return codigo
 
 
-# ---------------------------------------------------------------------------
-# Os testes: as duas listas (o que o contrato aceita, o que ele recusa) e o
-# comportamento do script — incluindo as três fantoches encadeadas.
-# ---------------------------------------------------------------------------
+def _imprimir_esquema_da_sessao(esquema: dict) -> int:
+    guia = projetar_para_sessao(esquema)
+    try:
+        print(json.dumps(guia, ensure_ascii=False))
+        sys.stdout.flush()
+    except OSError as saida:
+        print(ERRO_STDOUT.format(saida), file=sys.stderr)
+        _descartar_stdout()
+        return 2
+    return 0
 
-# O exemplo do corpo da issue, tal e qual: é caso de teste do contrato.
+
+def _validar_arquivo(pedido: str, esquema: dict) -> int:
+    if pedido == "-":
+        texto = sys.stdin.read()
+    else:
+        try:
+            texto = Path(pedido).read_text(encoding="utf-8")
+        except OSError as erro:
+            print(ERRO_LEITURA.format(pedido, erro), file=sys.stderr)
+            return 2
+    try:
+        dado = json.loads(texto)
+    except (ValueError, RecursionError) as erro:
+        print(ERRO_JSON_QUEBRADO.format(erro), file=sys.stderr)
+        return 2
+    erros = validar_evidencia(dado, esquema)
+    if erros:
+        for linha in erros:
+            print(linha, file=sys.stderr)
+        return 2
+    try:
+        print(OK_EVIDENCIA_VALIDA)
+        sys.stdout.flush()
+    except OSError as saida:
+        print(ERRO_STDOUT_APOS_VALIDA.format(saida), file=sys.stderr)
+        _descartar_stdout()
+        return 2
+    return 0
+
+
+def _problemas_dos_argumentos(args, esquema: dict) -> list:
+    problemas = _erros(esquema["properties"]["etapa"], args.etapa,
+                       ROTULO_ARG_ETAPA)
+    problemas += _erros(esquema["properties"]["trabalho"], args.trabalho,
+                        ROTULO_ARG_TRABALHO)
+    problemas += _erros(esquema["properties"]["ciclo"]["properties"]["teto"],
+                        args.teto, ROTULO_ARG_TETO)
+    if not ORDEM_MINIMA <= args.ordem <= ORDEM_MAXIMA:
+        problemas.append(PROBLEMA_ORDEM.format(args.ordem))
+    if not args.dir or "\n" in args.dir or "\r" in args.dir:
+        problemas.append(PROBLEMA_DIR)
+    return problemas
+
+
+def _texto_da_entrada(entrada: str):
+    if entrada == "-":
+        return sys.stdin.read()
+    try:
+        return Path(entrada).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+    except OSError as ambiente:
+        print(ERRO_AMBIENTE_NA_ENTRADA.format(entrada, ambiente),
+              file=sys.stderr)
+        return None
+
+
+def _materializar_pela_linha_de_comando(args, esquema: dict) -> int:
+    texto = _texto_da_entrada(args.entrada)
+    if texto is None:
+        return 2
+    try:
+        caminho, codigo = materializar(args.dir, args.trabalho, args.etapa,
+                                       args.ordem, args.teto, texto, esquema)
+    except FileExistsError as colisao:
+        print(ERRO_COLISAO.format(colisao), file=sys.stderr)
+        return 2
+    except OSError as ambiente:
+        print(ERRO_AMBIENTE_NADA_ESCRITO.format(ambiente), file=sys.stderr)
+        return 2
+    return _dizer_caminho(caminho, codigo)
+
+
+def _sintetizar_pela_linha_de_comando(args, esquema: dict) -> int:
+    try:
+        caminho = sintetizar(args.dir, args.trabalho, args.etapa, args.ordem,
+                             args.teto, args.motivo, args.detalhe, esquema)
+    except FileExistsError as colisao:
+        print(ERRO_COLISAO.format(colisao), file=sys.stderr)
+        return 2
+    except OSError as ambiente:
+        print(ERRO_AMBIENTE_NADA_ESCRITO.format(ambiente), file=sys.stderr)
+        return 2
+    return _dizer_caminho(caminho, 0)
+
+
+def main(argv) -> int:
+    args = montar_parser().parse_args(argv)
+    esquema = carregar_esquema()
+
+    if args.comando == "esquema-sessao":
+        return _imprimir_esquema_da_sessao(esquema)
+    if args.comando == "validar":
+        return _validar_arquivo(args.arquivo, esquema)
+
+    problemas = _problemas_dos_argumentos(args, esquema)
+    if problemas:
+        for problema in problemas:
+            print(ERRO_DE_USO.format(problema), file=sys.stderr)
+        return 2
+
+    if args.comando == "materializar":
+        return _materializar_pela_linha_de_comando(args, esquema)
+    return _sintetizar_pela_linha_de_comando(args, esquema)
+
+
 EXEMPLO_DA_ISSUE = r'''
 {
   "etapa": "cetico",
@@ -619,7 +568,8 @@ def _base(**troca):
         "ciclo": {"i": 1, "teto": 3},
     }
     evidencia.update(troca)
-    return {chave: valor for chave, valor in evidencia.items() if valor is not ...}
+    return {chave: valor for chave, valor in evidencia.items()
+            if valor is not ...}
 
 
 ACEITA = [
@@ -692,6 +642,8 @@ print(json.dumps({"structured_output": {
 """
 
 FANTOCHE_QUEBRADA = 'print("{ isto nao e json")\n'
+FANTOCHE_QUE_MORRE = "import sys; sys.exit(9)\n"
+ETAPA_DESLIGADA = None
 
 
 def _cli(argumentos, entrada=None):
@@ -700,27 +652,26 @@ def _cli(argumentos, entrada=None):
         input=entrada, capture_output=True, text=True, timeout=60)
 
 
-def _encadear(pasta, trabalho, etapas):
-    """O encadeador mínimo da prova: roda fantoches e materializa evidências.
+def _rodar_fantoche(pasta, nome, script):
+    arquivo = Path(pasta) / f"fantoche-{nome}.py"
+    arquivo.write_text(script, encoding="utf-8")
+    return subprocess.run([sys.executable, str(arquivo)],
+                          capture_output=True, text=True, timeout=60)
 
-    `etapas` é uma lista de (ordem, nome, script | None); None = desligada.
-    É de propósito um laço burro: o encadeador de verdade é o degrau 3.
-    """
+
+def _encadear(pasta, trabalho, etapas):
     resultados = []
     for ordem, nome, script in etapas:
         base = ["--dir", str(pasta), "--trabalho", trabalho, "--etapa", nome,
                 "--ordem", str(ordem), "--teto", "3"]
-        if script is None:
+        if script is ETAPA_DESLIGADA:
             saida = _cli(["sintetico"] + base + ["--motivo", "desligada"])
         else:
-            arquivo = Path(pasta) / f"fantoche-{nome}.py"
-            arquivo.write_text(script, encoding="utf-8")
-            fantoche = subprocess.run([sys.executable, str(arquivo)],
-                                      capture_output=True, text=True, timeout=60)
+            fantoche = _rodar_fantoche(pasta, nome, script)
             if fantoche.returncode != 0:
                 saida = _cli(["sintetico"] + base +
-                             ["--motivo", "morta",
-                              "--detalhe", f"exit {fantoche.returncode}"])
+                             ["--motivo", "morta", "--detalhe",
+                              DETALHE_EXIT.format(fantoche.returncode)])
             else:
                 saida = _cli(["materializar"] + base, entrada=fantoche.stdout)
         resultados.append(saida)
@@ -732,18 +683,7 @@ def _ler(pasta, trabalho, nome_arquivo):
                       .read_text(encoding="utf-8"))
 
 
-def _comportamento(pasta, esquema):
-    """Casos de comportamento; devolve a lista de (rótulo, passou).
-
-    O total sai do que RODOU — caso condicional (como o do /dev/full) que
-    não roda não conta, em vez de virar passe fabricado.
-    """
-    resultados = []
-
-    def caso(rotulo, condicao):
-        resultados.append((rotulo, bool(condicao)))
-
-    # a) o modelo não manda nos campos do código
+def _o_codigo_manda_nos_campos(pasta, caso):
     _cli(["materializar", "--dir", pasta, "--trabalho", "t-campos",
           "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
          entrada=json.dumps({"structured_output": json.loads(EXEMPLO_DA_ISSUE)}))
@@ -754,14 +694,12 @@ def _comportamento(pasta, esquema):
     caso("ciclo vem da contagem, não do JSON", escrito["ciclo"]["i"] == 1)
     caso("veredito do modelo é preservado", escrito["veredito"] == "para")
 
-    # b) segunda materialização da mesma etapa vira c2
     _cli(["materializar", "--dir", pasta, "--trabalho", "t-campos",
           "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
          entrada=json.dumps({"structured_output": json.loads(EXEMPLO_DA_ISSUE)}))
     caso("contagem de ciclo: segundo evidência é c2",
          (Path(pasta) / "t-campos" / "01-alfa-c2.json").exists())
 
-    # c) origem/motivo vindos do modelo são descartados
     forjado = _base(origem="encadeador", motivo="desligada")
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-forja",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
@@ -770,7 +708,8 @@ def _comportamento(pasta, esquema):
     caso("modelo não forja evidência sintética",
          resposta.returncode == 0 and "origem" not in escrito)
 
-    # d) entrada quebrada vira para sintético, exit 3
+
+def _entrada_ruim_vira_para_sintetico(pasta, caso):
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-quebra",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
                     entrada="{ isto nao e json")
@@ -779,7 +718,6 @@ def _comportamento(pasta, esquema):
          resposta.returncode == 3 and escrito["veredito"] == "para"
          and escrito["motivo"] == "recibo-invalido")
 
-    # e) entrada vazia (evidência ausente) vira para sintético
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-vazio",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
                     entrada="")
@@ -787,7 +725,6 @@ def _comportamento(pasta, esquema):
     caso("evidência ausente vira para sintético",
          resposta.returncode == 3 and escrito["motivo"] == "recibo-invalido")
 
-    # f) evidência fora do contrato vira para sintético com o erro registrado
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-contrato",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
                     entrada=json.dumps(_base(veredito="quase")))
@@ -796,18 +733,17 @@ def _comportamento(pasta, esquema):
          resposta.returncode == 3 and escrito["motivo"] == "recibo-invalido"
          and "veredito" in escrito["faltas"][0])
 
-    # g) escrita atômica: nenhum temporário sobra
+
+def _a_escrita_nao_deixa_temporario(pasta, caso):
     caso("nenhum temporário sobra no diretório",
          not list(Path(pasta).rglob("*.tmp")))
-
-    # h) o sintético que o script escreve passa no próprio validador
     resposta = _cli(["validar", str(Path(pasta) / "t-quebra" / "01-alfa-c1.json")])
     caso("sintético passa no próprio validador", resposta.returncode == 0)
 
-    # i) TRÊS fantoches encadeadas, a do meio desligada: a terceira roda,
-    #    a evidência do meio registra o skip
+
+def _tres_fantoches_encadeadas(pasta, caso):
     _encadear(pasta, "t-skip", [(1, "alfa", FANTOCHE),
-                                (2, "bravo", None),
+                                (2, "bravo", ETAPA_DESLIGADA),
                                 (3, "charlie", FANTOCHE)])
     meio = _ler(pasta, "t-skip", "02-bravo-c1.json")
     fim = _ler(pasta, "t-skip", "03-charlie-c1.json")
@@ -817,7 +753,6 @@ def _comportamento(pasta, esquema):
          meio["origem"] == "encadeador" and meio["motivo"] == "desligada"
          and meio["veredito"] == "segue")
 
-    # j) fantoche do meio devolvendo lixo: a evidência dela é para sintético
     _encadear(pasta, "t-lixo", [(1, "alfa", FANTOCHE),
                                 (2, "bravo", FANTOCHE_QUEBRADA),
                                 (3, "charlie", FANTOCHE)])
@@ -825,33 +760,22 @@ def _comportamento(pasta, esquema):
     caso("fantoche que devolve lixo vira para sintético",
          meio["veredito"] == "para" and meio["motivo"] == "recibo-invalido")
 
-    # k2) o guia da sessão sai sem allOf; a lei continua com ele
+
+def _o_guia_da_sessao_carrega_a_lei_que_julga(caso):
     resposta = _cli(["esquema-sessao"])
     guia = json.loads(resposta.stdout)
     caso("esquema-sessao tira o allOf e mantém o resto",
          "allOf" not in guia and "properties" in guia
          and "allOf" in carregar_esquema())
 
-    # k3) o guia é enxuto: sem a arqueologia e sem exigir do modelo os quatro
-    # campos que o código sobrescreve — eles ficam em properties, saem de
-    # required. A LEI segue inteira: o contrato ao lado não muda um byte.
-    do_codigo = ("etapa", "trabalho", "quando", "ciclo")
     lei = carregar_esquema()
     caso("esquema-sessao não manda $comment nem exige campo do código",
          '"$comment"' not in resposta.stdout
-         and not set(do_codigo) & set(guia["required"])
-         and all(campo in guia["properties"] for campo in do_codigo)
+         and not set(CAMPOS_DO_CODIGO) & set(guia["required"])
+         and all(campo in guia["properties"] for campo in CAMPOS_DO_CODIGO)
          and "$comment" in lei
-         and set(do_codigo) <= set(lei["required"]))
+         and set(CAMPOS_DO_CODIGO) <= set(lei["required"]))
 
-    # k2b) o contrato que a sessão VÊ tem de enunciar a regra que a JULGA.
-    # A projeção tira o allOf (a API recusa if/then/else), e é lá que mora
-    # "proximo só existe no para". Enquanto os $comment viajavam, a regra
-    # chegava em prosa. Sem eles, a sessão via `proximo` em properties e
-    # nada dizendo quando vale — medido em 18/08/2026: a etapa que fundiu
-    # `fluxos/` fez o trabalho inteiro, devolveu `veredito: segue` com um
-    # `proximo` prestativo, e foi reprovada por uma regra que ninguém lhe
-    # mostrou. Contrato que julga por regra escondida é armadilha.
     condicionais = ("proximo", "pergunta", "motivo", "origem")
     caso("o contrato da sessão diz QUANDO cada campo condicional vale",
          all(guia["properties"][campo].get("description")
@@ -859,11 +783,6 @@ def _comportamento(pasta, esquema):
     caso("a regra do proximo chega na sessão, não só no allOf",
          "para" in guia["properties"]["proximo"].get("description", ""))
 
-    # A mesma armadilha, noutro campo: como SE ESCREVE a prova era regra que
-    # só a verificação conhecia. Medido em 18/08/2026, numa execução real:
-    # 10 de 11 acusações foram prova mal escrita — prosa no campo `comando`,
-    # saída redigida à mão, ausência declarada entre parênteses. A sessão não
-    # tinha onde aprender nenhuma das três.
     regra_da_prova = guia["properties"]["provado"].get("description", "")
     caso("a sessão recebe COMO se escreve a prova, não só o que provar",
          bool(regra_da_prova))
@@ -875,16 +794,16 @@ def _comportamento(pasta, esquema):
     caso("e o marcador de corte é ensinado onde a sessão o lê",
          "(...)" in regra_da_prova)
 
-    # k) fantoche que morre (exit != 0): o encadeador registra morta
+
+def _fantoche_morta_e_json_fundo(pasta, caso):
     _encadear(pasta, "t-morte", [(1, "alfa", FANTOCHE),
-                                 (2, "bravo", "import sys; sys.exit(9)\n"),
+                                 (2, "bravo", FANTOCHE_QUE_MORRE),
                                  (3, "charlie", FANTOCHE)])
     meio = _ler(pasta, "t-morte", "02-bravo-c1.json")
     caso("fantoche morta vira para sintético com motivo morta",
          meio["veredito"] == "para" and meio["motivo"] == "morta"
          and "exit 9" in meio["proximo"])
 
-    # l) JSON fundo demais não derruba o materializar: vira para sintético
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-fundo",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
                     entrada="[" * 100000)
@@ -892,7 +811,8 @@ def _comportamento(pasta, esquema):
     caso("JSON fundo demais vira para sintético, nunca traceback",
          resposta.returncode == 3 and escrito["motivo"] == "recibo-invalido")
 
-    # m) argumento fora do contrato é erro de USO: exit 2, nada escrito
+
+def _argumento_fora_do_contrato_e_erro_de_uso(pasta, caso):
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-uso",
                      "--etapa", "Alfa", "--ordem", "1", "--teto", "3"],
                     entrada="{}")
@@ -908,7 +828,8 @@ def _comportamento(pasta, esquema):
                     entrada="{}")
     caso("ordem fora de 1..99: exit 2", resposta.returncode == 2)
 
-    # n) contagem por máximo: buraco na sequência não sobrescreve ninguém
+
+def _a_contagem_de_ciclo_nao_sobrescreve(pasta, caso):
     for _ in range(2):
         _cli(["sintetico", "--dir", pasta, "--trabalho", "t-buraco",
               "--etapa", "alfa", "--ordem", "1", "--teto", "3",
@@ -922,7 +843,6 @@ def _comportamento(pasta, esquema):
          (Path(pasta) / "t-buraco" / "01-alfa-c3.json").exists()
          and _ler(pasta, "t-buraco", "01-alfa-c2.json") == intacto)
 
-    # o) contagem não cruza etapas de prefixo parecido ("a" versus "a-c1")
     _cli(["sintetico", "--dir", pasta, "--trabalho", "t-prefixo",
           "--etapa", "a-c1", "--ordem", "1", "--teto", "3",
           "--motivo", "desligada"])
@@ -932,7 +852,8 @@ def _comportamento(pasta, esquema):
     caso("contagem não cruza etapas de prefixo parecido",
          (Path(pasta) / "t-prefixo" / "01-a-c1.json").exists())
 
-    # p) sobrescrever evidência falha ALTO — um escritor só
+
+def _a_colisao_de_caminho_falha_alto(pasta, caso):
     alvo = Path(pasta) / "t-colisao" / "01-alfa-c1.json"
     escrever_atomico(alvo, json.loads(EXEMPLO_DA_ISSUE))
     try:
@@ -943,22 +864,22 @@ def _comportamento(pasta, esquema):
     caso("colisão não deixa temporário para trás",
          not list((Path(pasta) / "t-colisao").glob("*.tmp")))
 
-    # q) --entrada apontando para diretório é erro de AMBIENTE: exit 2 e
-    #    NENHUM evidência com diagnóstico falso sobre a etapa
+
+def _a_entrada_separa_ambiente_de_etapa_sem_saida(pasta, caso):
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-eisdir",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3",
                      "--entrada", pasta])
     caso("entrada ilegível é erro de ambiente, sem evidência de diagnóstico falso",
          resposta.returncode == 2 and not (Path(pasta) / "t-eisdir").exists())
 
-    # r) --entrada que não existe segue sendo etapa-sem-saída: sintético
     resposta = _cli(["materializar", "--dir", pasta, "--trabalho", "t-enoent",
                      "--etapa", "alfa", "--ordem", "1", "--teto", "3",
                      "--entrada", str(Path(pasta) / "nao-existe.json")])
     caso("entrada inexistente vira para sintético (etapa sem saída)",
          resposta.returncode == 3)
 
-    # s) intruso com dígito não-ASCII no nome não dirige a contagem
+
+def _o_intruso_e_a_quebra_de_linha(pasta, caso):
     pasta_intruso = Path(pasta) / "t-intruso"
     pasta_intruso.mkdir()
     (pasta_intruso / "01-alfa-c１０.json").write_text("{}", encoding="utf-8")
@@ -968,25 +889,45 @@ def _comportamento(pasta, esquema):
     caso("intruso com dígito não-ASCII não dirige a contagem",
          (pasta_intruso / "01-alfa-c1.json").exists())
 
-    # t) --dir com quebra de linha é erro de uso (stdout lido linha a linha)
     resposta = _cli(["sintetico", "--dir", f"{pasta}/qu\nebra",
                      "--trabalho", "t-dir", "--etapa", "alfa", "--ordem", "1",
                      "--teto", "3", "--motivo", "desligada"])
     caso("--dir com quebra de linha é erro de uso", resposta.returncode == 2)
 
-    # u) stdout quebrado DEPOIS da escrita: exit 2 e o stderr diz o caminho
-    if os.path.exists("/dev/full"):
-        with open("/dev/full", "w") as ralo:
-            resposta = subprocess.run(
-                [sys.executable, str(Path(__file__).resolve()), "sintetico",
-                 "--dir", pasta, "--trabalho", "t-ralo", "--etapa", "alfa",
-                 "--ordem", "1", "--teto", "3", "--motivo", "desligada"],
-                stdout=ralo, stderr=subprocess.PIPE, text=True, timeout=60)
-        caso("stdout quebrado pós-escrita: exit 2 e o stderr diz o caminho",
-             resposta.returncode == 2
-             and "evidência escrita em" in resposta.stderr
-             and (Path(pasta) / "t-ralo" / "01-alfa-c1.json").exists())
 
+def _o_stdout_quebrado_depois_da_escrita(pasta, caso):
+    if not os.path.exists("/dev/full"):
+        return
+    with open("/dev/full", "w") as ralo:
+        resposta = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "sintetico",
+             "--dir", pasta, "--trabalho", "t-ralo", "--etapa", "alfa",
+             "--ordem", "1", "--teto", "3", "--motivo", "desligada"],
+            stdout=ralo, stderr=subprocess.PIPE, text=True, timeout=60)
+    caso("stdout quebrado pós-escrita: exit 2 e o stderr diz o caminho",
+         resposta.returncode == 2
+         and "evidência escrita em" in resposta.stderr
+         and (Path(pasta) / "t-ralo" / "01-alfa-c1.json").exists())
+
+
+def _comportamento(pasta):
+    resultados = []
+
+    def caso(rotulo, condicao):
+        resultados.append((rotulo, bool(condicao)))
+
+    _o_codigo_manda_nos_campos(pasta, caso)
+    _entrada_ruim_vira_para_sintetico(pasta, caso)
+    _a_escrita_nao_deixa_temporario(pasta, caso)
+    _tres_fantoches_encadeadas(pasta, caso)
+    _o_guia_da_sessao_carrega_a_lei_que_julga(caso)
+    _fantoche_morta_e_json_fundo(pasta, caso)
+    _argumento_fora_do_contrato_e_erro_de_uso(pasta, caso)
+    _a_contagem_de_ciclo_nao_sobrescreve(pasta, caso)
+    _a_colisao_de_caminho_falha_alto(pasta, caso)
+    _a_entrada_separa_ambiente_de_etapa_sem_saida(pasta, caso)
+    _o_intruso_e_a_quebra_de_linha(pasta, caso)
+    _o_stdout_quebrado_depois_da_escrita(pasta, caso)
     return resultados
 
 
@@ -997,29 +938,30 @@ def testar() -> int:
     for rotulo, evidencia in ACEITA:
         erros = validar_evidencia(evidencia, esquema)
         if erros:
-            falhas.append(f"ACEITA [{rotulo}]: recusou — {'; '.join(erros)}")
+            falhas.append(TESTE_ACEITA_RECUSOU.format(rotulo,
+                                                      "; ".join(erros)))
 
     for rotulo, evidencia, trecho in RECUSA:
         erros = validar_evidencia(evidencia, esquema)
         if not erros:
-            falhas.append(f"RECUSA [{rotulo}]: aceitou o que devia recusar")
+            falhas.append(TESTE_RECUSA_ACEITOU.format(rotulo))
         elif not any(trecho in erro for erro in erros):
-            falhas.append(f"RECUSA [{rotulo}]: recusou pelo motivo errado — "
-                          f"{'; '.join(erros)}")
+            falhas.append(TESTE_RECUSA_MOTIVO_ERRADO.format(
+                rotulo, "; ".join(erros)))
 
     with tempfile.TemporaryDirectory(prefix="evidencia-teste-") as pasta:
-        comportamento = _comportamento(pasta, esquema)
-    falhas += [f"COMPORTAMENTO [{rotulo}]"
+        comportamento = _comportamento(pasta)
+    falhas += [TESTE_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]
 
     total = len(ACEITA) + len(RECUSA) + len(comportamento)
     if falhas:
         for falha in falhas:
-            print(f"FALHOU: {falha}")
-        print(f"FALHOU: {len(falhas)} de {total} casos")
+            print(TESTE_FALHA.format(falha))
+        print(TESTE_RESUMO_FALHA.format(len(falhas), total))
         return 1
-    print(f"OK: {total} casos — {len(ACEITA)} aceitos, {len(RECUSA)} "
-          f"recusados, {len(comportamento)} de comportamento")
+    print(TESTE_RESUMO_OK.format(total, len(ACEITA), len(RECUSA),
+                                 len(comportamento)))
     return 0
 
 
@@ -1029,7 +971,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except OSError as ambiente:
-        # Última rede: as escritas já têm guarda própria lá dentro, então
-        # aqui não se afirma "nada escrito" — só o erro, honesto.
-        print(f"erro de ambiente: {ambiente}", file=sys.stderr)
+        print(ERRO_DE_AMBIENTE.format(ambiente), file=sys.stderr)
         sys.exit(2)

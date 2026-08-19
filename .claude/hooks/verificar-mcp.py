@@ -1,49 +1,55 @@
-"""Gancho SessionStart: acusa declaração de MCP apontando para arquivo que não existe.
-
-Servidor MCP declarado que não sobe some da lista de ferramentas. No Claude
-Code atual a falha de conexão chega ao agente (status no `claude mcp list`
-e aviso quando a busca de ferramenta não acha); em outros agentes o sumiço
-é silencioso. Este gancho acusa ANTES do uso e cobre os agentes que calam.
-
-A causa mais comum é caminho morto: o `command`, um item de `args` ou o
-ajudante de cabeçalho apontam para um arquivo que mudou de lugar, nunca foi
-commitado, ou ficou para trás quando a raiz do repositório mudou de nome.
-Ninguém valida esses caminhos na declaração — este gancho valida na abertura.
-
-Ele verifica só o que dá para provar barato: caminho declarado existe no
-disco? Não sobe servidor nem fala protocolo — a sonda completa é assunto da
-página conhecimento/mcp.md. E cala quando está tudo lá: aviso que aparece
-sempre ensina a ignorar aviso.
-
-Rode os testes com:  python .claude/hooks/verificar-mcp.py --testar
-"""
-
 import json
 import os
 import shlex
 import sys
 from pathlib import Path
 
-# Extensões que denunciam arquivo executável ou script. Token sem separador e
-# sem extensão destas é programa do PATH ("python", "node") ou argumento
-# comum ("run", "-m") — não é caminho para verificar.
-EXTENSOES = {".py", ".js", ".mjs", ".cjs", ".ts", ".sh", ".ps1", ".cmd",
-             ".bat", ".exe", ".jar", ".rb", ".php"}
+ARQUIVO_DE_DECLARACAO = ".mcp.json"
+CHAVE_DOS_SERVIDORES = "mcpServers"
+CHAVE_DO_COMANDO = "command"
+CHAVE_DOS_ARGUMENTOS = "args"
+CHAVE_DO_AJUDANTE_DE_CABECALHO = "headersHelper"
+
+VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
+NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
+
+EXTENSOES_DE_EXECUTAVEL_OU_SCRIPT = {".py", ".js", ".mjs", ".cjs", ".ts",
+                                     ".sh", ".ps1", ".cmd", ".bat", ".exe",
+                                     ".jar", ".rb", ".php"}
+PREFIXOS_DE_BANDEIRA_E_DE_PACOTE_COM_ESCOPO = ("-", "@")
+MARCAS_DE_URL_VARIAVEL_E_CURINGA = ("${", "://", "*")
+SEPARADORES_DE_PASTA = ("/", "\\")
+
+EVENTO_DE_INICIO_DE_SESSAO = "SessionStart"
+BANDEIRA_DE_TESTE = "--testar"
+SILENCIO = 0
+FALHA_ABERTO = 0
+
+LINHA_DO_CAMINHO_AUSENTE = "- servidor `{}`: `{}` não existe no disco"
+AVISO = (
+    "AVISO do gancho verificar-mcp: o .mcp.json declara caminho que não "
+    "existe. O servidor não vai subir e o sintoma é silencioso — ele "
+    "some da lista de ferramentas como se nunca tivesse sido "
+    "configurado.\n{}\n"
+    "Avise o dono antes de precisar da ferramenta, não depois de ela "
+    "faltar."
+)
+
+FALHA_DEVIA_ACUSAR = "  DEVIA ACUSAR e calou — {}"
+FALHA_DEVIA_CALAR = "  DEVIA CALAR e acusou — {}: {}"
+RESUMO_FALHOU = "FALHOU: {} de {} casos"
+RESUMO_OK = "OK: {} casos — {} acusados, {} calados"
 
 
-def parece_caminho(token: str) -> bool:
-    """Só o que dá para verificar sem adivinhar.
-
-    Fica de fora: bandeira, URL, variável não resolvida (`${VAR}`), curinga e
-    pacote npm com escopo (`@scope/nome` tem barra e não é arquivo).
-    """
-    if not token or token.startswith(("-", "@")):
+def parece_caminho_verificavel(token: str) -> bool:
+    if not token or token.startswith(PREFIXOS_DE_BANDEIRA_E_DE_PACOTE_COM_ESCOPO):
         return False
-    if "${" in token or "://" in token or "*" in token:
+    if any(marca in token for marca in MARCAS_DE_URL_VARIAVEL_E_CURINGA):
         return False
-    if any(token.lower().endswith(e) for e in EXTENSOES):
+    if any(token.lower().endswith(extensao)
+           for extensao in EXTENSOES_DE_EXECUTAVEL_OU_SCRIPT):
         return True
-    return "/" in token or "\\" in token
+    return any(separador in token for separador in SEPARADORES_DE_PASTA)
 
 
 def tokens_do_comando(texto: str) -> list:
@@ -53,75 +59,68 @@ def tokens_do_comando(texto: str) -> list:
         return texto.split()
 
 
-def candidatos_do_servidor(servidor: dict) -> list:
-    """Todos os tokens de caminho que uma declaração pode carregar."""
+def tokens_de_caminho_do_servidor(servidor: dict) -> list:
     tokens = []
-    comando = servidor.get("command", "")
+    comando = servidor.get(CHAVE_DO_COMANDO, "")
     if isinstance(comando, str) and comando:
         tokens += tokens_do_comando(comando)
-    args = servidor.get("args", [])
-    if isinstance(args, list):
-        tokens += [a for a in args if isinstance(a, str)]
-    ajudante = servidor.get("headersHelper", "")
+    argumentos = servidor.get(CHAVE_DOS_ARGUMENTOS, [])
+    if isinstance(argumentos, list):
+        tokens += [a for a in argumentos if isinstance(a, str)]
+    ajudante = servidor.get(CHAVE_DO_AJUDANTE_DE_CABECALHO, "")
     if isinstance(ajudante, str) and ajudante:
         tokens += tokens_do_comando(ajudante)
     return [t.strip('"') for t in tokens if isinstance(t, str)]
 
 
-def faltantes(cfg: dict, raiz: Path) -> list:
-    """Pares (servidor, caminho) declarados e ausentes do disco."""
-    problemas = []
-    for nome, servidor in cfg.get("mcpServers", {}).items():
+def alvo_no_disco(raiz: Path, token: str) -> Path:
+    caminho = Path(token.replace("\\", "/"))
+    return caminho if caminho.is_absolute() else raiz / caminho
+
+
+def caminhos_declarados_que_sumiram(declaracao: dict, raiz: Path) -> list:
+    ausentes = []
+    for nome, servidor in declaracao.get(CHAVE_DOS_SERVIDORES, {}).items():
         if not isinstance(servidor, dict):
             continue
-        for token in candidatos_do_servidor(servidor):
-            if not parece_caminho(token):
+        for token in tokens_de_caminho_do_servidor(servidor):
+            if not parece_caminho_verificavel(token):
                 continue
-            caminho = Path(token.replace("\\", "/"))
-            alvo = caminho if caminho.is_absolute() else raiz / caminho
-            if not alvo.exists():
-                problemas.append((nome, token))
-    return problemas
+            if not alvo_no_disco(raiz, token).exists():
+                ausentes.append((nome, token))
+    return ausentes
+
+
+def raiz_do_projeto_nunca_o_cwd() -> Path:
+    declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+    if declarada:
+        return Path(declarada)
+    return Path(__file__).resolve().parents[NIVEIS_DO_GANCHO_ATE_A_RAIZ]
 
 
 def main() -> int:
-    # O cwd anda com a sessão; a raiz do projeto, não. A variável vem do
-    # Claude Code; sem ela, o próprio arquivo sabe onde mora — nunca o cwd.
-    base = os.environ.get("CLAUDE_PROJECT_DIR")
-    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
-    arquivo = raiz / ".mcp.json"
+    raiz = raiz_do_projeto_nunca_o_cwd()
+    arquivo = raiz / ARQUIVO_DE_DECLARACAO
     if not arquivo.exists():
-        return 0  # nada declarado, nada a verificar
+        return SILENCIO
 
     try:
-        cfg = json.loads(arquivo.read_text(encoding="utf-8"))
-        problemas = faltantes(cfg, raiz)
+        declaracao = json.loads(arquivo.read_text(encoding="utf-8"))
+        ausentes = caminhos_declarados_que_sumiram(declaracao, raiz)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        return 0  # falha aberto: gancho quebrado não prende a sessão
+        return FALHA_ABERTO
 
-    if not problemas:
-        return 0  # tudo no lugar é silêncio
+    if not ausentes:
+        return SILENCIO
 
-    linhas = [f"- servidor `{nome}`: `{caminho}` não existe no disco"
-              for nome, caminho in problemas]
-    aviso = (
-        "AVISO do gancho verificar-mcp: o .mcp.json declara caminho que não "
-        "existe. O servidor não vai subir e o sintoma é silencioso — ele "
-        "some da lista de ferramentas como se nunca tivesse sido "
-        "configurado.\n" + "\n".join(linhas) + "\n"
-        "Avise o dono antes de precisar da ferramenta, não depois de ela "
-        "faltar."
-    )
+    linhas = [LINHA_DO_CAMINHO_AUSENTE.format(nome, caminho)
+              for nome, caminho in ausentes]
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "SessionStart",
-        "additionalContext": aviso,
+        "hookEventName": EVENTO_DE_INICIO_DE_SESSAO,
+        "additionalContext": AVISO.format("\n".join(linhas)),
     }}))
-    return 0
+    return SILENCIO
 
-
-# --- Testes -----------------------------------------------------------------
-# Duas listas, e a segunda é a que importa: aviso que dispara à toa é
-# desligado na primeira semana. Metade dos casos prova que ele CALA.
 
 def testar() -> int:
     import tempfile
@@ -164,21 +163,23 @@ def testar() -> int:
 
         falhas = []
         for rotulo, servidor in ACUSA:
-            if not faltantes({"mcpServers": {"s": servidor}}, raiz):
-                falhas.append(f"  DEVIA ACUSAR e calou — {rotulo}")
+            if not caminhos_declarados_que_sumiram(
+                    {CHAVE_DOS_SERVIDORES: {"s": servidor}}, raiz):
+                falhas.append(FALHA_DEVIA_ACUSAR.format(rotulo))
         for rotulo, servidor in CALA:
-            achou = faltantes({"mcpServers": {"s": servidor}}, raiz)
+            achou = caminhos_declarados_que_sumiram(
+                {CHAVE_DOS_SERVIDORES: {"s": servidor}}, raiz)
             if achou:
-                falhas.append(f"  DEVIA CALAR e acusou — {rotulo}: {achou}")
+                falhas.append(FALHA_DEVIA_CALAR.format(rotulo, achou))
 
         total = len(ACUSA) + len(CALA)
         if falhas:
-            print(f"FALHOU: {len(falhas)} de {total} casos")
+            print(RESUMO_FALHOU.format(len(falhas), total))
             print("\n".join(falhas))
             return 1
-        print(f"OK: {total} casos — {len(ACUSA)} acusados, {len(CALA)} calados")
+        print(RESUMO_OK.format(total, len(ACUSA), len(CALA)))
         return 0
 
 
 if __name__ == "__main__":
-    sys.exit(testar() if "--testar" in sys.argv else main())
+    sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

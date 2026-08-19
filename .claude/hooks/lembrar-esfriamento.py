@@ -1,42 +1,3 @@
-"""Gancho Stop: lembra o esfriamento — uma vez por sessão, e só quando houve
-trabalho de verdade.
-
-O fechamento mais importante da sessão dependia de alguém lembrar de
-invocá-lo — exatamente o que gancho existe para resolver. Este dispara no
-fim de cada turno e quase sempre CALA: os filtros são metade do valor
-(lição do sistema estudado — sem eles, lembrete vira ruído e ruído ensina
-a ignorar aviso).
-
-Os filtros, na ordem (qualquer um cala, saindo 0 sem imprimir):
-
-1. `stop_hook_active` — o modelo já está continuando por causa de um gancho
-   Stop; insistir seria laço.
-2. Sem `session_id` — sem chave não há como garantir "uma vez por sessão".
-3. `background_tasks`/`session_crons` não vazios — sessão pausada esperando
-   trabalho de fundo não é sessão terminando.
-4. Marca em `tmp/esfriamento-lembrado/<session_id>` — já lembrou nesta
-   sessão.
-5. `last_assistant_message` cita o esfriamento — já rodou, ou está rodando.
-6. Transcript pequeno (< LIMIAR_BYTES) — sessão curta não precisa de
-   fechamento cerimonial.
-7. O transcript INTEIRO cita o esfriamento — o filtro erra para o lado do
-   silêncio de propósito (medido em 17/08/2026: o esfriamento rodou, a
-   última resposta falava de outra coisa, e o lembrete saiu falso; sessão
-   que só mencionou o assunto de passagem fica sem lembrete, e a skill
-   continua sendo o caminho manual).
-8. Poucos turnos de usuário (< LIMIAR_TURNOS) no transcript.
-9. Nenhum uso de Edit/Write/Bash no transcript — sessão só de leitura e
-   pergunta.
-
-Passou por todos: grava a marca e devolve `additionalContext` (orientação,
-não erro — `decision: block` prenderia quem só quer encerrar). O formato
-interno do transcript não é contrato documentado; por isso os filtros que o
-leem falham ABERTOS — qualquer erro cala. A skill `esfriamento` continua
-sendo o caminho em agente sem gancho.
-
-Rode os testes com:  python .claude/hooks/lembrar-esfriamento.py --testar
-"""
-
 import json
 import os
 import sys
@@ -45,10 +6,25 @@ from pathlib import Path
 LIMIAR_BYTES = 80_000
 LIMIAR_TURNOS = 5
 PASTA_MARCAS = "tmp/esfriamento-lembrado"
+CONTEUDO_DA_MARCA = "lembrado\n"
 
-# As marcas se procuram no texto cru do transcript, nas duas grafias que o
-# JSON pode ter (com e sem espaço após os dois-pontos).
 FERRAMENTAS_DE_TRABALHO = ("Edit", "Write", "Bash")
+CHAVE_DO_TIPO = "type"
+TIPO_DE_TURNO_DE_USUARIO = "user"
+CHAVE_DO_NOME = "name"
+PALAVRA_DO_ESFRIAMENTO = "esfriamento"
+SEPARADORES_DE_CAMINHO = ("/", "\\")
+
+VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
+NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
+
+EVENTO_DE_PARADA = "Stop"
+BANDEIRA_DE_TESTE = "--testar"
+NAO_LEMBRA = ""
+MOTIVO_DE_LEMBRAR = "sessão de trabalho sem esfriamento"
+SILENCIO = 0
+FALHA_ABERTO = 0
+LEMBRETE_ENTREGUE = 0
 
 LEMBRETE = (
     "A sessão fez trabalho de verdade e o esfriamento ainda não rodou. Se o "
@@ -57,75 +33,107 @@ LEMBRETE = (
     "siga — este lembrete sai uma vez por sessão."
 )
 
+FALHA_DE_CASO = "  {}"
+FALHA_DEVIA_CALAR = "  DEVIA CALAR e lembrou — {}"
+ROTULO_MAIN_SAI_ZERO = "main sai 0 na {} chamada"
+ROTULO_DA_RODADA = "{} chamada {}"
+PALAVRA_LEMBRA = "lembra"
+PALAVRA_CALA = "cala"
+RESUMO_FALHOU = "FALHOU: {} casos"
+RESUMO_OK = ("OK: {} casos — {} calam, 1 lembra, e o ciclo (marca única, "
+             "contexto de Stop, falha aberta) bate")
 
-def raiz_do_repositorio() -> Path:
-    base = os.environ.get("CLAUDE_PROJECT_DIR")
-    return Path(base) if base else Path(__file__).resolve().parents[2]
+
+def raiz_do_projeto_nunca_o_cwd() -> Path:
+    declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+    if declarada:
+        return Path(declarada)
+    return Path(__file__).resolve().parents[NIVEIS_DO_GANCHO_ATE_A_RAIZ]
 
 
-def _tem_marca(texto: str, chave: str, valor: str) -> bool:
+def tem_par_json(texto: str, chave: str, valor: str) -> bool:
     return f'"{chave}":"{valor}"' in texto or f'"{chave}": "{valor}"' in texto
 
 
-def decisao(entrada: dict, raiz: Path) -> str:
-    """'' para calar; o motivo curto quando é hora de lembrar.
+def cala_pelo_que_o_pedido_diz(entrada: dict, raiz: Path) -> bool:
+    esta_num_laco_de_gancho_stop = entrada.get("stop_hook_active")
+    if esta_num_laco_de_gancho_stop:
+        return True
 
-    Só leitura — quem grava a marca é o main(), depois de decidir.
-    """
-    if entrada.get("stop_hook_active"):
-        return ""
     sessao = entrada.get("session_id", "")
-    if not sessao or "/" in sessao or "\\" in sessao:
-        return ""
-    if entrada.get("background_tasks") or entrada.get("session_crons"):
-        return ""
-    if (raiz / PASTA_MARCAS / sessao).exists():
-        return ""
-    ultima = entrada.get("last_assistant_message") or ""
-    if "esfriamento" in ultima.lower():
-        return ""
+    sem_chave_para_marcar_uma_vez_por_sessao = (
+        not sessao or any(s in sessao for s in SEPARADORES_DE_CAMINHO))
+    if sem_chave_para_marcar_uma_vez_por_sessao:
+        return True
+
+    espera_trabalho_de_fundo = (entrada.get("background_tasks")
+                                or entrada.get("session_crons"))
+    if espera_trabalho_de_fundo:
+        return True
+
+    ja_lembrou_nesta_sessao = (raiz / PASTA_MARCAS / sessao).exists()
+    if ja_lembrou_nesta_sessao:
+        return True
+
+    ultima_resposta = entrada.get("last_assistant_message") or ""
+    return PALAVRA_DO_ESFRIAMENTO in ultima_resposta.lower()
+
+
+def cala_pelo_que_o_transcript_mostra(entrada: dict) -> bool:
     try:
         transcript = Path(entrada.get("transcript_path", ""))
-        if transcript.stat().st_size < LIMIAR_BYTES:
-            return ""
+        sessao_curta_demais = transcript.stat().st_size < LIMIAR_BYTES
+        if sessao_curta_demais:
+            return True
         texto = transcript.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return ""
-    if "esfriamento" in texto.lower():
-        return ""
-    turnos = sum(1 for linha in texto.splitlines()
-                 if _tem_marca(linha, "type", "user"))
-    if turnos < LIMIAR_TURNOS:
-        return ""
-    if not any(_tem_marca(texto, "name", f) for f in FERRAMENTAS_DE_TRABALHO):
-        return ""
-    return "sessão de trabalho sem esfriamento"
+        return True
+
+    o_esfriamento_aparece_em_algum_turno = (
+        PALAVRA_DO_ESFRIAMENTO in texto.lower())
+    if o_esfriamento_aparece_em_algum_turno:
+        return True
+
+    turnos_de_usuario = sum(
+        1 for linha in texto.splitlines()
+        if tem_par_json(linha, CHAVE_DO_TIPO, TIPO_DE_TURNO_DE_USUARIO))
+    if turnos_de_usuario < LIMIAR_TURNOS:
+        return True
+
+    houve_ferramenta_de_trabalho = any(
+        tem_par_json(texto, CHAVE_DO_NOME, ferramenta)
+        for ferramenta in FERRAMENTAS_DE_TRABALHO)
+    return not houve_ferramenta_de_trabalho
+
+
+def decisao(entrada: dict, raiz: Path) -> str:
+    if cala_pelo_que_o_pedido_diz(entrada, raiz):
+        return NAO_LEMBRA
+    if cala_pelo_que_o_transcript_mostra(entrada):
+        return NAO_LEMBRA
+    return MOTIVO_DE_LEMBRAR
 
 
 def main() -> int:
     try:
         entrada = json.load(sys.stdin)
         if not isinstance(entrada, dict):
-            return 0
-        raiz = raiz_do_repositorio()
+            return SILENCIO
+        raiz = raiz_do_projeto_nunca_o_cwd()
         if not decisao(entrada, raiz):
-            return 0
+            return SILENCIO
         marca = raiz / PASTA_MARCAS / entrada["session_id"]
         marca.parent.mkdir(parents=True, exist_ok=True)
-        marca.write_text("lembrado\n", encoding="utf-8")
+        marca.write_text(CONTEUDO_DA_MARCA, encoding="utf-8")
     except Exception:
-        return 0  # falha aberto: lembrete nunca prende a sessão
+        return FALHA_ABERTO
 
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "Stop",
+        "hookEventName": EVENTO_DE_PARADA,
         "additionalContext": LEMBRETE,
     }}))
-    return 0
+    return LEMBRETE_ENTREGUE
 
-
-# --- Testes -----------------------------------------------------------------
-# Duas listas, e a que importa é a CALA: lembrete que dispara à toa é
-# desligado na primeira semana.
 
 def testar() -> int:
     import io
@@ -135,7 +143,7 @@ def testar() -> int:
 
     def caso(rotulo, condicao):
         if not condicao:
-            falhas.append(f"  {rotulo}")
+            falhas.append(FALHA_DE_CASO.format(rotulo))
 
     with tempfile.TemporaryDirectory(prefix="lembrar-teste-") as pasta:
         raiz = Path(pasta)
@@ -172,8 +180,6 @@ def testar() -> int:
              {**base, "session_crons": [{"id": 1}]}),
             ("o esfriamento já apareceu na resposta",
              {**base, "last_assistant_message": "Rodei o ESFRIAMENTO."}),
-            # O falso lembrete medido em 17/08/2026: o esfriamento rodou
-            # turnos atrás e a última resposta falava de outra coisa.
             ("o esfriamento está no transcript, não na última resposta",
              {**base, "transcript_path": transcript(
                  "ja-esfriou.jsonl", LIMIAR_BYTES + 1, 6, "Edit",
@@ -189,15 +195,13 @@ def testar() -> int:
         ]
         for rotulo, entrada in CALA:
             if decisao(entrada, raiz):
-                falhas.append(f"  DEVIA CALAR e lembrou — {rotulo}")
+                falhas.append(FALHA_DEVIA_CALAR.format(rotulo))
 
         caso("DEVIA LEMBRAR: sessão de trabalho sem esfriamento",
-             decisao(base, raiz) != "")
+             decisao(base, raiz) != NAO_LEMBRA)
 
-        # O ciclo inteiro pelo main(): lembra uma vez, e a marca cala a
-        # segunda — mesmo payload, mesma sessão.
-        guardado = os.environ.get("CLAUDE_PROJECT_DIR")
-        os.environ["CLAUDE_PROJECT_DIR"] = pasta
+        guardado = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+        os.environ[VARIAVEL_DA_RAIZ_DO_PROJETO] = pasta
         try:
             for rodada, esperado in (("primeira", True), ("segunda", False)):
                 sys.stdin = io.StringIO(json.dumps(base))
@@ -208,25 +212,25 @@ def testar() -> int:
                     codigo = main()
                 finally:
                     sys.stdout = stdout
-                caso(f"main sai 0 na {rodada} chamada", codigo == 0)
-                caso(f"{rodada} chamada {'lembra' if esperado else 'cala'}",
+                caso(ROTULO_MAIN_SAI_ZERO.format(rodada), codigo == 0)
+                caso(ROTULO_DA_RODADA.format(
+                        rodada, PALAVRA_LEMBRA if esperado else PALAVRA_CALA),
                      bool(saida.getvalue().strip()) == esperado)
                 if esperado and saida.getvalue().strip():
                     corpo = json.loads(saida.getvalue())["hookSpecificOutput"]
                     caso("o lembrete é contexto de Stop, não erro",
-                         corpo.get("hookEventName") == "Stop"
-                         and "esfriamento" in corpo.get(
+                         corpo.get("hookEventName") == EVENTO_DE_PARADA
+                         and PALAVRA_DO_ESFRIAMENTO in corpo.get(
                              "additionalContext", ""))
             caso("a marca nasceu dentro de tmp/ (descartável)",
                  (raiz / PASTA_MARCAS / "s1").is_file())
         finally:
             sys.stdin = sys.__stdin__
             if guardado is None:
-                os.environ.pop("CLAUDE_PROJECT_DIR", None)
+                os.environ.pop(VARIAVEL_DA_RAIZ_DO_PROJETO, None)
             else:
-                os.environ["CLAUDE_PROJECT_DIR"] = guardado
+                os.environ[VARIAVEL_DA_RAIZ_DO_PROJETO] = guardado
 
-        # Falha aberta: entrada quebrada cala e sai 0.
         sys.stdin = io.StringIO("{ nem json")
         saida = io.StringIO()
         stdout = sys.stdout
@@ -241,13 +245,12 @@ def testar() -> int:
 
     total = len(CALA) + 8
     if falhas:
-        print(f"FALHOU: {len(falhas)} casos")
+        print(RESUMO_FALHOU.format(len(falhas)))
         print("\n".join(falhas))
         return 1
-    print(f"OK: {total} casos — {len(CALA)} calam, 1 lembra, e o ciclo "
-          "(marca única, contexto de Stop, falha aberta) bate")
+    print(RESUMO_OK.format(total, len(CALA)))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(testar() if "--testar" in sys.argv else main())
+    sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

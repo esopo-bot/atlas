@@ -1,34 +1,3 @@
-"""Gancho SessionStart: acusa o que a máquina não tem e o repositório declara
-precisar.
-
-Mudança de pasta, de disco ou de máquina perde tudo o que vive fora do
-repositório: variável de ambiente, perfil de CLI, ferramenta instalada. A
-perda é silenciosa — nada avisa na hora; cada peça para dias depois, com
-cara de defeito novo. Este gancho é o aviso que faltou, na primeira sessão.
-
-Ele verifica só o que dá para provar barato, sem abrir conteúdo nenhum: as
-variáveis `${VAR}` que o .mcp.json usa existem no ambiente? O que o
-nucleo/ambiente.json declara — comando, pasta, arquivo, variável — existe?
-Nomes e existência, nunca valores. E cala quando está tudo lá: aviso que
-aparece sempre ensina a ignorar aviso.
-
-O nucleo/ambiente.json é do dono do repositório (a atualização nunca o
-reescreve).
-Uma lista por tipo; valor solto vale por lista de um:
-
-    {
-      "receita": "conhecimento/notas/maquina-nova.md",
-      "comando": ["git", "python3"],
-      "pasta": ["~/.config/ferramenta-x"],
-      "arquivo": ["scripts/preparar.sh"],
-      "variavel": ["FERRAMENTA_X_TOKEN"]
-    }
-
-O porquê está em conhecimento/estado-que-nao-viaja.md.
-
-Rode os testes com:  python .claude/hooks/verificar-ambiente.py --testar
-"""
-
 import json
 import os
 import re
@@ -36,35 +5,74 @@ import shutil
 import sys
 from pathlib import Path
 
-# ${VAR} exige a variável; ${VAR:-padrão} se vira sem ela — o padrão cobre a
-# ausência, e acusar viraria alarme falso.
-VARIAVEL = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}")
+ARQUIVO_MCP = ".mcp.json"
+ARQUIVO_AMBIENTE = "nucleo/ambiente.json"
+ARQUIVO_ANTIGO = "ambiente.txt"
+
+TIPO_RECEITA = "receita"
+TIPO_COMANDO = "comando"
+TIPO_PASTA = "pasta"
+TIPO_ARQUIVO = "arquivo"
+TIPO_VARIAVEL = "variavel"
+TIPOS = (TIPO_RECEITA, TIPO_COMANDO, TIPO_PASTA, TIPO_ARQUIVO, TIPO_VARIAVEL)
+
+VARIAVEL_COM_PADRAO_OPCIONAL = re.compile(
+    r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}")
+
+VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
+NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
+
+EVENTO_DE_INICIO_DE_SESSAO = "SessionStart"
+BANDEIRA_DE_TESTE = "--testar"
+SILENCIO = 0
+FALHA_ABERTO = 0
+
+ERRO_TOPO_NAO_E_OBJETO = "o topo tem de ser um objeto"
+PROBLEMA_VARIAVEL_DO_MCP_AUSENTE = (
+    "- variável `{}` ausente do ambiente (o .mcp.json a usa)")
+PROBLEMA_DECLARACAO_ILEGIVEL = (
+    "- `{}` ilegível ({}) — nenhuma exigência do repositório foi verificada")
+PROBLEMA_ENDERECO_ANTIGO = (
+    "- `{}` virou `{}`: mova as declarações para lá — o gancho não lê mais "
+    "o .txt")
+PROBLEMA_POR_TIPO = {
+    TIPO_RECEITA: "- a própria receita `{}` não existe no disco",
+    TIPO_COMANDO: "- comando `{}` não está no PATH",
+    TIPO_PASTA: "- pasta `{}` não existe",
+    TIPO_ARQUIVO: "- arquivo `{}` não está no disco",
+    TIPO_VARIAVEL: "- variável `{}` ausente do ambiente",
+}
+
+FECHO_COM_RECEITA = "A receita para repor: {}"
+FECHO_SEM_RECEITA = (
+    "Nenhuma receita declarada — a chave `receita` do {} pode apontar a "
+    "página que ensina a repor.")
+AVISO = (
+    "AVISO do gancho verificar-ambiente: esta máquina não tem tudo o que o "
+    "repositório declara precisar. Perda de migração é silenciosa — este é o "
+    "aviso que não existiu na mudança.\n{}\n{}\n"
+    "Avise o dono antes de precisar, não depois de faltar. Nome se "
+    "verifica; valor não se imprime nem se procura."
+)
+
+FALHA_DEVIA_ACUSAR = "  DEVIA ACUSAR e calou — {}"
+FALHA_DEVIA_CALAR = "  DEVIA CALAR e acusou — {}: {}"
+RESUMO_FALHOU = "FALHOU: {} de {} casos"
+RESUMO_OK = "OK: {} casos — {} acusados, {} calados"
 
 
-def variaveis_exigidas(texto: str) -> list:
-    """Os nomes de variável sem padrão, na ordem, sem repetição."""
+def variaveis_exigidas_sem_padrao(texto: str) -> list:
     vistos, nomes = set(), []
-    for nome, padrao in VARIAVEL.findall(texto):
-        if padrao or nome in vistos:
+    for nome, padrao_que_cobre_a_ausencia in (
+            VARIAVEL_COM_PADRAO_OPCIONAL.findall(texto)):
+        if padrao_que_cobre_a_ausencia or nome in vistos:
             continue
         vistos.add(nome)
         nomes.append(nome)
     return nomes
 
 
-ARQUIVO_AMBIENTE = "nucleo/ambiente.json"
-ARQUIVO_ANTIGO = "ambiente.txt"
-TIPOS = ("receita", "comando", "pasta", "arquivo", "variavel")
-
-
 def declaracoes(dados: dict) -> list:
-    """Pares (tipo, valor) do nucleo/ambiente.json, na ordem dos TIPOS.
-
-    Valor solto vale por lista de um — `"receita": "pagina.md"` é o caso
-    comum, e exigir `["pagina.md"]` só deixaria o arquivo mais feio. O que
-    não é texto fica de fora: exigência que ninguém sabe verificar não vira
-    aviso, e chave desconhecida é comentário do repositório, não erro.
-    """
     pares = []
     for tipo in TIPOS:
         valores = dados.get(tipo) or []
@@ -83,107 +91,139 @@ def alvo_no_disco(raiz: Path, valor: str) -> Path:
     return caminho if caminho.is_absolute() else raiz / caminho
 
 
+def variaveis_do_mcp_que_faltam(raiz: Path, env) -> list:
+    mcp = raiz / ARQUIVO_MCP
+    if not mcp.is_file():
+        return []
+    return [nome for nome in
+            variaveis_exigidas_sem_padrao(mcp.read_text(encoding="utf-8"))
+            if nome not in env]
+
+
+def ler_declaracao(caminho: Path) -> tuple:
+    try:
+        dados = json.loads(caminho.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as erro:
+        return {}, str(erro)
+    if not isinstance(dados, dict):
+        return {}, ERRO_TOPO_NAO_E_OBJETO
+    return dados, ""
+
+
+def declaracao_atendida(tipo: str, valor: str, raiz: Path, env,
+                        caminho_path) -> bool:
+    if tipo in (TIPO_RECEITA, TIPO_ARQUIVO):
+        return alvo_no_disco(raiz, valor).is_file()
+    if tipo == TIPO_COMANDO:
+        return bool(shutil.which(valor, path=caminho_path))
+    if tipo == TIPO_PASTA:
+        return alvo_no_disco(raiz, valor).is_dir()
+    return valor in env
+
+
 def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
-    """(problemas, receita): o que falta na máquina, e a página que ensina a repor."""
     env = os.environ if env is None else env
     problemas, receita = [], None
-    ja_acusadas = set()
 
-    mcp = raiz / ".mcp.json"
-    if mcp.is_file():
-        for nome in variaveis_exigidas(mcp.read_text(encoding="utf-8")):
-            if nome not in env:
-                problemas.append(
-                    f"- variável `{nome}` ausente do ambiente (o .mcp.json a usa)")
-                ja_acusadas.add(nome)
+    variaveis_ja_acusadas = set()
+    for nome in variaveis_do_mcp_que_faltam(raiz, env):
+        problemas.append(PROBLEMA_VARIAVEL_DO_MCP_AUSENTE.format(nome))
+        variaveis_ja_acusadas.add(nome)
 
     declarado = raiz / ARQUIVO_AMBIENTE
     if declarado.is_file():
-        try:
-            dados = json.loads(declarado.read_text(encoding="utf-8"))
-            if not isinstance(dados, dict):
-                raise ValueError("o topo tem de ser um objeto")
-        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as erro:
-            # Aqui não se cala: arquivo ilegível é a perda silenciosa que este
-            # gancho existe para acusar — calar devolveria o defeito.
-            problemas.append(f"- `{ARQUIVO_AMBIENTE}` ilegível ({erro}) — "
-                             "nenhuma exigência do repositório foi "
-                             "verificada")
-            dados = {}
+        dados, motivo_de_ilegivel = ler_declaracao(declarado)
+        if motivo_de_ilegivel:
+            problemas.append(PROBLEMA_DECLARACAO_ILEGIVEL.format(
+                ARQUIVO_AMBIENTE, motivo_de_ilegivel))
         for tipo, valor in declaracoes(dados):
-            if tipo == "receita":
+            if tipo == TIPO_RECEITA:
                 receita = valor
-                if not alvo_no_disco(raiz, valor).is_file():
-                    problemas.append(
-                        f"- a própria receita `{valor}` não existe no disco")
-            elif tipo == "comando":
-                if not shutil.which(valor, path=caminho_path):
-                    problemas.append(f"- comando `{valor}` não está no PATH")
-            elif tipo == "pasta":
-                if not alvo_no_disco(raiz, valor).is_dir():
-                    problemas.append(f"- pasta `{valor}` não existe")
-            elif tipo == "arquivo":
-                if not alvo_no_disco(raiz, valor).is_file():
-                    problemas.append(f"- arquivo `{valor}` não está no disco")
-            elif tipo == "variavel":
-                if valor not in env and valor not in ja_acusadas:
-                    problemas.append(f"- variável `{valor}` ausente do ambiente")
+            if tipo == TIPO_VARIAVEL and valor in variaveis_ja_acusadas:
+                continue
+            if not declaracao_atendida(tipo, valor, raiz, env, caminho_path):
+                problemas.append(PROBLEMA_POR_TIPO[tipo].format(valor))
 
-    # O repositório que montou a camada antiga tem o arquivo no endereço velho,
-    # e o gancho não o lê mais. Calar aqui apagaria em silêncio o que ele
-    # declarou
-    # — exatamente o defeito que este gancho existe para acusar.
     if (raiz / ARQUIVO_ANTIGO).is_file():
-        problemas.append(
-            f"- `{ARQUIVO_ANTIGO}` virou `{ARQUIVO_AMBIENTE}`: mova as "
-            "declarações para lá — o gancho não lê mais o .txt")
+        problemas.append(PROBLEMA_ENDERECO_ANTIGO.format(
+            ARQUIVO_ANTIGO, ARQUIVO_AMBIENTE))
     return problemas, receita
 
 
+def raiz_do_projeto_nunca_o_cwd() -> Path:
+    declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+    if declarada:
+        return Path(declarada)
+    return Path(__file__).resolve().parents[NIVEIS_DO_GANCHO_ATE_A_RAIZ]
+
+
 def main() -> int:
-    # O cwd anda com a sessão; a raiz do projeto, não. A variável vem do
-    # Claude Code; sem ela, o próprio arquivo sabe onde mora — nunca o cwd.
-    base = os.environ.get("CLAUDE_PROJECT_DIR")
-    raiz = Path(base) if base else Path(__file__).resolve().parents[2]
     try:
-        problemas, receita = faltas(raiz)
+        problemas, receita = faltas(raiz_do_projeto_nunca_o_cwd())
     except Exception:
-        return 0  # falha aberto: gancho quebrado não prende a sessão
+        return FALHA_ABERTO
 
     if not problemas:
-        return 0  # tudo no lugar é silêncio
+        return SILENCIO
 
-    fecho = (f"A receita para repor: {receita}" if receita else
-             f"Nenhuma receita declarada — a chave `receita` do "
-             f"{ARQUIVO_AMBIENTE} pode apontar a página que ensina a repor.")
-    aviso = (
-        "AVISO do gancho verificar-ambiente: esta máquina não tem tudo o que "
-        "o repositório declara precisar. Perda de migração é silenciosa — este "
-        "é o "
-        "aviso que não existiu na mudança.\n" + "\n".join(problemas) + "\n"
-        + fecho + "\n"
-        "Avise o dono antes de precisar, não depois de faltar. Nome se "
-        "verifica; valor não se imprime nem se procura."
-    )
+    fecho = (FECHO_COM_RECEITA.format(receita) if receita
+             else FECHO_SEM_RECEITA.format(ARQUIVO_AMBIENTE))
     print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "SessionStart",
-        "additionalContext": aviso,
+        "hookEventName": EVENTO_DE_INICIO_DE_SESSAO,
+        "additionalContext": AVISO.format("\n".join(problemas), fecho),
     }}))
-    return 0
+    return SILENCIO
 
 
-# --- Testes -----------------------------------------------------------------
-# Duas listas, e a segunda é a que importa: aviso que dispara à toa é
-# desligado na primeira semana. Metade dos casos prova que ele CALA.
+ACUSA = [
+    ("variável do .mcp.json ausente",
+     dict(mcp='{"x": "${TAMBOR_MAIOR}"}')),
+    ("variável declarada ausente",
+     dict(declarado={"variavel": ["CAIXA_DE_MUSICA"]})),
+    ("comando fora do PATH",
+     dict(declarado={"comando": ["regador-automatico"]})),
+    ("pasta que não existe",
+     dict(declarado={"pasta": ["estufa/inverno"]})),
+    ("arquivo que não existe",
+     dict(declarado={"arquivo": ["estufa/inventario.md"]})),
+    ("receita apontando página morta",
+     dict(declarado={"receita": "cadernos/plantio.md"})),
+    ("declaração ilegível não passa batido",
+     dict(declarado="{quebrado")),
+    ("o endereço velho ainda no disco acusa a mudança",
+     dict(antigo="comando prensa-de-flores\n")),
+]
+
+CALA = [
+    ("variável presente no ambiente",
+     dict(mcp='{"x": "${SINO_DE_VENTO_TOKEN}"}')),
+    ("variável com padrão se vira sem valor",
+     dict(mcp='{"x": "${TAMBOR_MAIOR:-surdo}"}')),
+    ("comando que está no PATH",
+     dict(declarado={"comando": ["prensa-de-flores"]})),
+    ("pasta que existe",
+     dict(declarado={"pasta": ["estufa"]})),
+    ("arquivo que existe",
+     dict(declarado={"arquivo": ["estufa/regras.md"]})),
+    ("receita que existe",
+     dict(declarado={"receita": "estufa/regras.md"})),
+    ("sem declaração nenhuma", dict()),
+    ("comentário do repositório e chave desconhecida ficam de fora",
+     dict(declarado={"comentario": "nota do repositório",
+                     "receita": None})),
+    ("lista vazia não inventa exigência",
+     dict(declarado={"comando": [], "pasta": [], "variavel": []})),
+]
+
 
 def testar() -> int:
     import tempfile
 
     with tempfile.TemporaryDirectory() as pasta:
         raiz = Path(pasta)
-        caixa = raiz / "caixa-de-ferramentas"
-        caixa.mkdir()
-        util = caixa / "prensa-de-flores"
+        caixa_de_ferramentas = raiz / "caixa-de-ferramentas"
+        caixa_de_ferramentas.mkdir()
+        util = caixa_de_ferramentas / "prensa-de-flores"
         util.write_text("#!/bin/sh\n", encoding="utf-8")
         util.chmod(0o755)
 
@@ -192,13 +232,8 @@ def testar() -> int:
 
         ambiente = {"SINO_DE_VENTO_TOKEN": "presente"}
 
-        def caso(mcp=None, declarado=None, antigo=None):
-            """Monta o repositório do caso e devolve o que o gancho acha nele.
-
-            Dado vira JSON; texto vai como está — é assim que o caso do
-            arquivo ilegível entra sem uma segunda porta só para ele.
-            """
-            for nome, conteudo in ((".mcp.json", mcp),
+        def faltas_do_caso(mcp=None, declarado=None, antigo=None):
+            for nome, conteudo in ((ARQUIVO_MCP, mcp),
                                    (ARQUIVO_AMBIENTE, declarado),
                                    (ARQUIVO_ANTIGO, antigo)):
                 alvo = raiz / nome
@@ -210,66 +245,27 @@ def testar() -> int:
                 else:
                     alvo.write_text(json.dumps(conteudo, ensure_ascii=False),
                                     encoding="utf-8")
-            return faltas(raiz, env=ambiente, caminho_path=str(caixa))
-
-        ACUSA = [
-            ("variável do .mcp.json ausente",
-             dict(mcp='{"x": "${TAMBOR_MAIOR}"}')),
-            ("variável declarada ausente",
-             dict(declarado={"variavel": ["CAIXA_DE_MUSICA"]})),
-            ("comando fora do PATH",
-             dict(declarado={"comando": ["regador-automatico"]})),
-            ("pasta que não existe",
-             dict(declarado={"pasta": ["estufa/inverno"]})),
-            ("arquivo que não existe",
-             dict(declarado={"arquivo": ["estufa/inventario.md"]})),
-            ("receita apontando página morta",
-             dict(declarado={"receita": "cadernos/plantio.md"})),
-            ("declaração ilegível não passa batido",
-             dict(declarado="{quebrado")),
-            ("o endereço velho ainda no disco acusa a mudança",
-             dict(antigo="comando prensa-de-flores\n")),
-        ]
-
-        CALA = [
-            ("variável presente no ambiente",
-             dict(mcp='{"x": "${SINO_DE_VENTO_TOKEN}"}')),
-            ("variável com padrão se vira sem valor",
-             dict(mcp='{"x": "${TAMBOR_MAIOR:-surdo}"}')),
-            ("comando que está no PATH",
-             dict(declarado={"comando": ["prensa-de-flores"]})),
-            ("pasta que existe",
-             dict(declarado={"pasta": ["estufa"]})),
-            ("arquivo que existe",
-             dict(declarado={"arquivo": ["estufa/regras.md"]})),
-            ("receita que existe",
-             dict(declarado={"receita": "estufa/regras.md"})),
-            ("sem declaração nenhuma", dict()),
-            ("comentário do repositório e chave desconhecida ficam de fora",
-             dict(declarado={"comentario": "nota do repositório",
-                             "receita": None})),
-            ("lista vazia não inventa exigência",
-             dict(declarado={"comando": [], "pasta": [], "variavel": []})),
-        ]
+            return faltas(raiz, env=ambiente,
+                          caminho_path=str(caixa_de_ferramentas))
 
         falhas = []
-        for rotulo, kwargs in ACUSA:
-            problemas, _ = caso(**kwargs)
+        for rotulo, caso in ACUSA:
+            problemas, _ = faltas_do_caso(**caso)
             if not problemas:
-                falhas.append(f"  DEVIA ACUSAR e calou — {rotulo}")
-        for rotulo, kwargs in CALA:
-            problemas, _ = caso(**kwargs)
+                falhas.append(FALHA_DEVIA_ACUSAR.format(rotulo))
+        for rotulo, caso in CALA:
+            problemas, _ = faltas_do_caso(**caso)
             if problemas:
-                falhas.append(f"  DEVIA CALAR e acusou — {rotulo}: {problemas}")
+                falhas.append(FALHA_DEVIA_CALAR.format(rotulo, problemas))
 
         total = len(ACUSA) + len(CALA)
         if falhas:
-            print(f"FALHOU: {len(falhas)} de {total} casos")
+            print(RESUMO_FALHOU.format(len(falhas), total))
             print("\n".join(falhas))
             return 1
-        print(f"OK: {total} casos — {len(ACUSA)} acusados, {len(CALA)} calados")
+        print(RESUMO_OK.format(total, len(ACUSA), len(CALA)))
         return 0
 
 
 if __name__ == "__main__":
-    sys.exit(testar() if "--testar" in sys.argv else main())
+    sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

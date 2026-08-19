@@ -1,33 +1,3 @@
-#!/usr/bin/env python3
-"""limpeza — gera e roda a rotina que arruma o workspace antes do trabalho.
-
-O PORQUÊ: quem dispara o executor de roteiros num workspace grande paga por
-sujeira que ninguém vê — artefato de build que o disco carrega, branch base
-atrasada em relação ao remoto, e trabalho que ficou sem entrar na
-integração. Nada disso é defeito de código; é o chão sujo antes de começar.
-
-DUAS PEÇAS, e a divisão importa:
-
-- **Este arquivo VIAJA** com a camada: é o mecanismo, e não sabe nada de
-  ninguém.
-- **A rotina GERADA é local** e não entra em git. Ela nasce do inventário
-  medido no dia — cada repositório com a linguagem e a branch padrão dele —
-  e mora no caminho que `arquivo_limpeza` declara em `nucleo/executor.json`.
-
-A REGRA DURA DA REMOÇÃO: por padrão ela só RELATA. Só com `--aplicar` remove,
-e só o que um comando de build recria sozinho. **Nunca** toca arquivo
-rastreado pelo git, `.env`, configuração local, worktree — nem
-`node_modules`, que é regenerável mas caro de repor, e por isso ficou de fora
-por decisão. Destrutivo é do dono (regra 9): o automático se limita ao que
-não custa nada refazer.
-
-Uso:
-    limpeza.py inventariar --workspace D          # o que existe, medido
-    limpeza.py gerar --workspace D --destino F    # escreve a rotina local
-    limpeza.py rodar --workspace D [--aplicar]    # relata; com --aplicar, remove
-
-Rode os testes com:  python .agents/limpeza/limpeza.py --testar
-"""
 
 import argparse
 import json
@@ -36,128 +6,42 @@ import sys
 import tempfile
 from pathlib import Path
 
-# O que um build recria sozinho. `node_modules` NÃO está aqui de propósito:
-# regenerável, sim; barato de repor, não — e a decisão do dono foi deixá-lo
-# de fora até que alguém peça uma bandeira própria para ele.
-REGENERAVEL = ("bin", "obj", "dist", "build", "out", "__pycache__",
-               ".pytest_cache", ".mypy_cache", "target")
-# Marcador → linguagem. Serve para a rotina saber o que esperar de cada
-# repositório, e para o relatório dizer o que está olhando.
-MARCADORES = (("package.json", "node"), ("pyproject.toml", "python"),
-              ("requirements.txt", "python"), ("go.mod", "go"),
-              ("Cargo.toml", "rust"), ("pom.xml", "java"),
-              ("build.gradle", "java"), ("*.csproj", "dotnet"),
-              ("*.sln", "dotnet"))
+REGENERAVEL_BARATO_DE_REFAZER = ("bin", "obj", "dist", "build", "out",
+                                 "__pycache__", ".pytest_cache",
+                                 ".mypy_cache", "target")
+MARCADOR_DA_LINGUAGEM = (("package.json", "node"), ("pyproject.toml", "python"),
+                         ("requirements.txt", "python"), ("go.mod", "go"),
+                         ("Cargo.toml", "rust"), ("pom.xml", "java"),
+                         ("build.gradle", "java"), ("*.csproj", "dotnet"),
+                         ("*.sln", "dotnet"))
+LINGUAGEM_DESCONHECIDA = "desconhecida"
+BRANCH_PADRAO_SEM_REMOTO = "main"
+TEMPO_LIMITE_DO_GIT = 30
+QUANTOS_EXEMPLOS_MOSTRAR = 5
+COMANDOS = ("inventariar", "gerar", "rodar")
 
+RELATO_CABECALHO = "\n{} ({})"
+RELATO_ARTEFATOS = "  artefato regenerável: {} pasta(s)"
+RELATO_PASTA = "    {}"
+RELATO_REMOVIDAS = "  removidas {} pasta(s)"
+RELATO_BASE_ATRASADA = "  base {} commit(s) atrás do remoto"
+RELATO_NAO_MESCLADO = "  não mesclado na integração: {}"
+RELATO_EM_DIA = "  em dia"
+RELATO_RODAPE = "\n{} repositórios"
+RELATO_RODAPE_REMOVIDAS = ", {} pastas removidas"
+RELATO_RODAPE_NADA_REMOVIDO = " — nada removido (use --aplicar)"
+RELATO_ROTINA_ESCRITA = "rotina escrita em {} — {} repositórios ({})"
 
-def _git(repo, *args, tempo=30):
-    try:
-        return subprocess.run(["git", "-C", str(repo), *args],
-                              capture_output=True, text=True, timeout=tempo)
-    except (OSError, subprocess.SubprocessError):
-        return None
+ERRO_SEM_REPOSITORIO = "erro de uso: nenhum repositório git em {}"
+ERRO_WORKSPACE_INEXISTENTE = "erro de uso: --workspace {} não existe"
+ERRO_DE_AMBIENTE = "erro de ambiente: {}"
 
+AJUDA_APLICAR = "remove o artefato regenerável (o padrão é só relatar)"
+AJUDA_INTEGRACAO = "a branch de integração, para acusar o que não entrou nela"
 
-def linguagem_de(repo: Path) -> str:
-    for padrao, nome in MARCADORES:
-        achou = list(repo.glob(padrao)) if "*" in padrao \
-            else ([repo / padrao] if (repo / padrao).exists() else [])
-        if achou:
-            return nome
-    return "desconhecida"
-
-
-def branch_padrao_de(repo: Path) -> str:
-    """A branch padrão do remoto; sem remoto, a que está em curso."""
-    achado = _git(repo, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
-    if achado and achado.returncode == 0 and achado.stdout.strip():
-        return achado.stdout.strip().split("/")[-1]
-    achado = _git(repo, "branch", "--show-current")
-    return achado.stdout.strip() if achado and achado.stdout.strip() else "main"
-
-
-def inventariar(workspace: Path) -> list:
-    """Um item por repositório do workspace, medido agora."""
-    repositorios = []
-    for caminho in sorted(p.parent for p in workspace.glob("*/.git")):
-        repositorios.append({
-            "caminho": str(caminho),
-            "nome": caminho.name,
-            "linguagem": linguagem_de(caminho),
-            "branch_padrao": branch_padrao_de(caminho),
-        })
-    return repositorios
-
-
-def _artefatos(repo: Path) -> list:
-    """As pastas regeneráveis deste repositório — e só as NÃO rastreadas.
-
-    O cheque contra o git é a trava que importa: pasta chamada `bin/` que
-    alguém commitou de propósito é código de outra pessoa, não artefato.
-    """
-    achados = []
-    for nome in REGENERAVEL:
-        for pasta in repo.rglob(nome):
-            if not pasta.is_dir() or ".git" in pasta.parts:
-                continue
-            relativo = pasta.relative_to(repo)
-            rastreado = _git(repo, "ls-files", "--error-unmatch",
-                             str(relativo))
-            if rastreado and rastreado.returncode == 0:
-                continue  # rastreado: é de alguém, não é artefato
-            achados.append(pasta)
-    return achados
-
-
-def olhar(repo: dict, integracao=None) -> dict:
-    """O relatório de um repositório: artefatos, base atrasada, não mesclado."""
-    caminho = Path(repo["caminho"])
-    achado = {"nome": repo["nome"], "linguagem": repo["linguagem"],
-              "artefatos": [str(p) for p in _artefatos(caminho)],
-              "base_atrasada": None, "nao_mesclado": []}
-
-    base = repo["branch_padrao"]
-    atras = _git(caminho, "rev-list", "--count", f"{base}..origin/{base}")
-    if atras and atras.returncode == 0 and atras.stdout.strip().isdigit():
-        quantos = int(atras.stdout.strip())
-        achado["base_atrasada"] = quantos if quantos else None
-
-    alvo = integracao or base
-    nao = _git(caminho, "branch", "--no-merged", alvo, "--format=%(refname:short)")
-    if nao and nao.returncode == 0:
-        achado["nao_mesclado"] = [b for b in nao.stdout.split() if b != alvo]
-    return achado
-
-
-def relatar(repositorios: list, integracao=None, aplicar=False) -> int:
-    """Imprime o relatório. Com aplicar=True, remove o regenerável."""
-    removidos = 0
-    for repo in repositorios:
-        visto = olhar(repo, integracao)
-        print(f"\n{visto['nome']} ({visto['linguagem']})")
-        if visto["artefatos"]:
-            print(f"  artefato regenerável: {len(visto['artefatos'])} pasta(s)")
-            for pasta in visto["artefatos"][:5]:
-                print(f"    {pasta}")
-            if aplicar:
-                import shutil
-                for pasta in visto["artefatos"]:
-                    shutil.rmtree(pasta, ignore_errors=True)
-                    removidos += 1
-                print(f"  removidas {len(visto['artefatos'])} pasta(s)")
-        if visto["base_atrasada"]:
-            print(f"  base {visto['base_atrasada']} commit(s) atrás do remoto")
-        if visto["nao_mesclado"]:
-            print("  não mesclado na integração: "
-                  + ", ".join(visto["nao_mesclado"][:5]))
-        if not any((visto["artefatos"], visto["base_atrasada"],
-                    visto["nao_mesclado"])):
-            print("  em dia")
-    print(f"\n{len(repositorios)} repositórios"
-          + (f", {removidos} pastas removidas" if aplicar
-             else " — nada removido (use --aplicar)"))
-    return 0
-
+TESTE_FALHA = "FALHOU: {}"
+TESTE_RESUMO_FALHA = "FALHOU: {} de {} casos"
+TESTE_RESUMO_OK = "OK: {} casos"
 
 MOLDE = '''#!/usr/bin/env python3
 """A rotina de limpeza DESTE workspace — gerada em {quando}.
@@ -183,12 +67,136 @@ if __name__ == "__main__":
 '''
 
 
+def _git(repo, *args, tempo_limite=TEMPO_LIMITE_DO_GIT):
+    try:
+        return subprocess.run(["git", "-C", str(repo), *args],
+                              capture_output=True, text=True,
+                              timeout=tempo_limite)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def linguagem_de(repo: Path) -> str:
+    for padrao, nome in MARCADOR_DA_LINGUAGEM:
+        achou = list(repo.glob(padrao)) if "*" in padrao \
+            else ([repo / padrao] if (repo / padrao).exists() else [])
+        if achou:
+            return nome
+    return LINGUAGEM_DESCONHECIDA
+
+
+def branch_padrao_de(repo: Path) -> str:
+    do_remoto = _git(repo, "symbolic-ref", "--short",
+                     "refs/remotes/origin/HEAD")
+    if do_remoto and do_remoto.returncode == 0 and do_remoto.stdout.strip():
+        return do_remoto.stdout.strip().split("/")[-1]
+    em_curso = _git(repo, "branch", "--show-current")
+    if em_curso and em_curso.stdout.strip():
+        return em_curso.stdout.strip()
+    return BRANCH_PADRAO_SEM_REMOTO
+
+
+def inventariar(workspace: Path) -> list:
+    repositorios = []
+    for caminho in sorted(p.parent for p in workspace.glob("*/.git")):
+        repositorios.append({
+            "caminho": str(caminho),
+            "nome": caminho.name,
+            "linguagem": linguagem_de(caminho),
+            "branch_padrao": branch_padrao_de(caminho),
+        })
+    return repositorios
+
+
+def _rastreada_pelo_git(repo: Path, pasta: Path) -> bool:
+    resposta = _git(repo, "ls-files", "--error-unmatch",
+                    str(pasta.relative_to(repo)))
+    return bool(resposta and resposta.returncode == 0)
+
+
+def artefatos_nao_rastreados(repo: Path) -> list:
+    achados = []
+    for nome in REGENERAVEL_BARATO_DE_REFAZER:
+        for pasta in repo.rglob(nome):
+            if not pasta.is_dir() or ".git" in pasta.parts:
+                continue
+            if _rastreada_pelo_git(repo, pasta):
+                continue
+            achados.append(pasta)
+    return achados
+
+
+def _quantos_commits_atras_do_remoto(repo: Path, base: str):
+    atras = _git(repo, "rev-list", "--count", f"{base}..origin/{base}")
+    if atras and atras.returncode == 0 and atras.stdout.strip().isdigit():
+        return int(atras.stdout.strip()) or None
+    return None
+
+
+def _branches_nao_mescladas(repo: Path, alvo: str) -> list:
+    nao = _git(repo, "branch", "--no-merged", alvo,
+               "--format=%(refname:short)")
+    if nao and nao.returncode == 0:
+        return [b for b in nao.stdout.split() if b != alvo]
+    return []
+
+
+def relatorio_do_repositorio(repo: dict, integracao=None) -> dict:
+    caminho = Path(repo["caminho"])
+    base = repo["branch_padrao"]
+    return {
+        "nome": repo["nome"],
+        "linguagem": repo["linguagem"],
+        "artefatos": [str(p) for p in artefatos_nao_rastreados(caminho)],
+        "base_atrasada": _quantos_commits_atras_do_remoto(caminho, base),
+        "nao_mesclado": _branches_nao_mescladas(caminho, integracao or base),
+    }
+
+
+def _remover(pastas: list) -> int:
+    import shutil
+    for pasta in pastas:
+        shutil.rmtree(pasta, ignore_errors=True)
+    return len(pastas)
+
+
+def _imprimir_relatorio(visto: dict, aplicar: bool) -> int:
+    print(RELATO_CABECALHO.format(visto["nome"], visto["linguagem"]))
+    removidos = 0
+    if visto["artefatos"]:
+        print(RELATO_ARTEFATOS.format(len(visto["artefatos"])))
+        for pasta in visto["artefatos"][:QUANTOS_EXEMPLOS_MOSTRAR]:
+            print(RELATO_PASTA.format(pasta))
+        if aplicar:
+            removidos = _remover(visto["artefatos"])
+            print(RELATO_REMOVIDAS.format(removidos))
+    if visto["base_atrasada"]:
+        print(RELATO_BASE_ATRASADA.format(visto["base_atrasada"]))
+    if visto["nao_mesclado"]:
+        print(RELATO_NAO_MESCLADO.format(
+            ", ".join(visto["nao_mesclado"][:QUANTOS_EXEMPLOS_MOSTRAR])))
+    if not any((visto["artefatos"], visto["base_atrasada"],
+                visto["nao_mesclado"])):
+        print(RELATO_EM_DIA)
+    return removidos
+
+
+def relatar(repositorios: list, integracao=None, aplicar=False) -> int:
+    removidos = 0
+    for repo in repositorios:
+        removidos += _imprimir_relatorio(
+            relatorio_do_repositorio(repo, integracao), aplicar)
+    print(RELATO_RODAPE.format(len(repositorios))
+          + (RELATO_RODAPE_REMOVIDAS.format(removidos) if aplicar
+             else RELATO_RODAPE_NADA_REMOVIDO))
+    return 0
+
+
 def gerar(workspace: Path, destino: Path) -> int:
     from datetime import datetime
     repositorios = inventariar(workspace)
     if not repositorios:
-        print(f"erro de uso: nenhum repositório git em {workspace}",
-              file=sys.stderr)
+        print(ERRO_SEM_REPOSITORIO.format(workspace), file=sys.stderr)
         return 2
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(MOLDE.format(
@@ -197,31 +205,32 @@ def gerar(workspace: Path, destino: Path) -> int:
         mecanismo=str(Path(__file__).resolve()),
         repositorios=json.dumps(repositorios, ensure_ascii=False, indent=4),
     ), encoding="utf-8")
-    print(f"rotina escrita em {destino} — {len(repositorios)} repositórios "
-          f"({', '.join(r['nome'] for r in repositorios[:5])})")
+    exemplos = ", ".join(r["nome"]
+                         for r in repositorios[:QUANTOS_EXEMPLOS_MOSTRAR])
+    print(RELATO_ROTINA_ESCRITA.format(destino, len(repositorios), exemplos))
     return 0
 
 
-def main(argv) -> int:
+def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="limpeza.py")
     sub = parser.add_subparsers(dest="comando", required=True)
-    for nome in ("inventariar", "gerar", "rodar"):
+    for nome in COMANDOS:
         p = sub.add_parser(nome)
         p.add_argument("--workspace", required=True)
         if nome == "gerar":
             p.add_argument("--destino", required=True)
         if nome == "rodar":
             p.add_argument("--aplicar", action="store_true",
-                           help="remove o artefato regenerável (o padrão é "
-                                "só relatar)")
-            p.add_argument("--integracao",
-                           help="a branch de integração, para acusar o que "
-                                "não entrou nela")
-    args = parser.parse_args(argv)
+                           help=AJUDA_APLICAR)
+            p.add_argument("--integracao", help=AJUDA_INTEGRACAO)
+    return parser
+
+
+def main(argv) -> int:
+    args = montar_parser().parse_args(argv)
     workspace = Path(args.workspace)
     if not workspace.is_dir():
-        print(f"erro de uso: --workspace {workspace} não existe",
-              file=sys.stderr)
+        print(ERRO_WORKSPACE_INEXISTENTE.format(workspace), file=sys.stderr)
         return 2
     if args.comando == "inventariar":
         print(json.dumps(inventariar(workspace), ensure_ascii=False, indent=2))
@@ -231,7 +240,12 @@ def main(argv) -> int:
     return relatar(inventariar(workspace), args.integracao, args.aplicar)
 
 
-# --- Testes -----------------------------------------------------------------
+def _commitar_so_este_arquivo(repo: Path, arquivo: str, mensagem: str):
+    subprocess.run(["git", "-C", str(repo), "add", arquivo],
+                   capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", mensagem],
+                   capture_output=True)
+
 
 def _repo_de_mentira(raiz: Path, nome, linguagem, sujeira, branch_extra=None):
     repo = raiz / nome
@@ -247,23 +261,26 @@ def _repo_de_mentira(raiz: Path, nome, linguagem, sujeira, branch_extra=None):
     for pasta in sujeira:
         (repo / pasta).mkdir(parents=True, exist_ok=True)
         (repo / pasta / "artefato.bin").write_text("x", encoding="utf-8")
-    subprocess.run(["git", "-C", str(repo), "add", marcador],
-                   capture_output=True)
-    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "base"],
-                   capture_output=True)
+    _commitar_so_este_arquivo(repo, marcador, "base")
     if branch_extra:
-        subprocess.run(["git", "-C", str(repo), "checkout", "-qb", branch_extra],
-                       capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "checkout", "-qb",
+                        branch_extra], capture_output=True)
         (repo / "novo.txt").write_text("a", encoding="utf-8")
-        # `add -A` aqui rastrearia a sujeira, e voltar para a base a
-        # apagaria do disco — o fixture mentiria sobre o que existe.
-        subprocess.run(["git", "-C", str(repo), "add", "novo.txt"],
-                       capture_output=True)
-        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "trabalho"],
-                       capture_output=True)
+        _commitar_so_este_arquivo(repo, "novo.txt", "trabalho")
         subprocess.run(["git", "-C", str(repo), "checkout", "-q", "-"],
                        capture_output=True)
     return repo
+
+
+def _rastrear_de_proposito(repo: Path, nome: str) -> Path:
+    pasta = repo / nome
+    pasta.mkdir()
+    (pasta / "importante.txt").write_text("meu", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-f", nome],
+                   capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", nome],
+                   capture_output=True)
+    return pasta
 
 
 def testar() -> int:
@@ -286,7 +303,8 @@ def testar() -> int:
              {r["nome"]: r["linguagem"] for r in inventario}
              == {"app-node": "node", "app-dotnet": "dotnet"})
 
-        visto = olhar([r for r in inventario if r["nome"] == "app-node"][0])
+        do_node = [r for r in inventario if r["nome"] == "app-node"][0]
+        visto = relatorio_do_repositorio(do_node)
         nomes = {Path(p).name for p in visto["artefatos"]}
         caso("acha o artefato regenerável", "dist" in nomes)
         caso("e NÃO toca node_modules (decisão do dono)",
@@ -294,19 +312,11 @@ def testar() -> int:
         caso("acusa trabalho não mesclado",
              "trabalho/x" in visto["nao_mesclado"])
 
-        # a trava: pasta regenerável que alguém RASTREOU não é artefato
-        rastreada = node / "build"
-        rastreada.mkdir()
-        (rastreada / "importante.txt").write_text("meu", encoding="utf-8")
-        subprocess.run(["git", "-C", str(node), "add", "-f", "build"],
-                       capture_output=True)
-        subprocess.run(["git", "-C", str(node), "commit", "-qm", "build"],
-                       capture_output=True)
-        visto = olhar([r for r in inventario if r["nome"] == "app-node"][0])
+        rastreada = _rastrear_de_proposito(node, "build")
+        visto = relatorio_do_repositorio(do_node)
         caso("pasta regenerável RASTREADA não é tocada",
              "build" not in {Path(p).name for p in visto["artefatos"]})
 
-        # relatar não remove; --aplicar remove
         dist = node / "dist"
         relatar(inventario)
         caso("o padrão não remove nada", dist.is_dir())
@@ -326,10 +336,10 @@ def testar() -> int:
     falhas = [r for r, ok in resultados if not ok]
     if falhas:
         for falha in falhas:
-            print(f"FALHOU: {falha}")
-        print(f"FALHOU: {len(falhas)} de {len(resultados)} casos")
+            print(TESTE_FALHA.format(falha))
+        print(TESTE_RESUMO_FALHA.format(len(falhas), len(resultados)))
         return 1
-    print(f"OK: {len(resultados)} casos")
+    print(TESTE_RESUMO_OK.format(len(resultados)))
     return 0
 
 
@@ -339,5 +349,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except OSError as ambiente:
-        print(f"erro de ambiente: {ambiente}", file=sys.stderr)
+        print(ERRO_DE_AMBIENTE.format(ambiente), file=sys.stderr)
         sys.exit(2)
