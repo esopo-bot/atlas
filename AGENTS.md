@@ -16,11 +16,11 @@ Para qualquer agente de IA neste repositório.
 - Rode `python montar.py --sincronizar` depois de editar página, skill, módulo
   ou `nucleo/`.
 
-## Ordens desta casa
+## Ordens deste repositório
 
 - Não commite, não empurre, não publique: deixe os arquivos para o dono
-  conferir. O teto é o ensaio, que mostra o que subiria sem subir. Destrutivo é
-  dele. Esta é a única casa desta regra: outro arquivo que disser diferente
+  verificar. O teto é o ensaio, que mostra o que subiria sem subir. Destrutivo
+  é dele. Este é o único lugar desta regra: outro arquivo que disser diferente
   está errado.
 - Repositório público: nada de nome de pessoa ou empresa, credencial ou caminho
   de máquina em arquivo, commit, branch ou issue. Na dúvida, pergunte.
@@ -39,10 +39,10 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 6. Trabalhe econômico.
 7. Rede com cortesia.
 8. Segredo não entra em git nenhum — e ler credencial localmente é livre.
-9. Destrutivo é do dono; commit e push seguem o que a casa autorizou.
+9. Destrutivo é do dono; commit e push seguem o que o repositório autorizou.
 10. Texto na régua.
 11. Não invente passo onde já existe receita.
-12. Branch de longa duração e configuração de esteira não se tocam.
+12. Branch de longa duração e configuração de integração contínua não se tocam.
 13. Publicar exige revisão semântica, não só varredura.
 14. Conhecimento nasce na língua de quem vai lê-lo.
 

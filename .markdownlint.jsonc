@@ -4,13 +4,13 @@
 
   // Tamanho de linha fica de fora. As páginas da camada são escritas em 80
   // colunas por hábito de quem escreve, não por cobrança de ferramenta — e a
-  // cobrança caía onde não paga: anotação da casa, perfil gerado, registro de
-  // incidente. Ninguém requebra aquilo, e aviso que ninguém atende ensina a
-  // ignorar aviso. Quem quiser a disciplina liga de volta na sua pasta, com
+  // cobrança caía onde não paga: anotação do repositório, perfil gerado,
+  // registro de incidente. Ninguém requebra aquilo, e aviso que ninguém
+  // atende ensina a ignorar aviso. Quem quiser a disciplina liga de volta na sua pasta, com
   // um .markdownlint.jsonc próprio.
   "MD013": false,
 
-  // Título repetido entre seções irmãs é o padrão de CHANGELOG
+  // Título repetido entre seções vizinhas é o padrão de CHANGELOG
   // ("Adicionado" em cada versão).
   "MD024": { "siblings_only": true },
 

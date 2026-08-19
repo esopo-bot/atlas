@@ -21,7 +21,7 @@ O corte: tarefa com começo e fim. Conversa fica com o principal.
 | Formato | markdown          | markdown                               |
 | Prontos | Explore, Plan     | `subagent_explore`, `subagent_general` |
 
-Só endereços conferidos numa máquina; outra ferramenta, procure na doc
+Só endereços verificados numa máquina; outra ferramenta, procure na doc
 dela. No Devin, skill vira subagente pelo frontmatter (`subagent: true`) —
 recurso experimental.
 

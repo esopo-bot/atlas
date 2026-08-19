@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""encadeador — roda a corrente de etapas do manifesto, um recibo por etapa.
+"""encadeador — roda a execução de etapas do roteiro, uma evidência por etapa.
 
 Generaliza a receita do `rotinas/executar.sh` (preparar ambiente e rodar
 `claude -p` com um prompt), peça a peça: a raiz virou `--cwd`; o venv e o
-arquivo de ambiente viraram o bloco `ambiente` do manifesto (lidos por ESTE
+arquivo de ambiente viraram o bloco `ambiente` do roteiro (lidos por ESTE
 processo, nunca pelo modelo — igual à receita); o prompt virou a etapa de
-tipo `sessao`; e o log virou recibo materializado por código (degrau 1)
-mais o log da conferência (degrau 2). O que a receita não tinha e aqui
-existe: manifesto com dependências, fork/join, ensaio e teto de ciclos.
+tipo `sessao`; e o log virou evidência materializada por código (degrau 1)
+mais o log da verificação (degrau 2). O que a receita não tinha e aqui
+existe: roteiro com dependências, fork/join, ensaio e teto de ciclos.
 
-O manifesto (JSON):
+O roteiro (JSON):
 
     {
       "teto": 3,
@@ -18,90 +18,91 @@ O manifesto (JSON):
         {"nome": "prepara", "tipo": "codigo", "comando": "bash prepara.sh"},
         {"nome": "analisa", "tipo": "sessao", "prompt": "…",
          "depende": ["prepara"]},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["analisa"]},
-        {"nome": "aprova", "tipo": "portao",
-         "aprovacao": "aprovacoes/pr.ok", "depende": ["confere"]}
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["analisa"]},
+        {"nome": "aprova", "tipo": "aprovacao-manual",
+         "aprovacao": "aprovacoes/pr.ok", "depende": ["verifica"]}
       ]
     }
 
 As regras que este script impõe:
 
 - **Fork só de etapas sem dependência declarada entre si** — quem está
-  pronto junto roda junto; `conferencia` e `portao` NUNCA dividem onda com
-  ninguém (conferir em paralelo com sessão é conferir código que ainda
-  muda; portão é do dono e não disputa CPU com nada).
-- **O ensaio lista a corrente inteira sem executar NADA**: nem comando,
+  pronto junto roda junto; `verificacao` e `aprovacao-manual` NUNCA dividem
+  estágio com ninguém (verificar em paralelo com sessão é verificar código que
+  ainda muda; aprovação manual é do dono e não disputa CPU com nada).
+- **O ensaio lista a execução inteira sem executar NADA**: nem comando,
   nem sessão, nem leitura do arquivo de ambiente.
-- **Recibo só por código** (o contrato é `.agents/recibo/recibo.schema.json`):
+- **Evidência só por código** (o contrato é `.agents/evidencia/recibo.schema.json`):
   o stdout de cada etapa vai ao `materializar`; etapa que morre vira `para`
-  sintético `morta`; stdout que não é recibo vira `para` `recibo-invalido`;
-  etapa desligada vira skip. Veredito que não seja `segue` PARA a corrente.
-- **Teto pela contagem**: com `teto` ou mais recibos `para` no diretório do
+  sintético `morta`; stdout que não é evidência vira `para` `recibo-invalido`;
+  etapa desligada vira skip. Veredito que não seja `segue` PARA a execução.
+- **Teto pela contagem**: com `teto` ou mais evidências `para` no diretório do
   trabalho, nada roda — nasce o `para` sintético `teto-esgotado`.
-- **Um escritor só**: quem materializa recibo deste trabalho é este
-  processo; a mesma etapa nunca roda duas vezes na mesma onda.
+- **Um escritor só**: quem materializa evidência deste trabalho é este
+  processo; a mesma etapa nunca roda duas vezes no mesmo estágio.
 
 O que ele NÃO FAZ — e confessa (os refutadores mediram cada limite):
-- não escreve recibo (chama `recibo.py`) nem confere (chama `conferir.py`);
+- não escreve evidência (chama `evidencia.py`) nem verifica (chama `verificar.py`);
 - não isola etapas entre si: fork de etapas que escrevem no mesmo arquivo
   é corrida — o desenho manda worktree por etapa (a receita dos
-  fabricantes), e o isolamento é de quem escreve o manifesto;
+  fabricantes), e o isolamento é de quem escreve o roteiro;
 - não reescreve prompt de ciclo — o `proximo` de quem reprovou é a
   instrução; reexecutar é decisão de quem opera;
-- não preserva a série de recibos se o MANIFESTO for reordenado no meio de
+- não preserva a série de evidências se o ROTEIRO for reordenado no meio de
   um trabalho: a ordem NN vem da posição na lista — reordenar começa outra
-  série; não reordene manifesto de trabalho já rodado;
+  série; não reordene roteiro de trabalho já rodado;
 - skip satisfaz dependência (o contrato do degrau 1: desligar o meio não
   impede a terceira) — dependente que precisava da entrega da desligada
   morre, e o log da etapa diz por quê; desligar etapa com entrega é
   tesoura de quem opera;
 - etapa de sessão herda da receita o `--dangerously-skip-permissions`
-  (sessão de rotina não tem quem responder prompt) — rode a corrente em
+  (sessão de rotina não tem quem responder prompt) — rode a execução em
   worktree ou clone descartável, nunca na árvore que importa;
 - no estouro de tempo mata o GRUPO do processo, mas comando que abre
-  sessão própria (`setsid …`) escapa da matança e fica órfão — o recibo
-  `morta` e a parada da corrente nascem mesmo assim (medido); órfão
+  sessão própria (`setsid …`) escapa da matança e fica órfão — a evidência
+  `morta` e a parada da execução nascem mesmo assim (medido); órfão
   desses é de quem escreveu o comando;
 - lê `ambiente.env` como SUBCONJUNTO do source do shell: aspas
   envolventes caem, comentário após espaço-# cai, e `$()` NÃO expande —
   de propósito, mais seguro que a receita;
 - não imprime valor de ambiente; não empurra, não publica e não toca na
-  automação da casa — portão e destrutivo são do dono.
+  automação do repositório — aprovação manual e destrutivo são do dono.
 
 Uso:
-    encadeador.py ensaio    --manifesto M --trabalho T [--dir recibos] [--cwd .]
-    encadeador.py executar  --manifesto M --trabalho T [--dir recibos] [--cwd .]
-    encadeador.py andamento --trabalho T [--dir recibos] [--manifesto M]
+    encadeador.py ensaio    --roteiro M --trabalho T [--dir evidencias] [--cwd .]
+    encadeador.py executar  --roteiro M --trabalho T [--dir evidencias] [--cwd .]
+    encadeador.py andamento --trabalho T [--dir evidencias] [--roteiro M]
 
-Saída de ensaio/executar: 0 = corrente completa (tudo `segue`); 5 = parou
+Saída de ensaio/executar: 0 = execução completa (tudo `segue`); 5 = parou
 num `para`; 6 = parou num `pergunta` (aguardando o dono); 2 = erro de
 uso/ambiente.
 
-O `andamento` fotografa os recibos do trabalho e devolve JSON no stdout
+O `andamento` fotografa as evidências do trabalho e devolve JSON no stdout
 (exit 0; 2 = erro de uso). O contrato:
 
     {"trabalho": T, "dir": <absoluto>, "estado":
-       "completa | parada | aguardando-portao | em-curso",
+       "completa | parada | aguardando-aprovacao | em-curso",
      "etapas": [{"ordem": N, "nome": ..., "veredito": segue|para|pergunta,
                  "ciclo": {"i": N, "teto": N}, "faltas": [...],
                  "proximo": texto|null, "pergunta": texto|null}],
-     "paras": <total de recibos para — o contador do teto>,
-     "teto": <o teto visto nos recibos>|null,
+     "paras": <total de evidências para — o contador do teto>,
+     "teto": <o teto visto nas evidências>|null,
      "avisos": [...], "proxima_acao": <texto>}
 
-- Por etapa entra o recibo do CICLO MAIS ALTO; a ordem é a do manifesto
+- Por etapa entra a evidência do CICLO MAIS ALTO; a ordem é a do roteiro
   (o NN do nome do arquivo).
-- Estado: algum `para` no recibo corrente = `parada`; algum `pergunta` =
-  `aguardando-portao`; tudo `segue` = `completa`; nenhum recibo =
+- Estado: algum `para` na evidência atual = `parada`; algum `pergunta` =
+  `aguardando-aprovacao`; tudo `segue` = `completa`; nenhuma evidência =
   `em-curso` (nada rodou ainda).
-- `proxima_acao`: o `proximo` de quem reprovou, a `pergunta` do portão, ou
-  a leitura dos recibos — sempre uma frase acionável.
-- `--manifesto` (opcional) troca inferência por prova: `completa` passa a
-  exigir recibo `segue` de TODA etapa ligada do manifesto; etapa ligada sem
-  recibo vira `em-curso`, com a lista do que falta na `proxima_acao`.
-- Limites confessados: leitura no meio de uma execução fotografa a onda
-  parcial (releia); SEM o manifesto, corrente morta sem deixar recibo não
-  se distingue de completa — o exit de quem executou é a fonte; recibo
+- `proxima_acao`: o `proximo` de quem reprovou, a `pergunta` da
+  aprovação manual, ou
+  a leitura das evidências — sempre uma frase acionável.
+- `--roteiro` (opcional) troca inferência por prova: `completa` passa a
+  exigir evidência `segue` de TODA etapa ligada do roteiro; etapa ligada sem
+  evidência vira `em-curso`, com a lista do que falta na `proxima_acao`.
+- Limites confessados: leitura no meio de uma execução fotografa o estágio
+  parcial (releia); SEM o roteiro, execução morta sem deixar evidência não
+  se distingue de completa — o exit de quem executou é a fonte; evidência
   ilegível vira aviso e conta como `para`, igual ao motor.
 
 Rode os testes com:  python .agents/encadeador/encadeador.py --testar
@@ -128,72 +129,73 @@ AQUI = Path(__file__).resolve().parent
 
 
 def _achar_camada() -> Path:
-    """A pasta .agents que tem recibo/ e conferir/ — a camada do destino.
+    """A pasta .agents que tem evidencia/ e verificar/ — a camada do destino.
 
-    Instalado, é a irmã direta (.agents/encadeador → .agents/recibo). No
-    repositório de origem, o módulo mora em modulos/encadeador/.agents/…,
-    então sobe até achar a raiz que tem .agents/recibo. Sem camada, o
-    módulo não funciona — e diz isso, em vez de quebrar longe.
+    Instalado, é a pasta vizinha direta (.agents/encadeador →
+    .agents/evidencia). No repositório de origem, o módulo mora em
+    modulos/encadeador/.agents/…, então sobe até achar a raiz que tem
+    .agents/evidencia. Sem camada, o módulo não funciona — e diz isso, em vez
+    de quebrar longe.
     """
     for base in (AQUI.parent, *AQUI.parents):
-        if (base / "recibo" / "recibo.py").is_file():
+        if (base / "evidencia" / "evidencia.py").is_file():
             return base
-        if (base / ".agents" / "recibo" / "recibo.py").is_file():
+        if (base / ".agents" / "evidencia" / "evidencia.py").is_file():
             return base / ".agents"
-    print("erro de ambiente: não achei a camada (.agents/recibo/recibo.py) — "
+    print("erro de ambiente: não achei a camada (.agents/evidencia/evidencia.py) — "
           "o módulo encadeador exige a camada montada no repositório.",
           file=sys.stderr)
     sys.exit(2)
 
 
 CAMADA = _achar_camada()
-sys.path.insert(0, str(CAMADA / "recibo"))
-import recibo as _recibo  # noqa: E402 — o contrato e o validador moram lá
+sys.path.insert(0, str(CAMADA / "evidencia"))
+import evidencia as _evidencia  # noqa: E402 — o contrato e o validador moram lá
 
-RECIBO = CAMADA / "recibo" / "recibo.py"
-CONFERIR = CAMADA / "conferir" / "conferir.py"
+EVIDENCIA = CAMADA / "evidencia" / "evidencia.py"
+VERIFICAR = CAMADA / "verificar" / "verificar.py"
 
-TIPOS = ("codigo", "sessao", "conferencia", "portao")
-SOZINHAS = ("conferencia", "portao")
+TIPOS = ("codigo", "sessao", "verificacao", "aprovacao-manual")
+SOZINHAS = ("verificacao", "aprovacao-manual")
 TEMPO_CODIGO = 600
 TEMPO_SESSAO = 3600
 
 
 # ---------------------------------------------------------------------------
-# O manifesto: validação na fronteira e as ondas do fork/join.
+# O roteiro: validação na fronteira e os estágios do fork/join.
 # ---------------------------------------------------------------------------
 
 def _inteiro_sao(valor, minimo=1) -> bool:
-    # bool é subclasse de int — a lição do recibo.py vale aqui também.
+    # bool é subclasse de int — a lição do evidencia.py vale aqui também.
     return isinstance(valor, int) and not isinstance(valor, bool) \
         and valor >= minimo
 
 
-def validar_manifesto(manifesto, esquema: dict) -> list:
-    """Todos os defeitos do manifesto; lista vazia = são.
+def validar_roteiro(roteiro, esquema: dict) -> list:
+    """Todos os defeitos do roteiro; lista vazia = são.
 
     Tipo errado é recusa na fronteira, nunca traceback lá dentro: raiz que
     não é objeto, depende que não é lista de nomes e comando-lista (que o
     shell rodaria pela metade, em silêncio) foram todos medidos.
     """
-    if not isinstance(manifesto, dict):
-        return ["manifesto: a raiz precisa ser um objeto JSON"]
+    if not isinstance(roteiro, dict):
+        return ["roteiro: a raiz precisa ser um objeto JSON"]
     erros = []
     # A régua do degrau 1 (additionalProperties false) vale aqui: um typo
     # ("dependee") apagava a dependência em silêncio e forkava etapas que
-    # o manifesto quis serializar (medido).
-    for sobra in sorted(set(manifesto) - {"teto", "ambiente", "etapas",
+    # o roteiro quis serializar (medido).
+    for sobra in sorted(set(roteiro) - {"teto", "ambiente", "etapas",
                                           "issue"}):
-        erros.append(f"manifesto: campo desconhecido {sobra!r}")
-    if "issue" in manifesto and not _inteiro_sao(manifesto["issue"]):
+        erros.append(f"roteiro: campo desconhecido {sobra!r}")
+    if "issue" in roteiro and not _inteiro_sao(roteiro["issue"]):
         erros.append("issue precisa ser o número da issue (inteiro >= 1)")
-    for sobra in sorted(set(manifesto.get("ambiente", {}) or {})
+    for sobra in sorted(set(roteiro.get("ambiente", {}) or {})
                         - {"venv", "env"}):
         erros.append(f"ambiente: campo desconhecido {sobra!r}")
-    etapas = manifesto.get("etapas")
+    etapas = roteiro.get("etapas")
     if not isinstance(etapas, list) or not etapas:
-        return ["manifesto sem lista de etapas"]
-    if not _inteiro_sao(manifesto.get("teto", 3)):
+        return ["roteiro sem lista de etapas"]
+    if not _inteiro_sao(roteiro.get("teto", 3)):
         erros.append("teto precisa ser inteiro >= 1")
 
     nomes = []
@@ -203,7 +205,7 @@ def validar_manifesto(manifesto, esquema: dict) -> list:
             erros.append(f"etapa {n}: não é um objeto")
             continue
         nome = etapa.get("nome", "")
-        erros += _recibo._erros(regra_nome, nome, f"etapa {n} (nome)")
+        erros += _evidencia._erros(regra_nome, nome, f"etapa {n} (nome)")
         if nome in nomes:
             erros.append(f"etapa {n}: nome duplicado {nome!r}")
         nomes.append(nome)
@@ -212,7 +214,7 @@ def validar_manifesto(manifesto, esquema: dict) -> list:
             erros.append(f"etapa {nome!r}: tipo desconhecido {tipo!r} "
                          f"(vale: {', '.join(TIPOS)})")
         for campo, quando in (("comando", "codigo"), ("prompt", "sessao"),
-                              ("aprovacao", "portao")):
+                              ("aprovacao", "aprovacao-manual")):
             if tipo == quando and (not isinstance(etapa.get(campo), str)
                                    or not etapa.get(campo, "").strip()):
                 erros.append(f"etapa {nome!r}: tipo {quando} exige o campo "
@@ -240,7 +242,7 @@ def validar_manifesto(manifesto, esquema: dict) -> list:
             if dependencia not in [e.get("nome") for e in etapas
                                    if isinstance(e, dict)]:
                 erros.append(f"etapa {nome!r}: depende de {dependencia!r}, "
-                             "que não existe no manifesto")
+                             "que não existe no roteiro")
 
     if not erros and _tem_ciclo(etapas):
         erros.append("o grafo de dependências tem ciclo — nada teria vez")
@@ -260,14 +262,15 @@ def _tem_ciclo(etapas: list) -> bool:
     return False
 
 
-def ondas_de(etapas: list) -> list:
-    """As ondas do fork/join, na ordem do manifesto.
+def estagios_de(etapas: list) -> list:
+    """Os estágios do fork/join, na ordem do roteiro.
 
-    Quem está pronto junto roda junto — MENOS conferência e portão, que
-    ganham onda própria, sempre. A ordem do manifesto desempata: se a
-    primeira etapa pronta é uma solitária, a onda é só dela.
+    Quem está pronto junto roda junto — MENOS verificação e aprovação
+    manual, que
+    ganham estágio próprio, sempre. A ordem do roteiro desempata: se a
+    primeira etapa pronta é uma solitária, o estágio é só dela.
     """
-    feitas, ondas = set(), []
+    feitas, estagios = set(), []
     pendentes = list(etapas)
     while pendentes:
         prontas = [e for e in pendentes
@@ -275,24 +278,24 @@ def ondas_de(etapas: list) -> list:
         if not prontas:
             sys.exit("defeito no encadeador: grafo validado travou")
         if prontas[0]["tipo"] in SOZINHAS:
-            onda = [prontas[0]]
+            estagio = [prontas[0]]
         else:
-            onda = [e for e in prontas if e["tipo"] not in SOZINHAS]
-        ondas.append(onda)
-        for etapa in onda:
+            estagio = [e for e in prontas if e["tipo"] not in SOZINHAS]
+        estagios.append(estagio)
+        for etapa in estagio:
             feitas.add(etapa["nome"])
             pendentes.remove(etapa)
-    return ondas
+    return estagios
 
 
 # ---------------------------------------------------------------------------
 # O ambiente — a parte herdada do executar.sh, lida por este processo.
 # ---------------------------------------------------------------------------
 
-def montar_ambiente(manifesto: dict, cwd: str, base: dict) -> dict:
+def montar_ambiente(roteiro: dict, cwd: str, base: dict) -> dict:
     """PATH do venv e variáveis do arquivo de ambiente, sem ecoar valor."""
     ambiente = dict(base)
-    bloco = manifesto.get("ambiente", {})
+    bloco = roteiro.get("ambiente", {})
     venv = bloco.get("venv")
     if venv:
         caminho = Path(cwd) / venv
@@ -373,7 +376,7 @@ RETOMADAS = 2  # quantas vezes uma etapa continua depois de bater no teto
 PEDIDO_DE_FECHO = (
     "Você bateu no teto de turnos da rodada anterior e a sessão foi retomada — "
     "todo o contexto do que você já leu continua aqui.\n\n"
-    "NÃO recomece e NÃO releia o que já leu. FECHE agora: escreva o recibo com "
+    "NÃO recomece e NÃO releia o que já leu. FECHE agora: escreva a evidência com "
     "o que você já tem.\n\n"
     "Ponha em provado só o que você já mediu, com o comando e a saída. "
     "O que ficou por olhar vai em faltas, nomeado. Veredito segue — análise "
@@ -385,7 +388,7 @@ def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
     """Roda a sessão e, se ela bater no TETO DE TURNOS, retoma de onde parou.
 
     Bater no teto é o único fracasso que perde tudo: a sessão trabalhou, achou
-    coisas, e morre sem recibo. Recomeçar do zero pagaria de novo pela leitura
+    coisas, e morre sem evidência. Recomeçar do zero pagaria de novo pela leitura
     inteira e provavelmente bateria no mesmo teto. Retomar pelo `session_id`
     mantém o contexto já comprado e pede só o fecho.
 
@@ -432,7 +435,7 @@ def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
             return codigo, saida, erro, marcas
         retomar, entrada = marcas["sessao"], PEDIDO_DE_FECHO
         print(f"    {rotulo}: teto de turnos — retomando a MESMA sessão para "
-              f"fechar o recibo ({tentativa + 1} de {RETOMADAS})", flush=True)
+              f"fechar a evidência ({tentativa + 1} de {RETOMADAS})", flush=True)
     return codigo, saida, erro, marcas
 
 
@@ -450,7 +453,7 @@ def _espera_do_limite(saida: str, limite: dict | None) -> int:
     Duas guardas, ambas pagas com uma noite perdida em 18/08/2026:
 
     1. Sessão que deu CERTO nunca espera. Ela já entregou; dormir aqui só
-       adiaria o recibo e faria o laço re-executar trabalho pronto. Parede que
+       adiaria a evidência e faria o laço re-executar trabalho pronto. Parede que
        ainda esteja de pé é problema da PRÓXIMA etapa, que bate nela sozinha.
     2. O texto só acusa parede com a expressão colada, em FRONTEIRA DE
        PALAVRA, e vinda de fracasso. Sem a fronteira, "accurate limite"
@@ -499,8 +502,9 @@ def _rodar_sessao_em_fluxo(comando, *, cwd, env, entrada, tempo, log, rotulo):
 
     Por que não `communicate()`: ele só devolve no EOF, e uma sessão de 60
     turnos fica meia hora muda. Aqui cada linha é escrita no log e resumida
-    na tela assim que chega — a corrente deixa de parecer congelada, e o
-    painel ganha andamento ao vivo de graça, porque ele já mostra este log.
+    na tela assim que chega — a execução deixa de parecer congelada, e o
+    painel de controle ganha andamento ao vivo de graça, porque ele já
+    mostra este log.
 
     O `result` NÃO é a última linha do fluxo (medido em 18/08: veio um
     `task_summary` depois dele), então guardá-lo pelo tipo é obrigatório;
@@ -536,7 +540,8 @@ def _rodar_sessao_em_fluxo(comando, *, cwd, env, entrada, tempo, log, rotulo):
                     if not linha:
                         break
                     diario.write(linha)
-                    diario.flush()  # o painel lê este arquivo enquanto enche
+                    # o painel de controle lê este arquivo enquanto enche
+                    diario.flush()
                     linhas.append(linha)
                     try:
                         dado = json.loads(linha)
@@ -566,7 +571,7 @@ def _rodar_sessao_em_fluxo(comando, *, cwd, env, entrada, tempo, log, rotulo):
         processo.wait()
         ferro.seek(0)
         erro = ferro.read()
-    # O contrato de saída é o mesmo de antes — só o recibo do `result` sobe,
+    # O contrato de saída é o mesmo de antes — só a evidência do `result` sobe,
     # e o resto do fluxo fica no log. Quem chama não muda.
     return (processo.returncode, (resultado or "".join(linhas)), erro,
             {"sessao": sessao, "ditos": ditos, "limite": limite_uso})
@@ -604,17 +609,17 @@ def _rodar_processo(comando, *, shell, cwd, env, entrada, tempo):
 
 
 # ---------------------------------------------------------------------------
-# Rodar uma etapa e materializar o recibo dela — sempre por código.
+# Rodar uma etapa e materializar a evidência dela — sempre por código.
 # ---------------------------------------------------------------------------
 
-def _cli_recibo(argumentos, entrada=None):
-    return subprocess.run([sys.executable, str(RECIBO)] + argumentos,
+def _cli_evidencia(argumentos, entrada=None):
+    return subprocess.run([sys.executable, str(EVIDENCIA)] + argumentos,
                           input=entrada, capture_output=True, text=True,
                           timeout=120)
 
 
 def _guia_da_sessao() -> str:
-    return _cli_recibo(["esquema-sessao"]).stdout.strip()
+    return _cli_evidencia(["esquema-sessao"]).stdout.strip()
 
 
 TETO_CONFIGURACAO = 64_000
@@ -627,8 +632,9 @@ def _bloco_de_regras(cwd) -> str:
     imperativas entram — o porquê mora nas páginas de procedência e não cabe
     em todo prompt de etapa. Entrega determinística de propósito: regra dura
     que depende de o modelo lembrar de buscar já custou caro no sistema
-    estudado. Fonte ausente é silêncio (casa sem a camada nova); ilegível
-    avisa e segue — nenhuma etapa derruba a corrente por causa de aviso.
+    estudado. Fonte ausente é silêncio (repositório sem a camada nova);
+    ilegível
+    avisa e segue — nenhuma etapa derruba a execução por causa de aviso.
     Cada frase vira linha única citada (`> `), pela mesma razão da moldura
     da configuração.
     """
@@ -658,9 +664,11 @@ def _bloco_de_regras(cwd) -> str:
 
 
 def _linhas_da_configuracao(dados: dict) -> list:
-    """A configuração da casa em linhas curtas: `chave: valor`, lista com `- `.
+    """A configuração do repositório em linhas curtas: `chave: valor`, lista
+    com `- `.
 
-    Genérica de propósito: a casa acrescenta chave — o que ela autoriza, por
+    Genérica de propósito: o repositório acrescenta chave — o que ele
+    autoriza, por
     exemplo — e a linha nova chega ao prompt sem passar por aqui. Só o
     `comentario` fica de fora, porque é recado para quem edita o arquivo, e
     todo caractere daqui é cobrado em TODA etapa de sessão.
@@ -682,7 +690,7 @@ def _linhas_da_configuracao(dados: dict) -> list:
 
 
 def _bloco_de_configuracao(cwd) -> str:
-    """A configuração da casa citada e emoldurada — ou nada.
+    """A configuração do repositório citada e emoldurada — ou nada.
 
     A fonte é `nucleo/configuracao.json` (camada 0.124+): dado, não prosa —
     quem lê são instrumentos, e prosa obriga cada leitor a garimpar o valor.
@@ -691,13 +699,13 @@ def _bloco_de_configuracao(cwd) -> str:
 
     - **Ilegível de qualquer natureza segue puro** — inclusive UTF-8
       quebrado: editor de Windows salva cp1252, `UnicodeDecodeError` não é
-      `OSError`, e sem o pega a corrente inteira morria sem recibo (medido).
-      JSON quebrado avisa no stderr e segue: aviso não derruba corrente.
+      `OSError`, e sem o pega a execução inteira morria sem evidência (medido).
+      JSON quebrado avisa no stderr e segue: aviso não derruba execução.
     - **Cada linha entra citada (`> `)**: valor que imita o cabeçalho ou o
       separador viraria limite falso entre config e prompt; citada, só as
       linhas SEM o prefixo são a moldura de verdade (medido: duas molduras
       idênticas no mesmo prompt sem isso).
-    - **Teto de sanidade**: config de casa é uma página; acima do teto o
+    - **Teto de sanidade**: config de repositório é uma página; acima do teto o
       prompt segue puro com aviso no stderr — estourar o contexto da sessão
       longe da causa é o defeito mais caro de achar.
     """
@@ -708,31 +716,35 @@ def _bloco_de_configuracao(cwd) -> str:
         return ""
     if len(texto) > TETO_CONFIGURACAO:
         print(f"AVISO: {configuracao} tem {len(texto)} caracteres (teto "
-              f"{TETO_CONFIGURACAO}) — configuração de casa é uma página; "
+              f"{TETO_CONFIGURACAO}) — configuração de repositório é uma "
+              "página; "
               "o prompt seguiu sem ela.", file=sys.stderr)
         return ""
     try:
         linhas = _linhas_da_configuracao(json.loads(texto))
     except (json.JSONDecodeError, AttributeError, TypeError):
-        print(f"AVISO: {configuracao} ilegível como configuração da casa; o "
+        print(f"AVISO: {configuracao} ilegível como configuração do "
+              "repositório; o "
               "prompt seguiu sem ela.", file=sys.stderr)
         return ""
     if not linhas:
         return ""
     citado = "\n".join("> " + linha for linha in linhas)
-    return ("CONFIGURAÇÃO DA CASA — as linhas citadas com '> ' logo abaixo "
+    return ("CONFIGURAÇÃO DO REPOSITÓRIO — as linhas citadas com '> ' logo "
+            "abaixo "
             "valem antes de criar issue ou escolher endereço de trabalho:\n\n"
             + citado + "\n---\n\n")
 
 
 def _prompt_da_sessao(etapa: dict, cwd) -> str:
-    """O prompt do manifesto, com as regras e a configuração na frente.
+    """O prompt do roteiro, com as regras e a configuração na frente.
 
-    A casa declara em `nucleo/configuracao.json` (raiz do `--cwd`) onde issue
-    nasce, com que nome e em que fila — e a sessão da corrente não tem outra
+    O repositório declara em `nucleo/configuracao.json` (raiz do `--cwd`) onde
+    issue
+    nasce, com que nome e em que fila — e a sessão da execução não tem outra
     fonte: ela nasce sem contexto e decidiria de cabeça. O arquivo entra
     inteiro, não como endereço, porque a sessão pode rodar em worktree ou
-    com leitura restrita — o que o manifesto quer que ela saiba viaja no
+    com leitura restrita — o que o roteiro quer que ela saiba viaja no
     prompt, como o contrato já viaja no `--json-schema`.
 
     A ordem é semântica: regras antes da configuração, configuração antes
@@ -796,10 +808,11 @@ def _bloco_de_onde_esta() -> str:
 def _comando_sessao(etapa: dict, retomar: str = "") -> list:
     # O --dangerously-skip-permissions vem da receita (executar.sh): sessão
     # de rotina não tem quem responder prompt. Por isso o docstring manda
-    # rodar a corrente em worktree ou clone descartável.
+    # rodar a execução em worktree ou clone descartável.
     #
     # O --bare traria o determinismo que este desenho quer: gancho, plugin e
-    # MCP da casa ficariam de fora, e tudo o que a etapa precisa saber viaja
+    # MCP do repositório ficariam de fora, e tudo o que a etapa precisa saber
+    # viaja
     # no PROMPT. MAS ele não carrega a credencial de quem entrou por conta
     # (OAuth): medido em 17/08/2026, `claude -p --bare` devolve
     # "Not logged in · Please run /login" em 55ms, sem tocar a API, enquanto
@@ -811,8 +824,8 @@ def _comando_sessao(etapa: dict, retomar: str = "") -> list:
     # recuperar o isolamento — não medimos esse caminho aqui.
     #
     # O preço do padrão, dito na cara: sem --bare a sessão herda gancho,
-    # plugin e MCP da máquina onde a corrente roda. Duas casas com plugins
-    # diferentes podem dar respostas diferentes para o mesmo manifesto.
+    # plugin e MCP da máquina onde a execução roda. Dois repositórios com
+    # plugins diferentes podem dar respostas diferentes para o mesmo roteiro.
     comando = ["claude", "-p"]
     if retomar:
         # Retomar em vez de recomeçar: a sessão que bateu no teto continua de
@@ -829,24 +842,24 @@ def _comando_sessao(etapa: dict, retomar: str = "") -> list:
 
 def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                 materializados=None):
-    """Roda a etapa e devolve o caminho do recibo materializado."""
+    """Roda a etapa e devolve o caminho da evidência materializada."""
     base = ["--dir", dir_base, "--trabalho", trabalho,
             "--etapa", etapa["nome"], "--ordem", str(ordem), "--teto", str(teto)]
 
     if not etapa.get("ligada", True):
-        feito = _cli_recibo(["sintetico"] + base + ["--motivo", "desligada"])
+        feito = _cli_evidencia(["sintetico"] + base + ["--motivo", "desligada"])
         return feito.stdout.strip()
 
-    if etapa["tipo"] == "conferencia":
-        return _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd,
+    if etapa["tipo"] == "verificacao":
+        return _rodar_verificacao(etapa, base, ordem, trabalho, dir_base, cwd,
                                   ambiente, materializados)
-    if etapa["tipo"] == "portao":
-        return _rodar_portao(etapa, base, cwd, dir_base, trabalho)
+    if etapa["tipo"] == "aprovacao-manual":
+        return _rodar_aprovacao_manual(etapa, base, cwd, dir_base, trabalho)
 
     # O log completo é herança da receita (ultima-execucao.log): stderr de
     # etapa boa não evapora, e o proximo do para sintético cita um log que
     # EXISTE (medido: antes citava log nenhum).
-    previsto, _ = _recibo.caminho_do_recibo(dir_base, trabalho, ordem,
+    previsto, _ = _evidencia.caminho_da_evidencia(dir_base, trabalho, ordem,
                                             etapa["nome"])
     log = previsto.with_suffix(".log")
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -862,7 +875,7 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                 rotulo=f"{ordem:02d}-{etapa['nome']}")
     except TempoEstourado as estouro:
         log.write_text(f"{estouro}\n", encoding="utf-8")
-        feito = _cli_recibo(["sintetico"] + base +
+        feito = _cli_evidencia(["sintetico"] + base +
                             ["--motivo", "morta",
                              "--detalhe", f"{estouro} — leia {log}"])
         return feito.stdout.strip()
@@ -877,14 +890,14 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
         detalhe = _porque_morreu(codigo_saida, saida, log)
         if etapa["tipo"] == "sessao" and marcas.get("ditos"):
             # Os turnos gastos deixam de virar nada: o que a sessão chegou a
-            # dizer entra no recibo como colhido, marcado como NÃO fechado.
+            # dizer entra na evidência como colhido, marcado como NÃO fechado.
             # É suposição, não prova — ela não passou pelo contrato.
             detalhe += (" | colhido do que ela já dizia, sem fechar: "
                         + " ⏎ ".join(d[:400] for d in marcas["ditos"][-3:]))
-        feito = _cli_recibo(["sintetico"] + base +
+        feito = _cli_evidencia(["sintetico"] + base +
                             ["--motivo", "morta", "--detalhe", detalhe[:4000]])
         return feito.stdout.strip()
-    feito = _cli_recibo(["materializar"] + base, entrada=saida)
+    feito = _cli_evidencia(["materializar"] + base, entrada=saida)
     return feito.stdout.strip()
 
 
@@ -894,16 +907,16 @@ def _porque_morreu(codigo_saida: int, saida: str, log) -> str:
     "exit 1 — leia o log" é verdade e é inútil: manda abrir arquivo para
     descobrir o que o processo já contou. A sessão devolve JSON com `subtype`,
     e três causas respondem por quase toda morte — teto de turnos, falta de
-    login e erro de API. Nomeá-las no recibo é a diferença entre "de novo deu
+    login e erro de API. Nomeá-las na evidência é a diferença entre "de novo deu
     erro" e "aumente o teto desta etapa".
 
-    Medido em 18/08/2026: três etapas de uma corrente morreram com
-    `error_max_turns` e o recibo dizia só `exit 1`, escondendo que o conserto
-    era uma linha do manifesto.
+    Medido em 18/08/2026: três etapas de uma execução morreram com
+    `error_max_turns` e a evidência dizia só `exit 1`, escondendo que o conserto
+    era uma linha do roteiro.
     """
     conhecidos = {
         "error_max_turns": ("esgotou o teto de turnos ANTES de escrever o "
-                            "recibo — os turnos gastos viraram nada. Aumente "
+                            "evidência — os turnos gastos viraram nada. Aumente "
                             "`max-turnos` nesta etapa, ou peça menos dela"),
         "error_during_execution": "a sessão falhou durante a execução",
     }
@@ -930,8 +943,8 @@ def verificacao_de(alvo) -> Path:
     """Onde mora o resultado da verificação de uma evidência.
 
     Numa subpasta, e nunca ao lado: a contagem de ciclo e o teto de reprovas
-    varrem o `*.json` da pasta do trabalho (`caminho_do_recibo` e
-    `_contar_paras`), e arquivo irmão ali dentro mexeria nas duas contas.
+    varrem o `*.json` da pasta do trabalho (`caminho_da_evidencia` e
+    `_contar_paras`), e arquivo vizinho ali dentro mexeria nas duas contas.
     """
     alvo = Path(alvo)
     return alvo.parent / "verificacoes" / alvo.name
@@ -940,9 +953,9 @@ def verificacao_de(alvo) -> Path:
 def verificar_na_janela(alvo, cwd, ambiente, tempo) -> None:
     """Re-executa o provado desta evidência AGORA, e grava o resultado.
 
-    O defeito que isto conserta: a conferência rodava tudo no fim, depois
+    O defeito que isto conserta: a verificação rodava tudo no fim, depois
     que as etapas seguintes mudaram o mundo. Uma etapa declarava 94 casos,
-    a etapa seguinte acrescentava três, e a conferência acusava quem não
+    a etapa seguinte acrescentava três, e a verificação acusava quem não
     mentiu — o mundo é que andou. Medido em 18/08/2026: das seis acusações
     de uma execução, QUATRO eram isso.
 
@@ -954,53 +967,53 @@ def verificar_na_janela(alvo, cwd, ambiente, tempo) -> None:
     onde.parent.mkdir(parents=True, exist_ok=True)
     try:
         codigo, saida, erro = _rodar_processo(
-            [sys.executable, str(CONFERIR), "recibo", str(alvo),
+            [sys.executable, str(VERIFICAR), "evidencia", str(alvo),
              "--cwd", cwd], shell=False, cwd=None, env=ambiente,
             entrada=None, tempo=tempo)
     except (TempoEstourado, OSError) as falha:
         codigo, saida, erro = 2, "", f"não verificado na janela: {falha}"
-    _recibo.escrever_atomico(onde, {
+    _evidencia.escrever_atomico(onde, {
         "alvo": Path(alvo).name,
-        "quando": _recibo.agora(),
+        "quando": _evidencia.agora(),
         "exit": codigo,
         "saida": f"{saida}{erro}".strip(),
     })
 
 
-def _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
+def _rodar_verificacao(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
                        materializados):
-    """Confere os recibos DESTA execução e materializa o recibo da conferência.
+    """Verifica as evidências DESTA execução e materializa a evidência da verificação.
 
-    Só os desta execução, de propósito: recibo de ciclo anterior já foi
-    conferido no tempo dele, e prova de git presa a ref móvel envelhece
+    Só os desta execução, de propósito: evidência de ciclo anterior já foi
+    verificado no tempo dele, e prova de git presa a ref móvel envelhece
     LEGITIMAMENTE quando a rodada é entregue (o merge move a ref da branch de integração)
     — re-litigar ciclo antigo reprovava rodada sã (medido no ciclo 2 do
     primeiro pedido real). O contrato agora manda ancorar em SHA; a
-    conferência da rodada confere a rodada.
+    verificação da rodada verifica a rodada.
 
-    O log é a evidência: o provado do recibo cita `tail -n 1 <log>` — prova
-    re-executável e estável. A conferência herda o MESMO ambiente das
+    O log é a evidência: o provado da evidência cita `tail -n 1 <log>` — prova
+    re-executável e estável. A verificação herda o MESMO ambiente das
     etapas (sem ele, prova com credencial do `ambiente.env` era acusada
     falsamente — medido).
     """
-    previsto, _ = _recibo.caminho_do_recibo(dir_base, trabalho, ordem,
+    previsto, _ = _evidencia.caminho_da_evidencia(dir_base, trabalho, ordem,
                                             etapa["nome"])
     log = previsto.with_suffix(".log")
     log.parent.mkdir(parents=True, exist_ok=True)
 
     alvos = list(materializados or [])
     if not alvos:
-        log.write_text("nenhum recibo novo nesta execução — nada a conferir\n",
+        log.write_text("nenhuma evidência nova nesta execução — nada a verificar\n",
                        encoding="utf-8")
         envelope = {"veredito": "segue", "provado": [
-            {"afirmacao": "nenhum recibo novo nesta execução",
+            {"afirmacao": "nenhuma evidência nova nesta execução",
              "comando": f"tail -n 1 {shlex.quote(str(log))}",
-             "saida": "nenhum recibo novo nesta execução — nada a conferir"}],
+             "saida": "nenhuma evidência nova nesta execução — nada a verificar"}],
             "suposto": [], "faltas": []}
         completo = {"etapa": "x", "trabalho": "x",
                     "quando": "2000-01-01T00:00:00Z",
                     "ciclo": {"i": 1, "teto": 1}, **envelope}
-        feito = _cli_recibo(["materializar"] + base,
+        feito = _cli_evidencia(["materializar"] + base,
                             entrada=json.dumps(completo, ensure_ascii=False))
         return feito.stdout.strip()
 
@@ -1024,20 +1037,20 @@ def _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
         else:
             try:
                 codigo_um, saida_um, erro_um = _rodar_processo(
-                    [sys.executable, str(CONFERIR), "recibo", str(alvo),
+                    [sys.executable, str(VERIFICAR), "evidencia", str(alvo),
                      "--cwd", cwd], shell=False, cwd=None, env=ambiente,
                     entrada=None,
                     tempo=etapa.get("tempo-limite", TEMPO_CODIGO))
             except TempoEstourado as estouro:
                 log.write_text("\n".join(saidas) + f"\n{estouro}\n",
                                encoding="utf-8")
-                feito = _cli_recibo(["sintetico"] + base +
+                feito = _cli_evidencia(["sintetico"] + base +
                                     ["--motivo", "morta",
-                                     "--detalhe", f"conferência: {estouro}"])
+                                     "--detalhe", f"verificação: {estouro}"])
                 return feito.stdout.strip()
         saidas.append(f"--- {Path(alvo).name}\n{saida_um}{erro_um}".strip())
         pior = max(pior, codigo_um)
-    resumo = (f"conferidos {len(alvos)} recibos desta execução "
+    resumo = (f"verificados {len(alvos)} evidências desta execução "
               f"({na_janela} verificados na janela da declaração) — "
               + ("nenhuma acusação" if pior == 0 else f"pior exit {pior}"))
     log.write_text("\n".join(saidas) + f"\n{resumo}\n", encoding="utf-8")
@@ -1045,9 +1058,9 @@ def _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
 
     if codigo == 0:
         envelope = {"veredito": "segue", "provado": [
-            {"afirmacao": "a conferência terminou sem acusações",
+            {"afirmacao": "a verificação terminou sem acusações",
              # shlex.quote: caminho com espaço quebrava a re-execução da
-             # evidência e a corrente honesta se autoacusava (medido).
+             # evidência e a execução honesta se autoacusava (medido).
              "comando": f"tail -n 1 {shlex.quote(str(log))}",
              "saida": resumo}],
             "suposto": [], "faltas": []}
@@ -1055,27 +1068,34 @@ def _rodar_conferencia(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
         acusacoes = [linha for linha in "\n".join(saidas).splitlines()
                      if linha.startswith("ACUSA")]
         envelope = {"veredito": "para", "provado": [], "suposto": [],
-                    "faltas": acusacoes[:10] or ["conferência acusou"],
-                    "proximo": (f"Leia {log}: corrija cada acusação (cada "
-                                "uma nomeia o recibo e o motivo) e reexecute "
-                                f"o trabalho {trabalho} a partir da etapa "
-                                "acusada.")}
+                    "faltas": acusacoes[:10] or ["verificação acusou"],
+                    # Sem caminho absoluto: este texto vai para a issue
+                    # quando o roteiro declara uma, e caminho de máquina em
+                    # issue é o que a regra do repositório proíbe. Terceira
+                    # vez que
+                    # o mesmo vazamento aparece — por isso o teste agora
+                    # cobre TODO texto postado, não um lugar por vez.
+                    "proximo": (f"Leia o log da verificação em "
+                                f"`{log.name}`, no trabalho {trabalho}: "
+                                "corrija cada acusação (cada uma nomeia a "
+                                "evidência e o motivo) e reexecute a partir "
+                                "da etapa acusada.")}
     else:
-        feito = _cli_recibo(["sintetico"] + base +
+        feito = _cli_evidencia(["sintetico"] + base +
                             ["--motivo", "morta",
-                             "--detalhe", f"conferência com erro de ambiente "
+                             "--detalhe", f"verificação com erro de ambiente "
                              f"(exit {codigo})"])
         return feito.stdout.strip()
     completo = {"etapa": "x", "trabalho": "x",
                 "quando": "2000-01-01T00:00:00Z",
                 "ciclo": {"i": 1, "teto": 1}, **envelope}
-    feito = _cli_recibo(["materializar"] + base,
+    feito = _cli_evidencia(["materializar"] + base,
                         entrada=json.dumps(completo, ensure_ascii=False))
     return feito.stdout.strip()
 
 
-def _rodar_portao(etapa, base, cwd, dir_base, trabalho):
-    """Portão do dono: arquivo de aprovação presente segue; ausente pergunta."""
+def _rodar_aprovacao_manual(etapa, base, cwd, dir_base, trabalho):
+    """Aprovação do dono: arquivo presente segue; ausente pergunta."""
     arquivo = Path(cwd) / etapa["aprovacao"]
     if arquivo.is_file():
         envelope = {"veredito": "segue", "provado": [
@@ -1085,7 +1105,8 @@ def _rodar_portao(etapa, base, cwd, dir_base, trabalho):
     else:
         # A pergunta VAI PARA A ISSUE quando o roteiro declara uma: caminho
         # absoluto aqui viraria caminho de máquina publicado, que é o que a
-        # regra da casa proíbe. Nome do trabalho e caminho relativo bastam
+        # regra do repositório proíbe. Nome do trabalho e caminho relativo
+        # bastam
         # para achar as duas coisas.
         relativo = Path(arquivo).name if Path(arquivo).is_absolute() else arquivo
         envelope = {"veredito": "pergunta", "provado": [], "suposto": [],
@@ -1097,7 +1118,7 @@ def _rodar_portao(etapa, base, cwd, dir_base, trabalho):
     completo = {"etapa": "x", "trabalho": "x",
                 "quando": "2000-01-01T00:00:00Z",
                 "ciclo": {"i": 1, "teto": 1}, **envelope}
-    feito = _cli_recibo(["materializar"] + base,
+    feito = _cli_evidencia(["materializar"] + base,
                         entrada=json.dumps(completo, ensure_ascii=False))
     return feito.stdout.strip()
 
@@ -1108,7 +1129,7 @@ def _rodar_portao(etapa, base, cwd, dir_base, trabalho):
 
 def _rotulo(etapa, ordem):
     if not etapa.get("ligada", True):
-        texto = f"{ordem:02d}-{etapa['nome']} [desligada — recibo de skip]"
+        texto = f"{ordem:02d}-{etapa['nome']} [desligada — evidência de skip]"
     elif etapa["tipo"] == "codigo":
         texto = f"{ordem:02d}-{etapa['nome']} [codigo: {etapa['comando']}]"
     elif etapa["tipo"] == "sessao":
@@ -1119,27 +1140,27 @@ def _rotulo(etapa, ordem):
                  f"--output-format json "
                  f"--json-schema <contrato sem allOf> --max-turns "
                  f"{etapa.get('max-turnos', 16)}]")
-    elif etapa["tipo"] == "portao":
+    elif etapa["tipo"] == "aprovacao-manual":
         texto = (f"{ordem:02d}-{etapa['nome']} "
-                 f"[portao: aprovação em {etapa['aprovacao']}]")
+                 f"[aprovacao-manual: aprovação em {etapa['aprovacao']}]")
     else:
-        texto = f"{ordem:02d}-{etapa['nome']} [conferencia]"
-    # Quebra de linha embutida no comando forjava linha de onda na
+        texto = f"{ordem:02d}-{etapa['nome']} [verificacao]"
+    # Quebra de linha embutida no comando forjava linha de estágio na
     # listagem do ensaio (medido) — o rótulo é sempre uma linha só.
     return texto.replace("\r", "\\r").replace("\n", "\\n")
 
 
-def ensaio(manifesto, trabalho, dir_base) -> int:
-    """Lista a corrente inteira. NADA executa, NADA é lido além do manifesto."""
-    etapas = manifesto["etapas"]
+def ensaio(roteiro, trabalho, dir_base) -> int:
+    """Lista a execução inteira. NADA executa, NADA é lido além do roteiro."""
+    etapas = roteiro["etapas"]
     ordem_de = {e["nome"]: n for n, e in enumerate(etapas, start=1)}
     print(f"ensaio do trabalho {trabalho} — nada será executado:")
-    for n, onda in enumerate(ondas_de(etapas), start=1):
-        marca = "[só]" if onda[0]["tipo"] in SOZINHAS else (
-            f"[fork de {len(onda)}]" if len(onda) > 1 else "[uma]")
-        nomes = ", ".join(_rotulo(e, ordem_de[e["nome"]]) for e in onda)
-        print(f"  onda {n} {marca}: {nomes}")
-    print(f"recibos iriam para: {Path(dir_base) / trabalho}/")
+    for n, estagio in enumerate(estagios_de(etapas), start=1):
+        marca = "[só]" if estagio[0]["tipo"] in SOZINHAS else (
+            f"[fork de {len(estagio)}]" if len(estagio) > 1 else "[uma]")
+        nomes = ", ".join(_rotulo(e, ordem_de[e["nome"]]) for e in estagio)
+        print(f"  estagio {n} {marca}: {nomes}")
+    print(f"evidências iriam para: {Path(dir_base) / trabalho}/")
     return 0
 
 
@@ -1153,14 +1174,14 @@ def _contar_paras(pasta: Path) -> int:
             if not isinstance(dado, dict):
                 # JSON válido que não é objeto ([]) derrubava a contagem
                 # com traceback (medido) — trata igual ao ilegível.
-                raise ValueError("não é um objeto de recibo")
+                raise ValueError("não é um objeto de evidência")
             if dado.get("veredito") == "para":
                 total += 1
         except (OSError, ValueError):
-            # Conservador de propósito: um recibo corrompido reabria a
-            # corrente além do teto em silêncio (medido). Ilegível conta
+            # Conservador de propósito: uma evidência corrompida reabria a
+            # execução além do teto em silêncio (medido). Ilegível conta
             # como para — só pode parar mais cedo, nunca rodar demais.
-            print(f"AVISO: recibo ilegível {arquivo.name} conta como para "
+            print(f"AVISO: evidência ilegível {arquivo.name} conta como para "
                   "no teto.", file=sys.stderr)
             total += 1
     return total
@@ -1200,7 +1221,7 @@ def gravar_estado(dir_base, trabalho, situacao, **extra) -> None:
     """
     alvo = caminho_do_estado(dir_base, trabalho)
     alvo.parent.mkdir(parents=True, exist_ok=True)
-    dado = {"situacao": situacao, "desde": _recibo.agora(),
+    dado = {"situacao": situacao, "desde": _evidencia.agora(),
             **{k: v for k, v in extra.items() if v is not None}}
     # replace, não link: o estado é reescrito a cada transição — ao
     # contrário da evidência, que falha alto se já existir.
@@ -1237,10 +1258,51 @@ def _token_da_conta(conta):
     return achado.stdout.strip() or None
 
 
-def postar_na_issue(configuracao, issue, texto):
+def sem_caminho_de_maquina(texto, *raizes):
+    """Encurta caminho absoluto antes de o texto virar comentário público.
+
+    Comentário de issue é publicação, e este código VIAJA: cada instalador
+    publicaria o caminho do disco dele. Quatro vezes o mesmo vazamento saiu
+    por um lugar novo — o desfecho, a pergunta da aprovação manual, o
+    `proximo` de
+    quem reprova e, medido em 18/08/2026 numa execução real, o `comando` da
+    prova da verificação. Consertar o lugar da vez não fecha: por isso a
+    limpeza mora no ponto por onde TODO texto postado passa, e não em quem
+    monta cada texto. O motivo mais forte é que nem todo texto é nosso —
+    a prova de uma etapa `sessao` é escrita pelo modelo, e o caminho que
+    ele declarar não passa por nenhum dos construtores daqui.
+
+    Só o COMENTÁRIO encurta; a evidência em disco guarda o caminho como
+    ele é, que é o que a verificação re-executa.
+    """
+    if not texto:
+        return texto
+    conhecidas = []
+    for raiz in raizes:
+        if raiz:
+            conhecidas.append(str(Path(raiz).resolve()))
+    try:
+        pasta_pessoal = str(Path.home())
+    except RuntimeError:            # máquina sem home definida
+        pasta_pessoal = ""
+    # Da mais funda para a mais rasa: a raiz do trabalho costuma estar
+    # dentro do repositório, e trocar o repositório primeiro deixaria o resto
+    # pela metade.
+    for raiz in sorted(conhecidas, key=len, reverse=True):
+        for sep in ("/", os.sep):
+            texto = texto.replace(raiz + sep, "")
+        texto = texto.replace(raiz, ".")
+    if pasta_pessoal:
+        for sep in ("/", os.sep):
+            texto = texto.replace(pasta_pessoal + sep, "~" + sep)
+    return texto
+
+
+def postar_na_issue(configuracao, issue, texto, *raizes):
     """Comenta na issue do trabalho. Devolve (postou, o que dizer no log)."""
     if not issue:
         return False, "o roteiro não declara issue — nada a postar"
+    texto = sem_caminho_de_maquina(texto, *raizes)
     repositorio = _campo(configuracao or {}, "issues.repositorio")
     if not repositorio:
         return False, "sem repositório de issues na configuração — não postei"
@@ -1267,7 +1329,7 @@ MODOS = ("completo", "so-issues")
 # O que a configuração precisa ter para o disparo acontecer. Caminho de
 # ponto: campo dentro de objeto.
 # O que TODA execução precisa, e mais nada. Exigir branch de integração e
-# quadro de projeto de qualquer repositório seria a topologia de uma casa
+# quadro de projeto de qualquer repositório seria a topologia de UM deles
 # virando requisito de instalação: quem tem só `main`, ou quem não usa
 # quadro, não dispararia nem com um roteiro que não toca em nenhum dos dois.
 CAMPOS_DO_EXECUTOR = ("modo", "branches.padrao_de_trabalho")
@@ -1347,7 +1409,7 @@ def carregar_executor(cwd, caminho=None, roteiro=None):
     return dado, problemas
 
 
-def avisos_do_alvo(configuracao, manifesto, cwd) -> list:
+def avisos_do_alvo(configuracao, roteiro, cwd) -> list:
     """As três perguntas baratas antes de gastar o primeiro turno.
 
     Uma noite inteira já foi condenada por um alvo parado num commit velho,
@@ -1367,7 +1429,7 @@ def avisos_do_alvo(configuracao, manifesto, cwd) -> list:
                 avisos.append(f"branches.{campo} ({valor}) não está em "
                               f"{protegidas.name} — confira se é mesmo assim")
     citados = set()
-    for etapa in manifesto.get("etapas", []):
+    for etapa in roteiro.get("etapas", []):
         for palavra in re.findall(r"[\w./-]+\.(?:py|json|md|js|txt)",
                                   str(etapa.get("comando", ""))):
             if not palavra.startswith("-"):
@@ -1382,9 +1444,9 @@ def avisos_do_alvo(configuracao, manifesto, cwd) -> list:
     # commit (para reverter um passo sem perder os anteriores) e de uma
     # rodada do cético contra o plano combinado. Heurística, e por isso
     # AVISO: ela lê o texto das etapas de que a aprovação depende.
-    por_nome = {e["nome"]: e for e in manifesto.get("etapas", [])}
-    for etapa in manifesto.get("etapas", []):
-        if etapa.get("tipo") != "portao":
+    por_nome = {e["nome"]: e for e in roteiro.get("etapas", [])}
+    for etapa in roteiro.get("etapas", []):
+        if etapa.get("tipo") != "aprovacao-manual":
             continue
         antes = " ".join(
             str(por_nome.get(d, {}).get("comando", ""))
@@ -1508,22 +1570,22 @@ def ler_respostas(trabalho, dir_base, cwd, caminho_configuracao=None,
                   etapa=estado.get("etapa"), issue=estado.get("issue"),
                   roteiro=estado.get("roteiro"), resposta=texto,
                   respondeu=quem)
-    roteiro = estado.get("roteiro")
+    caminho_roteiro = estado.get("roteiro")
     comando = (f"{sys.executable} {Path(__file__).resolve()} executar "
-               f"--manifesto {roteiro} --trabalho {trabalho} "
+               f"--roteiro {caminho_roteiro} --trabalho {trabalho} "
                f"--dir {dir_base} --cwd {cwd} --retomar")
     if not disparar:
         print("resposta gravada. Para retomar do ponto exato:\n  " + comando)
         return 0
-    if not roteiro or not Path(roteiro).is_file():
+    if not caminho_roteiro or not Path(caminho_roteiro).is_file():
         print("não retomo: o estado não guarda o roteiro deste trabalho",
               file=sys.stderr)
         return 2
     print("retomando…")
-    manifesto = json.loads(Path(roteiro).read_text(encoding="utf-8"))
-    return executar(manifesto, trabalho, dir_base, cwd,
+    roteiro = json.loads(Path(caminho_roteiro).read_text(encoding="utf-8"))
+    return executar(roteiro, trabalho, dir_base, cwd,
                     caminho_configuracao=caminho_configuracao, retomar=True,
-                    resposta=texto, roteiro=roteiro)
+                    resposta=texto, caminho_roteiro=caminho_roteiro)
 
 
 def foto_das_etapas(pasta) -> dict:
@@ -1533,7 +1595,7 @@ def foto_das_etapas(pasta) -> dict:
     """
     foto = {}
     for arquivo in sorted(Path(pasta).glob("*.json")):
-        casado = PADRAO_NOME_RECIBO.match(arquivo.name)
+        casado = PADRAO_NOME_EVIDENCIA.match(arquivo.name)
         if not casado:
             continue
         nome, ciclo = casado.group(2), int(casado.group(3))
@@ -1547,17 +1609,17 @@ def foto_das_etapas(pasta) -> dict:
     return foto
 
 
-def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
+def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
              caminho_configuracao=None, retomar=False, resposta=None,
-             roteiro=None) -> int:
-    etapas = manifesto["etapas"]
-    teto = manifesto.get("teto", 3)
+             caminho_roteiro=None) -> int:
+    etapas = roteiro["etapas"]
+    teto = roteiro.get("teto", 3)
     ordem_de = {e["nome"]: n for n, e in enumerate(etapas, start=1)}
     pasta = Path(dir_base) / trabalho
 
     if _contar_paras(pasta) >= teto:
         primeira = etapas[0]
-        feito = _cli_recibo(["sintetico", "--dir", dir_base, "--trabalho",
+        feito = _cli_evidencia(["sintetico", "--dir", dir_base, "--trabalho",
                              trabalho, "--etapa", primeira["nome"], "--ordem",
                              str(ordem_de[primeira["nome"]]), "--teto",
                              str(teto), "--motivo", "teto-esgotado"])
@@ -1569,7 +1631,7 @@ def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
     # dentro e não no main(): o main é compartilhado com o ensaio, que
     # promete não ler nada além do roteiro.
     configuracao, problemas = (configuracao, []) if configuracao is not None \
-        else carregar_executor(cwd, caminho_configuracao, manifesto)
+        else carregar_executor(cwd, caminho_configuracao, roteiro)
     if problemas:
         for problema in problemas:
             print(f"erro de configuração: {problema}", file=sys.stderr)
@@ -1580,12 +1642,12 @@ def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
         print("modo so-issues: esta configuração só permite abrir issue; "
               "executar está desligado.", file=sys.stderr)
         return 2
-    for aviso in avisos_do_alvo(configuracao, manifesto, cwd):
+    for aviso in avisos_do_alvo(configuracao, roteiro, cwd):
         print(f"aviso: {aviso}", file=sys.stderr)
 
-    issue = manifesto.get("issue")
+    issue = roteiro.get("issue")
     # A retomada continua do ponto exato: etapa com evidência `segue` não
-    # roda de novo. Sem isto, reexecutar pagava a corrente inteira outra vez
+    # roda de novo. Sem isto, reexecutar pagava a execução inteira outra vez
     # — e a etapa que perguntou perdia a resposta no caminho.
     provadas = set()
     if retomar:
@@ -1600,19 +1662,20 @@ def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
                       "issue": issue, "resposta": resposta,
                       "etapas": [e["nome"] for e in etapas]})
     gravar_estado(dir_base, trabalho, "rodando", issue=issue,
-                  roteiro=str(roteiro) if roteiro else None)
+                  roteiro=str(caminho_roteiro) if caminho_roteiro else None)
 
     def _fechar(situacao, etapa=None, texto=None, **extra):
         """Grava o estado terminal e conta na issue o que aconteceu."""
         gravar_estado(dir_base, trabalho, situacao, etapa=etapa, issue=issue,
                       **extra)
         if texto:
-            postou, recado = postar_na_issue(configuracao, issue, texto)
+            postou, recado = postar_na_issue(configuracao, issue, texto,
+                                             cwd, dir_base)
             print(("  " if postou else "  não postei: ") + recado)
 
     feitas = 0
-    ambiente = montar_ambiente(manifesto, cwd, dict(os.environ))
-    # O cheque precoce da receita: sem ele, a corrente executava meia onda
+    ambiente = montar_ambiente(roteiro, cwd, dict(os.environ))
+    # O cheque precoce da receita: sem ele, a execução executava meio estágio
     # com efeito colateral antes de descobrir que a sessão não abriria.
     if any(e["tipo"] == "sessao" and e.get("ligada", True) for e in etapas) \
             and not shutil.which("claude", path=ambiente.get("PATH")):
@@ -1620,34 +1683,34 @@ def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
               "está no PATH — nada rodou.", file=sys.stderr)
         return 2
     materializados = []
-    for n, onda in enumerate(ondas_de(etapas), start=1):
-        marca = "[só]" if onda[0]["tipo"] in SOZINHAS else (
-            f"[fork de {len(onda)}]" if len(onda) > 1 else "[uma]")
-        pulando = [e for e in onda if e["nome"] in provadas]
-        onda = [e for e in onda if e["nome"] not in provadas]
+    for n, estagio in enumerate(estagios_de(etapas), start=1):
+        marca = "[só]" if estagio[0]["tipo"] in SOZINHAS else (
+            f"[fork de {len(estagio)}]" if len(estagio) > 1 else "[uma]")
+        pulando = [e for e in estagio if e["nome"] in provadas]
+        estagio = [e for e in estagio if e["nome"] not in provadas]
         for etapa_pulada in pulando:
             print(f"  {etapa_pulada['nome']}: já provada — não roda de novo")
-        if not onda:
+        if not estagio:
             continue
-        print(f"onda {n} {marca}: {', '.join(e['nome'] for e in onda)}")
-        with concurrent.futures.ThreadPoolExecutor(len(onda)) as executor:
+        print(f"estagio {n} {marca}: {', '.join(e['nome'] for e in estagio)}")
+        with concurrent.futures.ThreadPoolExecutor(len(estagio)) as executor:
             caminhos = list(executor.map(
                 lambda etapa: rodar_etapa(etapa, ordem_de[etapa["nome"]],
                                           trabalho, dir_base, cwd, ambiente,
-                                          teto, materializados), onda))
+                                          teto, materializados), estagio))
         materializados.extend(caminho for caminho in caminhos if caminho)
-        # Verificar AQUI, antes de a próxima onda mexer no mundo: a prova é
+        # Verificar AQUI, antes de o próximo estágio mexer no mundo: a prova é
         # do instante em que foi declarada. A etapa de verificação agrega.
         for caminho in caminhos:
             if caminho and Path(caminho).is_file():
                 verificar_na_janela(caminho, cwd, ambiente, TEMPO_CODIGO)
         for caminho in caminhos:
             if not caminho or not Path(caminho).is_file():
-                print("defeito no encadeador: uma etapa terminou sem recibo "
+                print("defeito no encadeador: uma etapa terminou sem evidência "
                       "no disco — corrija encadeador.py", file=sys.stderr)
                 return 2
-            recibo_dado = json.loads(Path(caminho).read_text(encoding="utf-8"))
-            veredito = recibo_dado["veredito"]
+            evidencia_dado = json.loads(Path(caminho).read_text(encoding="utf-8"))
+            veredito = evidencia_dado["veredito"]
             print(f"  {Path(caminho).name}: {veredito}")
             # A issue se atualiza A CADA ETAPA, não só no desfecho: o que
             # foi feito, o que foi testado e com que comando. Isto é código
@@ -1657,34 +1720,36 @@ def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
             if issue:
                 postou, recado = postar_na_issue(
                     configuracao, issue,
-                    resumo_da_etapa(recibo_dado, feitas, len(etapas)))
+                    resumo_da_etapa(evidencia_dado, feitas, len(etapas)),
+                    cwd, dir_base)
                 if not postou:
                     print(f"  não postei o passo: {recado}")
             if veredito == "para":
-                proximo = recibo_dado.get("proximo", "")
+                proximo = evidencia_dado.get("proximo", "")
                 print(f"parou — o proximo de quem reprovou:\n  {proximo}")
-                _fechar("parada", etapa=recibo_dado.get("etapa"),
+                _fechar("parada", etapa=evidencia_dado.get("etapa"),
                         texto=(f"**A execução parou** na etapa "
-                               f"`{recibo_dado.get('etapa')}`.\n\n"
+                               f"`{evidencia_dado.get('etapa')}`.\n\n"
                                f"O próximo passo, escrito por quem reprovou:\n"
                                f"\n> {proximo}\n\n"
                                f"Evidências no trabalho `{trabalho}`."))
                 return 5
             if veredito == "pergunta":
-                pergunta = recibo_dado.get("pergunta", "")
+                pergunta = evidencia_dado.get("pergunta", "")
                 print(f"parou — aguardando o dono:\n  {pergunta}")
                 _fechar("aguardando-resposta",
-                        etapa=recibo_dado.get("etapa"),
+                        etapa=evidencia_dado.get("etapa"),
                         texto=(f"**A execução parou e precisa de você**, na "
-                               f"etapa `{recibo_dado.get('etapa')}`.\n\n"
+                               f"etapa `{evidencia_dado.get('etapa')}`.\n\n"
                                f"> {pergunta}\n\n"
                                "Responda nesta issue, num comentário seu. "
                                "A retomada continua do ponto exato — as "
                                "etapas já provadas não rodam de novo."))
                 return 6
-    print(f"corrente completa: {len(etapas)} etapas, recibos em {pasta}/")
+    print(f"execução completa: {len(etapas)} etapas, evidências em {pasta}/")
     # O caminho é ABSOLUTO no disco de quem roda, e isto vai para uma issue:
-    # caminho de máquina em issue é o que a regra da casa proíbe — e este
+    # caminho de máquina em issue é o que a regra do repositório proíbe — e
+    # este
     # código viaja, então cada instalador publicaria o dele. Só o nome do
     # trabalho, que é o que serve para achar a evidência de qualquer jeito.
     _fechar("completa", texto=(
@@ -1696,21 +1761,21 @@ def executar(manifesto, trabalho, dir_base, cwd, configuracao=None,
 
 
 # [0-9] e não \d: dígito Unicode no nome ('c１０') dirigiria a leitura do
-# ciclo — a mesma emenda do recibo.py.
-PADRAO_NOME_RECIBO = re.compile(r"^([0-9]+)-(.+)-c([0-9]+)\.json$")
+# ciclo — a mesma emenda do evidencia.py.
+PADRAO_NOME_EVIDENCIA = re.compile(r"^([0-9]+)-(.+)-c([0-9]+)\.json$")
 
 
-def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
-    """Fotografa os recibos do trabalho e imprime o JSON do contrato.
+def andamento(trabalho, dir_base, etapas_do_roteiro=None) -> int:
+    """Fotografa as evidências do trabalho e imprime o JSON do contrato.
 
     Só leitura: nada roda, nada nasce. O contrato completo está no
     docstring do módulo; a régua do teto é a MESMA do motor: todo *.json da
     pasta conta — ilegível conta como para, com aviso. Só quem casa o padrão
-    de nome vira etapa. Com o manifesto, `completa` é prova, não inferência.
+    de nome vira etapa. Com o roteiro, `completa` é prova, não inferência.
     """
     pasta = Path(dir_base) / trabalho
     avisos = []
-    correntes = {}
+    atuais = {}
     paras, teto = 0, None
     if not pasta.is_dir():
         avisos.append(f"o diretório {pasta} não existe — o trabalho nunca "
@@ -1719,9 +1784,9 @@ def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
         try:
             dado = json.loads(arquivo.read_text(encoding="utf-8"))
             if not isinstance(dado, dict):
-                raise ValueError("não é um objeto de recibo")
+                raise ValueError("não é um objeto de evidência")
         except (OSError, ValueError):
-            avisos.append(f"recibo ilegível: {arquivo.name} — conta como "
+            avisos.append(f"evidência ilegível: {arquivo.name} — conta como "
                           "para no teto")
             paras += 1
             continue
@@ -1730,19 +1795,19 @@ def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
         ciclo = dado.get("ciclo", {})
         if isinstance(ciclo, dict) and _inteiro_sao(ciclo.get("teto", 0)):
             teto = ciclo["teto"]
-        pedacos = PADRAO_NOME_RECIBO.match(arquivo.name)
+        pedacos = PADRAO_NOME_EVIDENCIA.match(arquivo.name)
         if not pedacos:
-            avisos.append(f"{arquivo.name} não tem nome de recibo — lido "
+            avisos.append(f"{arquivo.name} não tem nome de evidência — lido "
                           "para o teto, fora das etapas")
             continue
         chave = (int(pedacos.group(1)), pedacos.group(2))
         vez = int(pedacos.group(3))
-        if chave not in correntes or vez > correntes[chave][0]:
-            correntes[chave] = (vez, dado)
+        if chave not in atuais or vez > atuais[chave][0]:
+            atuais[chave] = (vez, dado)
 
     etapas = []
-    for ordem, nome in sorted(correntes):
-        _, dado = correntes[(ordem, nome)]
+    for ordem, nome in sorted(atuais):
+        _, dado = atuais[(ordem, nome)]
         etapas.append({"ordem": ordem, "nome": nome,
                        "veredito": dado.get("veredito"),
                        "ciclo": dado.get("ciclo"),
@@ -1752,39 +1817,39 @@ def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
 
     parado = next((e for e in etapas if e["veredito"] == "para"), None)
     aguarda = next((e for e in etapas if e["veredito"] == "pergunta"), None)
-    sem_recibo = []
-    if etapas_do_manifesto is not None:
-        com_recibo = {nome for _, nome in correntes}
-        sem_recibo = [e["nome"] for e in etapas_do_manifesto
-                      if e.get("ligada", True) and e["nome"] not in com_recibo]
+    sem_evidencia = []
+    if etapas_do_roteiro is not None:
+        com_evidencia = {nome for _, nome in atuais}
+        sem_evidencia = [e["nome"] for e in etapas_do_roteiro
+                      if e.get("ligada", True) and e["nome"] not in com_evidencia]
     if not etapas:
         estado = "em-curso"
         acao = (f"nada rodou ainda — rode: python "
-                f".agents/encadeador/encadeador.py executar --manifesto <M> "
+                f".agents/encadeador/encadeador.py executar --roteiro <M> "
                 f"--trabalho {trabalho} --dir {dir_base}")
     elif teto is not None and paras >= teto:
         estado = "parada"
         acao = (f"teto de {teto} ciclos esgotado — a decisão é do dono; "
-                f"leia os recibos em {pasta}")
+                f"leia as evidências em {pasta}")
     elif parado:
         estado = "parada"
-        acao = parado["proximo"] or (f"leia o recibo da etapa "
+        acao = parado["proximo"] or (f"leia a evidência da etapa "
                                      f"{parado['nome']} em {pasta}")
     elif aguarda:
-        estado = "aguardando-portao"
-        acao = aguarda["pergunta"] or (f"leia o recibo da etapa "
+        estado = "aguardando-aprovacao"
+        acao = aguarda["pergunta"] or (f"leia a evidência da etapa "
                                        f"{aguarda['nome']} em {pasta}")
-    elif sem_recibo:
-        # A prova que o manifesto compra: etapa ligada sem recibo é corrente
+    elif sem_evidencia:
+        # A prova que o roteiro compra: etapa ligada sem evidência é execução
         # por rodar — ou morta no meio, e "completa" aqui seria o zero que
         # mente do próprio instrumento.
         estado = "em-curso"
-        acao = ("etapa ligada sem recibo: " + ", ".join(sem_recibo)
-                + " — a corrente ainda não passou por ela (ou morreu antes; "
+        acao = ("etapa ligada sem evidência: " + ", ".join(sem_evidencia)
+                + " — a execução ainda não passou por ela (ou morreu antes; "
                 "o exit de quem executou é a fonte)")
     else:
         estado = "completa"
-        acao = f"nada a fazer — corrente completa; recibos em {pasta}"
+        acao = f"nada a fazer — execução completa; evidências em {pasta}"
 
     # O estado que o motor gravou vale MAIS que o inferido dos arquivos
     # quando ele diz que está esperando: dormindo e aguardando-resposta não
@@ -1792,11 +1857,10 @@ def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
     # "trabalhando" com o motor parado (defeito 4).
     #
     # `dormindo` é estado NOVO — não existia nome para ele, e é o que a mesa
-    # não tinha como saber. Já `aguardando-resposta` é a mesma situação que o
-    # andamento sempre chamou de `aguardando-portao`: o nome fica como está,
-    # porque o painel de controle o lê, e trocá-lo aqui seria misturar a
-    # renomeação de vocabulário com trabalho novo. O detalhe preciso viaja no
-    # campo `gravado`.
+    # não tinha como saber. Já `aguardando-resposta` é a mesma espera que o
+    # andamento infere das evidências e chama de `aguardando-aprovacao`: dois
+    # nomes para o mesmo parado, um gravado pelo motor e outro lido dos
+    # arquivos. O detalhe preciso viaja no campo `gravado`.
     gravado = ler_estado(dir_base, trabalho)
     if gravado and gravado.get("situacao") == "dormindo":
         estado = "dormindo"
@@ -1820,12 +1884,12 @@ def andamento(trabalho, dir_base, etapas_do_manifesto=None) -> int:
 def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="encadeador.py")
     sub = parser.add_subparsers(dest="comando", required=True)
-    for nome_cmd, ajuda in (("ensaio", "lista a corrente sem executar nada"),
-                            ("executar", "roda a corrente e deixa os recibos")):
+    for nome_cmd, ajuda in (("ensaio", "lista a execução sem executar nada"),
+                            ("executar", "roda a execução e deixa as evidências")):
         p = sub.add_parser(nome_cmd, help=ajuda)
-        p.add_argument("--manifesto", required=True)
+        p.add_argument("--roteiro", required=True)
         p.add_argument("--trabalho", required=True)
-        p.add_argument("--dir", default="recibos")
+        p.add_argument("--dir", default="evidencias")
         p.add_argument("--cwd", default=".")
         # Só o executar lê configuração; o ensaio aceita a bandeira e a
         # ignora, para o mesmo comando servir aos dois sem ramificar.
@@ -1842,28 +1906,28 @@ def montar_parser() -> argparse.ArgumentParser:
                        help="vê se o dono respondeu na issue e grava a "
                             "resposta; com --disparar, retoma")
     p.add_argument("--trabalho", required=True)
-    p.add_argument("--dir", default="recibos")
+    p.add_argument("--dir", default="evidencias")
     p.add_argument("--cwd", default=".")
     p.add_argument("--configuracao")
     p.add_argument("--disparar", action="store_true",
                    help="retoma a execução do ponto exato quando houver "
                         "resposta (o padrão é só gravar e dizer o comando)")
     p = sub.add_parser("andamento",
-                       help="fotografa os recibos do trabalho em JSON")
+                       help="fotografa as evidências do trabalho em JSON")
     p.add_argument("--trabalho", required=True)
-    p.add_argument("--dir", default="recibos")
-    p.add_argument("--manifesto", help="opcional: torna `completa` prova, "
+    p.add_argument("--dir", default="evidencias")
+    p.add_argument("--roteiro", help="opcional: torna `completa` prova, "
                    "não inferência")
     return parser
 
 
 def main(argv) -> int:
     # Linha a linha mesmo com o stdout redirecionado: rodando destacado, o
-    # buffer segurava as ondas até o fim e o acompanhamento ficava mudo
+    # buffer segurava os estágios até o fim e o acompanhamento ficava mudo
     # (medido no primeiro pedido real).
     sys.stdout.reconfigure(line_buffering=True)
     args = montar_parser().parse_args(argv)
-    esquema = _recibo.carregar_esquema()
+    esquema = _evidencia.carregar_esquema()
 
     if args.comando == "respostas":
         if not Path(args.cwd).is_dir():
@@ -1874,34 +1938,34 @@ def main(argv) -> int:
                              args.configuracao, args.disparar)
 
     if args.comando == "andamento":
-        problemas = _recibo._erros(esquema["properties"]["trabalho"],
+        problemas = _evidencia._erros(esquema["properties"]["trabalho"],
                                    args.trabalho, "argumento --trabalho")
-        etapas_do_manifesto = None
-        if args.manifesto:
+        etapas_do_roteiro = None
+        if args.roteiro:
             try:
-                manifesto = json.loads(
-                    Path(args.manifesto).read_text(encoding="utf-8"))
+                roteiro = json.loads(
+                    Path(args.roteiro).read_text(encoding="utf-8"))
             except (OSError, ValueError) as erro:
-                problemas.append(f"não li o manifesto {args.manifesto}: {erro}")
+                problemas.append(f"não li o roteiro {args.roteiro}: {erro}")
             else:
-                problemas += validar_manifesto(manifesto, esquema)
-                etapas_do_manifesto = manifesto.get("etapas") \
+                problemas += validar_roteiro(roteiro, esquema)
+                etapas_do_roteiro = roteiro.get("etapas") \
                     if not problemas else None
         if problemas:
             for problema in problemas:
                 print(f"erro de uso: {problema}", file=sys.stderr)
             return 2
         return andamento(args.trabalho, str(Path(args.dir).resolve()),
-                         etapas_do_manifesto)
+                         etapas_do_roteiro)
 
     try:
-        manifesto = json.loads(Path(args.manifesto).read_text(encoding="utf-8"))
+        roteiro = json.loads(Path(args.roteiro).read_text(encoding="utf-8"))
     except (OSError, ValueError) as erro:
-        print(f"erro de uso: não li o manifesto {args.manifesto}: {erro}",
+        print(f"erro de uso: não li o roteiro {args.roteiro}: {erro}",
               file=sys.stderr)
         return 2
-    problemas = validar_manifesto(manifesto, esquema)
-    problemas += _recibo._erros(esquema["properties"]["trabalho"],
+    problemas = validar_roteiro(roteiro, esquema)
+    problemas += _evidencia._erros(esquema["properties"]["trabalho"],
                                 args.trabalho, "argumento --trabalho")
     if not Path(args.cwd).is_dir():
         problemas.append(f"argumento --cwd: {args.cwd} não existe")
@@ -1910,18 +1974,18 @@ def main(argv) -> int:
             print(f"erro de uso: {problema}", file=sys.stderr)
         return 2
 
-    # Caminhos ABSOLUTOS daqui em diante: evidência de conferência com
-    # caminho relativo misturava dois referenciais no mesmo recibo (o cwd
+    # Caminhos ABSOLUTOS daqui em diante: evidência de verificação com
+    # caminho relativo misturava dois referenciais no mesmo evidência (o cwd
     # de invocação e o --cwd da etapa) e fabricava acusação falsa (medido).
     dir_base = str(Path(args.dir).resolve())
     cwd = str(Path(args.cwd).resolve())
 
     if args.comando == "ensaio":
-        return ensaio(manifesto, args.trabalho, dir_base)
-    return executar(manifesto, args.trabalho, dir_base, cwd,
+        return ensaio(roteiro, args.trabalho, dir_base)
+    return executar(roteiro, args.trabalho, dir_base, cwd,
                     caminho_configuracao=args.configuracao,
                     retomar=args.retomar, resposta=args.resposta,
-                    roteiro=str(Path(args.manifesto).resolve()))
+                    caminho_roteiro=str(Path(args.roteiro).resolve()))
 
 
 # ---------------------------------------------------------------------------
@@ -1936,7 +2000,7 @@ FANTOCHE_OK = ("python3 -c \"import json; print(json.dumps({'etapa':'x',"
                "{'i':1,'teto':1}}))\"")
 
 
-def _manifesto(pasta, nome, conteudo):
+def _roteiro(pasta, nome, conteudo):
     caminho = Path(pasta) / nome
     caminho.write_text(json.dumps(conteudo, ensure_ascii=False),
                        encoding="utf-8")
@@ -1949,10 +2013,10 @@ def _cli(argumentos):
         capture_output=True, text=True, timeout=300)
 
 
-def _cli_conferir(alvo, cwd):
-    """A conferência chamada direto — a contraprova do 'verificar no fim'."""
+def _cli_verificar(alvo, cwd):
+    """A verificação chamada direto — a contraprova do 'verificar no fim'."""
     return subprocess.run(
-        [sys.executable, str(CONFERIR), "recibo", str(alvo), "--cwd", str(cwd)],
+        [sys.executable, str(VERIFICAR), "evidencia", str(alvo), "--cwd", str(cwd)],
         capture_output=True, text=True, timeout=300)
 
 
@@ -1963,7 +2027,7 @@ RECUSA = [
      "ciclo"),
     ("dependência fantasma", {"etapas": [
         {"nome": "a", "tipo": "codigo", "comando": "true",
-         "depende": ["nao-existe"]}]}, "não existe no manifesto"),
+         "depende": ["nao-existe"]}]}, "não existe no roteiro"),
     ("nome de etapa fora do contrato", {"etapas": [
         {"nome": "Alfa", "tipo": "codigo", "comando": "true"}]}, "não casa"),
     ("nome duplicado", {"etapas": [
@@ -1975,8 +2039,9 @@ RECUSA = [
         {"nome": "a", "tipo": "codigo"}]}, "exige o campo comando"),
     ("sessao sem prompt", {"etapas": [
         {"nome": "a", "tipo": "sessao"}]}, "exige o campo prompt"),
-    ("portao sem aprovacao", {"etapas": [
-        {"nome": "a", "tipo": "portao"}]}, "exige o campo aprovacao"),
+    ("aprovacao-manual sem aprovacao", {"etapas": [
+        {"nome": "a", "tipo": "aprovacao-manual"}]},
+     "exige o campo aprovacao"),
     ("teto zero", {"teto": 0, "etapas": [
         {"nome": "a", "tipo": "codigo", "comando": "true"}]}, "teto"),
     ("raiz que não é objeto", [1, 2], "raiz"),
@@ -1998,7 +2063,7 @@ RECUSA = [
     ("ligada como texto (string é sempre verdadeira)", {"etapas": [
         {"nome": "a", "tipo": "codigo", "comando": "true",
          "ligada": "false"}]}, "booleano"),
-    ("campo desconhecido na raiz do manifesto", {"tetos": 3, "etapas": [
+    ("campo desconhecido na raiz do roteiro", {"tetos": 3, "etapas": [
         {"nome": "a", "tipo": "codigo", "comando": "true"}]},
      "campo desconhecido"),
 ]
@@ -2010,7 +2075,7 @@ def _comportamento(pasta):
     def caso(rotulo, condicao):
         resultados.append((rotulo, bool(condicao)))
 
-    recibos = str(Path(pasta) / "recibos")
+    evidencias = str(Path(pasta) / "evidencias")
 
     # A configuração que o alvo de teste precisa ter: sem ela o executar
     # recusa, e é isso que os casos (y) provam logo abaixo.
@@ -2031,16 +2096,16 @@ def _comportamento(pasta):
         return alvo
 
     # y) sem configuração válida o executor NÃO dispara — e o ensaio, sim
-    manifesto_seco = _manifesto(pasta, "m-seco.json", {"etapas": [
+    roteiro_seco = _roteiro(pasta, "m-seco.json", {"etapas": [
         {"nome": "unica", "tipo": "codigo", "comando": FANTOCHE_OK}]})
-    resposta = _cli(["executar", "--manifesto", manifesto_seco, "--trabalho",
-                     "t-sem-config", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro_seco, "--trabalho",
+                     "t-sem-config", "--dir", evidencias, "--cwd", pasta])
     caso("sem executor.json o disparo recusa e nomeia o arquivo",
          resposta.returncode == 2 and ARQUIVO_EXECUTOR in resposta.stderr)
     caso("e nada foi materializado",
-         not (Path(recibos) / "t-sem-config").exists())
-    resposta = _cli(["ensaio", "--manifesto", manifesto_seco, "--trabalho",
-                     "t-sem-config", "--dir", recibos, "--cwd", pasta])
+         not (Path(evidencias) / "t-sem-config").exists())
+    resposta = _cli(["ensaio", "--roteiro", roteiro_seco, "--trabalho",
+                     "t-sem-config", "--dir", evidencias, "--cwd", pasta])
     caso("o ensaio continua rodando SEM configuração (a promessa dele)",
          resposta.returncode == 0)
 
@@ -2051,14 +2116,15 @@ def _comportamento(pasta):
         "projeto": {"url": "https://exemplo.invalido/quadro"},
         "branches": {"padrao_de_trabalho": "${PADRAO}", "base": "base",
                      "integracao": "integracao"}}), encoding="utf-8")
-    resposta = _cli(["executar", "--manifesto", manifesto_seco, "--trabalho",
-                     "t-molde", "--dir", recibos, "--cwd", pasta,
+    resposta = _cli(["executar", "--roteiro", roteiro_seco, "--trabalho",
+                     "t-molde", "--dir", evidencias, "--cwd", pasta,
                      "--configuracao", str(molde)])
     caso("campo ainda no molde recusa e NOMEIA o campo",
          resposta.returncode == 2
          and "branches.padrao_de_trabalho" in resposta.stderr)
 
-    # Sob demanda: a camada não exige a topologia de casa nenhuma. O campo de
+    # Sob demanda: a camada não exige a topologia de repositório nenhum. O
+    # campo de
     # issues só é cobrado quando o roteiro declara issue; o de integração, só
     # quando alguma etapa o cita. Quem tem um repositório de branch única
     # dispara sem inventar branch que não existe.
@@ -2085,8 +2151,8 @@ def _comportamento(pasta):
         "projeto": {"url": "https://exemplo.invalido/quadro"},
         "branches": {"padrao_de_trabalho": "t/<n>", "base": "base",
                      "integracao": "integracao"}}), encoding="utf-8")
-    resposta = _cli(["executar", "--manifesto", manifesto_seco, "--trabalho",
-                     "t-so-issues", "--dir", recibos, "--cwd", pasta,
+    resposta = _cli(["executar", "--roteiro", roteiro_seco, "--trabalho",
+                     "t-so-issues", "--dir", evidencias, "--cwd", pasta,
                      "--configuracao", str(so_issues)])
     caso("modo so-issues recusa executar, com o recado do modo",
          resposta.returncode == 2 and "so-issues" in resposta.stderr)
@@ -2101,8 +2167,8 @@ def _comportamento(pasta):
                                     existe_arquivo_limpeza=True,
                                     arquivo_limpeza="nao-existe.py")))[1]))
 
-    # A partir daqui o alvo de teste TEM configuração — como qualquer casa
-    # que dispare o executor de verdade.
+    # A partir daqui o alvo de teste TEM configuração — como qualquer
+    # repositório que dispare o executor de verdade.
     _configurar(pasta)
 
     # w) a sessão recebe ONDE ESTÁ — o que a torna independente da sessão
@@ -2110,19 +2176,19 @@ def _comportamento(pasta):
     _EM_CURSO.clear()
     caso("sem trabalho em curso o bloco não aparece",
          _bloco_de_onde_esta() == "")
-    pasta_foto = Path(recibos) / "t-onde"
+    pasta_foto = Path(evidencias) / "t-onde"
     pasta_foto.mkdir(parents=True, exist_ok=True)
-    def _evidencia(veredito, **troca):
+    def _molde(veredito, **troca):
         return {"etapa": "x", "trabalho": "t-onde", "veredito": veredito,
                 "quando": "2026-08-18T12:00:00-03:00", "provado": [],
                 "suposto": [], "faltas": [], "ciclo": {"i": 1, "teto": 3},
                 **troca}
     (pasta_foto / "01-primeira-c1.json").write_text(
-        json.dumps(_evidencia("segue")), encoding="utf-8")
+        json.dumps(_molde("segue")), encoding="utf-8")
     (pasta_foto / "02-segunda-c1.json").write_text(
-        json.dumps(_evidencia("pergunta", pergunta="Sigo com A?")),
+        json.dumps(_molde("pergunta", pergunta="Sigo com A?")),
         encoding="utf-8")
-    _EM_CURSO.update({"dir_base": recibos, "trabalho": "t-onde", "issue": 7,
+    _EM_CURSO.update({"dir_base": evidencias, "trabalho": "t-onde", "issue": 7,
                       "etapas": ["primeira", "segunda", "terceira"],
                       "resposta": "pode seguir com A"})
     onde = _bloco_de_onde_esta()
@@ -2143,7 +2209,7 @@ def _comportamento(pasta):
 
     # a prova de independência: processo NOVO, sem sessão anterior viva
     _configurar(pasta)
-    manifesto = _manifesto(pasta, "m-cego.json", {"issue": 7, "etapas": [
+    roteiro = _roteiro(pasta, "m-cego.json", {"issue": 7, "etapas": [
         {"nome": "conta", "tipo": "codigo",
          "comando": FANTOCHE_OK},
         {"nome": "espia", "tipo": "codigo", "depende": ["conta"],
@@ -2151,12 +2217,12 @@ def _comportamento(pasta):
                     + shlex.quote(
                         "import sys;print(sys.argv)") + " > /dev/null && "
                     + FANTOCHE_OK}]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-cego", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-cego", "--dir", evidencias, "--cwd", pasta])
     caso("um processo novo monta o bloco a partir do disco, sem estado em "
          "memória de ninguém",
          resposta.returncode == 0
-         and "conta" in foto_das_etapas(Path(recibos) / "t-cego"))
+         and "conta" in foto_das_etapas(Path(evidencias) / "t-cego"))
 
 
     # x) a pergunta vai para a issue, o estado fica visível, e a retomada
@@ -2189,16 +2255,21 @@ sys.exit(0)
 
     _configurar(pasta)
     aprovacao = Path(pasta) / "aprovacoes" / "h3.ok"
-    manifesto = _manifesto(pasta, "m-issue.json", {"issue": 42, "etapas": [
+    roteiro = _roteiro(pasta, "m-issue.json", {"issue": 42, "etapas": [
         {"nome": "antes", "tipo": "codigo", "comando": FANTOCHE_OK},
-        {"nome": "espera", "tipo": "portao", "depende": ["antes"],
+        {"nome": "espera", "tipo": "aprovacao-manual", "depende": ["antes"],
          "aprovacao": "aprovacoes/h3.ok"},
         {"nome": "depois", "tipo": "codigo", "depende": ["espera"],
-         "comando": FANTOCHE_OK}]})
-    resposta = _cli_dublê(["executar", "--manifesto", manifesto, "--trabalho",
-                           "t-issue", "--dir", recibos, "--cwd", pasta])
-    estado = ler_estado(recibos, "t-issue") or {}
-    caso("veredito pergunta para a corrente com exit 6",
+         "comando": FANTOCHE_OK},
+        # A verificação que PASSA declara `tail -n 1 <log>` como prova, e o
+        # log é absoluto: foi por aqui que o caminho de máquina chegou a uma
+        # issue de verdade em 18/08/2026, com o roteiro de teste cego porque
+        # não tinha verificação nenhuma.
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["depois"]}]})
+    resposta = _cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
+                           "t-issue", "--dir", evidencias, "--cwd", pasta])
+    estado = ler_estado(evidencias, "t-issue") or {}
+    caso("veredito pergunta para a execução com exit 6",
          resposta.returncode == 6)
     caso("e o estado em disco diz aguardando-resposta, com a issue",
          estado.get("situacao") == "aguardando-resposta"
@@ -2210,12 +2281,12 @@ sys.exit(0)
          "auth token --user conta" in (caixa / "chamadas.txt").read_text())
     caso("o andamento diz onde a resposta é esperada",
          "aguardando resposta na issue 42" in _cli_dublê(
-             ["andamento", "--trabalho", "t-issue", "--dir", recibos]).stdout)
+             ["andamento", "--trabalho", "t-issue", "--dir", evidencias]).stdout)
 
     # a issue conta a história PASSO A PASSO, não só o desfecho
     postado = (caixa / "postado.md").read_text()
     caso("cada etapa vira um comentário na issue, com o veredito",
-         "`antes` — segue (1 de 3" in postado)
+         "`antes` — segue (1 de 4" in postado)
     caso("e o comentário diz o que foi testado, com o comando",
          "O que foi testado" in postado and "$ " in postado)
     resumo = resumo_da_etapa({"etapa": "x", "veredito": "para",
@@ -2238,7 +2309,7 @@ sys.exit(0)
         {"author": {"login": "conta"}, "body": f"pergunta {MARCA_DO_MOTOR}"}]}),
         encoding="utf-8")
     resposta = _cli_dublê(["respostas", "--trabalho", "t-issue", "--dir",
-                           recibos, "--cwd", pasta])
+                           evidencias, "--cwd", pasta])
     caso("comentário do próprio motor não conta como resposta",
          "ninguém respondeu" in resposta.stdout)
     # comentário de OUTRO autor é resposta
@@ -2247,57 +2318,74 @@ sys.exit(0)
         {"author": {"login": "dono"}, "body": "pode seguir, aprove"}]}),
         encoding="utf-8")
     resposta = _cli_dublê(["respostas", "--trabalho", "t-issue", "--dir",
-                           recibos, "--cwd", pasta])
+                           evidencias, "--cwd", pasta])
     caso("comentário de outro autor é lido como resposta e gravado",
          "resposta de dono" in resposta.stdout
-         and (ler_estado(recibos, "t-issue") or {}).get("resposta")
+         and (ler_estado(evidencias, "t-issue") or {}).get("resposta")
          == "pode seguir, aprove")
 
     # a retomada: a etapa já provada NÃO roda de novo
     aprovacao.parent.mkdir(parents=True, exist_ok=True)
     aprovacao.write_text("ok", encoding="utf-8")
-    antes_c1 = Path(recibos) / "t-issue" / "01-antes-c1.json"
+    antes_c1 = Path(evidencias) / "t-issue" / "01-antes-c1.json"
     marca_de_tempo = antes_c1.stat().st_mtime
-    resposta = _cli_dublê(["executar", "--manifesto", manifesto, "--trabalho",
-                           "t-issue", "--dir", recibos, "--cwd", pasta,
+    resposta = _cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
+                           "t-issue", "--dir", evidencias, "--cwd", pasta,
                            "--retomar"])
-    caso("com --retomar a corrente fecha depois da aprovação",
+    caso("com --retomar a execução fecha depois da aprovação",
          resposta.returncode == 0)
     caso("e a etapa já provada não rodou de novo",
          "já provada" in resposta.stdout
          and antes_c1.stat().st_mtime == marca_de_tempo
-         and not (Path(recibos) / "t-issue" / "01-antes-c2.json").exists())
+         and not (Path(evidencias) / "t-issue" / "01-antes-c2.json").exists())
     caso("o desfecho também foi para a issue",
          "Execução completa" in (caixa / "postado.md").read_text())
-    # Caminho de máquina em issue é o que a regra da casa proíbe, e este
+    # Caminho de máquina em issue é o que a regra do repositório proíbe, e este
     # código viaja: cada instalador publicaria o caminho do disco dele.
     # Medido em 18/08/2026, na primeira execução real que postou de verdade.
+    # O mesmo vazamento apareceu em TRÊS lugares (desfecho, pergunta da
+    # aprovação manual, próximo da verificação). O teste passa a cobrir todo
+    # texto que a execução posta, e não um ponto de cada vez.
+    caso("nem o `proximo` de uma reprovação carrega caminho absoluto",
+         "/home/" not in resumo_da_etapa(
+             {"etapa": "x", "veredito": "para", "provado": [],
+              "proximo": "Leia o log da verificação em `03-x-c1.log`, no "
+                         "trabalho t: corrija cada acusação."}, 1, 1))
+    caso("o encurtador troca caminho do repositório por relativo",
+         sem_caminho_de_maquina("$ tail -n 1 /r/a/tmp/rec/v/04.log", "/r/a")
+         == "$ tail -n 1 tmp/rec/v/04.log")
+    caso("e o que está fora do repositório vira ~, nunca o nome de quem roda",
+         sem_caminho_de_maquina(f"leia {Path.home()}/fora/z.log", "/r/a")
+         == "leia ~/fora/z.log")
+    caso("texto sem caminho nenhum atravessa intacto",
+         sem_caminho_de_maquina("nada aqui", "/r/a") == "nada aqui")
     caso("e NENHUM comentário carrega caminho absoluto de máquina",
          "/home/" not in (caixa / "postado.md").read_text()
-         and str(Path(recibos).resolve()) not in
+         and str(Path(evidencias).resolve()) not in
              (caixa / "postado.md").read_text())
     caso("e o estado terminal ficou gravado",
-         (ler_estado(recibos, "t-issue") or {}).get("situacao") == "completa")
+         (ler_estado(evidencias, "t-issue") or {}).get("situacao") == "completa")
 
     # sem issue no roteiro: para igual, e diz que não postou
-    manifesto = _manifesto(pasta, "m-sem-issue.json", {"etapas": [
-        {"nome": "espera", "tipo": "portao", "aprovacao": "nao-existe.ok"}]})
-    resposta = _cli_dublê(["executar", "--manifesto", manifesto, "--trabalho",
-                           "t-sem-issue", "--dir", recibos, "--cwd", pasta])
-    caso("sem issue declarada a corrente para do mesmo jeito e confessa",
+    roteiro = _roteiro(pasta, "m-sem-issue.json", {"etapas": [
+        {"nome": "espera", "tipo": "aprovacao-manual",
+         "aprovacao": "nao-existe.ok"}]})
+    resposta = _cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
+                           "t-sem-issue", "--dir", evidencias, "--cwd", pasta])
+    caso("sem issue declarada a execução para do mesmo jeito e confessa",
          resposta.returncode == 6 and "não postei" in resposta.stdout)
 
     # o campo issue é validado como número
     caso("issue que não é inteiro é recusada na fronteira",
-         any("issue precisa ser" in e for e in validar_manifesto(
+         any("issue precisa ser" in e for e in validar_roteiro(
              {"issue": "quarenta e dois", "etapas": [
                  {"nome": "a", "tipo": "codigo", "comando": "echo"}]},
-             _recibo.carregar_esquema())))
+             _evidencia.carregar_esquema())))
 
     # os avisos da pausa estratégica
     avisos = avisos_do_alvo({}, {"etapas": [
         {"nome": "trabalha", "tipo": "codigo", "comando": "echo oi"},
-        {"nome": "aprova", "tipo": "portao", "depende": ["trabalha"],
+        {"nome": "aprova", "tipo": "aprovacao-manual", "depende": ["trabalha"],
          "aprovacao": "a.ok"}]}, pasta)
     caso("aprovação manual sem commit antes vira aviso",
          any("depois de um commit" in a for a in avisos))
@@ -2307,7 +2395,7 @@ sys.exit(0)
 
     # z) a prova é do instante em que se declara: uma etapa declara o
     # contador, a seguinte o muda, e a verificação NÃO acusa quem foi
-    # honesto. Antes da verificação na janela isto reprovava a corrente
+    # honesto. Antes da verificação na janela isto reprovava a execução
     # inteira — o defeito 13, medido em 18/08/2026.
     contador = Path(pasta) / "contador.txt"
     contador.write_text("1\n", encoding="utf-8")
@@ -2323,17 +2411,17 @@ sys.exit(0)
                               + repr(json.dumps(molde, ensure_ascii=False))
                               + ")"))
 
-    manifesto = _manifesto(pasta, "m-janela.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-janela.json", {"etapas": [
         {"nome": "declara", "tipo": "codigo",
          "comando": _fantoche("o contador vale 1", "cat contador.txt", "1")},
         {"nome": "muda", "tipo": "codigo", "depende": ["declara"],
          "comando": "echo 2 > contador.txt && "
                     + _fantoche("o contador vale 2", "cat contador.txt", "2")},
-        {"nome": "verifica", "tipo": "conferencia", "depende": ["muda"]},
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["muda"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-janela", "--dir", recibos, "--cwd", pasta])
-    trabalho_janela = Path(recibos) / "t-janela"
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-janela", "--dir", evidencias, "--cwd", pasta])
+    trabalho_janela = Path(evidencias) / "t-janela"
     caso("etapa honesta não é acusada porque a seguinte mudou o mundo",
          resposta.returncode == 0)
     caso("a verificação da janela fica gravada ao lado de cada evidência",
@@ -2343,35 +2431,35 @@ sys.exit(0)
              trabalho_janela / "03-verifica-c1.log").read_text(
                  encoding="utf-8"))
     caso("contraprova: re-executada AGORA, a prova honesta seria acusada",
-         _cli_conferir(trabalho_janela / "01-declara-c1.json",
+         _cli_verificar(trabalho_janela / "01-declara-c1.json",
                        pasta).returncode == 4)
     caso("a subpasta de verificações não vira ciclo novo",
-         _recibo.caminho_do_recibo(recibos, "t-janela", 1, "declara")[1] == 2)
+         _evidencia.caminho_da_evidencia(evidencias, "t-janela", 1, "declara")[1] == 2)
 
-    # a) ensaio-sentinela: a corrente inteira listada, NADA executado
+    # a) ensaio-sentinela: a execução inteira listada, NADA executado
     sentinela = Path(pasta) / "sentinela.txt"
-    manifesto = _manifesto(pasta, "m-sentinela.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-sentinela.json", {"etapas": [
         {"nome": "grava", "tipo": "codigo",
          "comando": f"touch {sentinela} && {FANTOCHE_OK}"},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["grava"]},
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["grava"]},
     ]})
-    resposta = _cli(["ensaio", "--manifesto", manifesto, "--trabalho",
-                     "t-sentinela", "--dir", recibos, "--cwd", pasta])
-    caso("ensaio lista as duas ondas e sai 0",
-         resposta.returncode == 0 and "onda 1" in resposta.stdout
-         and "onda 2 [só]" in resposta.stdout)
+    resposta = _cli(["ensaio", "--roteiro", roteiro, "--trabalho",
+                     "t-sentinela", "--dir", evidencias, "--cwd", pasta])
+    caso("ensaio lista os dois estágios e sai 0",
+         resposta.returncode == 0 and "estagio 1" in resposta.stdout
+         and "estagio 2 [só]" in resposta.stdout)
     caso("ensaio não executa nada: a sentinela NÃO existe",
          not sentinela.exists())
-    caso("ensaio não escreve recibo nenhum",
-         not (Path(recibos) / "t-sentinela").exists())
+    caso("ensaio não escreve evidência nenhum",
+         not (Path(evidencias) / "t-sentinela").exists())
 
-    # b) contraprova: executar grava a sentinela e materializa os recibos
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-sentinela", "--dir", recibos, "--cwd", pasta])
-    caso("contraprova: sem ensaio a sentinela aparece e a corrente completa",
+    # b) contraprova: executar grava a sentinela e materializa as evidencias
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-sentinela", "--dir", evidencias, "--cwd", pasta])
+    caso("contraprova: sem ensaio a sentinela aparece e a execução completa",
          resposta.returncode == 0 and sentinela.exists()
-         and (Path(recibos) / "t-sentinela" / "01-grava-c1.json").exists()
-         and (Path(recibos) / "t-sentinela" / "02-confere-c1.json").exists())
+         and (Path(evidencias) / "t-sentinela" / "01-grava-c1.json").exists()
+         and (Path(evidencias) / "t-sentinela" / "02-verifica-c1.json").exists())
 
     # c) fork provado por encontro marcado: A e B esperam a marca um do outro
     marca_a, marca_b = Path(pasta) / "marca-a", Path(pasta) / "marca-b"
@@ -2381,7 +2469,7 @@ sys.exit(0)
                 f"[ -f {outra} ] && break; sleep 0.1; done; "
                 f"[ -f {outra} ] && " + FANTOCHE_OK)
 
-    manifesto = _manifesto(pasta, "m-fork.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-fork.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo",
          "comando": espera(marca_a, marca_b)},
         {"nome": "bb", "tipo": "codigo",
@@ -2389,145 +2477,145 @@ sys.exit(0)
         {"nome": "cc", "tipo": "codigo", "comando": FANTOCHE_OK,
          "depende": ["aa", "bb"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-fork", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-fork", "--dir", evidencias, "--cwd", pasta])
     caso("fork real: as duas se veem rodando (encontro marcado) e o join vem",
          resposta.returncode == 0 and "fork de 2" in resposta.stdout
-         and (Path(recibos) / "t-fork" / "03-cc-c1.json").exists())
+         and (Path(evidencias) / "t-fork" / "03-cc-c1.json").exists())
 
-    # d) conferência nunca em paralelo, mesmo sem dependência declarada
-    manifesto = _manifesto(pasta, "m-solo.json", {"etapas": [
-        {"nome": "confere", "tipo": "conferencia"},
+    # d) verificação nunca em paralelo, mesmo sem dependência declarada
+    roteiro = _roteiro(pasta, "m-solo.json", {"etapas": [
+        {"nome": "verifica", "tipo": "verificacao"},
         {"nome": "aa", "tipo": "codigo", "comando": FANTOCHE_OK},
     ]})
-    resposta = _cli(["ensaio", "--manifesto", manifesto, "--trabalho",
-                     "t-solo", "--dir", recibos, "--cwd", pasta])
-    caso("conferência pronta junto ganha onda própria [só]",
-         "onda 1 [só]: 01-confere" in resposta.stdout)
+    resposta = _cli(["ensaio", "--roteiro", roteiro, "--trabalho",
+                     "t-solo", "--dir", evidencias, "--cwd", pasta])
+    caso("verificação pronta junto ganha estágio próprio [só]",
+         "estagio 1 [só]: 01-verifica" in resposta.stdout)
 
-    # e) etapa desligada vira skip e a corrente segue
-    manifesto = _manifesto(pasta, "m-skip.json", {"etapas": [
+    # e) etapa desligada vira skip e a execução segue
+    roteiro = _roteiro(pasta, "m-skip.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": FANTOCHE_OK},
         {"nome": "bb", "tipo": "codigo", "comando": FANTOCHE_OK,
          "ligada": False, "depende": ["aa"]},
         {"nome": "cc", "tipo": "codigo", "comando": FANTOCHE_OK,
          "depende": ["bb"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-skip", "--dir", recibos, "--cwd", pasta])
-    meio = json.loads((Path(recibos) / "t-skip" / "02-bb-c1.json")
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-skip", "--dir", evidencias, "--cwd", pasta])
+    meio = json.loads((Path(evidencias) / "t-skip" / "02-bb-c1.json")
                       .read_text(encoding="utf-8"))
     caso("desligada registra o skip e não impede a terceira",
          resposta.returncode == 0 and meio["motivo"] == "desligada"
-         and (Path(recibos) / "t-skip" / "03-cc-c1.json").exists())
+         and (Path(evidencias) / "t-skip" / "03-cc-c1.json").exists())
 
-    # f) etapa que morre para a corrente: quem depende dela não roda
-    manifesto = _manifesto(pasta, "m-morte.json", {"etapas": [
+    # f) etapa que morre para a execução: quem depende dela não roda
+    roteiro = _roteiro(pasta, "m-morte.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": "exit 9"},
         {"nome": "bb", "tipo": "codigo", "comando": FANTOCHE_OK,
          "depende": ["aa"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-morte", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-morte", "--dir", evidencias, "--cwd", pasta])
     caso("morte vira para sintético, exit 5, e o dependente nem roda",
          resposta.returncode == 5
-         and not (Path(recibos) / "t-morte" / "02-bb-c1.json").exists())
+         and not (Path(evidencias) / "t-morte" / "02-bb-c1.json").exists())
 
-    # g) stdout que não é recibo vira para recibo-invalido e para a corrente
-    manifesto = _manifesto(pasta, "m-lixo.json", {"etapas": [
-        {"nome": "aa", "tipo": "codigo", "comando": "echo isto-nao-e-recibo"},
+    # g) stdout que não é evidência vira para recibo-invalido e para a execução
+    roteiro = _roteiro(pasta, "m-lixo.json", {"etapas": [
+        {"nome": "aa", "tipo": "codigo", "comando": "echo isto-nao-e-evidência"},
         {"nome": "bb", "tipo": "codigo", "comando": FANTOCHE_OK,
          "depende": ["aa"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-lixo", "--dir", recibos, "--cwd", pasta])
-    primeiro = json.loads((Path(recibos) / "t-lixo" / "01-aa-c1.json")
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-lixo", "--dir", evidencias, "--cwd", pasta])
+    primeiro = json.loads((Path(evidencias) / "t-lixo" / "01-aa-c1.json")
                           .read_text(encoding="utf-8"))
-    caso("stdout-lixo vira para recibo-invalido e a corrente para",
+    caso("stdout-lixo vira para recibo-invalido e a execução para",
          resposta.returncode == 5 and primeiro["motivo"] == "recibo-invalido")
 
-    # h) teto pela contagem: com teto recibos para, nada roda
-    manifesto = _manifesto(pasta, "m-teto.json", {"teto": 2, "etapas": [
+    # h) teto pela contagem: com teto evidências para, nada roda
+    roteiro = _roteiro(pasta, "m-teto.json", {"teto": 2, "etapas": [
         {"nome": "aa", "tipo": "codigo",
          "comando": f"touch {Path(pasta) / 'teto-rodou'} && {FANTOCHE_OK}"},
     ]})
     for _ in range(2):
-        _cli_recibo(["sintetico", "--dir", recibos, "--trabalho", "t-teto",
+        _cli_evidencia(["sintetico", "--dir", evidencias, "--trabalho", "t-teto",
                      "--etapa", "aa", "--ordem", "1", "--teto", "2",
                      "--motivo", "morta", "--detalhe", "plantado no teste"])
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-teto", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-teto", "--dir", evidencias, "--cwd", pasta])
     caso("teto esgotado: nada roda e nasce o para teto-esgotado",
          resposta.returncode == 5
          and not (Path(pasta) / "teto-rodou").exists()
          and "teto-esgotado" in
-         (Path(recibos) / "t-teto" / "01-aa-c3.json")
+         (Path(evidencias) / "t-teto" / "01-aa-c3.json")
          .read_text(encoding="utf-8"))
 
-    # i) portão sem aprovação pergunta e para; com aprovação, segue
+    # i) aprovação manual sem o arquivo pergunta e para; com ele, segue
     aprovacao = Path(pasta) / "aprovacoes" / "pr.ok"
-    manifesto = _manifesto(pasta, "m-portao.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-aprovacao-manual.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": FANTOCHE_OK},
-        {"nome": "aprova", "tipo": "portao",
+        {"nome": "aprova", "tipo": "aprovacao-manual",
          "aprovacao": str(aprovacao), "depende": ["aa"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-portao", "--dir", recibos, "--cwd", pasta])
-    caso("portão sem aprovação: veredito pergunta e exit 6",
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-aprovacao-manual", "--dir", evidencias, "--cwd", pasta])
+    caso("aprovação manual sem o arquivo: veredito pergunta e exit 6",
          resposta.returncode == 6 and "Aprova a etapa" in resposta.stdout)
     aprovacao.parent.mkdir(parents=True, exist_ok=True)
     aprovacao.write_text("aprovado pelo dono\n", encoding="utf-8")
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-portao-2", "--dir", recibos, "--cwd", pasta])
-    caso("portão com aprovação registrada segue",
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-aprovacao-manual-2", "--dir", evidencias, "--cwd", pasta])
+    caso("aprovação manual com o arquivo registrado segue",
          resposta.returncode == 0)
 
-    # j) conferência acusa forja DESTA execução: para com o log de evidência
+    # j) verificação acusa forja DESTA execução: para com o log de evidência
     FORJA = ("python3 -c \"import json; print(json.dumps({'etapa':'x',"
              "'trabalho':'x','quando':'2000-01-01T00:00:00Z','veredito':"
              "'segue','provado':[{'afirmacao':'eco','comando':'echo ola',"
              "'saida':'adeus'}],'suposto':[],'faltas':[],'ciclo':"
              "{'i':1,'teto':3}}))\"")
-    manifesto = _manifesto(pasta, "m-confere.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-verifica.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": FORJA},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["aa"]},
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["aa"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-forja", "--dir", recibos, "--cwd", pasta])
-    recibo_conf = json.loads(
-        (Path(recibos) / "t-forja" / "02-confere-c1.json")
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-forja", "--dir", evidencias, "--cwd", pasta])
+    evidencia_conf = json.loads(
+        (Path(evidencias) / "t-forja" / "02-verifica-c1.json")
         .read_text(encoding="utf-8"))
-    caso("conferência acusa a forja: para com as acusações nas faltas",
-         resposta.returncode == 5 and recibo_conf["veredito"] == "para"
-         and any("diverge" in falta for falta in recibo_conf["faltas"])
-         and (Path(recibos) / "t-forja" / "02-confere-c1.log").exists())
+    caso("verificação acusa a forja: para com as acusações nas faltas",
+         resposta.returncode == 5 and evidencia_conf["veredito"] == "para"
+         and any("diverge" in falta for falta in evidencia_conf["faltas"])
+         and (Path(evidencias) / "t-forja" / "02-verifica-c1.log").exists())
 
-    # j2) recibo ENVELHECIDO de ciclo anterior não reprova rodada sã: a
-    #     conferência da rodada confere a rodada (o achado do ciclo 2 real)
+    # j2) evidência ENVELHECIDA de ciclo anterior não reprova rodada sã: a
+    #     verificação da rodada verifica a rodada (o achado do ciclo 2 real)
     envelhecido = {"etapa": "aa", "trabalho": "t-envelhecido",
                    "quando": "2026-08-16T12:00:00-03:00", "veredito": "segue",
                    "provado": [{"afirmacao": "a marca da rodada antiga existe",
                                 "comando": "test -f marca-que-ja-foi && echo ok",
                                 "saida": "ok"}],
                    "suposto": [], "faltas": [], "ciclo": {"i": 1, "teto": 3}}
-    pasta_env = Path(recibos) / "t-envelhecido"
+    pasta_env = Path(evidencias) / "t-envelhecido"
     pasta_env.mkdir(parents=True, exist_ok=True)
     (pasta_env / "01-aa-c1.json").write_text(
         json.dumps(envelhecido, ensure_ascii=False), encoding="utf-8")
-    manifesto = _manifesto(pasta, "m-envelhecido.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-envelhecido.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": FANTOCHE_OK},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["aa"]},
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["aa"]},
     ]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-envelhecido", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-envelhecido", "--dir", evidencias, "--cwd", pasta])
     caso("prova envelhecida de ciclo anterior não reprova a rodada nova",
          resposta.returncode == 0)
 
-    # k) o ambiente do manifesto chega à etapa (sem ecoar valor nenhum)
+    # k) o ambiente do roteiro chega à etapa (sem ecoar valor nenhum)
     arquivo_env = Path(pasta) / "fantoche.env"
     arquivo_env.write_text("# comentario\nVAR_FANTOCHE=chegou\n",
                            encoding="utf-8")
-    manifesto = _manifesto(pasta, "m-env.json", {
+    roteiro = _roteiro(pasta, "m-env.json", {
         "ambiente": {"env": str(arquivo_env.name)},
         "etapas": [{"nome": "aa", "tipo": "codigo", "comando":
                     "python3 -c \"import json,os; print(json.dumps("
@@ -2536,21 +2624,21 @@ sys.exit(0)
                     "'provado':[],'suposto':["
                     "os.environ.get('VAR_FANTOCHE','ausente')],"
                     "'faltas':[],'ciclo':{'i':1,'teto':1}}))\""}]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-env", "--dir", recibos, "--cwd", pasta])
-    escrito = json.loads((Path(recibos) / "t-env" / "01-aa-c1.json")
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-env", "--dir", evidencias, "--cwd", pasta])
+    escrito = json.loads((Path(evidencias) / "t-env" / "01-aa-c1.json")
                          .read_text(encoding="utf-8"))
-    caso("o arquivo de ambiente do manifesto chega à etapa",
+    caso("o arquivo de ambiente do roteiro chega à etapa",
          escrito["suposto"] == ["chegou"])
 
     # l) a sessão aparece no ensaio com o comando claude montado — sem rodar
-    manifesto = _manifesto(pasta, "m-sessao.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-sessao.json", {"etapas": [
         {"nome": "pensa", "tipo": "sessao", "prompt": "pense"}]})
-    resposta = _cli(["ensaio", "--manifesto", manifesto, "--trabalho",
-                     "t-sessao", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["ensaio", "--roteiro", roteiro, "--trabalho",
+                     "t-sessao", "--dir", evidencias, "--cwd", pasta])
     caso("sessão listada no ensaio com claude -p, sem executar",
          resposta.returncode == 0 and "claude -p" in resposta.stdout
-         and not (Path(recibos) / "t-sessao").exists())
+         and not (Path(evidencias) / "t-sessao").exists())
 
     # l2) o --bare NÃO entra por padrão: medido em 17/08/2026, ele não carrega
     # a credencial de quem entrou por conta e a sessão morre com "Not logged
@@ -2563,7 +2651,7 @@ sys.exit(0)
     caso("o ensaio não mente sobre o --bare",
          "--bare" not in resposta.stdout)
 
-    # l4) o fluxo: sem ele a corrente ficava muda por dezenas de minutos e
+    # l4) o fluxo: sem ele a execução ficava muda por dezenas de minutos e
     # ninguém distinguia "trabalhando" de "congelado".
     caso("a sessão pede o fluxo de eventos, não o blob do fim",
          "stream-json" in " ".join(_comando_sessao({"nome": "x", "tipo": "sessao"})))
@@ -2621,7 +2709,7 @@ sys.exit(0)
     caso("parede sem hora declarada não vira espera eterna",
          _espera_do_limite('{"subtype":"error","result":"rate limit reached"}',
                            None) == 300)
-    caso("parede que demora demais não prende a corrente por um dia",
+    caso("parede que demora demais não prende a execução por um dia",
          _espera_do_limite("{}", {"status": "blocked",
                                   "resetsAt": int(_t.time()) + 99999})
          <= ESPERA_MAXIMA_S)
@@ -2630,11 +2718,11 @@ sys.exit(0)
     caso("teto de turnos continua sendo retomada, não espera",
          _espera_do_limite('{"subtype":"error_max_turns"}', None) == 0)
 
-    # l6b) o texto do recibo é o TRABALHO da sessão, não recado do servidor.
+    # l6b) o texto da evidência é o TRABALHO da sessão, não recado do servidor.
     # Medido em 18/08/2026: a etapa `doutrina` fechou com [success] em 54
-    # turnos e dormiu 6h duas vezes porque o recibo dela, em português, tinha
+    # turnos e dormiu 6h duas vezes porque a evidência dela, em português, tinha
     # "t(rate)i" e "(limit)es" — e o aviso de consumo em curso era de janela
-    # de sete dias, a 55%. Parede nenhuma. A corrente perdeu a noite.
+    # de sete dias, a 55%. Parede nenhuma. A execução perdeu a noite.
     prosa = json.dumps({"subtype": "success", "result":
                         "Tratei como dois produtos distintos, dentro dos "
                         "limites da documentacao."})
@@ -2649,15 +2737,15 @@ sys.exit(0)
                            None) == 0)
 
     # l3) morte de sessão diz a CAUSA. "exit 1 — leia o log" escondia que o
-    # conserto era uma linha do manifesto (medido: 3 etapas mortas no teto).
+    # conserto era uma linha do roteiro (medido: 3 etapas mortas no teto).
     teto_estourado = json.dumps({"is_error": True, "subtype": "error_max_turns",
                                  "num_turns": 25, "result": None})
     diagnostico = _porque_morreu(1, teto_estourado, "/tmp/x.log")
-    caso("teto de turnos é nomeado no recibo, não escondido no log",
+    caso("teto de turnos é nomeado na evidência, não escondido no log",
          "teto de turnos" in diagnostico)
-    caso("e o recibo diz onde mexer", "max-turnos" in diagnostico)
+    caso("e a evidência diz onde mexer", "max-turnos" in diagnostico)
     caso("e conta quantos turnos se perderam", "25 turnos" in diagnostico)
-    caso("o recado da sessão sobe para o recibo",
+    caso("o recado da sessão sobe para a evidência",
          "Not logged in" in _porque_morreu(
              1, json.dumps({"subtype": "success",
                             "result": "Not logged in · Please run /login"}),
@@ -2666,70 +2754,70 @@ sys.exit(0)
          "leia /tmp/x.log" in _porque_morreu(1, "lixo sem json", "/tmp/x.log"))
 
     # m) estouro de tempo vira morta com log — e mata o grupo (sem órfão)
-    manifesto = _manifesto(pasta, "m-tempo.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-tempo.json", {"etapas": [
         {"nome": "trava", "tipo": "codigo", "comando": "sleep 3737",
          "tempo-limite": 1},
         {"nome": "depois", "tipo": "codigo", "comando": FANTOCHE_OK,
          "depende": ["trava"]}]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-tempo", "--dir", recibos, "--cwd", pasta])
-    recibo_tempo = json.loads(
-        (Path(recibos) / "t-tempo" / "01-trava-c1.json")
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-tempo", "--dir", evidencias, "--cwd", pasta])
+    evidencia_tempo = json.loads(
+        (Path(evidencias) / "t-tempo" / "01-trava-c1.json")
         .read_text(encoding="utf-8"))
     orfaos = subprocess.run(["pgrep", "-f", "sleep 3737"],
                             capture_output=True, text=True)
     caso("estouro de tempo vira para morta, exit 5, com log",
-         resposta.returncode == 5 and recibo_tempo["motivo"] == "morta"
-         and "tempo-limite" in recibo_tempo["faltas"][0]
-         and (Path(recibos) / "t-tempo" / "01-trava-c1.log").exists())
+         resposta.returncode == 5 and evidencia_tempo["motivo"] == "morta"
+         and "tempo-limite" in evidencia_tempo["faltas"][0]
+         and (Path(evidencias) / "t-tempo" / "01-trava-c1.log").exists())
     caso("o grupo do processo morre junto — nenhum órfão",
          orfaos.returncode != 0)
 
-    # n) o log da conferência leva o ciclo no nome: três rodadas, três logs
-    manifesto = _manifesto(pasta, "m-ciclos.json", {"etapas": [
+    # n) o log da verificação leva o ciclo no nome: três rodadas, três logs
+    roteiro = _roteiro(pasta, "m-ciclos.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": FANTOCHE_OK},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["aa"]}]})
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["aa"]}]})
     for _ in range(3):
-        resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                         "t-ciclos", "--dir", recibos, "--cwd", pasta])
-    pasta_ciclos = Path(recibos) / "t-ciclos"
+        resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                         "t-ciclos", "--dir", evidencias, "--cwd", pasta])
+    pasta_ciclos = Path(evidencias) / "t-ciclos"
     caso("terceira rodada não se autoacusa e cada ciclo tem o próprio log",
          resposta.returncode == 0
-         and (pasta_ciclos / "02-confere-c1.log").exists()
-         and (pasta_ciclos / "02-confere-c2.log").exists()
-         and (pasta_ciclos / "02-confere-c3.log").exists())
+         and (pasta_ciclos / "02-verifica-c1.log").exists()
+         and (pasta_ciclos / "02-verifica-c2.log").exists()
+         and (pasta_ciclos / "02-verifica-c3.log").exists())
 
-    # o) recibo para corrompido conta no teto (conservador)
-    manifesto = _manifesto(pasta, "m-teto2.json", {"teto": 2, "etapas": [
+    # o) evidência para corrompido conta no teto (conservador)
+    roteiro = _roteiro(pasta, "m-teto2.json", {"teto": 2, "etapas": [
         {"nome": "aa", "tipo": "codigo",
          "comando": f"touch {Path(pasta) / 'teto2-rodou'} && {FANTOCHE_OK}"}]})
-    _cli_recibo(["sintetico", "--dir", recibos, "--trabalho", "t-teto2",
+    _cli_evidencia(["sintetico", "--dir", evidencias, "--trabalho", "t-teto2",
                  "--etapa", "aa", "--ordem", "1", "--teto", "2",
                  "--motivo", "morta", "--detalhe", "plantado"])
-    (Path(recibos) / "t-teto2" / "01-aa-c9.json").write_text(
+    (Path(evidencias) / "t-teto2" / "01-aa-c9.json").write_text(
         "{ para corrompido", encoding="utf-8")
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-teto2", "--dir", recibos, "--cwd", pasta])
-    caso("recibo corrompido conta no teto: nada roda",
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-teto2", "--dir", evidencias, "--cwd", pasta])
+    caso("evidência corrompida conta no teto: nada roda",
          resposta.returncode == 5
          and not (Path(pasta) / "teto2-rodou").exists())
 
     # p) stderr de etapa boa fica no log (a herança do ultima-execucao.log)
-    manifesto = _manifesto(pasta, "m-stderr.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-stderr.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo",
          "comando": f"echo aviso-no-stderr >&2; {FANTOCHE_OK}"}]})
-    _cli(["executar", "--manifesto", manifesto, "--trabalho", "t-stderr",
-          "--dir", recibos, "--cwd", pasta])
+    _cli(["executar", "--roteiro", roteiro, "--trabalho", "t-stderr",
+          "--dir", evidencias, "--cwd", pasta])
     caso("stderr de etapa boa não evapora: está no log",
          "aviso-no-stderr" in
-         (Path(recibos) / "t-stderr" / "01-aa-c1.log")
+         (Path(evidencias) / "t-stderr" / "01-aa-c1.log")
          .read_text(encoding="utf-8"))
 
     # q) ambiente.env com aspas chega limpo (semântica do source)
     (Path(pasta) / "aspas.env").write_text(
         'VAR_ASPAS="entre aspas"\nVAR_COMENTARIO=valor # comentario\n',
         encoding="utf-8")
-    manifesto = _manifesto(pasta, "m-aspas.json", {
+    roteiro = _roteiro(pasta, "m-aspas.json", {
         "ambiente": {"env": "aspas.env"},
         "etapas": [{"nome": "aa", "tipo": "codigo", "comando":
                     "python3 -c \"import json,os; print(json.dumps("
@@ -2739,22 +2827,22 @@ sys.exit(0)
                     "os.environ.get('VAR_ASPAS',''),"
                     "os.environ.get('VAR_COMENTARIO','')],"
                     "'faltas':[],'ciclo':{'i':1,'teto':1}}))\""}]})
-    _cli(["executar", "--manifesto", manifesto, "--trabalho", "t-aspas",
-          "--dir", recibos, "--cwd", pasta])
-    escrito = json.loads((Path(recibos) / "t-aspas" / "01-aa-c1.json")
+    _cli(["executar", "--roteiro", roteiro, "--trabalho", "t-aspas",
+          "--dir", evidencias, "--cwd", pasta])
+    escrito = json.loads((Path(evidencias) / "t-aspas" / "01-aa-c1.json")
                          .read_text(encoding="utf-8"))
     caso("aspas envolventes e comentário caem como no source",
          escrito["suposto"] == ["entre aspas", "valor"])
 
     # s) JSON válido que não é objeto conta no teto sem traceback
-    manifesto = _manifesto(pasta, "m-lista.json", {"teto": 1, "etapas": [
+    roteiro = _roteiro(pasta, "m-lista.json", {"teto": 1, "etapas": [
         {"nome": "aa", "tipo": "codigo",
          "comando": f"touch {Path(pasta) / 'lista-rodou'} && {FANTOCHE_OK}"}]})
-    pasta_lista = Path(recibos) / "t-lista"
+    pasta_lista = Path(evidencias) / "t-lista"
     pasta_lista.mkdir(parents=True, exist_ok=True)
     (pasta_lista / "01-aa-c9.json").write_text("[]", encoding="utf-8")
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-lista", "--dir", recibos, "--cwd", pasta])
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-lista", "--dir", evidencias, "--cwd", pasta])
     caso("JSON não-objeto no diretório conta no teto, sem traceback",
          resposta.returncode == 5
          and not (Path(pasta) / "lista-rodou").exists())
@@ -2764,25 +2852,25 @@ sys.exit(0)
     (pasta_espaco / "aprovacoes").mkdir(parents=True, exist_ok=True)
     _configurar(pasta_espaco)  # alvo próprio, configuração própria
     (pasta_espaco / "aprovacoes" / "pr.ok").write_text("ok", encoding="utf-8")
-    manifesto = _manifesto(pasta, "m-espaco.json", {"etapas": [
+    roteiro = _roteiro(pasta, "m-espaco.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo", "comando": FANTOCHE_OK},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["aa"]},
-        {"nome": "aprova", "tipo": "portao",
-         "aprovacao": "aprovacoes/pr.ok", "depende": ["confere"]}]})
-    recibos_espaco = str(pasta_espaco / "recibos")
-    exits = [_cli(["executar", "--manifesto", manifesto, "--trabalho",
-                   "t-espaco", "--dir", recibos_espaco,
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["aa"]},
+        {"nome": "aprova", "tipo": "aprovacao-manual",
+         "aprovacao": "aprovacoes/pr.ok", "depende": ["verifica"]}]})
+    evidencias_espaco = str(pasta_espaco / "evidencias")
+    exits = [_cli(["executar", "--roteiro", roteiro, "--trabalho",
+                   "t-espaco", "--dir", evidencias_espaco,
                    "--cwd", str(pasta_espaco)]).returncode
              for _ in range(2)]
     caso("caminho com espaço: dois ciclos completos sem autoacusação",
          exits == [0, 0])
 
-    # u) a conferência herda o ambiente das etapas: prova que depende de
+    # u) a verificação herda o ambiente das etapas: prova que depende de
     #    variável do ambiente.env re-executa com ela (o defeito do primeiro
-    #    pedido real: etapa provava com credencial, conferência rodava sem)
-    (Path(pasta) / "herda.env").write_text("VAR_HERDA=confere\n",
+    #    pedido real: etapa provava com credencial, verificação rodava sem)
+    (Path(pasta) / "herda.env").write_text("VAR_HERDA=verifica\n",
                                            encoding="utf-8")
-    manifesto = _manifesto(pasta, "m-herda.json", {
+    roteiro = _roteiro(pasta, "m-herda.json", {
         "ambiente": {"env": "herda.env"},
         "etapas": [
             {"nome": "aa", "tipo": "codigo", "comando":
@@ -2790,17 +2878,17 @@ sys.exit(0)
              "{'etapa':'x','trabalho':'x',"
              "'quando':'2000-01-01T00:00:00Z','veredito':'segue',"
              "'provado':[{'afirmacao':'a variavel do ambiente chega',"
-             "'comando':'test \\\\\\\"$VAR_HERDA\\\\\\\" = confere && echo ok',"
+             "'comando':'test \\\\\\\"$VAR_HERDA\\\\\\\" = verifica && echo ok',"
              "'saida':'ok'}],"
              "'suposto':[],'faltas':[],'ciclo':{'i':1,'teto':1}}))\""},
-            {"nome": "confere", "tipo": "conferencia", "depende": ["aa"]}]})
-    resposta = _cli(["executar", "--manifesto", manifesto, "--trabalho",
-                     "t-herda", "--dir", recibos, "--cwd", pasta])
-    caso("conferência herda o ambiente: prova com variável re-executa",
+            {"nome": "verifica", "tipo": "verificacao", "depende": ["aa"]}]})
+    resposta = _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-herda", "--dir", evidencias, "--cwd", pasta])
+    caso("verificação herda o ambiente: prova com variável re-executa",
          resposta.returncode == 0)
 
-    # v) a configuração da casa entra no prompt da sessão — e sem o arquivo
-    #    o prompt segue puro (casa sem o molde ainda funciona)
+    # v) a configuração do repositório entra no prompt da sessão — e sem o
+    #    arquivo o prompt segue puro (repositório sem o molde ainda funciona)
     etapa_sessao = {"nome": "s", "tipo": "sessao", "prompt": "faça"}
     configuracao = Path(pasta) / "nucleo" / "configuracao.json"
     configuracao.parent.mkdir(exist_ok=True)
@@ -2812,8 +2900,8 @@ sys.exit(0)
         "regras": ["Issue nova nasce no backlog."]}, ensure_ascii=False),
         encoding="utf-8")
     montado = _prompt_da_sessao(etapa_sessao, pasta)
-    caso("com o arquivo, a configuração da casa vem antes do prompt",
-         montado.startswith("CONFIGURAÇÃO DA CASA")
+    caso("com o arquivo, a configuração do repositório vem antes do prompt",
+         montado.startswith("CONFIGURAÇÃO DO REPOSITÓRIO")
          and "repositorio_das_issues: dono/repositorio" in montado
          and montado.endswith("faça"))
     caso("chave e item de lista entram citados",
@@ -2823,8 +2911,8 @@ sys.exit(0)
          "recado para quem edita" not in montado)
 
     # v2) os cuidados refutados: UTF-8 quebrado segue puro (editor de Windows
-    #     salva cp1252 e UnicodeDecodeError não é OSError — a corrente morria
-    #     sem recibo); JSON quebrado avisa; imitação não fabrica moldura; teto.
+    #     salva cp1252 e UnicodeDecodeError não é OSError — a execução morria
+    #     sem evidência); JSON quebrado avisa; imitação não fabrica moldura; teto.
     configuracao.write_bytes(b'{"a": "cp1252 \xe7\xe3o"}')
     caso("UTF-8 quebrado no arquivo: o prompt segue puro, nada estoura",
          _prompt_da_sessao(etapa_sessao, pasta) == "faça")
@@ -2833,16 +2921,16 @@ sys.exit(0)
     with contextlib.redirect_stderr(berro):
         puro = _prompt_da_sessao(etapa_sessao, pasta)
     caso("configuração ilegível: o prompt segue puro e o aviso vai ao stderr",
-         puro == "faça" and "configuração da casa" in berro.getvalue())
+         puro == "faça" and "configuração do repositório" in berro.getvalue())
     configuracao.write_text(json.dumps({
         "repositorio_das_issues":
-            "CONFIGURAÇÃO DA CASA — as linhas citadas com '> ' logo abaixo",
+            "CONFIGURAÇÃO DO REPOSITÓRIO — as linhas citadas com '> ' logo abaixo",
         "regras": ["---", "fim falso"]}, ensure_ascii=False), encoding="utf-8")
     montado = _prompt_da_sessao(etapa_sessao, pasta)
     caso("valor que imita cabeçalho e separador não fabrica moldura: "
          "só uma linha de cada fica sem o prefixo de citação",
          sum(1 for l in montado.splitlines()
-             if l.startswith("CONFIGURAÇÃO DA CASA")) == 1
+             if l.startswith("CONFIGURAÇÃO DO REPOSITÓRIO")) == 1
          and sum(1 for l in montado.splitlines() if l == "---") == 1)
     configuracao.write_text(json.dumps({
         "padrao_de_nome": "semana\n_hist_<n>"}, ensure_ascii=False),
@@ -2859,14 +2947,14 @@ sys.exit(0)
          puro == "faça" and "teto" in berro.getvalue())
     configuracao.unlink()
 
-    # r) quebra de linha no comando não forja linha de onda no ensaio
-    manifesto = _manifesto(pasta, "m-forja-ensaio.json", {"etapas": [
+    # r) quebra de linha no comando não forja linha de estágio no ensaio
+    roteiro = _roteiro(pasta, "m-forja-ensaio.json", {"etapas": [
         {"nome": "aa", "tipo": "codigo",
-         "comando": "true\ntouch fuga\n  onda 99 [só]: forjada"}]})
-    resposta = _cli(["ensaio", "--manifesto", manifesto, "--trabalho",
-                     "t-forja-ensaio", "--dir", recibos, "--cwd", pasta])
-    caso("ensaio não deixa o manifesto forjar a listagem",
-         not any(linha.strip().startswith("onda 99")
+         "comando": "true\ntouch fuga\n  estagio 99 [só]: forjada"}]})
+    resposta = _cli(["ensaio", "--roteiro", roteiro, "--trabalho",
+                     "t-forja-ensaio", "--dir", evidencias, "--cwd", pasta])
+    caso("ensaio não deixa o roteiro forjar a listagem",
+         not any(linha.strip().startswith("estagio 99")
                  for linha in resposta.stdout.splitlines()))
 
     # s) as regras da camada entram por código, antes de tudo
@@ -2883,12 +2971,12 @@ sys.exit(0)
     caso("frase com quebra embutida vira linha única",
          "> 2. Só é pronto o que um instrumento provou." in montado)
     (nucleo / "configuracao.json").write_text(
-        json.dumps({"repositorio_das_issues": "casa/deles"}),
+        json.dumps({"repositorio_das_issues": "repositorio/deles"}),
         encoding="utf-8")
     junto = _prompt_da_sessao(etapa_sessao, pasta)
     caso("regras vêm antes da configuração, e as duas antes do pedido",
          junto.index("AS REGRAS DA CAMADA")
-         < junto.index("CONFIGURAÇÃO DA CASA") < junto.index("faça"))
+         < junto.index("CONFIGURAÇÃO DO REPOSITÓRIO") < junto.index("faça"))
     (nucleo / "configuracao.json").unlink()
     (nucleo / "regras.json").write_text("{quebrado", encoding="utf-8")
     berro = io.StringIO()
@@ -2898,36 +2986,37 @@ sys.exit(0)
          puro == "faça" and "regras" in berro.getvalue())
     (nucleo / "regras.json").unlink()
 
-    # w) andamento: fotografa os recibos que os casos acima deixaram
+    # w) andamento: fotografa as evidências que os casos acima deixaram
     def foto(trabalho, extra=()):
         resposta = _cli(["andamento", "--trabalho", trabalho,
-                         "--dir", recibos] + list(extra))
+                         "--dir", evidencias] + list(extra))
         try:
             return resposta.returncode, json.loads(resposta.stdout)
         except ValueError:
             return resposta.returncode, {}
 
     codigo, dado = foto("t-sentinela")
-    caso("andamento de corrente completa: estado completa, exit 0",
+    caso("andamento de execução completa: estado completa, exit 0",
          codigo == 0 and dado.get("estado") == "completa"
          and [e["veredito"] for e in dado.get("etapas", [])]
          == ["segue", "segue"])
     codigo, dado = foto("t-morte")
-    caso("andamento de corrente parada: estado parada e o proximo de quem "
+    caso("andamento de execução parada: estado parada e o proximo de quem "
          "reprovou na proxima_acao",
          codigo == 0 and dado.get("estado") == "parada"
          and dado.get("etapas", [{}])[0].get("proximo")
          and dado.get("proxima_acao") == dado["etapas"][0]["proximo"])
-    codigo, dado = foto("t-portao")
-    caso("andamento de portão pendente: aguardando-portao com a pergunta",
-         codigo == 0 and dado.get("estado") == "aguardando-portao"
+    codigo, dado = foto("t-aprovacao-manual")
+    caso("andamento de aprovação manual pendente: aguardando-aprovacao"
+         " com a pergunta",
+         codigo == 0 and dado.get("estado") == "aguardando-aprovacao"
          and "Aprova a etapa" in dado.get("proxima_acao", ""))
     codigo, dado = foto("t-nunca-rodou")
-    caso("andamento sem recibo nenhum: em-curso, etapas vazias",
+    caso("andamento sem evidência nenhum: em-curso, etapas vazias",
          codigo == 0 and dado.get("estado") == "em-curso"
          and dado.get("etapas") == [])
     codigo, dado = foto("t-teto2")
-    caso("andamento com recibo ilegível: aviso, conta no teto, sem traceback",
+    caso("andamento com evidência ilegível: aviso, conta no teto, sem traceback",
          codigo == 0 and dado.get("avisos")
          and dado.get("estado") == "parada" and dado.get("paras", 0) >= 2)
     codigo, dado = foto("t-ciclos")
@@ -2935,29 +3024,29 @@ sys.exit(0)
          codigo == 0 and dado.get("estado") == "completa"
          and all(e["ciclo"]["i"] == 3 for e in dado.get("etapas", [])))
     resposta = _cli(["andamento", "--trabalho", "Nome Errado",
-                     "--dir", recibos])
+                     "--dir", evidencias])
     caso("andamento recusa trabalho fora do contrato com exit 2",
          resposta.returncode == 2)
 
-    # w2) com o manifesto, `completa` é prova: todas as etapas ligadas têm
-    #     recibo — e etapa ligada sem recibo rebaixa para em-curso
+    # w2) com o roteiro, `completa` é prova: todas as etapas ligadas têm
+    #     evidência — e etapa ligada sem evidência rebaixa para em-curso
     codigo, dado = foto("t-sentinela",
-                        ["--manifesto", str(Path(pasta) / "m-sentinela.json")])
-    caso("andamento com manifesto prova a corrente completa",
+                        ["--roteiro", str(Path(pasta) / "m-sentinela.json")])
+    caso("andamento com roteiro prova a execução completa",
          codigo == 0 and dado.get("estado") == "completa")
-    maior = _manifesto(pasta, "m-sentinela-maior.json", {"etapas": [
+    maior = _roteiro(pasta, "m-sentinela-maior.json", {"etapas": [
         {"nome": "grava", "tipo": "codigo", "comando": "true"},
-        {"nome": "confere", "tipo": "conferencia", "depende": ["grava"]},
+        {"nome": "verifica", "tipo": "verificacao", "depende": ["grava"]},
         {"nome": "nunca-rodou", "tipo": "codigo", "comando": "true",
-         "depende": ["confere"]}]})
-    codigo, dado = foto("t-sentinela", ["--manifesto", maior])
-    caso("etapa ligada sem recibo rebaixa completa para em-curso, nomeada",
+         "depende": ["verifica"]}]})
+    codigo, dado = foto("t-sentinela", ["--roteiro", maior])
+    caso("etapa ligada sem evidência rebaixa completa para em-curso, nomeada",
          codigo == 0 and dado.get("estado") == "em-curso"
          and "nunca-rodou" in dado.get("proxima_acao", ""))
     resposta = _cli(["andamento", "--trabalho", "t-sentinela",
-                     "--dir", recibos, "--manifesto",
+                     "--dir", evidencias, "--roteiro",
                      str(Path(pasta) / "nao-existe.json")])
-    caso("manifesto ilegível no andamento é erro de uso, exit 2",
+    caso("roteiro ilegível no andamento é erro de uso, exit 2",
          resposta.returncode == 2)
 
     return resultados
@@ -2967,8 +3056,8 @@ def testar() -> int:
     falhas = []
     with tempfile.TemporaryDirectory(prefix="encadeador-teste-") as pasta:
         for rotulo, conteudo, trecho in RECUSA:
-            manifesto = _manifesto(pasta, "m-recusa.json", conteudo)
-            resposta = _cli(["ensaio", "--manifesto", manifesto,
+            roteiro = _roteiro(pasta, "m-recusa.json", conteudo)
+            resposta = _cli(["ensaio", "--roteiro", roteiro,
                              "--trabalho", "t", "--cwd", pasta])
             if resposta.returncode != 2:
                 falhas.append(f"RECUSA [{rotulo}]: exit {resposta.returncode}, "

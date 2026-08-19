@@ -1,4 +1,4 @@
-# O roteiro de entrega — um EXEMPLO, não o processo da sua casa
+# O roteiro de entrega — um EXEMPLO, não o processo do seu repositório
 
 `entrega.json`, ao lado, mostra a forma de um trabalho que termina em pedido
 de revisão. **Ele é exemplo, e cada nome dentro dele sai da configuração** —

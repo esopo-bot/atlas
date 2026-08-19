@@ -5,22 +5,23 @@ Os moldes que a abertura usa. O corpo da skill diz quando abrir cada um.
 ## Bloco de perfil do passo zero
 
 O bloco que se grava no perfil do repositório, em `conhecimento/projetos/`.
-Os nomes são os que a casa usa, nunca os que a skill imagina:
+Os nomes são os que o repositório usa, nunca os que a skill imagina:
 
 Onde as issues moram, o padrão de nome e o fluxo do backlog **não entram
-aqui**: têm casa própria, o `nucleo/configuracao.json` — um fato, uma
-casa. Este bloco guarda o resto:
+aqui**: têm lugar próprio, o `nucleo/configuracao.json` — um fato, um
+lugar. Este bloco guarda o resto:
 
 ```markdown
 ## Trabalho por issue
 
-- **Quadro de acompanhamento:** <como a casa o chama, e onde ele fica>
+- **Quadro de acompanhamento:** <como o repositório o chama, e onde ele fica>
 - **Estados do quadro, na ordem:** <os nomes de lá>
 - **Rótulos que importam:** <quais, e o que cada um significa aqui>
-- **Etapas de verificação:** <como a casa chama cada uma, e o que prova cada>
+- **Etapas de verificação:** <como o repositório chama cada uma, e o que prova
+  cada>
 - **Branch onde a sessão trabalha:** <o padrão do nome, e de qual branch nasce>
-- **Branch de entrega, e o que o nome dela aciona:** <esteira? implantação?
-  aviso a outras pessoas?>
+- **Branch de entrega, e o que o nome dela aciona:** <integração contínua?
+  implantação? aviso a outras pessoas?>
 - **A sessão pode empurrar:** <o que sim, e o que só o dono empurra>
 - **Branches protegidas** — não apagar, não renomear, não forçar, não
   reescrever: <os nomes das de longa duração. Na dúvida, é protegida.>

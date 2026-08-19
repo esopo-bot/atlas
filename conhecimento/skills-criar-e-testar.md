@@ -2,12 +2,12 @@
 
 ## A peneira: pare no primeiro "sim"
 
-1. **Já vem de fábrica?** [Canivete](skills-da-camada.md).
+1. **Já vem de fábrica?** [Catálogo](skills-da-camada.md).
 2. **Tem plugin oficial?** [Plugins](skills-da-camada.md#os-plugins-que-se-pagam).
 3. **Resolve com uma frase no `AGENTS.md`?** Instrução curta vence skill:
    vale em toda sessão, sem depender de disparo.
 4. **Sobrou o quê?** Só o que ninguém escreveria por você: a regra do seu
-   negócio, o seu dado, o jeito da sua casa.
+   negócio, o seu dado, o jeito do seu workspace.
 5. **Passou nos quatro?** Escreva — com o plugin `skill-creator`.
 
 ## Os comandos, na ordem do trabalho
@@ -39,4 +39,4 @@ se um nome falhar, use o outro.
 
 Skill de padrão de código não dispara por descrição. Quando precisa
 disparar: cite pelo nome ou prenda com gancho —
-[canivete](skills-da-camada.md#as-skills-da-camada).
+[catálogo](skills-da-camada.md#as-skills-da-camada).

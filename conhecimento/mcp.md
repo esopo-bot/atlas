@@ -41,7 +41,7 @@ funciona é o padrão.
 
 | Causa                                   | Como pega                                                        |
 | --------------------------------------- | ---------------------------------------------------------------- |
-| caminho morto na declaração             | o gancho `conferir-mcp.py` acusa na abertura                     |
+| caminho morto na declaração             | o gancho `verificar-mcp.py` acusa na abertura                     |
 | processo morre antes de falar protocolo | sonda                                                            |
 | aprovação pendente de quem clonou       | `claude mcp list` mostra o status                                |
 | variável `${...}` sem valor             | sobe, lista, e falha só no `tools/call` — sonda com chamada real |
@@ -52,7 +52,7 @@ funciona é o padrão.
   `initialize` e chamar uma ferramenta com dado real. Quem para no
   `initialize` dá verde a servidor que falha no primeiro uso.
 - Declare o nome da variável onde algum instrumento leia: `${VARIAVEL}` na
-  declaração (o `conferir-ambiente.py` extrai daí) ou na lista `variavel`
+  declaração (o `verificar-ambiente.py` extrai daí) ou na lista `variavel`
   do `nucleo/ambiente.json`.
 
 ## Caminho e token

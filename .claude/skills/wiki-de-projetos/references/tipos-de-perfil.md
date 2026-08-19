@@ -50,7 +50,7 @@ roda, como se testa. O que uma aplicação nova deveria imitar.>
 <a lista que evita reinvenção: serviços, helpers, contratos, endpoints —
 cada um com o caminho onde vive>
 
-## Como conversa com os irmãos
+## Como conversa com os repositórios vizinhos
 <quem chama, quem é chamado, contratos compartilhados — só o que você VIU>
 
 ## Armadilhas

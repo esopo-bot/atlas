@@ -1,4 +1,4 @@
-# Zero que mente
+# Falso negativo
 
 "Não encontrei" e "não existe" são coisas diferentes, e o instrumento
 raramente avisa qual das duas entregou. Vale para busca, consulta,
@@ -28,7 +28,7 @@ chamada de interface e verificação de permissão.
 - **4** — `tail`, `sort` e `wc` só respondem quando a entrada fecha;
   `head -n N` e `grep -m N` saem quando a conta fecha. Para esperar
   serviço: `until curl -s -o /dev/null <endereço>; do sleep 2; done`.
-- **6** — conferência que depende de evento não fecha em janela sem
+- **6** — verificação que depende de evento não fecha em janela sem
   evento: provoque o evento ou ancore num que tem hora marcada. Massa
   semeada por fora morre na recriação do ambiente.
 - **7** — quando o número importar: `pwd; <a medição>` na mesma chamada.

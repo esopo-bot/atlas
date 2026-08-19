@@ -1,6 +1,6 @@
 # Roteiros que viajam com a camada
 
-Esta pasta é o oposto da `correntes/` da raiz: **aqui o conteúdo ENTRA no
+Esta pasta é o oposto da `execucoes/` da raiz: **aqui o conteúdo ENTRA no
 git**, e é essa a razão de ela existir.
 
 Roteiro que mora aqui é **da camada**: não sabe nada de ninguém, tira todo
@@ -19,7 +19,7 @@ vazar sem ninguém ver.
 
 ## Onde mora o SEU roteiro
 
-Na `correntes/` da raiz do seu repositório. Lá o conteúdo não entra no git,
+Na `execucoes/` da raiz do seu repositório. Lá o conteúdo não entra no git,
 de propósito: roteiro de trabalho cita o caminho da sua máquina, o nome dos
 seus outros repositórios, o seu caso. Nada disso viaja.
 

@@ -44,7 +44,7 @@ SO_EXPANSAO = re.compile(r"\$\(|`|\)")
 
 # Documento entregue com o delimitador entre aspas (`<<'FIM'`) é dado literal:
 # o shell não expande nada ali dentro. Sem esta exceção, o gancho barra quem
-# escreve o recibo dele. Já `<<FIM`, sem aspas, expande — e continua valendo.
+# escreve a evidência dele. Já `<<FIM`, sem aspas, expande — e continua valendo.
 DOCUMENTO_LITERAL = re.compile(r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
 
 
@@ -52,7 +52,7 @@ def _cortar_respeitando_aspas(comando: str):
     """Parte em segmentos, dando a cada tipo de aspa o que ele protege.
 
     Um comando que apenas CITA outro não o executa — e sem essa distinção o
-    gancho barra quem escreve o recibo dele. Mas as duas aspas protegem
+    gancho barra quem escreve a evidência dele. Mas as duas aspas protegem
     coisas diferentes, e tratá-las igual seria trocar um falso positivo por
     um furo: `$(...)` continua executando dentro de aspas duplas.
 
@@ -462,14 +462,14 @@ DEIXA_PASSAR = [
     ("espelhar em clone não é push", "git clone --mirror https://exemplo.invalido/r.git"),
     ("subcomando que não empurra nada", "git status $(git rev-parse HEAD)"),
     # Citar o destrutivo não é executá-lo. Estes dois casos nasceram de um
-    # falso positivo real: o gancho barrou o comando que escrevia o recibo dele.
+    # falso positivo real: o gancho barrou o comando que escrevia a evidência dele.
     ("mensagem de commit que cita o veto",
      'git commit -m "não rode git push --force origin main"'),
     # Aspa simples protege tudo: ali dentro é texto, não comando.
     ("aspas simples seguram o comando inteiro",
      "echo 'git push --force origin main'"),
     # E o par do documento: com aspas no delimitador, é dado que vai para a
-    # entrada de outro programa. Foi este caso que barrou o recibo do gancho.
+    # entrada de outro programa. Foi este caso que barrou a evidência do gancho.
     ("documento literal é dado, não comando",
      "gh issue comment 13 --body-file - <<'FIM'\ngit push --force origin main\nFIM"),
 ]

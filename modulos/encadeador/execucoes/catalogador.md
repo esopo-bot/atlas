@@ -17,11 +17,11 @@ O alcance é limitado por CÓDIGO — o gancho vetar-conhecimento-em-codigo.py b
 
 ```bash
 python .agents/encadeador/encadeador.py ensaio \
-  --manifesto modulos/encadeador/correntes/catalogador.json \
-  --trabalho catalogador --dir tmp/recibos
+  --roteiro modulos/encadeador/execucoes/catalogador.json \
+  --trabalho catalogador --dir tmp/evidencias
 python .agents/encadeador/encadeador.py executar \
-  --manifesto modulos/encadeador/correntes/catalogador.json \
-  --trabalho catalogador --dir tmp/recibos --cwd .
+  --roteiro modulos/encadeador/execucoes/catalogador.json \
+  --trabalho catalogador --dir tmp/evidencias --cwd .
 ```
 
 O ensaio primeiro, sempre. E **o dono invoca**: esta rotina não tem

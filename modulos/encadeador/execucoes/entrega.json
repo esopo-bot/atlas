@@ -12,7 +12,7 @@
       "tipo": "sessao",
       "depende": ["abrir-branch"],
       "max-turnos": 40,
-      "prompt": "Faça o trabalho desta issue na branch que a etapa anterior abriu. O que fazer está no corpo da issue: leia o prompt refinado e siga por ele.\n\nO QUE VOCÊ NÃO PODE FAZER: mesclar em branch de longa duração, empurrar para ela, ou abrir e mesclar PR por conta própria — o gancho recusa, e a recusa é a regra 9 virando código. Commit e push seguem o que `autorizacoes` declara em nucleo/configuracao.json; onde não estiver declarado, deixe os arquivos e diga o que fez.\n\nA PROVA: cada afirmação do seu recibo tem comando e saída. Teste ANTES de dar por pronto — o teste que não falha quando o código quebra não é teste."
+      "prompt": "Faça o trabalho desta issue na branch que a etapa anterior abriu. O que fazer está no corpo da issue: leia o prompt refinado e siga por ele.\n\nO QUE VOCÊ NÃO PODE FAZER: mesclar em branch de longa duração, empurrar para ela, ou abrir e mesclar PR por conta própria — o gancho recusa, e a recusa é a regra 9 virando código. Commit e push seguem o que `autorizacoes` declara em nucleo/configuracao.json; onde não estiver declarado, deixe os arquivos e diga o que fez.\n\nA PROVA: cada afirmação do seu evidência tem comando e saída. Teste ANTES de dar por pronto — o teste que não falha quando o código quebra não é teste."
     },
     {
       "nome": "testar-na-integracao",
@@ -23,7 +23,7 @@
     },
     {
       "nome": "verificacao",
-      "tipo": "conferencia",
+      "tipo": "verificacao",
       "depende": ["testar-na-integracao"]
     },
     {
@@ -31,11 +31,11 @@
       "tipo": "sessao",
       "depende": ["verificacao"],
       "max-turnos": 15,
-      "prompt": "Escreva o corpo do pedido de revisão desta entrega, em pt-BR, e grave em tmp/pedido-de-revisao.md. Quatro seções obrigatórias, nesta ordem e com estes títulos exatos:\n\n## O que foi testado\nO comando e a saída de cada verificação — o que passou e o que não foi medido. Sem comando e sem saída não é teste, é opinião.\n\n## Risco de quebrar em produção\nO que este diff pode derrubar, e por quê. \"Nenhum\" só vale com a razão medida.\n\n## Mitigação\nO que já está no lugar para o risco não virar incidente.\n\n## Plano de reversão\nO comando exato que desfaz, e o que ele NÃO desfaz (migração de dado, efeito em terceiro, aviso já enviado).\n\nO corpo cobre o que o diff entrega: confira as seções contra a lista real de commits. Corpo que não cobre o diff é revisão aprovando sem ver.\n\nVocê NÃO abre o pedido de revisão — quem abre é o dono, com o texto na mão. Seu recibo prova que o arquivo existe e tem as quatro seções."
+      "prompt": "Escreva o corpo do pedido de revisão desta entrega, em pt-BR, e grave em tmp/pedido-de-revisao.md. Quatro seções obrigatórias, nesta ordem e com estes títulos exatos:\n\n## O que foi testado\nO comando e a saída de cada verificação — o que passou e o que não foi medido. Sem comando e sem saída não é teste, é opinião.\n\n## Risco de quebrar em produção\nO que este diff pode derrubar, e por quê. \"Nenhum\" só vale com a razão medida.\n\n## Mitigação\nO que já está no lugar para o risco não virar incidente.\n\n## Plano de reversão\nO comando exato que desfaz, e o que ele NÃO desfaz (migração de dado, efeito em terceiro, aviso já enviado).\n\nO corpo cobre o que o diff entrega: confira as seções contra a lista real de commits. Corpo que não cobre o diff é revisão aprovando sem ver.\n\nVocê NÃO abre o pedido de revisão — quem abre é o dono, com o texto na mão. Seu evidência prova que o arquivo existe e tem as quatro seções."
     },
     {
       "nome": "entregar",
-      "tipo": "portao",
+      "tipo": "aprovacao-manual",
       "depende": ["corpo-do-pedido"],
       "aprovacao": "aprovacoes/entrega.ok"
     }

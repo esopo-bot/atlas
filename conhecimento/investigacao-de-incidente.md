@@ -34,14 +34,14 @@ exata de uma mudança de configuração = a configuração é a variável.
 | o sintoma em uma frase, do ponto de vista de quem usa | o outro time reconhece o problema como real |
 | o escopo **medido**: afetados sobre quantos tentaram | amostra despriorizada mata incidente — quem não reclama some da conta |
 | o instante exato em que começou | sem ele não sabem onde procurar |
-| identificadores que **eles** conseguem procurar | o seu não serve no painel do outro |
+| identificadores que **eles** conseguem procurar | o seu não serve no painel de controle do outro |
 | o que mudou do nosso lado, com hora e autor | antecipa a pergunta de volta |
-| **o pedido acionável**: o que conferir, e o que fazer em cada resultado | evidência sem pedido é escalação pela metade |
+| **o pedido acionável**: o que verificar, e o que fazer em cada resultado | evidência sem pedido é escalação pela metade |
 | como a correção será validada em tempo real | fecha sem segunda rodada |
 
 Sem acusação e sem adjetivo. O que não estiver medido entra como "não
 medido" — nunca estimado.
 
 Busca que devolve zero e log noutro vocabulário:
-[zero que mente](../conhecimento/zero-que-mente.md) — leia antes de
+[falso negativo](../conhecimento/falso-negativo.md) — leia antes de
 confiar num vazio.

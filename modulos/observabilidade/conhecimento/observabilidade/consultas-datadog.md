@@ -24,4 +24,5 @@ Antes de escrever "não existe", alargue a janela e refaça.
 
 O formato da entrada — cinco campos, com o porquê de cada um — está em
 `references/ingestao.md` da skill; a sintaxe canônica, na tabela de
-[observabilidade](../observabilidade.md). O caderno guarda só o que é da casa.
+[observabilidade](../observabilidade.md). O caderno guarda só o que é do
+workspace.

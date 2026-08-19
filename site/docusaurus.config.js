@@ -33,9 +33,9 @@ const config = {
           sidebarPath: './sidebars.js',
           // Lista de permissão, não de exclusão: só entra o que está aqui.
           // As páginas da camada, e um nível de subpasta de conhecimento/ —
-          // onde moram a wiki e as notas da casa. O caminho do preset é a
-          // raiz do repositório, então um `**` arrastaria os repositórios de
-          // código e o material de terceiro junto: por isso, um nível só.
+          // onde moram a wiki e as notas do repositório. O caminho do preset
+          // é a raiz do repositório, então um `**` arrastaria os repositórios
+          // de código e o material de terceiro junto: por isso, um nível só.
           include: ['conhecimento/*.md', 'conhecimento/*/*.md'],
           // O LEIAME do primeiro nível diz ao repositório o que entra na
           // pasta — não é página. O de uma subpasta costuma ser conteúdo (o

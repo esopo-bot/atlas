@@ -12,12 +12,12 @@ da sua máquina.
 ## O agente não consulta a ferramenta — e isso é desenho
 
 **Não é falta de permissão.** Quem investiga tem acesso pleno; o agente é que
-fica de fora, por dois motivos que valem em quase toda casa:
+fica de fora, por dois motivos que valem em quase todo workspace:
 
 - **Licença custa por assento.** Um agente consultando não é um leitor a mais
   de graça.
 - **Agente consulta em rajada.** Ferramenta de observabilidade fica lenta para
-  a casa inteira quando alguém a martela — é a [regra 7 da
+  o workspace inteiro quando alguém a martela — é a [regra 7 da
   camada](regras-da-camada.md) aplicada onde ela dói.
 
 O que isso muda na prática:
@@ -129,8 +129,8 @@ Os passos 1, 2, 8 e 9 não mudam de ferramenta — a ordem inteira está no flux
 ### A sintaxe que decide se a busca mente
 
 Não é enfeite: é o que separa "não existe" de "escrevi errado". Cada engano
-abaixo devolve **vazio com cara de resposta**, que é o assunto de [zero que
-mente](zero-que-mente.md).
+abaixo devolve **vazio com cara de resposta**, que é o assunto de
+[falso negativo](falso-negativo.md).
 
 | Regra | Certo | Errado, e devolve vazio |
 | --- | --- | --- |

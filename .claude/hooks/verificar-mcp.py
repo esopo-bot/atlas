@@ -10,12 +10,12 @@ ajudante de cabeçalho apontam para um arquivo que mudou de lugar, nunca foi
 commitado, ou ficou para trás quando a raiz do repositório mudou de nome.
 Ninguém valida esses caminhos na declaração — este gancho valida na abertura.
 
-Ele confere só o que dá para provar barato: caminho declarado existe no
+Ele verifica só o que dá para provar barato: caminho declarado existe no
 disco? Não sobe servidor nem fala protocolo — a sonda completa é assunto da
 página conhecimento/mcp.md. E cala quando está tudo lá: aviso que aparece
 sempre ensina a ignorar aviso.
 
-Rode os testes com:  python .claude/hooks/conferir-mcp.py --testar
+Rode os testes com:  python .claude/hooks/verificar-mcp.py --testar
 """
 
 import json
@@ -26,13 +26,13 @@ from pathlib import Path
 
 # Extensões que denunciam arquivo executável ou script. Token sem separador e
 # sem extensão destas é programa do PATH ("python", "node") ou argumento
-# comum ("run", "-m") — não é caminho para conferir.
+# comum ("run", "-m") — não é caminho para verificar.
 EXTENSOES = {".py", ".js", ".mjs", ".cjs", ".ts", ".sh", ".ps1", ".cmd",
              ".bat", ".exe", ".jar", ".rb", ".php"}
 
 
 def parece_caminho(token: str) -> bool:
-    """Só o que dá para conferir sem adivinhar.
+    """Só o que dá para verificar sem adivinhar.
 
     Fica de fora: bandeira, URL, variável não resolvida (`${VAR}`), curinga e
     pacote npm com escopo (`@scope/nome` tem barra e não é arquivo).
@@ -91,7 +91,7 @@ def main() -> int:
     raiz = Path(base) if base else Path(__file__).resolve().parents[2]
     arquivo = raiz / ".mcp.json"
     if not arquivo.exists():
-        return 0  # nada declarado, nada a conferir
+        return 0  # nada declarado, nada a verificar
 
     try:
         cfg = json.loads(arquivo.read_text(encoding="utf-8"))
@@ -105,7 +105,7 @@ def main() -> int:
     linhas = [f"- servidor `{nome}`: `{caminho}` não existe no disco"
               for nome, caminho in problemas]
     aviso = (
-        "AVISO do gancho conferir-mcp: o .mcp.json declara caminho que não "
+        "AVISO do gancho verificar-mcp: o .mcp.json declara caminho que não "
         "existe. O servidor não vai subir e o sintoma é silencioso — ele "
         "some da lista de ferramentas como se nunca tivesse sido "
         "configurado.\n" + "\n".join(linhas) + "\n"

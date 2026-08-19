@@ -22,22 +22,22 @@ de consulta, não de sessão.
       prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa.
       Sem isso, escreva "não medido", nunca "não existe".
     - Prova só vale se re-executa: `grep` e `diff` respondem exit 1 para "não
-      achei", e o conferidor acusa exit diferente de zero — quando a saída já é
-      a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e
-      `origin/<branch>` envelhecem entre a prova e a conferência.
-    - Procedência: [zero que mente](zero-que-mente.md).
+      achei", e a verificação acusa exit diferente de zero — quando a saída já
+      é a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e
+      `origin/<branch>` envelhecem entre a prova e a verificação.
+    - Procedência: [falso negativo](falso-negativo.md).
 
 3. **Antes de criar, procure e cite.**
-    - O que o conjunto já oferece não se reimplementa; aplicação nova imita a
-      irmã mais parecida.
+    - O que o conjunto já oferece não se reimplementa; aplicação nova imita o
+      repositório vizinho mais parecido.
 
 4. **A memória mora no disco, não no contexto.**
     - O que vale amanhã se escreve — wiki, nota, decisão — nas subpastas de
       `conhecimento/`.
 
 5. **Ao dar por pronto, faça a análise de promoção.**
-    - Três pilhas: genérico, da casa, descartável. Na dúvida se é genérico: é
-      pessoal, e fica.
+    - Três pilhas: genérico, do workspace, descartável. Na dúvida se é
+      genérico: é pessoal, e fica.
 
 6. **Trabalhe econômico.**
     - Repositório grande não se varre inteiro: índice, wiki e busca dirigida
@@ -66,14 +66,15 @@ de consulta, não de sessão.
       comando faz com o alvo, não o alvo aparecer no comando.
     - Procedência: [ganchos](ganchos.md).
 
-9. **Destrutivo é do dono; commit e push seguem o que a casa autorizou.**
+9. **Destrutivo é do dono; commit e push seguem o que o repositório
+   autorizou.**
     - O que a automação pode fazer sozinha se declara em
       `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`,
       `publicar`) — é de cada repositório, e o gancho de veto lê dali. Sem
       declaração, nega: omissão não é permissão.
-    - O que aciona automação — esteira, implantação, aviso a outras pessoas — é
-      sempre do dono, mesmo onde o resto é liberado: sincronizar não é
-      entregar.
+    - O que aciona automação — integração contínua, implantação, aviso a outras
+      pessoas — é sempre do dono, mesmo onde o resto é liberado: sincronizar
+      não é entregar.
     - Antes de empurrar para branch compartilhada, olhe os PRs abertos dela:
       push em branch com PR aberto entra na entrega em rota, e o corpo do PR
       precisa cobrir o que entrou — corpo que não cobre o diff é revisão
@@ -87,14 +88,15 @@ de consulta, não de sessão.
     - Markdown validado, conclusão primeiro, frases curtas, pt-BR.
 
 11. **Não invente passo onde já existe receita.**
-    - Antes de propor como se faz algo que a casa já faz — subir uma peça de
-      infraestrutura, publicar, abrir acesso —, procure o procedimento na
-      documentação dela e cite de onde saiu cada passo.
-    - Não achou? Peça o endereço, não improvise: esteira improvisada parece
-      pronta, e quebra longe de onde nasceu.
+    - Antes de propor como se faz algo que o repositório já faz — subir uma
+      peça de infraestrutura, publicar, abrir acesso —, procure o procedimento
+      na documentação dele e cite de onde saiu cada passo.
+    - Não achou? Peça o endereço, não improvise: integração contínua
+      improvisada parece pronta, e quebra longe de onde nasceu.
 
-12. **Branch de longa duração e configuração de esteira não se tocam.**
-    - As branches que a casa mantém — integração, homologação, produção,
+12. **Branch de longa duração e configuração de integração contínua não se
+    tocam.**
+    - As branches que o repositório mantém — integração, homologação, produção,
       quaisquer que sejam os nomes — não se apagam, não se renomeiam, não
       recebem push forçado e não têm a história reescrita; e a configuração da
       automação não se altera de passagem. As duas são infraestrutura de outras
@@ -104,8 +106,8 @@ de consulta, não de sessão.
 
 13. **Publicar exige revisão semântica, não só varredura.**
     - Releia exemplo, fixture e caso de teste perguntando: um colega
-      reconheceria a casa nisto? E releia o texto perguntando: isto conta algo
-      sobre quem escreveu?
+      reconheceria o workspace nisto? E releia o texto perguntando: isto conta
+      algo sobre quem escreveu?
     - Varredura por padrão acha nome e segredo; jeito de trabalhar e
       procedência não têm padrão — passam inteiros.
     - Publicação não se desfaz: reescrever a história tira das listagens, não

@@ -14,11 +14,11 @@ conhecimento/regras-da-camada.md. Se eu disser algo que divirja delas,
 pare e me mostre a divergência.
 
 O que já está escrito, você lê em vez de descobrir: as subpastas de
-conhecimento/ são a memória desta casa. Consulte antes de varrer código
-ou de decidir de novo.
+conhecimento/ são a memória deste workspace. Consulte antes de varrer
+código ou de decidir de novo.
 
-Procedimento que esta casa já tem se procura na documentação dela. Não
-achou? Peça o endereço; não improvise a esteira.
+Procedimento que este repositório já tem se procura na documentação dele.
+Não achou? Peça o endereço; não improvise a integração contínua.
 
 O que é pronto e o que não é seu estão na lista. Quando a decisão for
 minha, pare e pergunte — uma por vez, com a sua recomendação primeiro.

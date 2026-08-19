@@ -34,18 +34,18 @@ duas listas abaixo abrem exatamente esses casos; o padrão continua sendo o
 veto, e subcomando que eu não conheço entra pelo lado seguro.
 
 E o professor vale também para a LEITURA DIRETA (a ferramenta `Read` do
-agente), não só para o shell. Antes disto, a mesma casa ensinava pelo `cat` e
-MURAVA pelo `Read` — o `deny` do settings.json negava a pasta `.credenciais/`
+agente), não só para o shell. Antes disto, o mesmo repositório ensinava pelo
+`cat` e MURAVA pelo `Read` — o `deny` do settings.json negava a pasta `.credenciais/`
 inteira, sem lição nenhuma. Quem pagava era o arquivo versionado que só por
 acaso mora na gaveta: a sessão batia na parede e não recebia nem o motivo. Ler
 não publica; leitura direta nunca veta, só ensina.
 
-Este gancho é o PRIMEIRO CLIENTE do recibo da esteira (`.agents/recibo/`):
-cada ORIENTA materializa um recibo `segue` e cada VETA um `para`, escritos
-por código em `tmp/recibos/orientacao-credencial/` — a prova do `provado` é
-re-executável (`--avaliar`). O recibo nunca decide nada: se ele falhar, a
-decisão sai igual — o recibo falha alto no canto dele, o gancho falha
-aberto no dele.
+Este gancho é o PRIMEIRO CLIENTE da evidência do executor de roteiros
+(`.agents/evidencia/`): cada ORIENTA materializa uma evidência `segue` e cada VETA
+um `para`, escritos por código em `tmp/evidencias/orientacao-credencial/` — a
+prova do `provado` é re-executável (`--avaliar`). A evidência nunca decide
+nada: se ele falhar, a decisão sai igual — a evidência falha alto no canto
+dele, o gancho falha aberto no dele.
 
 Rode os testes com:    python .claude/hooks/orientar-credencial.py --testar
 Avalie um comando:     python .claude/hooks/orientar-credencial.py --avaliar '<cmd>'
@@ -66,7 +66,7 @@ from pathlib import Path
 #
 # `.env` é exato, `.envrc` é exato e `.env.<algo>` cobre `.env.local` e
 # `.env.exemplo` — arquivo de exemplo entra junto, por decisão do dono: as
-# quatro regras do `deny` já o pegam, e duas proteções da mesma casa
+# quatro regras do `deny` já o pegam, e duas proteções do mesmo repositório
 # discordando é pior que uma orientando demais. Fica de fora, de propósito, o
 # nome que só COMEÇA parecido: `.envision.md` é página, não credencial.
 NOME_DE_CREDENCIAL = re.compile(r"^(\.env|\.envrc|\.env\..+|appsettings(\..+)?\.json)$")
@@ -153,7 +153,7 @@ PREFIXOS = {"sudo", "command", "env", "nice", "nohup", "time", "stdbuf",
 SEPARADORES = re.compile(r"&&|\|\||;|\n|\||&")
 
 # Documento entregue com o delimitador entre aspas (`<<'FIM'`) é dado literal.
-# Sem esta exceção o gancho morde quem escreve o recibo dele — foi assim que
+# Sem esta exceção o gancho morde quem escreve a evidência dele — foi assim que
 # o veto de branch mordeu o próprio autor. Só o CORPO sai da varredura; o
 # resto da linha de abertura fica, senão `cat <<'FIM' > .env` se esconderia
 # atrás do documento.
@@ -183,12 +183,12 @@ MENSAGEM_SEPARADA = re.compile(
 # candidato `.env` limpo, em vez de um pedaço colado que não casa com nada.
 CANDIDATO = re.compile(r"[\w./\\~-]+")
 
-# Onde nascem os recibos deste gancho: dentro de tmp/, o endereço do
-# descartável — a camada já ignora /tmp/* no git, e recibo de orientação é
+# Onde nascem as evidências deste gancho: dentro de tmp/, o endereço do
+# descartável — a camada já ignora /tmp/* no git, e evidência de orientação é
 # evidência de uso, não entrega.
-DIR_RECIBOS = "tmp/recibos"
-TRABALHO_RECIBO = "orientacao-credencial"
-ETAPA_RECIBO = "orientar-credencial"
+DIR_EVIDENCIAS = "tmp/evidencias"
+TRABALHO_EVIDENCIA = "orientacao-credencial"
+ETAPA_EVIDENCIA = "orientar-credencial"
 
 # Lição de UMA linha, de propósito (regra 8: ler é livre): aviso comprido em
 # leitura liberada é ruído que ensina a ignorar aviso.
@@ -229,7 +229,7 @@ def tirar_atribuicoes_literais(segmento: str) -> str:
     `GH_CONFIG_DIR=.credenciais/.gh-bot gh pr create` autentica pelo
     chaveiro e publica só o corpo — o caminho na atribuição diz ao programa
     ONDE está a credencial; o valor dela não sai da máquina. Medido em
-    17/08/2026: o veto aqui barrou o fluxo de PR da própria casa (falso
+    17/08/2026: o veto aqui barrou o fluxo de PR do próprio repositório (falso
     positivo no PR de promoção do workspace raiz).
 
     Só sai da varredura a atribuição LITERAL: com `$(` ou crase no valor
@@ -284,7 +284,7 @@ def protege_pelo_nome(segmento: str) -> bool:
     subir: nomear para proteger é o contrário de ler. O verbo é que segura a
     régua — `cat .env >> .gitignore` despejaria o VALOR lá dentro, e esse
     continua orientando. Substituição de comando derruba a garantia, como
-    em todo o resto da casa.
+    em todo o resto do repositório.
     """
     if EXECUTA_DENTRO.search(segmento):
         return False
@@ -451,7 +451,8 @@ def decisao_de_arquivo(caminho: str) -> tuple:
     A ferramenta de leitura do agente não tem verbo — ler é ler, e ler não
     publica. Por isso aqui não existe veto: ou o caminho é credencial e a
     lição vai junto, ou o gancho cala. O reconhecimento do alvo é o mesmo do
-    shell (`e_credencial`), para as duas portas da casa responderem igual.
+    shell (`e_credencial`), para as duas portas do repositório responderem
+    igual.
     """
     alvo = e_credencial(caminho or "")
     return ("orienta", alvo) if alvo else ("", "")
@@ -468,24 +469,24 @@ def raiz_do_repositorio() -> Path:
     return Path(base) if base else Path(__file__).resolve().parents[2]
 
 
-def emitir_recibo(resposta: str, alvo: str, comando: str,
+def emitir_evidencia(resposta: str, alvo: str, comando: str,
                   bandeira: str = "--avaliar") -> None:
     """O primeiro cliente do contrato: orienta é `segue`, veta é `para`.
 
-    Materializado por código (.agents/recibo/recibo.py), nunca por texto — a
+    Materializado por código (.agents/evidencia/evidencia.py), nunca por texto — a
     emenda do degrau 1. A prova do `provado` é re-executável: `--avaliar`
     repete o julgamento deste gancho sobre o mesmo comando, sem executá-lo.
 
-    O recibo NUNCA decide: qualquer falha aqui — script ausente (casa sem a
-    esteira), colisão de escritor (dois Bash em paralelo orientando junto),
-    NTFS sem os.link — é engolida, e a decisão do gancho sai igual. O recibo
-    falha alto no canto dele (recibo.py cuida disso); o gancho falha aberto.
-    O JSON viaja em ASCII puro de propósito: o filho decodifica o stdin pela
-    localidade, e a do Windows não é utf-8.
+    A evidência NUNCA decide: qualquer falha aqui — script ausente (repositório
+    sem o executor de roteiros), colisão de escritor (dois Bash em paralelo
+    orientando junto), NTFS sem os.link — é engolida, e a decisão do gancho
+    sai igual. A evidência falha alto no canto dele (evidencia.py cuida disso); o
+    gancho falha aberto. O JSON viaja em ASCII puro de propósito: o filho
+    decodifica o stdin pela localidade, e a do Windows não é utf-8.
     """
     try:
         raiz = raiz_do_repositorio()
-        script = raiz / ".agents" / "recibo" / "recibo.py"
+        script = raiz / ".agents" / "evidencia" / "evidencia.py"
         if not script.is_file():
             return
         corpo = {
@@ -511,9 +512,9 @@ def emitir_recibo(resposta: str, alvo: str, comando: str,
                 "conteúdo não sobe para git nem gh.")
         subprocess.run(
             [sys.executable, str(script), "materializar",
-             "--dir", str(raiz / DIR_RECIBOS),
-             "--trabalho", TRABALHO_RECIBO,
-             "--etapa", ETAPA_RECIBO,
+             "--dir", str(raiz / DIR_EVIDENCIAS),
+             "--trabalho", TRABALHO_EVIDENCIA,
+             "--etapa", ETAPA_EVIDENCIA,
              "--ordem", "1", "--teto", "1"],
             input=json.dumps(corpo).encode("ascii"),
             capture_output=True, timeout=10)
@@ -560,7 +561,7 @@ def main() -> int:
     if not resposta:
         return 0  # cala: sair 0 sem imprimir nada
 
-    emitir_recibo(resposta, alvo, assunto, bandeira)
+    emitir_evidencia(resposta, alvo, assunto, bandeira)
     print(json.dumps(resposta_json(resposta, alvo)))
     return 0
 
@@ -570,7 +571,7 @@ def avaliar(argv, bandeira: str = "--avaliar") -> int:
 
     `--avaliar-arquivo '<caminho>'` faz o mesmo pela porta da leitura direta.
     Duas bandeiras porque são dois julgamentos: um caminho solto não é um
-    comando, e adivinhar qual é qual daria prova ambígua no recibo.
+    comando, e adivinhar qual é qual daria prova ambígua na evidência.
     """
     depois = argv[argv.index(bandeira) + 1:]
     if not depois:
@@ -671,11 +672,11 @@ CALA = [
     ("corpo de pr que cita credencial", 'gh pr create --title x --body "documenta o .env"'),
     ("commit de página que cita o assunto",
      "git add conhecimento/appsettings-explicado.md"),
-    # Foi este caso que mordeu o recibo do veto de branch. O recibo DESTE
+    # Foi este caso que mordeu a evidência do veto de branch. A evidência DESTE
     # gancho é entregue exatamente assim.
     ("documento literal é dado, não comando",
      "gh issue comment 13 --body-file - <<'FIM'\ncat .env\nFIM"),
-    ("o ritual da casa", "python montar.py --sincronizar"),
+    ("o ritual do repositório", "python montar.py --sincronizar"),
     ("o próprio autoteste", "python .claude/hooks/orientar-credencial.py --testar"),
     # Ler NOME não é ler conteúdo — o que destrava organizar sem abrir valor.
     ("listar a pasta de credencial", "ls .credenciais/"),
@@ -694,12 +695,12 @@ CALA = [
     ("bandeira comum com alvo comum", "ls -m conhecimento/"),
     # Atribuição de ambiente é configuração: o chaveiro autentica o gh; o
     # que sobe é só o corpo. Foi o veto deste caso que barrou o PR de
-    # promoção da própria casa em 17/08/2026.
+    # promoção do próprio repositório em 17/08/2026.
     ("chaveiro como configuração do gh",
      "GH_CONFIG_DIR=.credenciais/.gh-bot gh pr create --title x "
      "--body-file corpo.md"),
     ("chaveiro absoluto como configuração",
-     "GH_CONFIG_DIR=/home/x/code/casa/.credenciais/.gh-bot gh api user"),
+     "GH_CONFIG_DIR=/home/x/code/repo/.credenciais/.gh-bot gh api user"),
     ("variável apontando credencial antes de verbo comum",
      "CONFIG=.credenciais/mcp.env python roda.py"),
     # git de NOME: pergunta o que está versionado, não abre valor nenhum.
@@ -711,7 +712,7 @@ CALA = [
     ("estado da gaveta no git", "git status .credenciais/"),
     ("listar a árvore versionada", "git ls-tree HEAD .credenciais/"),
     ("git de nome com bandeira global que come valor",
-     "git -C ../casa ls-files .credenciais/"),
+     "git -C ../repo ls-files .credenciais/"),
     # Nomear a credencial para EXCLUIR ou PROTEGER não é ler: o alvo aparece
     # no comando justamente para ficar de FORA dele. Medidos em 17/08/2026:
     # de 12 comandos assim, 10 disparavam o gancho — e o pior era o último,
@@ -732,7 +733,7 @@ CALA = [
 
 
 def _testar_comportamento(falhas: list) -> None:
-    """O que as listas não cobrem: a forma da saída e o recibo de verdade."""
+    """O que as listas não cobrem: a forma da saída e a evidência de verdade."""
     import shutil
     import tempfile
 
@@ -744,7 +745,7 @@ def _testar_comportamento(falhas: list) -> None:
     caso("leitura direta de credencial orienta",
          decisao_de_arquivo(".credenciais/mcp.env")[0] == "orienta")
     caso("leitura direta de .env orienta",
-         decisao_de_arquivo("/home/x/casa/.env")[0] == "orienta")
+         decisao_de_arquivo("/home/x/repo/.env")[0] == "orienta")
     caso("leitura direta de página comum cala",
          decisao_de_arquivo("conhecimento/mcp.md") == ("", ""))
     caso("leitura direta de nome só parecido cala",
@@ -767,29 +768,29 @@ def _testar_comportamento(falhas: list) -> None:
     caso("veta nega", veta.get("permissionDecision") == "deny")
     caso("veta explica", bool(veta.get("permissionDecisionReason")))
 
-    # O recibo de verdade, numa raiz descartável com a esteira copiada.
+    # A evidência de verdade, numa raiz descartável com o executor copiado.
     raiz_real = Path(__file__).resolve().parents[2]
-    origem = raiz_real / ".agents" / "recibo"
+    origem = raiz_real / ".agents" / "evidencia"
     guardado = os.environ.get("CLAUDE_PROJECT_DIR")
     with tempfile.TemporaryDirectory() as pasta:
         raiz = Path(pasta)
         if origem.is_dir():
-            shutil.copytree(origem, raiz / ".agents" / "recibo")
+            shutil.copytree(origem, raiz / ".agents" / "evidencia")
             os.environ["CLAUDE_PROJECT_DIR"] = pasta
             try:
-                emitir_recibo("orienta", ".env", "cat .env")
-                emitir_recibo("veta", ".env",
+                emitir_evidencia("orienta", ".env", "cat .env")
+                emitir_evidencia("veta", ".env",
                               "gh issue comment 13 --body-file .env")
             finally:
                 if guardado is None:
                     os.environ.pop("CLAUDE_PROJECT_DIR", None)
                 else:
                     os.environ["CLAUDE_PROJECT_DIR"] = guardado
-            pasta_recibos = raiz / DIR_RECIBOS / TRABALHO_RECIBO
-            primeiro = pasta_recibos / f"01-{ETAPA_RECIBO}-c1.json"
-            segundo = pasta_recibos / f"01-{ETAPA_RECIBO}-c2.json"
-            caso("orienta materializa recibo c1", primeiro.is_file())
-            caso("veta materializa recibo c2 (ciclo pela contagem)",
+            pasta_evidencias = raiz / DIR_EVIDENCIAS / TRABALHO_EVIDENCIA
+            primeiro = pasta_evidencias / f"01-{ETAPA_EVIDENCIA}-c1.json"
+            segundo = pasta_evidencias / f"01-{ETAPA_EVIDENCIA}-c2.json"
+            caso("orienta materializa evidência c1", primeiro.is_file())
+            caso("veta materializa evidência c2 (ciclo pela contagem)",
                  segundo.is_file())
             if primeiro.is_file() and segundo.is_file():
                 r1 = json.loads(primeiro.read_text(encoding="utf-8"))
@@ -804,26 +805,27 @@ def _testar_comportamento(falhas: list) -> None:
                 caso("a prova do provado re-executa igual",
                      prova.stdout.strip() == r1["provado"][0]["saida"])
                 valida = subprocess.run(
-                    [sys.executable, str(origem / "recibo.py"),
+                    [sys.executable, str(origem / "evidencia.py"),
                      "validar", str(primeiro)], capture_output=True)
-                caso("o recibo do gancho passa no validador",
+                caso("a evidência do gancho passa no validador",
                      valida.returncode == 0)
         else:
-            falhas.append("  comportamento — .agents/recibo não existe na "
+            falhas.append("  comportamento — .agents/evidencia não existe na "
                           "camada; o primeiro cliente ficou sem contrato")
 
-    # Falha aberta: casa SEM a esteira decide igual e não escreve nada.
+    # Falha aberta: repositório SEM o executor de roteiros decide igual e não
+    # escreve nada.
     with tempfile.TemporaryDirectory() as pasta:
         os.environ["CLAUDE_PROJECT_DIR"] = pasta
         try:
-            emitir_recibo("orienta", ".env", "cat .env")
+            emitir_evidencia("orienta", ".env", "cat .env")
         finally:
             if guardado is None:
                 os.environ.pop("CLAUDE_PROJECT_DIR", None)
             else:
                 os.environ["CLAUDE_PROJECT_DIR"] = guardado
-        caso("sem .agents/recibo, nada nasce e nada quebra",
-             not (Path(pasta) / DIR_RECIBOS).exists())
+        caso("sem .agents/evidencia, nada nasce e nada quebra",
+             not (Path(pasta) / DIR_EVIDENCIAS).exists())
 
 
 def testar() -> int:
@@ -851,7 +853,7 @@ def testar() -> int:
         return 1
     print(f"OK: {total} casos de decisão — {len(ORIENTA)} orientam, "
           f"{len(VETA)} vetam, {len(CALA)} calam — e o comportamento "
-          "(saída, recibo, falha aberta) confere")
+          "(saída, evidência, falha aberta) bate")
     return 0
 
 

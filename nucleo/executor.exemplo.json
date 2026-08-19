@@ -19,7 +19,7 @@
   "existe_arquivo_limpeza": false,
   "arquivo_limpeza": "${CAMINHO_DO_SCRIPT_QUANDO_EXISTE_FOR_TRUE}",
   "notas": [
-    "modo: em `completo` o executor roda a corrente inteira; em `so-issues` ele SÓ abre issue — executar fica desligado, e o disparo recusa com recado.",
+    "modo: em `completo` o executor roda a execução inteira; em `so-issues` ele SÓ abre issue — executar fica desligado, e o disparo recusa com recado.",
     "conta_gh nomeia a conta, nunca a credencial: o token mora no gh da máquina. Segredo não entra em arquivo, nem neste.",
     "branches.base e branches.integracao dizem para onde o trabalho APONTA. O que não se toca está em .claude/branches-protegidas.txt — outro arquivo, outro assunto. A validação avisa quando as duas não constam de lá.",
     "diretorios_so_codigo e arquivo_limpeza são lidos por quem veta conhecimento em pasta de código e pela rotina de limpeza.",

@@ -15,7 +15,7 @@ Atualizado em <data>, commit <sha>. Perfil — o repositório é a verdade.
 <formato do arquivo, frontmatter, se o menu é automático ou escrito à mão,
 onde ficam as imagens, como se publica — ramo, revisão, quem aprova>
 
-## O padrão da casa
+## O padrão do repositório
 <tom, tamanho, o que toda página tem: pré-requisitos? tempo estimado?
 seções fixas? Copie o vocabulário de duas páginas boas que já existem.>
 

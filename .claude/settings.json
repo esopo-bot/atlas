@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/conferir-mcp.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-mcp.py\""
           }
         ]
       },
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/conferir-ambiente.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-ambiente.py\""
           }
         ]
       }

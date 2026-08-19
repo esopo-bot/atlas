@@ -15,7 +15,7 @@ aplicações que importam** e **escrever e afinar as consultas**.
 **Você não consulta a ferramenta. Nunca.** Não declare servidor de consulta,
 não presuma credencial, não peça chave. O motivo não é falta de permissão — é
 que licença custa por assento e agente consultando em rajada deixa a
-ferramenta lenta para a casa inteira.
+ferramenta lenta para o workspace inteiro.
 
 Daí a regra que decide se esta skill mente ou não:
 
@@ -49,8 +49,8 @@ Sem esse corte a abertura incha; o porquê, em `conhecimento/observabilidade.md`
 Pergunte **uma coisa por vez**. Questionário despejado faz quem está no meio
 de um incidente responder mal e por atacado.
 
-> "Não tenho memória desta casa ainda, então vou por partes. O que você está
-> vendo — a mensagem, a tela, ou o alerta?"
+> "Não tenho memória deste workspace ainda, então vou por partes. O que você
+> está vendo — a mensagem, a tela, ou o alerta?"
 
 Do que vier, tire em qual aplicação olhar. Se houver stack trace, ele já diz:
 peça-o antes de perguntar o nome da aplicação.

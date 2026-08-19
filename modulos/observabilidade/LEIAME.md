@@ -3,7 +3,7 @@
 Copiloto de investigação em ferramenta de observabilidade. Ele **não se
 conecta a ferramenta nenhuma** — ensina a investigar, guarda o que cada
 incidente ensinou, e vai compondo consulta melhor à medida que conhece as
-aplicações da casa.
+aplicações do workspace.
 
 Primeira ferramenta hospedada: **Datadog**. O módulo foi desenhado para
 receber uma segunda sem renomear nada — o que é método mora no nível do
@@ -33,5 +33,5 @@ quem instalou.
 O objetivo deste módulo é **acumular nome de aplicação, de serviço e de
 incidente** — exatamente o que nunca pode entrar num repositório público.
 Por isso a fronteira é física: a camada entrega molde vazio, e todo exemplo
-usa nome inventado que ninguém confunde com casa real. Se um exemplo aqui
+usa nome inventado que ninguém confunde com workspace real. Se um exemplo aqui
 começar a parecer plausível, ele está errado.

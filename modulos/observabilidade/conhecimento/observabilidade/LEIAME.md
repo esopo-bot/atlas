@@ -1,8 +1,8 @@
-# Observabilidade — a memória da casa
+# Observabilidade — a memória do workspace
 
-O que este copiloto aprendeu sobre as aplicações desta casa. **Nada aqui é da
-camada e nada aqui viaja**: a atualização escreve estes arquivos uma vez e
-nunca mais toca neles.
+O que este copiloto aprendeu sobre as aplicações deste workspace. **Nada aqui
+é da camada e nada aqui viaja**: a atualização escreve estes arquivos uma vez
+e nunca mais toca neles.
 
 | Arquivo | O que mora ali | Quem escreve |
 | --- | --- | --- |

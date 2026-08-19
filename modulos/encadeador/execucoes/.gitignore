@@ -1,14 +1,14 @@
 # O conteúdo desta pasta NÃO entra no git, e isso é o desenho.
 #
-# Corrente é rotina de desenvolvedor: ela cita o caminho da sua máquina, o
+# Execução é rotina de desenvolvedor: ela cita o caminho da sua máquina, o
 # nome dos seus outros repositórios, o seu caso. Nada disso viaja. Aqui você
 # escreve à vontade, sem barreira de publicação a respeitar.
 #
 # A pasta é DURÁVEL, ao contrário de tmp/: rascunho se apaga sem aviso, e
 # rotina que se mantém e se melhora não pode morar em rascunho.
 #
-# Corrente que sirva a QUALQUER casa não mora aqui — ela vira arquivo do
-# módulo, em modulos/<nome>/correntes/, e aí viaja com a camada.
+# Execução que sirva a QUALQUER repositório não mora aqui — ela vira arquivo do
+# módulo, em modulos/<nome>/execucoes/, e aí viaja com a camada.
 *
 !.gitignore
 !LEIAME.md

@@ -28,9 +28,10 @@ vizinho. Esta skill o troca por procurar → citar → só então criar.
    - "Não existe: procurei `<termos>` na wiki, no grep e em `<onde mais>`."
 
    Sem citação, não crie. Achado reusável vence implementação nova.
-4. **Criando, imite as irmãs.** Aplicação ou módulo novo segue os padrões do
-   perfil do repositório mais parecido — stack, organização de pastas,
-   convenções de nome, jeito de testar. Parecido por fora, parecido por dentro.
+4. **Criando, imite os repositórios vizinhos.** Aplicação ou módulo novo
+   segue os padrões do perfil do repositório mais parecido — stack,
+   organização de pastas, convenções de nome, jeito de testar. Parecido por
+   fora, parecido por dentro.
 
 ## O corte
 

@@ -1,5 +1,5 @@
 {
-  "comentario": "A configuração DESTA casa: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores da sua casa. O desenho e o porquê: conhecimento/historia-em-issue.md. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar.",
+  "comentario": "A configuração DESTE repositório: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores do seu repositório. O desenho e o porquê: conhecimento/historia-em-issue.md. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar.",
   "repositorio_das_issues": "ver nucleo/executor.json",
   "padrao_de_nome": "${PADRAO_DO_NOME_DA_ISSUE}",
   "regras": [

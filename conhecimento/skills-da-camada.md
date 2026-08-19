@@ -1,4 +1,4 @@
-# O canivete
+# O catálogo
 
 Tudo o que já existe, para você não escrever de novo. **Abra esta página antes
 de escrever qualquer automação.**
@@ -13,10 +13,10 @@ A fonte da verdade é a descrição de cada `SKILL.md`, em `.agents/skills/<nome
 | `antes-de-criar` | procurar e citar o que já existe antes de criar | pelo pedido ("cria", "implementa") |
 | `wiki-de-projetos` | um perfil por repositório e o mapa do conjunto | quando você pede a wiki |
 | `cetico` | atacar uma conclusão antes de agir sobre ela | ao fechar investigação; "rode o cético" |
-| `analise-de-promocao` | separar genérico, da casa e descartável | no fechamento (o esfriamento chama) |
+| `analise-de-promocao` | separar genérico, do workspace e descartável | no fechamento (o esfriamento chama) |
 | `esfriamento` | fechar a sessão colhendo o que o dia ensinou | "O trabalho terminou. Rode o esfriamento." |
 | `documentar-processo` | documentar processo no padrão do repositório de docs | ao documentar ou atualizar documentação |
-| `trabalho-por-issue` | conduzir o trabalho pela issue, com recibo e retomada | ao abrir, retomar ou encerrar issue |
+| `trabalho-por-issue` | conduzir o trabalho pela issue, com evidência e retomada | ao abrir, retomar ou encerrar issue |
 | `iniciar-pedido` | pedido cru vira issue que uma sessão sem cabeça executa | ao começar trabalho novo; "abre uma issue disso" |
 
 A parte opcional não chega sem ser pedida:
@@ -38,7 +38,7 @@ não depende de ninguém lembrar). Gancho é de cada ferramenta: onde não há, 
 | `/simplify` | sugerir simplificação no código |
 | `/loop` | repetir um pedido num intervalo |
 | `/init` | criar o arquivo de instruções do projeto |
-| `/dataviz` | gráfico e painel que se leem |
+| `/dataviz` | gráfico e painel de controle que se leem |
 | `/claude-api` | referência da API: modelos, preço, cache |
 
 `/code-review` pode ser iniciado pelo próprio Claude; para deixá-lo só manual,

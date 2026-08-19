@@ -1,17 +1,19 @@
-"""Gancho SessionStart: acusa o que a máquina não tem e a casa declara precisar.
+"""Gancho SessionStart: acusa o que a máquina não tem e o repositório declara
+precisar.
 
 Mudança de pasta, de disco ou de máquina perde tudo o que vive fora do
 repositório: variável de ambiente, perfil de CLI, ferramenta instalada. A
 perda é silenciosa — nada avisa na hora; cada peça para dias depois, com
 cara de defeito novo. Este gancho é o aviso que faltou, na primeira sessão.
 
-Ele confere só o que dá para provar barato, sem abrir conteúdo nenhum: as
+Ele verifica só o que dá para provar barato, sem abrir conteúdo nenhum: as
 variáveis `${VAR}` que o .mcp.json usa existem no ambiente? O que o
 nucleo/ambiente.json declara — comando, pasta, arquivo, variável — existe?
 Nomes e existência, nunca valores. E cala quando está tudo lá: aviso que
 aparece sempre ensina a ignorar aviso.
 
-O nucleo/ambiente.json é do dono da casa (a atualização nunca o reescreve).
+O nucleo/ambiente.json é do dono do repositório (a atualização nunca o
+reescreve).
 Uma lista por tipo; valor solto vale por lista de um:
 
     {
@@ -24,7 +26,7 @@ Uma lista por tipo; valor solto vale por lista de um:
 
 O porquê está em conhecimento/estado-que-nao-viaja.md.
 
-Rode os testes com:  python .claude/hooks/conferir-ambiente.py --testar
+Rode os testes com:  python .claude/hooks/verificar-ambiente.py --testar
 """
 
 import json
@@ -60,8 +62,8 @@ def declaracoes(dados: dict) -> list:
 
     Valor solto vale por lista de um — `"receita": "pagina.md"` é o caso
     comum, e exigir `["pagina.md"]` só deixaria o arquivo mais feio. O que
-    não é texto fica de fora: exigência que ninguém sabe conferir não vira
-    aviso, e chave desconhecida é comentário da casa, não erro.
+    não é texto fica de fora: exigência que ninguém sabe verificar não vira
+    aviso, e chave desconhecida é comentário do repositório, não erro.
     """
     pares = []
     for tipo in TIPOS:
@@ -105,7 +107,8 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
             # Aqui não se cala: arquivo ilegível é a perda silenciosa que este
             # gancho existe para acusar — calar devolveria o defeito.
             problemas.append(f"- `{ARQUIVO_AMBIENTE}` ilegível ({erro}) — "
-                             "nenhuma exigência da casa foi conferida")
+                             "nenhuma exigência do repositório foi "
+                             "verificada")
             dados = {}
         for tipo, valor in declaracoes(dados):
             if tipo == "receita":
@@ -126,8 +129,9 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
                 if valor not in env and valor not in ja_acusadas:
                     problemas.append(f"- variável `{valor}` ausente do ambiente")
 
-    # A casa que montou a camada antiga tem o arquivo no endereço velho, e o
-    # gancho não o lê mais. Calar aqui apagaria em silêncio o que ela declarou
+    # O repositório que montou a camada antiga tem o arquivo no endereço velho,
+    # e o gancho não o lê mais. Calar aqui apagaria em silêncio o que ele
+    # declarou
     # — exatamente o defeito que este gancho existe para acusar.
     if (raiz / ARQUIVO_ANTIGO).is_file():
         problemas.append(
@@ -153,12 +157,13 @@ def main() -> int:
              f"Nenhuma receita declarada — a chave `receita` do "
              f"{ARQUIVO_AMBIENTE} pode apontar a página que ensina a repor.")
     aviso = (
-        "AVISO do gancho conferir-ambiente: esta máquina não tem tudo o que "
-        "a casa declara precisar. Perda de migração é silenciosa — este é o "
+        "AVISO do gancho verificar-ambiente: esta máquina não tem tudo o que "
+        "o repositório declara precisar. Perda de migração é silenciosa — este "
+        "é o "
         "aviso que não existiu na mudança.\n" + "\n".join(problemas) + "\n"
         + fecho + "\n"
         "Avise o dono antes de precisar, não depois de faltar. Nome se "
-        "confere; valor não se imprime nem se procura."
+        "verifica; valor não se imprime nem se procura."
     )
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "SessionStart",
@@ -188,7 +193,7 @@ def testar() -> int:
         ambiente = {"SINO_DE_VENTO_TOKEN": "presente"}
 
         def caso(mcp=None, declarado=None, antigo=None):
-            """Monta a casa do caso e devolve o que o gancho acha nela.
+            """Monta o repositório do caso e devolve o que o gancho acha nele.
 
             Dado vira JSON; texto vai como está — é assim que o caso do
             arquivo ilegível entra sem uma segunda porta só para ele.
@@ -240,8 +245,9 @@ def testar() -> int:
             ("receita que existe",
              dict(declarado={"receita": "estufa/regras.md"})),
             ("sem declaração nenhuma", dict()),
-            ("comentário da casa e chave desconhecida ficam de fora",
-             dict(declarado={"comentario": "nota da casa", "receita": None})),
+            ("comentário do repositório e chave desconhecida ficam de fora",
+             dict(declarado={"comentario": "nota do repositório",
+                             "receita": None})),
             ("lista vazia não inventa exigência",
              dict(declarado={"comando": [], "pasta": [], "variavel": []})),
         ]

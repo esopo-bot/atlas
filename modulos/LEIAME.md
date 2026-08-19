@@ -9,7 +9,7 @@ Módulo só chega onde alguém pedir pelo nome; os três comandos (`--modulos`,
 
 **A pasta dele espelha a árvore de destino.** O caminho do arquivo dentro de
 `modulos/<nome>/` é o caminho onde ele vai parar no repositório de destino —
-não existe manifesto, porque duas listas dessincronizam e um caminho não.
+não existe roteiro, porque duas listas dessincronizam e um caminho não.
 
 ```
 modulos/<nome>/
@@ -26,7 +26,7 @@ Três regras que o mecanismo cobra:
 - **Arquivo destinado a subpasta de `conhecimento/` é escrito uma vez e nunca
   mais.** É molde: o que nasce ali é a memória de quem usa, e a atualização
   não a sobrescreve. A fronteira é a mesma do mapa do repositório — primeiro
-  nível é da camada, subpasta é da casa.
+  nível é da camada, subpasta é do repositório.
 - **O nome da pasta é o nome do módulo, e ele não se renomeia.** Renomear
   deixa órfão eterno em toda máquina que já instalou. Módulo nasce com nome
   largo o bastante para caber a segunda ferramenta dentro dele.

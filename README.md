@@ -54,7 +54,7 @@ fronteira completa está no
 Todo comando imprime `camada 0.N`: número menor que o da origem significa
 atualização pendente.
 
-## Regras da casa
+## Regras do repositório
 
 Só é pronto o que um instrumento provou — build, teste, listagem; nunca "o
 modelo disse". E nada pessoal entra aqui: este repositório é público desde o

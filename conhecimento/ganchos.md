@@ -10,7 +10,7 @@ licença e não depende de o modelo lembrar da regra.
 | Negar um comando que um padrão descreve inteiro | regra em `settings.json` |
 | Decidir olhando o comando de verdade            | gancho                   |
 | Injetar informação no começo da sessão          | gancho                   |
-| Conferir alguma coisa depois de cada edição     | gancho                   |
+| Verificar alguma coisa depois de cada edição     | gancho                   |
 
 O caso que decide: `git push origin +feature/x` é forçado e
 `git push origin feature/x` não é — padrão de texto nenhum separa os dois. O
@@ -46,7 +46,7 @@ O caso que decide: `git push origin +feature/x` é forçado e
 | Evento                           | Dispara                     | Serve para                                        |
 | -------------------------------- | --------------------------- | ------------------------------------------------- |
 | `PreToolUse`                     | antes de a ferramenta rodar | negar o que não pode acontecer                    |
-| `PostToolUse`                    | depois que ela rodou        | conferir o que acabou de mudar                    |
+| `PostToolUse`                    | depois que ela rodou        | verificar o que acabou de mudar                    |
 | `SessionStart`                   | ao abrir a sessão           | injetar o que o agente precisa saber              |
 | `Stop`                           | ao fim de CADA turno        | devolver instrução ao modelo                      |
 | `SessionEnd`                     | ao encerrar                 | limpar estado, registrar — sem falar com o modelo |
@@ -85,8 +85,8 @@ Três leis:
 | Gancho                      | Evento         | O que faz                                                              |
 | --------------------------- | -------------- | ---------------------------------------------------------------------- |
 | `injetar-qualidade.py`      | `SessionStart` | entrega o padrão de código, que skill nenhuma dispara                  |
-| `conferir-mcp.py`           | `SessionStart` | acusa declaração de MCP apontando para arquivo que não existe          |
-| `conferir-ambiente.py`      | `SessionStart` | acusa o que a máquina não tem e a casa declara precisar                |
+| `verificar-mcp.py`           | `SessionStart` | acusa declaração de MCP apontando para arquivo que não existe          |
+| `verificar-ambiente.py`      | `SessionStart` | acusa o que a máquina não tem e o repositório declara precisar  |
 | `vetar-branch-protegida.py` | `PreToolUse`   | recusa o destrutivo em branch de longa duração, e o que o repositório não autorizou |
 | `orientar-credencial.py`    | `PreToolUse`   | lição curta ao ler credencial; veta só o que grava história ou publica |
 | `vetar-conhecimento-em-codigo.py` | `PreToolUse` | recusa nota nascendo em pasta de código; passa dentro de repositório |
@@ -129,10 +129,10 @@ Todo gancho que **decide** carrega o próprio teste: `python .claude/hooks/<nome
   Aspas e documento literal são dados, mas `$(...)` dentro de aspas duplas
   executa e aí o veto fica. Avulso: `--avaliar '<comando>'` e
   `--avaliar-arquivo '<caminho>'`. **Ele não vê imagem**: print com segredo
-  entra sem passar por gancho nenhum. Cada decisão vira recibo em
-  `tmp/recibos/`, e o recibo nunca decide — falha dele não muda a resposta.
+  entra sem passar por gancho nenhum. Cada decisão vira evidência em
+  `tmp/evidencias/`, e a evidência nunca decide — falha dele não muda a resposta.
 - **Esfriamento** quase sempre cala, e é desenho: trava anti-laço
-  (`stop_hook_active`), marca de uma vez por sessão em `tmp/`, e portões de
+  (`stop_hook_active`), marca de uma vez por sessão em `tmp/`, e filtros de
   trivialidade (transcript pequeno, poucos turnos, nenhum Edit/Write/Bash,
-  trabalho de fundo pendente). É orientação, nunca erro, e os portões falham
+  trabalho de fundo pendente). É orientação, nunca erro, e os filtros falham
   abertos. Sem gancho, o caminho é a skill `esfriamento`.

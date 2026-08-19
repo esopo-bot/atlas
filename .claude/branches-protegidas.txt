@@ -6,7 +6,7 @@
 # nucleo/configuracao.json — sem declaração, o gancho nega.
 #
 # Um nome por linha; linha com # é comentário. Tire o que não existe
-# aqui e acrescente os nomes da sua casa — este arquivo é seu, e a
+# aqui e acrescente os nomes do seu repositório — este arquivo é seu, e a
 # atualização da camada não o sobrescreve.
 main
 master

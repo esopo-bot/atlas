@@ -36,20 +36,20 @@ se diz na mesma frase — não numa nota de rodapé que ninguém lê.
 - Ela é a única hipótese que alguém levantou.
 - Ela explica o sintoma sem explicar o **começo** dele ("por que hoje?").
 - Alguém vai agir caro em cima dela — escalar, reverter — ou ela vai sair
-  da casa: e-mail, pedido de revisão, mensagem a terceiro.
+  do workspace: e-mail, pedido de revisão, mensagem a terceiro.
 
 ## Quando o alvo é o trabalho de outra sessão
 
-A conferência vale mais numa sessão **limpa**, que não tem apego à conclusão.
+A verificação vale mais numa sessão **limpa**, que não tem apego à conclusão.
 Três travas a mais:
 
 - **Rode os instrumentos você mesmo.** Saída colada por outra sessão é
   citação, não prova: ela mostra que alguém rodou algum dia, não que passa
   agora — e quem escreveu o texto é o menos indicado para dizer se ele está
   certo.
-- **Não conserte nada.** Conferente que arruma no meio do caminho devolve mais
-  mudança não revisada, e você perde justamente o par de olhos independente
-  que foi buscar. Isto é um relatório.
+- **Não conserte nada.** Quem verifica e arruma no meio do caminho
+  devolve mais mudança não revisada, e você perde justamente o par de
+  olhos independente que foi buscar. Isto é um relatório.
 - **Se a afirmação for um número, meça de novo e diga o que você contou.**
   Número é o achado mais fácil de "refutar" por engano: duas medições honestas
   de coisas ligeiramente diferentes discordam, e a discordância parece erro

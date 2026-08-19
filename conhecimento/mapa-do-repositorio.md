@@ -11,8 +11,8 @@ repositorio/
 ├── montar.py                monta e atualiza a camada
 ├── .agents/
 │   ├── skills/              fonte das skills: uma pasta por skill
-│   ├── recibo/              contrato do recibo: schema + validador, --testar
-│   ├── conferir/            conferência declarado × executado, --testar
+│   ├── evidencia/            contrato da evidência: schema + validador, --testar
+│   ├── verificar/            verificação declarado × executado, --testar
 │   └── limpeza/             gera e roda a rotina de limpeza do workspace
 ├── .claude/
 │   ├── settings.json        permissões e ganchos do Claude Code
@@ -69,7 +69,7 @@ ela será buscada.
 ## Os comandos
 
 ```bash
-python montar.py --conferir         # as cópias estão em dia? não escreve
+python montar.py --verificar         # as cópias estão em dia? não escreve
 python montar.py --modulos          # o que existe, e o que já está aqui
 python montar.py --modulo <nome>    # instala aquele
 
@@ -81,10 +81,10 @@ python montar.py --versao           # tem de bater com a origem
 
 - Sem pedir pelo nome, nenhum byte de módulo chega. `--atualizar` atualiza o
   instalado e nunca instala o que falta.
-- Piso de migração: **0.88**. Casa mais velha roda a montagem de novo.
+- Piso de migração: **0.88**. Repositório mais velho roda a montagem de novo.
 - Editou ou apagou página da camada? A atualização desfaz — mexa na origem.
-- Motor de correntes (módulo `encadeador`):
-  [rodar uma corrente](rodar-uma-corrente.md).
+- Motor de execuções (módulo `encadeador`):
+  [rodar uma execução](rodar-uma-execucao.md).
 
 ## A régua de markdown
 
@@ -112,8 +112,8 @@ Cobra estrutura, não estética. Régua de pasta vence a da raiz.
 
 O `AGENTS.md` **desta camada** é gerado de `nucleo/regras.json` e
 `nucleo/vocabulario.json` pelo `montar.py --sincronizar`: edite a fonte, e o
-texto fixo no gerador. O da sua casa continua seu — a atualização não o
-reescreve.
+texto fixo no gerador. O do seu repositório continua seu — a atualização não
+o reescreve.
 
 **Página nova entra com dois endereços**: a linha no índice
 (`site/sidebars.js`) **e** um link vindo de página já lida. O `LEIAME.md` da
@@ -127,7 +127,7 @@ Proponha a arrumação das subpastas de conhecimento/ conforme as regras
 desta página. Confira, citando em cada achado o endereço da regra:
 um nível de subpasta; LEIAME.md de uma linha em cada; nome minúsculo sem
 acento nem espaço; primeiro nível curto; pasta de um arquivo só; página
-sem link de entrada; o que é da casa na camada, e o contrário.
+sem link de entrada; o que é do repositório na camada, e o contrário.
 PROPONHA: de → para → a regra que manda. Nada se apaga, e nada se move
 sem meu OK.
 ```
@@ -181,6 +181,6 @@ A camada na raiz; os repositórios numa pasta abaixo, cada um com seu git. No
 
 - A barra inicial ancora na raiz; o asterisco ignora o conteúdo, não a pasta.
 - `.gitignore` esconde do git e **da busca**, não da leitura — hábitos em
-  [zero que mente](zero-que-mente.md).
+  [falso negativo](falso-negativo.md).
 - `CLAUDE.md` de repositório de baixo não entra na largada: só é lido ao abrir
   arquivo daquela pasta. Regra de primeiro segundo mora na raiz.

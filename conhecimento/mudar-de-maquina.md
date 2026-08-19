@@ -7,7 +7,7 @@ mapa do que morre:
 ## Antes de mudar
 
 1. **Feche o trabalho**: commit do commitável, ponto de retomada na nota de
-   continuação da casa.
+   continuação do workspace.
 2. **Copie a pasta do workspace inteira**, não só o clone — configuração
    local, notas e credenciais só viajam com a pasta (território 2).
 3. **Anote o que vai morrer**: estado da ferramenta (território 3) e perfil
@@ -15,14 +15,14 @@ mapa do que morre:
 
 ## Depois de mudar
 
-1. **Abra uma sessão na raiz** — o `conferir-ambiente.py` acusa o que
+1. **Abra uma sessão na raiz** — o `verificar-ambiente.py` acusa o que
    falta; se calar, os nomes estão no lugar.
-2. **Siga a página de máquina nova da casa**, provando cada item pelo
+2. **Siga a página de máquina nova do repositório**, provando cada item pelo
    instrumento da própria linha.
 3. **Refaça o que é do dono**: credencial, confiança de diretório,
    aprovação dos servidores MCP.
-4. **Pronto só com os instrumentos verdes** — gancho calado e conferência
-   da casa passando.
+4. **Pronto só com os instrumentos verdes** — gancho calado e verificação
+   do repositório passando.
 
 ## Os sintomas de migração malfeita
 
@@ -33,4 +33,4 @@ mapa do que morre:
 | skill não carrega | sessão fora da raiz — ou cópia parcial da pasta |
 | comando "funcionava e parou" | perfil de CLI ou variável que ficou na máquina velha |
 
-Cada causa se confere por instrumento antes de qualquer conserto.
+Cada causa se verifica por instrumento antes de qualquer conserto.

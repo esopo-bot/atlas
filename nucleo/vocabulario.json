@@ -88,6 +88,16 @@
           "caminho": "conhecimento/rodar-uma-corrente.md",
           "tipo": "arquivo",
           "vira": "conhecimento/rodar-uma-execucao.md"
+        },
+        {
+          "caminho": "correntes",
+          "tipo": "diretorio",
+          "vira": "execucoes"
+        },
+        {
+          "caminho": "modulos/encadeador/correntes",
+          "tipo": "diretorio",
+          "vira": "modulos/encadeador/execucoes"
         }
       ],
       "excecoes": [],

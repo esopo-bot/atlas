@@ -3,11 +3,11 @@ trabalho de verdade.
 
 O fechamento mais importante da sessão dependia de alguém lembrar de
 invocá-lo — exatamente o que gancho existe para resolver. Este dispara no
-fim de cada turno e quase sempre CALA: os portões são metade do valor
+fim de cada turno e quase sempre CALA: os filtros são metade do valor
 (lição do sistema estudado — sem eles, lembrete vira ruído e ruído ensina
 a ignorar aviso).
 
-Os portões, na ordem (qualquer um cala, saindo 0 sem imprimir):
+Os filtros, na ordem (qualquer um cala, saindo 0 sem imprimir):
 
 1. `stop_hook_active` — o modelo já está continuando por causa de um gancho
    Stop; insistir seria laço.
@@ -19,7 +19,7 @@ Os portões, na ordem (qualquer um cala, saindo 0 sem imprimir):
 5. `last_assistant_message` cita o esfriamento — já rodou, ou está rodando.
 6. Transcript pequeno (< LIMIAR_BYTES) — sessão curta não precisa de
    fechamento cerimonial.
-7. O transcript INTEIRO cita o esfriamento — o portão erra para o lado do
+7. O transcript INTEIRO cita o esfriamento — o filtro erra para o lado do
    silêncio de propósito (medido em 17/08/2026: o esfriamento rodou, a
    última resposta falava de outra coisa, e o lembrete saiu falso; sessão
    que só mencionou o assunto de passagem fica sem lembrete, e a skill
@@ -30,7 +30,7 @@ Os portões, na ordem (qualquer um cala, saindo 0 sem imprimir):
 
 Passou por todos: grava a marca e devolve `additionalContext` (orientação,
 não erro — `decision: block` prenderia quem só quer encerrar). O formato
-interno do transcript não é contrato documentado; por isso os portões que o
+interno do transcript não é contrato documentado; por isso os filtros que o
 leem falham ABERTOS — qualquer erro cala. A skill `esfriamento` continua
 sendo o caminho em agente sem gancho.
 
@@ -245,7 +245,7 @@ def testar() -> int:
         print("\n".join(falhas))
         return 1
     print(f"OK: {total} casos — {len(CALA)} calam, 1 lembra, e o ciclo "
-          "(marca única, contexto de Stop, falha aberta) confere")
+          "(marca única, contexto de Stop, falha aberta) bate")
     return 0
 
 

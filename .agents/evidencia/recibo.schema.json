@@ -1,0 +1,245 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "recibo — contrato v1",
+  "$comment": "draft-07 de propósito, medido em 16/08/2026: o claude 2.1.233 recusa a meta-referência do draft 2020-12 no --json-schema ('no schema with key or ref'), e tudo que este contrato usa existe no draft-07. O contrato da esteira: toda etapa termina escrevendo este JSON. Quem materializa o arquivo é sempre o encadeador (código), nunca o modelo — etapa, trabalho, quando e ciclo vêm do roteiro, do relógio e da contagem de arquivos. Um escritor só: recibos de um trabalho saem de um único encadeador, e a mesma etapa nunca escreve em paralelo — colisão de arquivo falha alto, nunca sobrescreve. Os campos origem e motivo só aparecem em recibo sintético, escrito pelo encadeador quando a etapa foi desligada, morreu, devolveu recibo inválido ou esgotou o teto. Versão nova deste contrato é arquivo novo (v2), nunca edição calada deste.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "etapa",
+    "trabalho",
+    "quando",
+    "veredito",
+    "provado",
+    "suposto",
+    "faltas",
+    "ciclo"
+  ],
+  "properties": {
+    "etapa": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "maxLength": 64,
+      "$comment": "Nome fixo, minúsculo — o painel do sistema estudado quebrou em silêncio por um P maiúsculo. Vira nome de arquivo: o teto de 64 protege o limite do sistema de arquivos."
+    },
+    "trabalho": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "maxLength": 64,
+      "$comment": "Vira nome de pasta: sem barra, sem espaço, sem ponto inicial, no máximo 64."
+    },
+    "quando": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$",
+      "$comment": "Além do padrão, o validador impõe calendário real (fromisoformat do Python): mês 13 ou 30 de fevereiro não passam."
+    },
+    "veredito": {
+      "enum": [
+        "segue",
+        "para",
+        "pergunta"
+      ],
+      "$comment": "Só 3 valores. Não existe quase."
+    },
+    "provado": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "afirmacao",
+          "comando",
+          "saida"
+        ],
+        "properties": {
+          "afirmacao": {
+            "type": "string",
+            "minLength": 1
+          },
+          "comando": {
+            "type": "string",
+            "minLength": 1
+          },
+          "saida": {
+            "type": "string"
+          }
+        }
+      },
+      "$comment": "Item só entra com comando + saida — o que não tem os dois, o modelo escreve em suposto. Item incompleto torna o recibo inteiro inválido, e o encadeador o troca por um para sintético. A prova precisa ser RE-EXECUTÁVEL: a conferência roda o comando de novo no diretório da etapa e acusa se o stdout divergir OU se o exit não for 0 — declare comando idempotente, de saída estável (nada de relógio, hash de artefato apagado, subir serviço) e que não dependa de efeito de outro item. Armadilha comum: grep e diff respondem com exit 1 quando a resposta honesta é 'não achei'/'é diferente' — quando a SAÍDA já é a prova, encerre com ' || true'. E âncora ESTÁVEL: prova de git presa a ref móvel (origin/<branch de integração>..HEAD) envelhece quando a rodada é entregue — ancore em SHA. COMO SE ESCREVE UM ITEM, e cada frase aqui existe porque foi violada e custou uma acusação (medido em 18/08/2026, 10 de 11 acusações de uma execução real): (1) `comando` é COMANDO, nunca prosa — 'os padrões sobre git ls-files' não roda; o que descreve a prova é a `afirmacao`. (2) `saida` é TRANSCRIÇÃO do que o comando imprimiu, nunca resumo, tradução ou anotação sua — colar, não redigir. (3) Cortou pedaço da saída? Declare o corte com `(...)` em linha própria: a verificação entende esse marcador e confere as pontas. (4) Comando silencioso no sucesso (`diff -q`, `cmp -s`, `grep -q`) declara `saida` VAZIA — ou ganha um `&& echo ok` para ter o que declarar. Inventar 'OK' é acusação na certa. (5) Ferramenta que fala por stderr (linter, compilador) precisa do `2>&1` DENTRO do comando declarado: sem ele o cano é cego e a saída vem vazia. (6) Ausência se declara com CONTADOR — `... | wc -l` devolvendo `0` —, nunca com frase entre parênteses: número é comparável, prosa não."
+    },
+    "suposto": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "faltas": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "proximo": {
+      "type": "string",
+      "minLength": 1,
+      "$comment": "Só existe no para, escrito por quem reprovou — nunca 'tente de novo'."
+    },
+    "pergunta": {
+      "type": "string",
+      "minLength": 1,
+      "$comment": "Só existe no veredito pergunta: uma só, com a recomendação primeiro."
+    },
+    "origem": {
+      "enum": [
+        "etapa",
+        "encadeador"
+      ],
+      "$comment": "Ausente = o conteúdo veio do structured_output da etapa. 'encadeador' = recibo sintético."
+    },
+    "motivo": {
+      "enum": [
+        "desligada",
+        "morta",
+        "recibo-invalido",
+        "teto-esgotado"
+      ],
+      "$comment": "Os três estados que a crítica achou sem nome, mais o teto. Só existe em recibo sintético."
+    },
+    "ciclo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "i",
+        "teto"
+      ],
+      "properties": {
+        "i": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "teto": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "$comment": "Informativo. O contador canônico é a contagem de recibos no diretório, feita pelo encadeador."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "veredito"
+        ],
+        "properties": {
+          "veredito": {
+            "const": "para"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "proximo"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "proximo"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "veredito"
+        ],
+        "properties": {
+          "veredito": {
+            "const": "pergunta"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "pergunta"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "pergunta"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "origem"
+        ],
+        "properties": {
+          "origem": {
+            "const": "encadeador"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "motivo"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "motivo"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "motivo"
+        ],
+        "properties": {
+          "motivo": {
+            "enum": [
+              "morta",
+              "recibo-invalido",
+              "teto-esgotado"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "veredito": {
+            "const": "para"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "motivo"
+        ],
+        "properties": {
+          "motivo": {
+            "const": "desligada"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "veredito": {
+            "const": "segue"
+          }
+        }
+      }
+    }
+  ]
+}

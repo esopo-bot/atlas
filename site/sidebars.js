@@ -4,8 +4,8 @@
 // todo dia primeiro. Página nova da CAMADA só aparece depois de ganhar uma
 // linha aqui.
 //
-// As subpastas de conhecimento/ são da casa — a wiki que a skill gera, as
-// notas, as decisões — e os nomes são livres. Por isso elas não podem ser
+// As subpastas de conhecimento/ são do repositório — a wiki que a skill gera,
+// as notas, as decisões — e os nomes são livres. Por isso elas não podem ser
 // lista fixa: o menu as descobre no disco a cada construção.
 
 import fs from 'node:fs';
@@ -16,7 +16,8 @@ const raiz = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const CONHECIMENTO = path.join(raiz, 'conhecimento');
 
 // O H1 do LEIAME da subpasta vira o rótulo da categoria; sem ele, o nome da
-// pasta serve. O LEIAME já é a convenção da casa para dizer o que mora ali.
+// pasta serve. O LEIAME já é a convenção do repositório para dizer o que mora
+// ali.
 function rotulo(pasta, nome) {
   const leiame = path.join(pasta, 'LEIAME.md');
   if (fs.existsSync(leiame)) {
@@ -68,7 +69,7 @@ function paginasNaoCitadas(citadas) {
 }
 
 // A ordem é de leitura, não de assunto: o que se usa todo dia primeiro e o
-// que se consulta depois. O canivete subiu para o
+// que se consulta depois. O catálogo subiu para o
 // terceiro lugar de propósito — ele é o que evita reescrever o que já existe,
 // e página que resolve isso no fim da lista chega tarde demais.
 const daCamada = [
@@ -78,9 +79,9 @@ const daCamada = [
   'conhecimento/regras-da-camada',
   'conhecimento/mapa-do-repositorio',
   'conhecimento/investigacao-de-incidente',
-  'conhecimento/zero-que-mente',
+  'conhecimento/falso-negativo',
   'conhecimento/historia-em-issue',
-  'conhecimento/rodar-uma-corrente',
+  'conhecimento/rodar-uma-execucao',
   'conhecimento/skills-criar-e-testar',
   'conhecimento/ganchos',
   'conhecimento/estado-que-nao-viaja',

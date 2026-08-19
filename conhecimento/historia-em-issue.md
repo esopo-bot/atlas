@@ -2,7 +2,7 @@
 
 Todo trabalho ganha um endereço antes de começar: **uma história, uma
 issue**. O que se executa — template, regras de abertura, sequência da
-sessão, recibo — está na skill `trabalho-por-issue`. Um fato, uma casa.
+sessão, evidência — está na skill `trabalho-por-issue`. Um fato, um lugar.
 
 ## O desenho
 
@@ -14,8 +14,8 @@ sessão, recibo — está na skill `trabalho-por-issue`. Um fato, uma casa.
 
 ## A fila e o nome
 
-- Onde a issue nasce, o padrão de nome e a fila são configuração da casa:
-  `nucleo/configuracao.json`. Sem o arquivo preenchido,
+- Onde a issue nasce, o padrão de nome e a fila são configuração do
+  repositório: `nucleo/configuracao.json`. Sem o arquivo preenchido,
   pergunte ao dono — nunca decida de cabeça.
 - O fluxo da fila é de cada repositório e se escreve lá: o que acontece com
   achado no meio do trabalho, e o que vira pergunta ao dono antes de entrar.

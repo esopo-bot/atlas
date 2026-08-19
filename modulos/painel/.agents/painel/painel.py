@@ -1,31 +1,33 @@
 #!/usr/bin/env python3
-"""painel — dispara sessão headless e mostra o estado da esteira, no navegador.
+"""painel de controle — dispara sessão headless e mostra o estado do
+executor de roteiros, no navegador.
 
 O que ele é: um servidor HTTP de biblioteca padrão, sem dependência nenhuma,
 que faz três coisas e para:
 
 1. serve uma página com uma caixa de prompt e um botão;
-2. no disparo, escreve um manifesto de UMA etapa e chama o `encadeador.py`
-   em segundo plano — corrente de verdade, com recibo e conferência, não um
+2. no disparo, escreve um roteiro de UMA etapa e chama o `encadeador.py`
+   em segundo plano — execução de verdade, com evidência e verificação, não um
    `claude -p` solto;
 3. pergunta o estado ao `andamento` do encadeador e devolve o JSON dele.
 
 O que ele NÃO faz, de propósito: não fala com o modelo (quem fala é o
 encadeador), não inventa estado (o `andamento` é a única fonte), não commita,
-não empurra, não publica, não apaga trabalho. O painel é vidro, não motor.
+não empurra, não publica, não apaga trabalho. O painel de controle é vidro,
+não motor.
 
-Por que manifesto de uma etapa em vez de chamar `claude -p` direto: assim o
-prompt livre e a corrente inteira passam pelo MESMO caminho — recibo por
-código, conferência re-executando as provas, teto de ciclos. Um caminho só
+Por que roteiro de uma etapa em vez de chamar `claude -p` direto: assim o
+prompt livre e a execução inteira passam pelo MESMO caminho — evidência por
+código, verificação re-executando as provas, teto de ciclos. Um caminho só
 para manter, e o que vale para um vale para o outro.
 
 A sessão herda `--dangerously-skip-permissions` do encadeador. Por isso o
 `--cwd` deve ser worktree ou clone descartável, NUNCA a árvore que importa —
-o painel recusa subir se o `--cwd` for um repositório com mudança não
-commitada, que é o sinal barato de "esta árvore importa".
+o painel de controle recusa subir se o `--cwd` for um repositório com
+mudança não commitada, que é o sinal barato de "esta árvore importa".
 
 Uso:
-    painel.py --cwd <worktree> [--porta 4000] [--dir tmp/recibos]
+    painel.py --cwd <worktree> [--porta 4000] [--dir tmp/evidencias]
     painel.py --testar
 """
 
@@ -49,10 +51,11 @@ from pathlib import Path
 def _raiz_da_camada() -> Path:
     """Sobe até achar o encadeador — nunca `Path.cwd()`.
 
-    O painel roda de dois lugares: instalado em `.agents/painel/` e, na casa
-    que PRODUZ o módulo, direto de `modulos/painel/.agents/painel/`. Contar
-    pastas para cima só acerta o primeiro caso, e o segundo falharia achando
-    que a camada não existe. Procurar o alvo acerta os dois.
+    O painel de controle roda de dois lugares: instalado em
+    `.agents/painel/` e, no repositório que PRODUZ o módulo, direto de
+    `modulos/painel/.agents/painel/`. Contar pastas para cima só acerta o
+    primeiro caso, e o segundo falharia achando que a camada não existe.
+    Procurar o alvo acerta os dois.
     """
     aqui = Path(__file__).resolve()
     for pasta in aqui.parents:
@@ -66,7 +69,8 @@ ENCADEADOR = RAIZ / ".agents" / "encadeador" / "encadeador.py"
 
 
 def casa_do_painel_na_porta(porta: int) -> str | None:
-    """Quem atende nesta porta é painel? De que casa? None se não for.
+    """Quem atende nesta porta é painel de controle? De que repositório? None
+    se não for.
 
     Pergunta-se ao próprio servidor, em vez de investigar PID: a resposta
     dele é a prova, e um processo com o nome parecido não engana.
@@ -74,7 +78,7 @@ def casa_do_painel_na_porta(porta: int) -> str | None:
     try:
         with urllib.request.urlopen(
                 f"http://127.0.0.1:{porta}/trabalhos", timeout=3) as resposta:
-            return json.loads(resposta.read()).get("casa")
+            return json.loads(resposta.read()).get("repositorio")
     except (OSError, ValueError, json.JSONDecodeError):
         return None
 
@@ -85,9 +89,10 @@ TETO_SESSAO_S = 3600  # espelha TEMPO_SESSAO do encadeador
 def descendentes(pai: int) -> list:
     """PIDs abaixo de `pai`, lendo /proc. Fora do Linux, devolve [].
 
-    Sem dependência de fora: o painel é de biblioteca padrão, e psutil
-    resolveria isto ao custo de uma instalação que a camada não exige.
-    Onde /proc não existe, o painel diz "não medido" em vez de inventar.
+    Sem dependência de fora: o painel de controle é de biblioteca padrão, e
+    psutil resolveria isto ao custo de uma instalação que a camada não exige.
+    Onde /proc não existe, o painel de controle diz "não medido" em vez de
+    inventar.
     """
     filhos = {}
     try:
@@ -111,15 +116,25 @@ def descendentes(pai: int) -> list:
 
 
 def vivacidade(proc, inicio: float | None, gravado: dict = None) -> dict:
-    """Os sinais que decidem se a corrente trabalha, e o que cada um vale.
+    """Os sinais que decidem se a execução trabalha, e o que cada um vale.
 
     Medido em 18/08/2026: sessão de modelo passa a vida esperando a API —
     443s de relógio para 5s de CPU. Logo, CPU parada NÃO é sinal de morte, e
-    um painel que dissesse "travado" por isso estaria mentindo. O sinal que
-    vale é composto: o processo existe, quantas sessões ainda respiram, e
-    quanto falta para o teto que mata sozinho.
+    um painel de controle que dissesse "travado" por isso estaria mentindo.
+    O sinal que vale é composto: o processo existe, quantas sessões ainda
+    respiram, e quanto falta para o teto que mata sozinho.
     """
     if proc is None:
+        # Execução disparada fora da mesa (pela linha de comando, por um
+        # agendador) não tem processo aqui — mas TEM estado gravado, e é
+        # ele que sabe. Sem isto a mesa dizia "desconhecida" com o motor
+        # trabalhando ao lado.
+        if gravado and gravado.get("situacao"):
+            return {"situacao": gravado["situacao"], "de_fora": True,
+                    "desde": gravado.get("desde"), "ate": gravado.get("ate"),
+                    "porque": gravado.get("porque"),
+                    "issue": gravado.get("issue"),
+                    "etapa": gravado.get("etapa")}
         return {"situacao": "desconhecida"}
     if proc.poll() is not None:
         return {"situacao": "encerrado", "codigo": proc.returncode}
@@ -162,7 +177,9 @@ INTERVALO_DO_QUADRO_S = 120  # regra 7: rede com cortesia, longe do polling
 
 
 def configuracao_do_executor(cwd):
-    """O executor.json do alvo — ou None. O painel não valida, só lê."""
+    """O executor.json do alvo — ou None. O painel de controle não valida,
+    só lê.
+    """
     try:
         dado = json.loads((Path(cwd) / ARQUIVO_EXECUTOR)
                           .read_text(encoding="utf-8"))
@@ -171,15 +188,15 @@ def configuracao_do_executor(cwd):
         return None
 
 
-def estado_gravado(dir_recibos, trabalho):
+def estado_gravado(dir_evidencias, trabalho):
     """O que o motor gravou sobre este trabalho — ou None.
 
-    O painel continua sendo vidro: ele não inventa este estado, lê o que o
-    motor escreveu. É a única fonte que sabe de espera, porque espera não
-    deixa rastro em evidência nenhuma.
+    O painel de controle continua sendo vidro: ele não inventa este estado,
+    lê o que o motor escreveu. É a única fonte que sabe de espera, porque
+    espera não deixa rastro em evidência nenhuma.
     """
     try:
-        dado = json.loads((Path(dir_recibos) / trabalho / ARQUIVO_ESTADO)
+        dado = json.loads((Path(dir_evidencias) / trabalho / ARQUIVO_ESTADO)
                           .read_text(encoding="utf-8"))
         return dado if isinstance(dado, dict) else None
     except (OSError, ValueError):
@@ -187,42 +204,48 @@ def estado_gravado(dir_recibos, trabalho):
 
 
 def corrigir_proxima_acao(estado: dict) -> dict:
-    """Cala o convite a disparar quando a corrente JÁ está disparada.
+    """Cala o convite a disparar quando a execução JÁ está disparada.
 
-    O `andamento` é honesto dentro do contrato dele: sem recibo no disco, ele
-    conclui "nada rodou ainda" e manda executar. Só que o painel sabe uma
-    coisa que ele não sabe — se o processo está vivo. Repassar aquele convite
-    é mandar disparar o que já está no ar, e foi o que quase provocou um
-    disparo duplo. Quem tem a informação a mais corrige a mensagem.
+    O `andamento` é honesto dentro do contrato dele: sem evidência no disco, ele
+    conclui "nada rodou ainda" e manda executar. Só que o painel de controle
+    sabe uma coisa que ele não sabe — se o processo está vivo. Repassar
+    aquele convite é mandar disparar o que já está no ar, e foi o que quase
+    provocou um disparo duplo. Quem tem a informação a mais corrige a
+    mensagem.
     """
     esperando = (estado.get("vivacidade") or {}).get("situacao") in (
         "dormindo", "aguardando-resposta")
     if estado.get("processo") == "rodando" and not esperando \
             and estado.get("estado") == "em-curso":
         estado["proxima_acao"] = (
-            "rodando agora — espere. A etapa só escreve recibo quando termina, "
+            "rodando agora — espere. A etapa só escreve evidência quando termina, "
             "então pasta vazia no começo é o esperado. Não dispare de novo: a "
             "trava recusaria.")
     return estado
 
 
-def decidir_porta_ocupada(porta: int, casa: str, ocupante: str | None) -> tuple:
+def decidir_porta_ocupada(porta: int, repositorio: str,
+                          ocupante: str | None) -> tuple:
     """(código, recado) para a porta ocupada. Função pura, para ser testada.
 
-    O caso comum — F5 duas vezes na mesma casa — NÃO é erro: o que se queria
+    O caso comum — F5 duas vezes no mesmo repositório — NÃO é erro: o que se
+    queria
     já está no ar. Sair 0 diz a verdade e, de quebra, apaga o popup de
     SystemExit do depurador, que só interrompe em código diferente de zero.
     """
-    if ocupante == casa:
-        return 0, (f"o painel desta casa já está no ar: "
+    if ocupante == repositorio:
+        return 0, (f"o painel de controle deste repositório já está no ar: "
                    f"http://127.0.0.1:{porta}\n"
                    "  (nada a fazer — abra o endereço acima)")
     if ocupante:
-        return 2, (f"PAREI — a porta {porta} é do painel de OUTRA casa:\n"
+        return 2, (f"PAREI — a porta {porta} é do painel de controle de "
+                   "OUTRO repositório:\n"
                    f"  {ocupante}\n"
-                   "Uma porta por casa é o desenho. Suba este noutra:\n"
+                   "Uma porta por repositório é o desenho. Suba este "
+                   "noutra:\n"
                    f"  --porta {porta + 1}")
-    return 2, (f"PAREI — a porta {porta} está ocupada, e não por um painel.\n"
+    return 2, (f"PAREI — a porta {porta} está ocupada, e não por um "
+               "painel de controle.\n"
                "Quem está nela:\n"
                f"  ss -ltnp | grep :{porta}\n"
                "Encerre aquele, ou suba este noutra porta:\n"
@@ -232,9 +255,10 @@ def decidir_porta_ocupada(porta: int, casa: str, ocupante: str | None) -> tuple:
 def versao_da_camada() -> str:
     """A versão sai do montar.py, que é onde ela já mora.
 
-    O painel não carrega número próprio de propósito: duas versões para a
-    mesma camada divergem no primeiro dia em que alguém esquece de subir uma
-    delas. Aqui há uma fonte só, e ela é a que o `--versao` também imprime.
+    O painel de controle não carrega número próprio de propósito: duas
+    versões para a mesma camada divergem no primeiro dia em que alguém
+    esquece de subir uma delas. Aqui há uma fonte só, e ela é a que o
+    `--versao` também imprime.
     """
     try:
         for linha in (RAIZ / "montar.py").read_text(encoding="utf-8").splitlines():
@@ -257,30 +281,31 @@ def nome_de_trabalho(prefixo: str = "painel") -> str:
 
 
 def validar_trabalho(nome: str) -> str | None:
-    """O nome vira pasta — a mesma régua do contrato do recibo."""
+    """O nome vira pasta — a mesma régua do contrato da evidência."""
     if not NOME_OK.match(nome or ""):
         return "nome de trabalho inválido: minúsculo, sem barra nem espaço, até 64"
     return None
 
 
-def manifesto_de_um_prompt(prompt: str, teto: int = 3,
+def roteiro_de_um_prompt(prompt: str, teto: int = 3,
                            turnos: int = 24, issue: int = None) -> dict:
-    """Prompt livre vira corrente de uma etapa mais a conferência.
+    """Prompt livre vira execução de uma etapa mais a verificação.
 
-    A conferência entra sempre: sem ela o painel mostraria 'segue' para uma
-    sessão que provou o que não se re-executa, que é o erro que a esteira
-    inteira existe para não cometer.
+    A verificação entra sempre: sem ela o painel de controle mostraria
+    'segue' para uma sessão que provou o que não se re-executa, que é o erro
+    que o executor de roteiros inteiro existe para não cometer.
     """
     roteiro = {
         "teto": teto,
         "etapas": [
             # `max-turnos` é o que decide se a sessão entrega ou morre no
-            # teto, então ele é controle de tela. O padrão do motor (16) matou
-            # o primeiro pedido disparado pelo painel; 24 dá folga ao pedido
-            # comum sem convidar ao pedido caro, que é caso de corrente.
+            # teto, então ele é controle de tela. O padrão do motor (16)
+            # matou o primeiro pedido disparado pelo painel de controle; 24
+            # dá folga ao pedido comum sem convidar ao pedido caro, que é
+            # caso de execução.
             {"nome": "pedido", "tipo": "sessao", "prompt": prompt,
              "max-turnos": turnos},
-            {"nome": "confere", "tipo": "conferencia", "depende": ["pedido"]},
+            {"nome": "verifica", "tipo": "verificacao", "depende": ["pedido"]},
         ],
     }
     # O vínculo com a issue é o que faz a execução contar a história lá: com
@@ -303,10 +328,10 @@ def arvore_suja(cwd: Path) -> bool:
 class Motor:
     """A ponte para o encadeador. Um lugar só chama subprocesso."""
 
-    def __init__(self, cwd: Path, dir_recibos: Path, dirs_manifestos: list):
+    def __init__(self, cwd: Path, dir_evidencias: Path, dirs_roteiros: list):
         self.cwd = cwd
-        self.dir = dir_recibos
-        self.manifestos = dirs_manifestos
+        self.dir = dir_evidencias
+        self.roteiros = dirs_roteiros
         self.rodando: dict[str, subprocess.Popen] = {}
         self.inicio: dict[str, float] = {}
         self.trava = threading.Lock()
@@ -315,24 +340,26 @@ class Motor:
     def _arquivo_de_trava(self) -> Path:
         """Uma trava por ALVO, e o nome vem do caminho do alvo.
 
-        Fica no diretório de recibos, que já é o estado desta esteira. O
-        resumo do caminho evita nome ilegal de arquivo sem perder unicidade.
+        Fica no diretório de evidências, que já é o estado deste executor de
+        roteiros. O resumo do caminho evita nome ilegal de arquivo sem
+        perder unicidade.
         """
         marca = hashlib.sha256(str(self.cwd).encode()).hexdigest()[:12]
         return self.dir / f".trava-{marca}.json"
 
     def ocupado(self) -> str | None:
-        """Uma corrente por vez neste alvo. Duas na mesma árvore se atropelam.
+        """Uma execução por vez neste alvo. Duas na mesma árvore se atropelam.
 
         O motor já garante um escritor por TRABALHO; o que falta é impedir
         dois TRABALHOS diferentes na mesma árvore. Sessões pulam permissões e
         editam arquivo: duas ao mesmo tempo no mesmo lugar é corrida, e o
-        recibo de cada uma descreveria um disco que a outra já mudou.
+        evidência de cada uma descreveria um disco que a outra já mudou.
 
-        A trava é de ARQUIVO, não de memória: dois painéis do mesmo alvo — o
-        que acontece quando um F5 sobe o segundo sem o primeiro ter morrido —
-        teriam duas travas de memória e nenhuma proteção. Trava morta (o dono
-        já não existe) não segura ninguém: só o PID vivo conta.
+        A trava é de ARQUIVO, não de memória: dois painéis de controle do
+        mesmo alvo — o que acontece quando um F5 sobe o segundo sem o
+        primeiro ter morrido — teriam duas travas de memória e nenhuma
+        proteção. Trava morta (o dono já não existe) não segura ninguém: só
+        o PID vivo conta.
         """
         with self.trava:
             for nome, proc in self.rodando.items():
@@ -344,7 +371,8 @@ class Motor:
             os.kill(int(dono["pid"]), 0)
         except (OSError, ValueError, KeyError, json.JSONDecodeError):
             return None  # sem trava, ilegível, ou dono morto
-        return f"{dono.get('trabalho', '?')} (outro painel, pid {dono['pid']})"
+        return (f"{dono.get('trabalho', '?')} "
+                f"(outro painel de controle, pid {dono['pid']})")
 
     def _travar(self, pid: int, trabalho: str) -> None:
         self._arquivo_de_trava().write_text(
@@ -354,20 +382,20 @@ class Motor:
     def _achados(self) -> dict:
         """nome exibido -> caminho. A primeira pasta da lista vence o nome.
 
-        São duas pastas por desenho: a versionada, das correntes oficiais que
+        São duas pastas por desenho: a versionada, das execuções oficiais que
         viajam com a camada, e a de rascunho, que é sua e não viaja. Nome
         repetido nas duas fica com a oficial — rascunho não sequestra o nome
-        de uma corrente que a casa inteira usa.
+        de uma execução que o repositório inteiro usa.
         """
         achados = {}
-        for pasta in self.manifestos:
+        for pasta in self.roteiros:
             if not pasta.is_dir():
                 continue
             for p in sorted(pasta.glob("*.json")):
-                # Nem todo .json da pasta é manifesto: a síntese escreve
+                # Nem todo .json da pasta é roteiro: a síntese escreve
                 # proposta de regra ali, e ela aparecia no seletor como se
-                # fosse corrente. Escolher aquela só falhava no disparo.
-                # A marca é ter lista de etapas — barata de conferir.
+                # fosse execução. Escolher aquela só falhava no disparo.
+                # A marca é ter lista de etapas — barata de verificar.
                 if not p.is_file() or p.name in achados:
                     continue
                 try:
@@ -379,44 +407,46 @@ class Motor:
         return achados
 
     def catalogo(self) -> list:
-        """Os manifestos que existem para escolher — nome puro, sem caminho."""
+        """Os roteiros que existem para escolher — nome puro, sem caminho."""
         return sorted(self._achados())
 
-    def ler_manifesto(self, nome: str) -> tuple[dict | None, str | None]:
-        """Nome puro só: o painel nunca abre caminho que o navegador montou."""
+    def ler_roteiro(self, nome: str) -> tuple[dict | None, str | None]:
+        """Nome puro só: o painel de controle nunca abre caminho que o
+        navegador montou.
+        """
         alvo = self._achados().get(nome)
         if alvo is None:
-            return None, f"manifesto desconhecido: {nome}"
+            return None, f"roteiro desconhecido: {nome}"
         try:
             dado = json.loads(alvo.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as e:
-            return None, f"manifesto ilegível: {e}"
+            return None, f"roteiro ilegível: {e}"
         if not isinstance(dado, dict) or not isinstance(dado.get("etapas"), list):
-            return None, "manifesto sem lista de etapas"
+            return None, "roteiro sem lista de etapas"
         return dado, None
 
-    def disparar(self, manifesto: dict, trabalho: str) -> dict:
+    def disparar(self, roteiro: dict, trabalho: str) -> dict:
         self.dir.mkdir(parents=True, exist_ok=True)
-        alvo = self.dir / f"{trabalho}.manifesto.json"
-        alvo.write_text(json.dumps(manifesto, ensure_ascii=False, indent=2),
+        alvo = self.dir / f"{trabalho}.roteiro.json"
+        alvo.write_text(json.dumps(roteiro, ensure_ascii=False, indent=2),
                         encoding="utf-8")
         log = (self.dir / f"{trabalho}.log").open("w", encoding="utf-8")
         proc = subprocess.Popen(
             [sys.executable, str(ENCADEADOR), "executar",
-             "--manifesto", str(alvo), "--trabalho", trabalho,
+             "--roteiro", str(alvo), "--trabalho", trabalho,
              "--dir", str(self.dir), "--cwd", str(self.cwd)],
             stdout=log, stderr=subprocess.STDOUT, cwd=str(self.cwd))
         with self.trava:
             self.rodando[trabalho] = proc
             self.inicio[trabalho] = time.time()
         self._travar(proc.pid, trabalho)
-        return {"trabalho": trabalho, "manifesto": alvo.name}
+        return {"trabalho": trabalho, "roteiro": alvo.name}
 
-    def andamento(self, trabalho: str, manifesto: Path | None = None) -> dict:
+    def andamento(self, trabalho: str, roteiro: Path | None = None) -> dict:
         cmd = [sys.executable, str(ENCADEADOR), "andamento",
                "--trabalho", trabalho, "--dir", str(self.dir)]
-        if manifesto and manifesto.exists():
-            cmd += ["--manifesto", str(manifesto)]
+        if roteiro and roteiro.exists():
+            cmd += ["--roteiro", str(roteiro)]
         r = subprocess.run(cmd, capture_output=True, text=True,
                            cwd=str(self.cwd), timeout=60)
         if r.returncode != 0:
@@ -474,13 +504,14 @@ class Motor:
         return achado
 
     def trabalhos(self) -> list:
-        """Trabalho da esteira e recibo avulso não são a mesma coisa.
+        """Trabalho do executor de roteiros e evidência avulsa não são a mesma coisa.
 
-        O diretório de recibos também recebe trilha de gancho — o professor
-        de credencial escreve lá, um recibo por decisão, todos com a MESMA
-        ordem. Lidos como corrente, viram 'ciclo 8 de teto 1, parada': alarme
-        falso sobre coisa que funcionou. A marca de corrente é ter manifesto
-        ao lado; sem ele, o painel mostra como avulso e não opina sobre estado.
+        O diretório de evidências também recebe trilha de gancho — o professor
+        de credencial escreve lá, uma evidência por decisão, todos com a MESMA
+        ordem. Lidos como execução, viram 'ciclo 8 de teto 1, parada': alarme
+        falso sobre coisa que funcionou. A marca de execução é ter roteiro
+        ao lado; sem ele, o painel de controle mostra como avulso e não
+        opina sobre estado.
         """
         if not self.dir.is_dir():
             return []
@@ -489,7 +520,12 @@ class Motor:
                         key=lambda d: d.name, reverse=True):
             gravado = estado_gravado(self.dir, p.name) or {}
             saida.append({"nome": p.name,
-                          "corrente": (self.dir / f"{p.name}.manifesto.json").exists(),
+                          # Roteiro ao lado OU estado gravado: quem disparou
+                          # pela linha de comando não deixa o primeiro, e a
+                          # mesa o tratava como trilha avulsa — recusando-se a
+                          # opinar sobre uma execução de verdade.
+                          "execucao": bool(gravado) or
+                          (self.dir / f"{p.name}.roteiro.json").exists(),
                           # A situação sai do disco, não de um subprocesso por
                           # trabalho: a lista é redesenhada a cada ciclo, e
                           # pagar `andamento` por item derrubaria a mesa.
@@ -500,7 +536,7 @@ class Motor:
 
 PAGINA = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mesa da esteira</title><style>
+<title>Mesa do executor de roteiros</title><style>
 /* A mesa é um instrumento, não um site. Uma família monoespaçada carrega
    todo dado e todo rótulo — placa de equipamento, silkscreen —, e a sans
    entra só onde há frase para ler. Cor é SINAL: o que não é estado não tem
@@ -565,7 +601,7 @@ button:disabled{opacity:.4;cursor:default}
 .nota{font:12px/1.5 var(--sans);color:var(--fraco);flex:1 1 220px}
 .direita{margin-left:auto}
 
-/* A ASSINATURA: a fita de recibos. O encadeador imprime um recibo por etapa,
+/* A ASSINATURA: a fita de evidências. O encadeador imprime uma evidência por etapa,
    em ordem — a tela mostra a fita saindo dele, com a borda serrilhada de
    papel picotado feita só com gradiente. */
 .fita{margin:24px 0 0;border:1px solid var(--linha);border-radius:3px;
@@ -640,15 +676,15 @@ pre{margin:8px 0 0;padding:13px 15px;background:var(--sulco);
 </style></head><body><div class="mesa">
 
 <div class="placa">
-  <h1>Mesa da esteira</h1>
+  <h1>Mesa do executor de roteiros</h1>
   <span class="selo" id="versao">—</span>
   <span class="farol" id="farol"><span class="bulbo"></span><span id="farol-txt">sem trabalho</span></span>
 </div>
 
 <dl class="coord">
-  <dt>casa</dt><dd id="casa">—</dd>
+  <dt>repositório</dt><dd id="repositorio">—</dd>
   <dt>sessão</dt><dd id="alvo">—</dd>
-  <dt>recibos</dt><dd id="recibos">—</dd>
+  <dt>evidências</dt><dd id="evidencias">—</dd>
 </dl>
 
 <div class="comandos">
@@ -659,7 +695,7 @@ pre{margin:8px 0 0;padding:13px 15px;background:var(--sulco);
   <label class="campo" id="lturnos">turnos
     <input id="turnos" type="number" value="24" min="4" max="120" style="width:62px">
   </label>
-  <label class="campo" id="lteto" title="quantas vezes a corrente pode reprovar antes de escalar">ciclos
+  <label class="campo" id="lteto" title="quantas vezes a execução pode reprovar antes de escalar">ciclos
     <input id="teto" type="number" value="3" min="1" max="9" style="width:52px">
   </label>
   <label class="campo" id="lissue" title="o número da issue que este trabalho atende: a execução conta a história lá, passo a passo">issue
@@ -680,22 +716,22 @@ pre{margin:8px 0 0;padding:13px 15px;background:var(--sulco);
 const $=i=>document.getElementById(i);
 let atual=null, assinatura='', parado=false;
 
-const ESTADOS={'aguardando-portao':['f-pergunta','pergunta'],
+const ESTADOS={'aguardando-aprovacao':['f-pergunta','pergunta'],
   'parada':['f-para','parada'],'completa':['f-segue','completa'],
   'em-curso':['f-corre','trabalhando']};
-const TITULOS={'aguardando-portao':'❓ PERGUNTA','parada':'⛔ parada',
+const TITULOS={'aguardando-aprovacao':'❓ PERGUNTA','parada':'⛔ parada',
   'completa':'✓ completa','em-curso':'⏳ rodando'};
 
 function esc(s){return String(s??'').replace(/[<&>]/g,c=>({'<':'&lt;','&':'&amp;','>':'&gt;'}[c]))}
 function mm(s){return s==null?'?':Math.floor(s/60)+'m'+String(s%60).padStart(2,'0')}
-function modoManifesto(){return $('modo').value!=='prompt'}
+function modoRoteiro(){return $('modo').value!=='prompt'}
 
 function ajusta(){
-  const m=modoManifesto();
+  const m=modoRoteiro();
   for(const i of ['p','lteto','lturnos'])$(i).style.display=m?'none':'';
   $('dica').textContent=m
-    ?'corrente de várias etapas — o prompt de cada uma está dentro do arquivo'
-    :'vira uma corrente de uma etapa mais a conferência. Turnos de menos = a sessão morre sem entregar nada';
+    ?'execução de várias etapas — o prompt de cada uma está dentro do arquivo'
+    :'vira uma execução de uma etapa mais a verificação. Turnos de menos = a sessão morre sem entregar nada';
 }
 
 // Vivacidade: sessão de modelo espera a API quase o tempo todo — medido, 443s
@@ -722,12 +758,12 @@ function vivo(v){
 function farol(estado){
   const [cls,txt]=ESTADOS[estado]||['','sem trabalho'];
   $('farol').className='farol '+cls; $('farol-txt').textContent=txt;
-  document.title=(TITULOS[estado]?TITULOS[estado]+' · ':'')+'Mesa da esteira';
+  document.title=(TITULOS[estado]?TITULOS[estado]+' · ':'')+'Mesa do executor de roteiros';
 }
 
 function fita(d){
   const et=d.etapas||[];
-  if(!et.length)return '<p class="vazia">nenhum recibo ainda</p>';
+  if(!et.length)return '<p class="vazia">nenhuma evidência ainda</p>';
   return et.map(e=>{
     const vd=e.veredito||'espera';
     const faltas=(e.faltas||[]).map(esc).join('<br>');
@@ -742,7 +778,7 @@ function fita(d){
   }).join('');
 }
 
-// O desenho da corrente: a mesma matéria-prima da fita, lida de relance.
+// O desenho da execução: a mesma matéria-prima da fita, lida de relance.
 // Cada etapa é um quadrado — verde passou, vermelho parou, e a que está em
 // curso pisca. Quem olha vê o passo atual e o que falta sem ler linha.
 function desenho(d){
@@ -767,18 +803,18 @@ function pinta(d){
   const perg=(d.etapas||[]).filter(e=>e.pergunta);
   const v=vivo(d.vivacidade);
   $('saida').innerHTML=`
-    ${perg.length?`<div class="recado perg"><b>a esteira está te perguntando</b>
+    ${perg.length?`<div class="recado perg"><b>o executor de roteiros está te perguntando</b>
       ${perg.map(e=>`<code>${esc(e.nome)}</code>: ${esc(e.pergunta)}`).join('<br>')}
       <br><br>Ela fica parada até você responder — nada roda enquanto isso.</div>`:''}
     ${desenho(d)}
     <div class="fita">
-      <div class="fita-topo"><span>fita de recibos</span>
+      <div class="fita-topo"><span>fita de evidências</span>
         <span>${esc(d.estado||'')} · ${d.paras??0} parada${d.paras===1?'':'s'}</span></div>
       <ul class="tira">${fita(d)}</ul>
     </div>
     ${d.proxima_acao?`<div class="recado"><b>próxima ação</b>${esc(d.proxima_acao)}</div>`:''}
     ${v?`<div class="rodape">${v}</div>`:''}
-    ${d.log?`<details><summary>log da corrente</summary><pre>${esc(d.log)}</pre></details>`:''}`;
+    ${d.log?`<details><summary>log da execução</summary><pre>${esc(d.log)}</pre></details>`:''}`;
 }
 
 async function ciclo(){
@@ -786,15 +822,15 @@ async function ciclo(){
   let d; try{ d=await (await fetch('/estado?trabalho='+encodeURIComponent(t||''))).json() }
   catch(e){ return }
   $('versao').textContent='camada '+d.versao;
-  $('casa').textContent=d.casa; $('alvo').textContent=d.alvo;
-  $('recibos').textContent=d.recibos;
+  $('repositorio').textContent=d.repositorio; $('alvo').textContent=d.alvo;
+  $('evidencias').textContent=d.evidencias;
 
   const md=$('modo'), antesM=md.value;
-  const listaM=['prompt'].concat(d.manifestos);
+  const listaM=['prompt'].concat(d.roteiros);
   if(md.dataset.chave!==listaM.join('|')){
     md.dataset.chave=listaM.join('|');
     md.innerHTML='<option value="prompt">um pedido meu</option>'
-      +d.manifestos.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+      +d.roteiros.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     if(antesM)md.value=antesM; ajusta();
   }
   // O backlog do quadro configurado, e o disparo a partir de uma issue.
@@ -830,18 +866,33 @@ async function ciclo(){
     const antes=s.value;
     const selo=x=>x.situacao==='dormindo'?' 💤':x.situacao==='aguardando-resposta'?' ⏸'
       :x.situacao==='completa'?' ✅':x.situacao==='parada'?' ❌':'';
-    s.innerHTML=lista.map(x=>`<option value="${esc(x.nome)}">${esc(x.nome)}${selo(x)}${x.corrente?'':' (avulso)'}</option>`).join('')
+    s.innerHTML=lista.map(x=>`<option value="${esc(x.nome)}">${esc(x.nome)}${selo(x)}${x.execucao?'':' (avulso)'}</option>`).join('')
       ||'<option value="">nenhum</option>';
     if(antes&&nomes.includes(antes))s.value=antes;
     else if(atual&&nomes.includes(atual))s.value=atual;
   }
 
+  // Com uma execução no ar, o botão de disparar FECHA. A trava por alvo
+  // recusaria o segundo disparo, mas deixar o botão vivo é convidar para o
+  // erro e explicar depois — e a mesa já sabe, pelo estado gravado, que há
+  // trabalho andando. Vale para execução disparada aqui ou fora daqui.
+  const EM_CURSO=['rodando','dormindo','aguardando-resposta'];
+  const ocupada=d.trabalhos.filter(x=>EM_CURSO.includes(x.situacao));
+  const b=$('b');
+  if(b){
+    b.disabled=ocupada.length>0;
+    b.title=ocupada.length
+      ? `${ocupada[0].nome} está no ar (${ocupada[0].situacao}) — a trava do alvo recusaria um segundo disparo`
+      : '';
+    b.textContent=ocupada.length?'No ar…':'Disparar';
+  }
+
   const a=d.andamento;
   if(!a){farol();return}
-  if(!nomes.includes(t)||!d.trabalhos.find(x=>x.nome===t&&x.corrente)){
-    $('saida').innerHTML=`<div class="recado"><b>fora da esteira</b>
-      <code>${esc(t)}</code> é trilha de recibos avulsos — de um gancho, por
-      exemplo —, sem manifesto ao lado. Lida como corrente daria estado falso,
+  if(!nomes.includes(t)||!d.trabalhos.find(x=>x.nome===t&&x.execucao)){
+    $('saida').innerHTML=`<div class="recado"><b>fora do executor de roteiros</b>
+      <code>${esc(t)}</code> é trilha de evidências avulsas — de um gancho, por
+      exemplo —, sem roteiro ao lado. Lida como execução daria estado falso,
       então a mesa não opina.</div>`; farol(); return;
   }
   // Só repinta quando algo mudou: a mesa fica aberta por horas e repintar
@@ -852,9 +903,9 @@ async function ciclo(){
 }
 
 async function disparar(){
-  const corpo=modoManifesto()?{manifesto:$('modo').value}
+  const corpo=modoRoteiro()?{roteiro:$('modo').value}
     :{prompt:$('p').value.trim(),teto:+$('teto').value,turnos:+$('turnos').value,issue:+$('issue').value||null};
-  if(!modoManifesto()&&!corpo.prompt){$('p').focus();return}
+  if(!modoRoteiro()&&!corpo.prompt){$('p').focus();return}
   $('b').disabled=true; $('b').textContent='Disparando';
   let d; try{
     d=await (await fetch('/disparar',{method:'POST',
@@ -868,7 +919,7 @@ $('b').onclick=disparar;
 $('sel').onchange=()=>{assinatura='';ciclo()};
 $('modo').onchange=ajusta;
 ajusta(); ciclo();
-// Ritmo por necessidade: 2,5s enquanto a corrente anda, 10s quando não há o
+// Ritmo por necessidade: 2,5s enquanto a execução anda, 10s quando não há o
 // que ver. Uma mesa aberta a noite inteira não deve acordar o disco à toa.
 setInterval(()=>{if(!parado||Math.random()<.25)ciclo()},2500);
 </script></body></html>"""
@@ -899,11 +950,11 @@ def fazer_handler(motor: Motor):
             if rota.path == "/trabalhos":
                 cfg = configuracao_do_executor(motor.cwd) or {}
                 return self._json({"trabalhos": motor.trabalhos(),
-                                   "manifestos": motor.catalogo(),
+                                   "roteiros": motor.catalogo(),
                                    "versao": versao_da_camada(),
-                                   "casa": str(RAIZ),
+                                   "repositorio": str(RAIZ),
                                    "alvo": str(motor.cwd),
-                                   "recibos": str(motor.dir),
+                                   "evidencias": str(motor.dir),
                                    # `so-issues` desliga o disparo na mesa,
                                    # como o motor já o desliga por código.
                                    "modo": cfg.get("modo"),
@@ -915,14 +966,20 @@ def fazer_handler(motor: Motor):
                 # duas metades podendo discordar entre si.
                 q = urllib.parse.parse_qs(rota.query)
                 nome = (q.get("trabalho") or [""])[0]
-                corpo = {"versao": versao_da_camada(), "casa": str(RAIZ),
-                         "alvo": str(motor.cwd), "recibos": str(motor.dir),
+                cfg = configuracao_do_executor(motor.cwd) or {}
+                corpo = {"versao": versao_da_camada(), "repositorio": str(RAIZ),
+                         "alvo": str(motor.cwd), "evidencias": str(motor.dir),
                          "trabalhos": motor.trabalhos(),
-                         "manifestos": motor.catalogo()}
+                         "roteiros": motor.catalogo(),
+                         # O backlog e o modo vêm por AQUI, e não só pelo
+                         # /trabalhos: é esta a rota que a página consulta a
+                         # cada ciclo — na outra, ninguém os leria.
+                         "modo": cfg.get("modo"),
+                         "quadro": motor.backlog()}
                 if nome and not validar_trabalho(nome):
                     try:
                         corpo["andamento"] = motor.andamento(
-                            nome, motor.dir / f"{nome}.manifesto.json")
+                            nome, motor.dir / f"{nome}.roteiro.json")
                     except (OSError, subprocess.SubprocessError) as e:
                         corpo["andamento"] = {"erro": f"o andamento falhou: {e}"}
                 return self._json(corpo)
@@ -931,7 +988,7 @@ def fazer_handler(motor: Motor):
                 nome = (q.get("trabalho") or [""])[0]
                 if erro := validar_trabalho(nome):
                     return self._json({"erro": erro}, 400)
-                m = motor.dir / f"{nome}.manifesto.json"
+                m = motor.dir / f"{nome}.roteiro.json"
                 try:
                     return self._json(motor.andamento(nome, m))
                 except (OSError, subprocess.SubprocessError) as e:
@@ -948,26 +1005,26 @@ def fazer_handler(motor: Motor):
                 return self._json({"erro": "corpo inválido"}, 400)
             if ocupado := motor.ocupado():
                 return self._json({"erro":
-                    f"já existe corrente rodando neste alvo: {ocupado}. "
+                    f"já existe execução rodando neste alvo: {ocupado}. "
                     "Uma por vez — duas sessões na mesma árvore se atropelam. "
-                    "Espere terminar, ou suba outro painel apontando para "
-                    "outro repositório."}, 409)
-            escolhido = (corpo.get("manifesto") or "").strip()
+                    "Espere terminar, ou suba outro painel de controle "
+                    "apontando para outro repositório."}, 409)
+            escolhido = (corpo.get("roteiro") or "").strip()
             if escolhido:
-                manifesto, erro = motor.ler_manifesto(escolhido)
+                roteiro, erro = motor.ler_roteiro(escolhido)
                 if erro:
                     return self._json({"erro": erro}, 400)
                 prefixo = re.sub(r"[^a-z0-9]+", "-",
-                                 Path(escolhido).stem.lower()).strip("-") or "corrente"
+                                 Path(escolhido).stem.lower()).strip("-") or "execucao"
             else:
                 prompt = (corpo.get("prompt") or "").strip()
                 if not prompt:
                     return self._json(
-                        {"erro": "escreva um pedido ou escolha um manifesto"}, 400)
+                        {"erro": "escreva um pedido ou escolha um roteiro"}, 400)
                 if prompt.lstrip().startswith("{") and '"etapas"' in prompt:
                     return self._json({"erro":
-                        "isso é um manifesto, não um pedido. Salve-o como .json "
-                        "na pasta de manifestos e escolha-o na lista — colado "
+                        "isso é um roteiro, não um pedido. Salve-o como .json "
+                        "na pasta de roteiros e escolha-o na lista — colado "
                         "aqui, o JSON inteiro viraria o texto de UMA sessão."}, 400)
                 teto = corpo.get("teto")
                 teto = teto if isinstance(teto, int) and 1 <= teto <= 9 else 3
@@ -975,13 +1032,13 @@ def fazer_handler(motor: Motor):
                 turnos = turnos if isinstance(turnos, int) and 4 <= turnos <= 120 else 24
                 issue = corpo.get("issue")
                 issue = issue if isinstance(issue, int) and issue > 0 else None
-                manifesto = manifesto_de_um_prompt(prompt, teto, turnos, issue)
+                roteiro = roteiro_de_um_prompt(prompt, teto, turnos, issue)
                 prefixo = f"issue-{issue}" if issue else "painel"
             trabalho = nome_de_trabalho(prefixo)
             if erro := validar_trabalho(trabalho):
                 return self._json({"erro": erro}, 400)
             try:
-                return self._json(motor.disparar(manifesto, trabalho))
+                return self._json(motor.disparar(roteiro, trabalho))
             except (OSError, subprocess.SubprocessError) as e:
                 return self._json({"erro": f"não consegui disparar: {e}"}, 500)
 
@@ -1001,17 +1058,17 @@ def testar() -> int:
     import tempfile as _tmp
     with _tmp.TemporaryDirectory(prefix="painel-h6-") as tmp:
         base = Path(tmp)
-        (base / "recibos" / "t-dorme").mkdir(parents=True)
-        (base / "recibos" / "t-dorme" / "estado.json").write_text(json.dumps({
+        (base / "evidencias" / "t-dorme").mkdir(parents=True)
+        (base / "evidencias" / "t-dorme" / "estado.json").write_text(json.dumps({
             "situacao": "dormindo", "ate": "12:36", "porque": "limite de uso",
             "etapa": "analisa", "desde": "2026-08-18T06:36:00-03:00"}),
             encoding="utf-8")
-        (base / "recibos" / "t-espera").mkdir(parents=True)
-        (base / "recibos" / "t-espera" / "estado.json").write_text(json.dumps({
+        (base / "evidencias" / "t-espera").mkdir(parents=True)
+        (base / "evidencias" / "t-espera" / "estado.json").write_text(json.dumps({
             "situacao": "aguardando-resposta", "issue": 39,
             "etapa": "decide"}), encoding="utf-8")
-        (base / "recibos" / "t-pronta").mkdir(parents=True)
-        (base / "recibos" / "t-pronta" / "estado.json").write_text(json.dumps({
+        (base / "evidencias" / "t-pronta").mkdir(parents=True)
+        (base / "evidencias" / "t-pronta" / "estado.json").write_text(json.dumps({
             "situacao": "completa"}), encoding="utf-8")
 
         class ProcVivo:
@@ -1019,20 +1076,20 @@ def testar() -> int:
             def poll(self): return None
 
         v = vivacidade(ProcVivo(), time.time() - 60,
-                       estado_gravado(base / "recibos", "t-dorme"))
+                       estado_gravado(base / "evidencias", "t-dorme"))
         caso("motor dormindo NÃO é 'trabalhando' na mesa",
              v["situacao"] == "dormindo" and v["ate"] == "12:36")
         v = vivacidade(ProcVivo(), time.time() - 60,
-                       estado_gravado(base / "recibos", "t-espera"))
+                       estado_gravado(base / "evidencias", "t-espera"))
         caso("aguardando resposta aparece com o número da issue",
              v["situacao"] == "aguardando-resposta" and v["issue"] == 39)
         v = vivacidade(ProcVivo(), time.time() - 60, None)
         caso("sem estado gravado, a mesa segue como era",
              v["situacao"] == "trabalhando")
         caso("estado ilegível não derruba a leitura",
-             estado_gravado(base / "recibos", "nao-existe") is None)
+             estado_gravado(base / "evidencias", "nao-existe") is None)
 
-        motor = Motor(base, base / "recibos", [])
+        motor = Motor(base, base / "evidencias", [])
         situacoes = {x["nome"]: x["situacao"] for x in motor.trabalhos()}
         caso("a lista de trabalhos carrega a situação de cada um",
              situacoes == {"t-dorme": "dormindo",
@@ -1067,29 +1124,34 @@ def testar() -> int:
              (configuracao_do_executor(base) or {}).get("modo") == "so-issues")
 
     caso("o vínculo com a issue viaja no roteiro do pedido",
-         manifesto_de_um_prompt("x", 3, 24, 39)["issue"] == 39)
+         roteiro_de_um_prompt("x", 3, 24, 39)["issue"] == 39)
     caso("e sem issue o roteiro não inventa o campo",
-         "issue" not in manifesto_de_um_prompt("x"))
-    caso("a página desenha a corrente e o backlog",
+         "issue" not in roteiro_de_um_prompt("x"))
+    caso("o botão de disparar fecha com execução no ar",
+         "b.disabled=ocupada.length>0" in PAGINA
+         and "'rodando','dormindo','aguardando-resposta'" in PAGINA)
+    caso("e o motivo aparece no próprio botão",
+         "a trava do alvo recusaria um segundo disparo" in PAGINA)
+    caso("a página desenha a execução e o backlog",
          'function desenho' in PAGINA and 'id="quadro"' in PAGINA
          and 'id="issue"' in PAGINA and 'id="historico"' in PAGINA)
     caso("o desenho usa os tokens de cor que já existem",
          '.passo.segue' in PAGINA and '.passo.agora' in PAGINA)
 
-    caso("nome de trabalho passa na régua do recibo",
+    caso("nome de trabalho passa na régua da evidência",
          validar_trabalho(nome_de_trabalho()) is None)
     caso("nome com barra é recusado", validar_trabalho("a/b") is not None)
     caso("nome com maiúscula é recusado", validar_trabalho("Painel") is not None)
     caso("nome vazio é recusado", validar_trabalho("") is not None)
     caso("nome de 65 é recusado", validar_trabalho("a" * 65) is not None)
 
-    m = manifesto_de_um_prompt("olhe o repositório")
+    m = roteiro_de_um_prompt("olhe o repositório")
     caso("prompt livre vira etapa de sessão", m["etapas"][0]["tipo"] == "sessao")
     caso("o prompt viaja inteiro", m["etapas"][0]["prompt"] == "olhe o repositório")
-    caso("a conferência entra sempre", m["etapas"][1]["tipo"] == "conferencia")
-    caso("a conferência depende da sessão",
+    caso("a verificação entra sempre", m["etapas"][1]["tipo"] == "verificacao")
+    caso("a verificação depende da sessão",
          m["etapas"][1]["depende"] == ["pedido"])
-    caso("o teto viaja", manifesto_de_um_prompt("x", 7)["teto"] == 7)
+    caso("o teto viaja", roteiro_de_um_prompt("x", 7)["teto"] == 7)
 
     caso("o encadeador está no lugar esperado", ENCADEADOR.exists())
     caso("a página cita o disparo", 'id="b"' in PAGINA and "/disparar" in PAGINA)
@@ -1100,27 +1162,28 @@ def testar() -> int:
          "ThreadingHTTPServer" in fonte)
     caso("porta ocupada vira recado, não traceback",
          "EADDRINUSE" in fonte and "PAREI — a porta" in fonte)
-    caso("porta livre não tem painel atendendo",
+    caso("porta livre não tem painel de controle atendendo",
          casa_do_painel_na_porta(1) is None)
-    # Segundo F5 na mesma casa: sair 0 é o que apaga o popup do depurador,
-    # e é a verdade — o painel que se queria já está no ar.
-    caso("segundo F5 da MESMA casa sai 0",
+    # Segundo F5 no mesmo repositório: sair 0 é o que apaga o popup do
+    # depurador,
+    # e é a verdade — o painel de controle que se queria já está no ar.
+    caso("segundo F5 do MESMO repositório sai 0",
          decidir_porta_ocupada(4000, "/casa", "/casa")[0] == 0)
     caso("e o recado dá o endereço em vez de reclamar",
          "http://127.0.0.1:4000" in decidir_porta_ocupada(4000, "/casa", "/casa")[1])
-    caso("painel de OUTRA casa na porta sai 2",
+    caso("painel de controle de OUTRO repositório na porta sai 2",
          decidir_porta_ocupada(4000, "/casa", "/outra")[0] == 2)
-    caso("e o recado nomeia a outra casa",
+    caso("e o recado nomeia o outro repositório",
          "/outra" in decidir_porta_ocupada(4000, "/casa", "/outra")[1])
-    caso("porta ocupada por quem não é painel sai 2",
+    caso("porta ocupada por quem não é painel de controle sai 2",
          decidir_porta_ocupada(4000, "/casa", None)[0] == 2)
     caso("a página mostra os três lugares",
-         all(f'id="{i}"' in PAGINA for i in ("casa", "alvo", "recibos")))
+         all(f'id="{i}"' in PAGINA for i in ("repositorio", "alvo", "evidencias")))
     caso("uma chamada por ciclo, não duas", "/estado?trabalho=" in PAGINA
          and "/andamento?trabalho=" not in PAGINA)
     caso("só repinta quando o estado muda", "assinatura" in PAGINA)
-    caso("a fita de recibos é a peça central", 'class="fita"' in PAGINA
-         and "fita de recibos" in PAGINA)
+    caso("a fita de evidências é a peça central", 'class="fita"' in PAGINA
+         and "fita de evidências" in PAGINA)
     caso("todo texto de fora passa por escape", "function esc(" in PAGINA)
     caso("respeita quem pediu menos movimento",
          "prefers-reduced-motion" in PAGINA)
@@ -1132,19 +1195,19 @@ def testar() -> int:
              capture_output=True, text=True, timeout=60
          ).stdout.split("camada")[-1].strip().split()[0])
     caso("a página tem onde mostrar a versão", 'id="versao"' in PAGINA)
-    # Pergunta no meio da corrente trava tudo até alguém responder. Se o
+    # Pergunta no meio da execução trava tudo até alguém responder. Se o
     # aviso morar só na página, quem trocou de aba não fica sabendo — o
     # título é o que atravessa a aba em segundo plano.
     caso("o título da aba grita a pergunta",
-         "aguardando-portao':'❓ PERGUNTA" in PAGINA)
+         "aguardando-aprovacao':'❓ PERGUNTA" in PAGINA)
     caso("o título distingue os quatro estados",
          all(e in PAGINA for e in ("parada", "completa", "em-curso")))
     caso("a pergunta da etapa aparece na tela", "e.pergunta" in PAGINA)
     caso("a pergunta tem caixa própria, separada da próxima ação",
          "recado perg" in PAGINA and ".recado.perg{" in PAGINA)
 
-    # Vivacidade: o painel precisa distinguir "esperando a API" de "morto",
-    # e CPU não serve — medido, 443s de relógio para 5s de CPU.
+    # Vivacidade: o painel de controle precisa distinguir "esperando a API"
+    # de "morto", e CPU não serve — medido, 443s de relógio para 5s de CPU.
     class ProcFalso:
         def __init__(self, vivo, pid=1): self._v, self.pid, self.returncode = vivo, pid, 0
         def poll(self): return None if self._v else 0
@@ -1157,7 +1220,7 @@ def testar() -> int:
     caso("mostra quanto tempo já corre", vv["decorrido_s"] >= 120)
     caso("e quanto falta para o teto que mata sozinho",
          vv["resta_s"] == TETO_SESSAO_S - vv["decorrido_s"])
-    caso("o teto do painel espelha o do encadeador",
+    caso("o teto do painel de controle espelha o do encadeador",
          f"TEMPO_SESSAO = {TETO_SESSAO_S}" in
          (ENCADEADOR.read_text(encoding="utf-8") if ENCADEADOR.exists() else
           f"TEMPO_SESSAO = {TETO_SESSAO_S}"))
@@ -1168,79 +1231,81 @@ def testar() -> int:
     import tempfile
     with tempfile.TemporaryDirectory() as t:
         base = Path(t)
-        (base / "recibos" / "vinda-de-corrente").mkdir(parents=True)
-        (base / "recibos" / "trilha-de-gancho").mkdir(parents=True)
-        (base / "recibos" / "vinda-de-corrente.manifesto.json").write_text("{}")
-        (base / "manifestos").mkdir()
-        (base / "manifestos" / "boa.json").write_text(
-            json.dumps(manifesto_de_um_prompt("oi")), encoding="utf-8")
-        (base / "manifestos" / "quebrada.json").write_text("{isso não é json",
+        (base / "evidencias" / "vinda-de-execucao").mkdir(parents=True)
+        (base / "evidencias" / "trilha-de-gancho").mkdir(parents=True)
+        (base / "evidencias" / "vinda-de-execucao.roteiro.json").write_text("{}")
+        (base / "roteiros").mkdir()
+        (base / "roteiros" / "boa.json").write_text(
+            json.dumps(roteiro_de_um_prompt("oi")), encoding="utf-8")
+        (base / "roteiros" / "quebrada.json").write_text("{isso não é json",
                                                            encoding="utf-8")
-        (base / "manifestos" / "sem-etapas.json").write_text('{"teto":3}',
+        (base / "roteiros" / "sem-etapas.json").write_text('{"teto":3}',
                                                              encoding="utf-8")
         (base / "oficiais").mkdir()
         (base / "oficiais" / "boa.json").write_text(
-            json.dumps(manifesto_de_um_prompt("sou a oficial")), encoding="utf-8")
+            json.dumps(roteiro_de_um_prompt("sou a oficial")), encoding="utf-8")
         (base / "oficiais" / "so-daqui.json").write_text(
-            json.dumps(manifesto_de_um_prompt("x")), encoding="utf-8")
-        m = Motor(base, base / "recibos",
-                  [base / "oficiais", base / "manifestos"])
+            json.dumps(roteiro_de_um_prompt("x")), encoding="utf-8")
+        m = Motor(base, base / "evidencias",
+                  [base / "oficiais", base / "roteiros"])
 
-        marcas = {t["nome"]: t["corrente"] for t in m.trabalhos()}
-        caso("trabalho com manifesto é corrente", marcas["vinda-de-corrente"])
-        caso("trilha de gancho NÃO é corrente", marcas["trilha-de-gancho"] is False)
+        marcas = {t["nome"]: t["execucao"] for t in m.trabalhos()}
+        caso("trabalho com roteiro é execução", marcas["vinda-de-execucao"])
+        caso("trilha de gancho NÃO é execução", marcas["trilha-de-gancho"] is False)
 
-        # Só manifesto de verdade entra: o quebrado e o sem-etapas ficam de
+        # Só roteiro de verdade entra: o quebrado e o sem-etapas ficam de
         # fora, e é por isso que a lista tem dois nomes e não quatro.
-        caso("o catálogo junta as duas pastas, e só o que é manifesto",
+        caso("o catálogo junta as duas pastas, e só o que é roteiro",
              m.catalogo() == sorted(["boa.json", "so-daqui.json"]))
         caso("nome repetido fica com a pasta oficial",
-             m.ler_manifesto("boa.json")[0]["etapas"][0]["prompt"]
+             m.ler_roteiro("boa.json")[0]["etapas"][0]["prompt"]
              == "sou a oficial")
-        caso("pasta de manifestos que não existe não derruba",
-             Motor(base, base / "recibos", [base / "nao-existe"]).catalogo() == [])
+        caso("pasta de roteiros que não existe não derruba",
+             Motor(base, base / "evidencias", [base / "nao-existe"]).catalogo() == [])
         caso("nada rodando, nada ocupado", m.ocupado() is None)
-        caso("manifesto bom é lido", m.ler_manifesto("boa.json")[0] is not None)
-        caso("manifesto ilegível vira erro, não exceção",
-             m.ler_manifesto("quebrada.json")[1] is not None)
-        caso("manifesto sem etapas é recusado",
-             m.ler_manifesto("sem-etapas.json")[1] is not None)
+        caso("roteiro bom é lido", m.ler_roteiro("boa.json")[0] is not None)
+        caso("roteiro ilegível vira erro, não exceção",
+             m.ler_roteiro("quebrada.json")[1] is not None)
+        caso("roteiro sem etapas é recusado",
+             m.ler_roteiro("sem-etapas.json")[1] is not None)
         caso("nome fora do catálogo é recusado",
-             m.ler_manifesto("../../etc/passwd")[1] is not None)
+             m.ler_roteiro("../../etc/passwd")[1] is not None)
         caso("caminho absoluto é recusado",
-             m.ler_manifesto("/etc/passwd")[1] is not None)
+             m.ler_roteiro("/etc/passwd")[1] is not None)
 
-        # .json que não é manifesto aparecia no seletor como se fosse
-        # corrente — a proposta de regra que a síntese escreve, por exemplo.
-        (base / "manifestos" / "nao-e-manifesto.json").write_text(
+        # .json que não é roteiro aparecia no seletor como se fosse
+        # execução — a proposta de regra que a síntese escreve, por exemplo.
+        (base / "roteiros" / "nao-e-roteiro.json").write_text(
             '{"regras": [{"id": 1}]}', encoding="utf-8")
         caso("json sem etapas fica fora do catálogo",
-             "nao-e-manifesto.json" not in m.catalogo())
+             "nao-e-roteiro.json" not in m.catalogo())
         caso("json quebrado também fica fora",
              "quebrada.json" not in m.catalogo())
-        caso("manifesto de verdade continua no catálogo",
+        caso("roteiro de verdade continua no catálogo",
              "boa.json" in m.catalogo())
 
         # A trava tem de sobreviver a outro PROCESSO, não só a outra thread:
-        # dois painéis do mesmo alvo é o caso que a trava de memória perde.
+        # dois painéis de controle do mesmo alvo é o caso que a trava de
+        # memória perde.
         m._travar(os.getpid(), "trabalho-vivo")
         caso("trava de dono vivo segura", m.ocupado() is not None)
         caso("a trava diz de quem é", "pid" in (m.ocupado() or ""))
         m._travar(2 ** 22, "trabalho-fantasma")  # PID que não existe
         caso("trava de dono morto não segura ninguém", m.ocupado() is None)
         m._arquivo_de_trava().write_text("isso não é json", encoding="utf-8")
-        caso("trava ilegível não trava a casa", m.ocupado() is None)
+        caso("trava ilegível não trava o repositório", m.ocupado() is None)
         m._arquivo_de_trava().unlink()
         caso("alvos diferentes, travas diferentes",
              m._arquivo_de_trava()
-             != Motor(base / "outro", base / "recibos", [])._arquivo_de_trava())
+             != Motor(base / "outro", base / "evidencias", [])._arquivo_de_trava())
 
-    # O primeiro pedido disparado pelo painel morreu no teto de 16 turnos do
-    # motor, sem ninguém poder mudá-lo pela tela.
-    caso("o pedido do painel declara os turnos, em vez de herdar o padrão",
-         manifesto_de_um_prompt("x")["etapas"][0]["max-turnos"] == 24)
+    # O primeiro pedido disparado pelo painel de controle morreu no teto de
+    # 16 turnos do motor, sem ninguém poder mudá-lo pela tela.
+    caso("o pedido do painel de controle declara os turnos, em vez de herdar "
+         "o padrão",
+         roteiro_de_um_prompt("x")["etapas"][0]["max-turnos"] == 24)
     caso("e quem dispara pode escolher",
-         manifesto_de_um_prompt("x", 3, 60)["etapas"][0]["max-turnos"] == 60)
+         roteiro_de_um_prompt("x", 3, 60)["etapas"][0]["max-turnos"] == 60)
     caso("turnos aparece na tela, não só ciclos",
          'id="turnos"' in PAGINA and "turnos:+$('turnos').value" in PAGINA)
 
@@ -1252,32 +1317,34 @@ def testar() -> int:
     caso("processo vivo: a próxima ação para de mandar executar",
          "executar" not in rodando["proxima_acao"])
     caso("e diz que pasta vazia no começo é o esperado",
-         "recibo quando termina" in rodando["proxima_acao"])
+         "evidência quando termina" in rodando["proxima_acao"])
     parado = corrigir_proxima_acao({
         "processo": "encerrado", "estado": "em-curso",
         "proxima_acao": "nada rodou ainda — rode: ... executar ..."})
     caso("processo morto: o convite a executar FICA — ali ele é verdade",
          "executar" in parado["proxima_acao"])
     completa = corrigir_proxima_acao({
-        "processo": "rodando", "estado": "completa", "proxima_acao": "leia os recibos"})
-    caso("corrente completa não tem a mensagem trocada",
-         completa["proxima_acao"] == "leia os recibos")
+        "processo": "rodando", "estado": "completa", "proxima_acao": "leia as evidências"})
+    caso("execução completa não tem a mensagem trocada",
+         completa["proxima_acao"] == "leia as evidências")
 
-    # O ensaio do encadeador prova que o manifesto gerado é aceito de verdade —
-    # sem isso o painel só testaria a própria opinião sobre o formato.
+    # O ensaio do encadeador prova que o roteiro gerado é aceito de verdade —
+    # sem isso o painel de controle só testaria a própria opinião sobre o
+    # formato.
     if ENCADEADOR.exists() and shutil.which("git"):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "m.json"
-            p.write_text(json.dumps(manifesto_de_um_prompt("oi")), encoding="utf-8")
+            p.write_text(json.dumps(roteiro_de_um_prompt("oi")), encoding="utf-8")
             r = subprocess.run(
-                [sys.executable, str(ENCADEADOR), "ensaio", "--manifesto", str(p),
+                [sys.executable, str(ENCADEADOR), "ensaio", "--roteiro", str(p),
                  "--trabalho", "teste-painel", "--dir", tmp, "--cwd", str(RAIZ)],
                 capture_output=True, text=True, timeout=60)
-            caso("o encadeador aceita o manifesto que o painel escreve",
+            caso("o encadeador aceita o roteiro que o painel de controle "
+                 "escreve",
                  r.returncode == 0)
             caso("o ensaio lista as duas etapas",
-                 "pedido" in r.stdout and "confere" in r.stdout)
+                 "pedido" in r.stdout and "verifica" in r.stdout)
 
     for f in falhas:
         print(f"FALHOU: {f}")
@@ -1290,9 +1357,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--cwd", help="worktree ou clone descartável onde a sessão roda")
     ap.add_argument("--porta", type=int, default=4000)
-    ap.add_argument("--dir", default="tmp/recibos")
-    ap.add_argument("--manifestos", default="correntes,tmp",
-                    help="pastas de manifesto, por vírgula; a primeira vence "
+    ap.add_argument("--dir", default="tmp/evidencias")
+    ap.add_argument("--roteiros", default="execucoes,tmp",
+                    help="pastas de roteiro, por vírgula; a primeira vence "
                          "o nome repetido")
     ap.add_argument("--forcar-arvore-suja", action="store_true",
                     help="sobe mesmo com mudança não commitada no --cwd")
@@ -1303,7 +1370,7 @@ def main() -> int:
         return testar()
     if not a.cwd:
         print("erro de uso: --cwd é obrigatório (worktree ou clone descartável);\n"
-              "a sessão da corrente pula permissões e não deve tocar a árvore "
+              "a sessão da execução pula permissões e não deve tocar a árvore "
               "que importa.", file=sys.stderr)
         return 2
     cwd = Path(a.cwd).expanduser().resolve()
@@ -1320,10 +1387,10 @@ def main() -> int:
         return 2
     if arvore_suja(cwd) and not a.forcar_arvore_suja:
         print(f"PAREI — {cwd} tem mudança não commitada.\n"
-              "A sessão da corrente roda com permissões puladas: numa árvore com "
+              "A sessão da execução roda com permissões puladas: numa árvore com "
               "trabalho seu dentro, um erro dela custa caro.\n"
               "Use um worktree descartável:\n"
-              f"  git worktree add /tmp/esteira HEAD\n"
+              f"  git worktree add /tmp/executor HEAD\n"
               "Se você sabe o que está fazendo: --forcar-arvore-suja",
               file=sys.stderr)
         return 2
@@ -1332,9 +1399,9 @@ def main() -> int:
         p = Path(valor)
         return p.resolve() if p.is_absolute() else (RAIZ / p).resolve()
 
-    dir_recibos = sob_a_raiz(a.dir)
-    dirs_manifestos = [sob_a_raiz(p) for p in a.manifestos.split(",") if p.strip()]
-    motor = Motor(cwd, dir_recibos, dirs_manifestos)
+    dir_evidencias = sob_a_raiz(a.dir)
+    dirs_roteiros = [sob_a_raiz(p) for p in a.roteiros.split(",") if p.strip()]
+    motor = Motor(cwd, dir_evidencias, dirs_roteiros)
     # Servidor de UMA conexão prende tudo: a página fala HTTP/1.1 e a aba
     # aberta segura a conexão viva entre um polling e o próximo. Medido — com
     # o navegador aberto, qualquer segundo cliente ficava esperando para
@@ -1355,11 +1422,13 @@ def main() -> int:
               file=sys.stderr)
         return 2
     servidor.daemon_threads = True
-    print(f"painel em http://127.0.0.1:{a.porta} — camada {versao_da_camada()}")
-    print(f"  casa (o painel):  {RAIZ}")
-    print(f"  sessões rodam em: {cwd}")
-    print(f"  recibos em:       {dir_recibos}")
-    print(f"  manifestos de:    {', '.join(str(p) for p in dirs_manifestos)} "
+    print(f"painel de controle em http://127.0.0.1:{a.porta} "
+          f"— camada {versao_da_camada()}")
+    print(f"  repositório (o painel de controle): {RAIZ}")
+    print(f"  sessões rodam em:                   {cwd}")
+    print(f"  evidências em:                         {dir_evidencias}")
+    print("  roteiros de:                      "
+          f"{', '.join(str(p) for p in dirs_roteiros)} "
           f"({len(motor.catalogo())} encontrados)")
     print("Ctrl+C encerra.")
     try:
