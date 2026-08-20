@@ -327,8 +327,8 @@
       "excecoes": [
         {
           "caso": "o VERBO casar conjugado — 'não casa com', 'casa com um esquema proibido', a variável `casa` do avaliador de esquema",
-          "ocorrencias": 11,
-          "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate."
+          "ocorrencias": 12,
+          "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate. Este número anda com a prosa: o verbo aparece toda vez que alguém escreve que um padrão não casa, e por isso a conta envelhece sozinha — quem a mede é o ritual, não a memória."
         },
         {
           "caso": "o caminho de mentira `/casa` nos casos de porta ocupada do painel de controle",
@@ -387,7 +387,7 @@
       "excecoes": [
         {
           "caso": "nome de arquivo, de diretório e de módulo — modulos/painel/, painel.py, painel.md, o prefixo do pedido e o da pasta temporária",
-          "ocorrencias": 16,
+          "ocorrencias": 17,
           "razao": "nome próprio de peça no disco: renomear arquivo e pasta quebra instalação, roteiro e documentação de quem já montou. A prosa já diz 'painel de controle'."
         }
       ],

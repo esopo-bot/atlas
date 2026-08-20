@@ -1,7 +1,9 @@
 import argparse
 import ast
 import contextlib
+import functools
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -29,10 +31,33 @@ TEMPO_DE_UM_GANCHO = 30
 PASTA_DAS_SKILLS = ".claude/skills"
 PASTA_DAS_SKILLS_FONTE = ".agents/skills"
 PASTA_DOS_GANCHOS = ".claude/hooks"
+PASTA_DOS_SUBAGENTES = ".claude/agents"
 PASTA_DOS_INSTRUMENTOS = ".agents"
 PASTA_DO_CONHECIMENTO = "conhecimento"
 INSTALADOR = "montar.py"
+INTERPRETADOR = sys.executable
+INTERPRETADOR_NO_SHELL = f'"{sys.executable}"'
+CANDIDATOS_DE_INTERPRETADOR = ("python3", "python", "py")
+PERGUNTA_DA_VERSAO = "import sys; print(sys.version_info[0])"
+VERSAO_QUE_SERVE = "3"
+TETO_DO_INTERPRETADOR_S = 10
 FONTE_DAS_REGRAS = "nucleo/regras.json"
+FONTE_DO_VOCABULARIO = "nucleo/vocabulario.json"
+FORA_DA_CONTA_DO_VOCABULARIO = ("nucleo/vocabulario.json", "montar.py")
+TITULO_VOCABULARIO = "O VOCABULÁRIO, TERMO A TERMO"
+LINHA_DO_TERMO = "  {:<16} bruto {:>3}  exceção {:>3}  saldo {:>3}  {}"
+TERMO_FECHADO = "ok"
+TERMO_ABERTO = "ABERTO"
+TERMO_NAO_MEDIDO = "NÃO MEDIDO"
+SEM_MEDIDA = "-"
+TETO_DE_ARGUMENTOS = 100000
+GREP_ERROU_A_PARTIR_DE = 2
+VOCABULARIO_NAO_MEDIDO = ("Vocabulário NÃO MEDIDO em {} termo(s): o grep falhou, "
+                          "e falha não é zero.")
+VOCABULARIO_FECHADO = "Vocabulário fechado: nenhum termo com saldo."
+VOCABULARIO_ABERTO = ("Vocabulário com {} ocorrência(s) em aberto — o "
+                      "termo velho voltou, ou a exceção declarada envelheceu.")
+SEM_VOCABULARIO = "Sem {} — nada a medir."
 RASCUNHO = "tmp"
 GLOB_PYTHON = "*.py"
 GLOB_SKILL = "*/SKILL.md"
@@ -43,6 +68,9 @@ MARCAS_DE_RESUMO = ("OK:", "FALHOU:")
 FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
 CAMPO_NOME = re.compile(r"^name:\s*(.+)$", re.M)
 CAMPO_DESCRICAO = re.compile(r"^description:\s*(.+)$", re.M)
+CAMPO_DAS_FERRAMENTAS = re.compile(r"^tools:\s*\S", re.M)
+FORMAS_DE_FUNCAO = (ast.FunctionDef, ast.AsyncFunctionDef)
+MARCA_DE_TESTE_NO_NOME = "test"
 LINHA_DO_CATALOGO = "- {}: {}\n"
 
 MODELO_DA_SIMULACAO = "claude-haiku-4-5-20251001"
@@ -103,6 +131,23 @@ def catalogo_e_corpo(skill: Path) -> tuple:
     return listada, len(texto.encode()) - len(frente.group(1).encode())
 
 
+@functools.lru_cache(maxsize=1)
+def interpretador_com_nome_portatil() -> str:
+    for nome in CANDIDATOS_DE_INTERPRETADOR:
+        if not shutil.which(nome):
+            continue
+        try:
+            pronto = subprocess.run(
+                [nome, "-c", PERGUNTA_DA_VERSAO], capture_output=True,
+                text=True, timeout=TETO_DO_INTERPRETADOR_S)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if pronto.returncode == 0 and \
+                pronto.stdout.strip() == VERSAO_QUE_SERVE:
+            return nome
+    return CANDIDATOS_DE_INTERPRETADOR[0]
+
+
 def comandos_de_abertura(raiz: Path) -> list:
     comandos = []
     for nome in CONFIGURACOES_DO_CLAUDE:
@@ -120,8 +165,8 @@ def comandos_de_abertura(raiz: Path) -> list:
     return comandos
 
 
-def bytes_que_os_ganchos_injetam(raiz: Path) -> int:
-    total = 0
+def bytes_que_os_ganchos_injetam(raiz: Path) -> tuple:
+    total, cegos = 0, 0
     for comando in comandos_de_abertura(raiz):
         real = comando.replace(RAIZ_NO_COMANDO, str(raiz)).replace(
             RAIZ_NO_COMANDO_SEM_CHAVES, str(raiz))
@@ -131,13 +176,103 @@ def bytes_que_os_ganchos_injetam(raiz: Path) -> int:
                 capture_output=True, text=True, cwd=raiz,
                 timeout=TEMPO_DE_UM_GANCHO)
         except (OSError, subprocess.SubprocessError):
+            cegos += 1
+            continue
+        if pronto.returncode != 0:
+            cegos += 1
             continue
         with contextlib.suppress(ValueError, KeyError, TypeError,
                                  AttributeError):
             injetado = json.loads(pronto.stdout)[
                 CHAVE_DA_SAIDA_DO_GANCHO][CHAVE_DO_CONTEXTO_INJETADO]
             total += len(injetado.encode())
+    return total, cegos
+
+
+def lotes_de_caminhos(alvos: list) -> list:
+    lotes, atual, tamanho = [], [], 0
+    for caminho in alvos:
+        if atual and tamanho + len(caminho) > TETO_DE_ARGUMENTOS:
+            lotes.append(atual)
+            atual, tamanho = [], 0
+        atual.append(caminho)
+        tamanho += len(caminho) + 1
+    if atual:
+        lotes.append(atual)
+    return lotes
+
+
+def quantas_linhas_casam(padrao: str, alvos: list, raiz: Path):
+    total = 0
+    for lote in lotes_de_caminhos(alvos):
+        try:
+            pronto = subprocess.run(
+                ["grep", "-cInP", padrao] + lote, cwd=raiz,
+                capture_output=True, text=True,
+                timeout=TEMPO_DE_UM_TESTE)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if pronto.returncode >= GREP_ERROU_A_PARTIR_DE:
+            return None
+        with contextlib.suppress(ValueError, IndexError):
+            total += sum(int(l.rsplit(":", 1)[1])
+                         for l in pronto.stdout.split("\n") if l)
     return total
+
+
+def saldo_do_vocabulario(raiz: Path) -> list:
+    fonte = raiz / FONTE_DO_VOCABULARIO
+    if not fonte.is_file():
+        return []
+    try:
+        termos = json.loads(fonte.read_text(encoding="utf-8"))["termos"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return []
+    listados = corre(f'cd "{raiz}" && git ls-files')[1].split("\n")
+    alvos = [c for c in listados
+             if c and c not in FORA_DA_CONTA_DO_VOCABULARIO]
+    if not alvos:
+        return []
+    contas = []
+    for termo in termos:
+        achadas = quantas_linhas_casam(
+            termo["pronto"]["padrao"], alvos, raiz)
+        perdoadas = sum(e.get("ocorrencias", 0)
+                        for e in termo.get("excecoes", []))
+        saldo = None if achadas is None else max(achadas - perdoadas, 0)
+        contas.append((termo["id"], achadas, perdoadas, saldo))
+    return contas
+
+
+def vocabulario(raiz: Path) -> int:
+    contas = saldo_do_vocabulario(raiz)
+    if not contas:
+        print(SEM_VOCABULARIO.format(FONTE_DO_VOCABULARIO))
+        return 0
+    print(f"\n{TITULO_VOCABULARIO}")
+    for nome, bruto, perdoadas, saldo in contas:
+        print(LINHA_DO_TERMO.format(
+            nome, SEM_MEDIDA if bruto is None else bruto, perdoadas,
+            SEM_MEDIDA if saldo is None else saldo,
+            TERMO_NAO_MEDIDO if saldo is None else
+            (TERMO_ABERTO if saldo else TERMO_FECHADO)))
+    cegos = sum(1 for _, _, _, saldo in contas if saldo is None)
+    aberto = sum(saldo for _, _, _, saldo in contas if saldo is not None)
+    if cegos:
+        print(VOCABULARIO_NAO_MEDIDO.format(cegos))
+    elif aberto:
+        print(VOCABULARIO_ABERTO.format(aberto))
+    else:
+        print(VOCABULARIO_FECHADO)
+    return 1 if (aberto or cegos) else 0
+
+
+def subagentes(raiz: Path) -> tuple:
+    achados = sorted((raiz / PASTA_DOS_SUBAGENTES).glob(GLOB_PAGINA))
+    sem_coleira = [a.name for a in achados
+                   if not CAMPO_DAS_FERRAMENTAS.search(
+                       a.read_text(encoding="utf-8", errors="replace"))]
+    return achados, sem_coleira
 
 
 def medir(raiz: Path) -> tuple:
@@ -150,17 +285,29 @@ def medir(raiz: Path) -> tuple:
         catalogo += len(listada.encode())
         adiado += corpo
     paginas = sorted((raiz / PASTA_DO_CONHECIMENTO).glob(GLOB_PAGINA))
-    injetado_por_gancho = bytes_que_os_ganchos_injetam(raiz)
+    achados_de_subagente, subagentes_sem_coleira = subagentes(raiz)
+    contas_do_vocabulario = saldo_do_vocabulario(raiz)
+    injetado_por_gancho, ganchos_cegos = bytes_que_os_ganchos_injetam(
+        raiz)
     dados = {
         "largada": instrucoes + catalogo + injetado_por_gancho,
         "instrucoes": instrucoes,
         "catalogo": catalogo,
         "injetado_por_gancho": injetado_por_gancho,
+        "ganchos_nao_medidos": ganchos_cegos,
         "adiado": adiado,
         "skills": len(skills),
         "paginas": len(paginas),
         "bytes_das_paginas": sum(len(p.read_bytes()) for p in paginas),
         "ganchos": len(sorted((raiz / PASTA_DOS_GANCHOS).glob(GLOB_PYTHON))),
+        "subagentes": len(achados_de_subagente),
+        "vocabulario_aberto": sum(
+            saldo for _, _, _, saldo in contas_do_vocabulario
+            if saldo is not None),
+        "vocabulario_nao_medido": sum(
+            1 for _, _, _, saldo in contas_do_vocabulario
+            if saldo is None),
+        "subagentes_sem_coleira": len(subagentes_sem_coleira),
         "regras": quantas_regras(raiz),
     }
     linhas = [
@@ -171,12 +318,17 @@ def medir(raiz: Path) -> tuple:
         LINHA.format(f"  catálogo de {dados['skills']} skills",
                      f"{dados['catalogo']} bytes"),
         LINHA.format("  injetado por gancho de abertura",
-                     f"{dados['injetado_por_gancho']} bytes"),
+                     f"{dados['injetado_por_gancho']} bytes"
+                     + (f" ({dados['ganchos_nao_medidos']} gancho(s) não medido(s))"
+                        if dados["ganchos_nao_medidos"] else "")),
         LINHA.format("corpo de skill — só ao disparar",
                      f"{dados['adiado']} bytes"),
         LINHA.format(f"páginas em {PASTA_DO_CONHECIMENTO}/",
                      f"{dados['paginas']} ({dados['bytes_das_paginas']} bytes)"),
         LINHA.format("ganchos no disco", dados["ganchos"]),
+        LINHA.format("subagentes no disco",
+                     f"{dados['subagentes']}"
+                     f" ({dados['subagentes_sem_coleira']} sem coleira)"),
     ]
     return linhas, dados
 
@@ -201,7 +353,7 @@ def provar(raiz: Path) -> tuple:
     linhas, caidos, rodados = [], [], 0
     for alvo in instrumentos_com_teste(raiz):
         codigo, saida = corre(
-            f'cd "{raiz}" && python3 "{alvo.relative_to(raiz)}" {BANDEIRA_DE_TESTE}')
+            f'cd "{raiz}" && {INTERPRETADOR_NO_SHELL} "{alvo.relative_to(raiz)}" {BANDEIRA_DE_TESTE}')
         rodados += 1
         passou = codigo == 0
         if not passou:
@@ -215,7 +367,7 @@ def provar(raiz: Path) -> tuple:
     for nome in sem_teste:
         linhas.append(LINHA_DE_CASO.format("CAIU", f"{nome} — sem --testar próprio"))
     if (raiz / INSTALADOR).is_file():
-        codigo, _ = corre(f'cd "{raiz}" && python3 {INSTALADOR} --verificar')
+        codigo, _ = corre(f'cd "{raiz}" && {INTERPRETADOR_NO_SHELL} {INSTALADOR} --verificar')
         rodados += 1
         if codigo != 0:
             caidos.append(INSTALADOR)
@@ -278,9 +430,11 @@ def teste_toca_o_proprio_codigo(caminho: Path) -> bool:
     with contextlib.suppress(OSError, SyntaxError):
         arvore = ast.parse(caminho.read_text(encoding="utf-8"))
         do_arquivo = {no.name for no in ast.walk(arvore)
-                      if isinstance(no, ast.FunctionDef)}
+                      if isinstance(no, FORMAS_DE_FUNCAO)}
         for no in ast.walk(arvore):
-            if not isinstance(no, ast.FunctionDef) or "test" not in no.name:
+            if not isinstance(no, FORMAS_DE_FUNCAO):
+                continue
+            if MARCA_DE_TESTE_NO_NOME not in no.name:
                 continue
             chamados = {c.func.id for c in ast.walk(no)
                         if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
@@ -319,7 +473,7 @@ def simular(raiz: Path) -> tuple:
 
     if alvo.is_file():
         codigo_do_teste, berro = corre(
-            f'cd "{raiz}" && python3 "{ARQUIVO_PEDIDO}" {BANDEIRA_DE_TESTE}')
+            f'cd "{raiz}" && {INTERPRETADOR_NO_SHELL} "{ARQUIVO_PEDIDO}" {BANDEIRA_DE_TESTE}')
     else:
         codigo_do_teste, berro = 1, "a sessão não escreveu o arquivo"
     do_artefato.append((f"entregou {ARQUIVO_PEDIDO} com --testar que passa",
@@ -367,7 +521,12 @@ NUMEROS = {
     "adiado": ("medir", "adiado"),
     "paginas": ("medir", "paginas"),
     "ganchos": ("medir", "ganchos"),
+    "subagentes": ("medir", "subagentes"),
+    "vocabulario-aberto": ("medir", "vocabulario_aberto"),
+    "vocabulario-nao-medido": ("medir", "vocabulario_nao_medido"),
+    "subagentes-sem-coleira": ("medir", "subagentes_sem_coleira"),
     "injetado-por-gancho": ("medir", "injetado_por_gancho"),
+    "ganchos-nao-medidos": ("medir", "ganchos_nao_medidos"),
     "instrumentos-que-caem": ("provar", "caem"),
     "ganchos-sem-teste": ("provar", "sem_teste"),
     "acertos-da-simulacao": ("simular", "acertos"),
@@ -394,7 +553,7 @@ SUPOSTO_DO_ARTEFATO = (
     "porque oscila entre execuções: {}.")
 VEREDITO_SEGUE = "segue"
 VEREDITO_PARA = "para"
-COMANDO_DO_NUMERO = "python3 .agents/camada/camada.py --numero {}"
+COMANDO_DO_NUMERO = "{} .agents/camada/camada.py --numero {}"
 FALTA_DO_PASSO = "{}: {}"
 PROXIMO_DO_PASSO = ("Leia a evidência, conserte o que o número acusa e "
                     "reexecute esta etapa.")
@@ -423,7 +582,8 @@ def evidencia(raiz: Path, passo: str) -> dict:
     resumo = rodar_passos(raiz, {passo}, calado=True)[passo]
     provado, faltas = [], []
     for afirmacao, chave in PROVAS[passo]:
-        comando = COMANDO_DO_NUMERO.format(chave)
+        comando = COMANDO_DO_NUMERO.format(
+            interpretador_com_nome_portatil(), chave)
         codigo, saida = corre(f'cd "{raiz}" && {comando}')
         provado.append({"afirmacao": afirmacao, "comando": comando,
                         "saida": saida})
@@ -498,7 +658,7 @@ def testar() -> int:
         (raiz / ".claude" / "settings.json").write_text(
             json.dumps({"hooks": {"SessionStart": [{"hooks": [
                 {"type": "command", "command":
-                 'python3 "${CLAUDE_PROJECT_DIR}/gancho.py"'}]}]}}),
+                 f'{INTERPRETADOR_NO_SHELL} "${{CLAUDE_PROJECT_DIR}}/gancho.py"'}]}]}}),
             encoding="utf-8")
         _, com_gancho = medir(raiz)
         caso("o gancho de abertura entra na conta",
@@ -506,10 +666,23 @@ def testar() -> int:
         caso("e a largada cresce exatamente o que ele injeta",
              com_gancho["largada"]
              == dados["largada"] + len(injecao.encode()))
+        (raiz / "gancho.py").write_text(
+            "print('nao sou json')\n", encoding="utf-8")
+        caso("gancho que RODA e não injeta vale zero, não cego",
+             medir(raiz)[1]["injetado_por_gancho"] == 0
+             and medir(raiz)[1]["ganchos_nao_medidos"] == 0)
         (raiz / "gancho.py").write_text("import sys\nsys.exit(1)\n",
                                         encoding="utf-8")
-        caso("gancho que cai não derruba a medida",
-             medir(raiz)[1]["injetado_por_gancho"] == 0)
+        caso("gancho que CAI não derruba a medida, e conta como cego",
+             medir(raiz)[1]["injetado_por_gancho"] == 0
+             and medir(raiz)[1]["ganchos_nao_medidos"] == 1)
+        (raiz / ".claude" / "settings.json").write_text(
+            json.dumps({"hooks": {"SessionStart": [{"hooks": [
+                {"type": "command",
+                 "command": "binario-que-nao-existe-nenhum"}]}]}}),
+            encoding="utf-8")
+        caso("gancho que NÃO RODOU é contado como não medido",
+             medir(raiz)[1]["ganchos_nao_medidos"] == 1)
         caso("o corpo da skill fica no adiado", dados["adiado"] > 0)
         caso("conta as skills", dados["skills"] == 1)
 
@@ -537,6 +710,92 @@ def testar() -> int:
         _, prova = provar(raiz)
         caso("gancho com --testar que cai é acusado", prova["caem"] == 1)
 
+        pasta_de_subagentes = raiz / PASTA_DOS_SUBAGENTES
+        pasta_de_subagentes.mkdir(parents=True, exist_ok=True)
+        caso("sem subagente nenhum, conta zero e não acusa coleira",
+             subagentes(raiz) == ([], []))
+        (pasta_de_subagentes / "com-coleira.md").write_text(
+            "---\nname: a\ndescription: faz\ntools: Read, Grep\n---\n",
+            encoding="utf-8")
+        (pasta_de_subagentes / "sem-coleira.md").write_text(
+            "---\nname: b\ndescription: faz\n---\n", encoding="utf-8")
+        achados, soltos = subagentes(raiz)
+        caso("conta os subagentes do disco", len(achados) == 2)
+        caso("acusa só o que herda tudo, e diz qual",
+             soltos == ["sem-coleira.md"])
+        _, com_subagentes = medir(raiz)
+        caso("a medida carrega os dois números",
+             com_subagentes["subagentes"] == 2
+             and com_subagentes["subagentes_sem_coleira"] == 1)
+        falso = raiz / "bin-de-mentira"
+        falso.mkdir(exist_ok=True)
+        alias = falso / "python3"
+        alias.write_text("#!/bin/sh\nexit 9\n", encoding="utf-8")
+        alias.chmod(0o755)
+        antes_do_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{falso}:{antes_do_path}"
+        interpretador_com_nome_portatil.cache_clear()
+        escolhido = interpretador_com_nome_portatil()
+        os.environ["PATH"] = antes_do_path
+        interpretador_com_nome_portatil.cache_clear()
+        caso("python3 que existe e NAO roda é descartado — é o atalho "
+             "da loja do Windows, e foi assim que a camada caiu lá",
+             escolhido != "python3")
+        caso("e o escolhido no lugar dele roda mesmo",
+             corre(f"{escolhido} -c \"{PERGUNTA_DA_VERSAO}\"")[1].strip()
+             == VERSAO_QUE_SERVE)
+        nome = interpretador_com_nome_portatil()
+        caso("o interpretador portátil é um nome, não um caminho",
+             nome in CANDIDATOS_DE_INTERPRETADOR)
+        caso("e o nome escolhido roda mesmo um Python 3",
+             corre(f"{nome} -c \"{PERGUNTA_DA_VERSAO}\"")[1].strip()
+             == VERSAO_QUE_SERVE)
+        caso("o que executa por dentro é o intérprete desta sessão",
+             INTERPRETADOR == sys.executable
+             and INTERPRETADOR_NO_SHELL.strip('"') == sys.executable)
+        caso("sem vocabulario.json não há o que medir",
+             saldo_do_vocabulario(raiz) == [])
+        (raiz / "nucleo").mkdir(exist_ok=True)
+        (raiz / "nucleo" / "vocabulario.json").write_text(json.dumps(
+            {"termos": [
+                {"id": "aberto", "excecoes": [],
+                 "pronto": {"padrao": r"(?i)\bfoo\b"}},
+                {"id": "perdoado", "excecoes": [{"ocorrencias": 2}],
+                 "pronto": {"padrao": r"(?i)\bbar\b"}}]}),
+            encoding="utf-8")
+        (raiz / "texto.md").write_text("foo\nbar\nBar\n",
+                                       encoding="utf-8")
+        corre(f'cd "{raiz}" && git init -q && git add -A')
+        contas = dict((c[0], c[1:]) for c in saldo_do_vocabulario(raiz))
+        caso("termo sem exceção acusa o saldo cheio",
+             contas["aberto"] == (1, 0, 1))
+        caso("exceção declarada desconta, e o padrão pega maiúscula",
+             contas["perdoado"] == (2, 2, 0))
+        caso("a medida carrega o saldo aberto",
+             medir(raiz)[1]["vocabulario_aberto"] == 1)
+        caso("o flag sai 1 quando algum termo reabriu",
+             vocabulario(raiz) == 1)
+
+        caso("o lote respeita o teto e não perde caminho",
+             [c for lote in lotes_de_caminhos(["a" * 40] * 50)
+              for c in lote] == ["a" * 40] * 50)
+        caso("lista curta cabe num lote só",
+             len(lotes_de_caminhos(["curto"])) == 1)
+        caso("grep que ERRA devolve não medido, nunca zero",
+             quantas_linhas_casam("(", ["texto.md"], raiz) is None)
+        caso("grep que não acha devolve zero de verdade",
+             quantas_linhas_casam("(?i)zzzz", ["texto.md"], raiz) == 0)
+        (raiz / "nucleo" / "vocabulario.json").write_text(json.dumps(
+            {"termos": [{"id": "quebrado", "excecoes": [],
+                         "pronto": {"padrao": "("}}]}), encoding="utf-8")
+        caso("termo com padrão quebrado não vira fechado",
+             saldo_do_vocabulario(raiz)[0][3] is None)
+        caso("e o flag sai 1 em vez de dizer verde",
+             vocabulario(raiz) == 1)
+        caso("a medida conta o que não foi medido",
+             medir(raiz)[1]["vocabulario_nao_medido"] == 1)
+
+
         bom = raiz / "bom.py"
         bom.write_text("def somar(n):\n    return sum(n)\n"
                        "def testar():\n    assert somar([1]) == 1\n",
@@ -548,6 +807,20 @@ def testar() -> int:
              teste_toca_o_proprio_codigo(bom))
         caso("teste que só usa embutido não conta",
              not teste_toca_o_proprio_codigo(ruim))
+        assincrono = raiz / "assincrono.py"
+        assincrono.write_text(
+            "async def buscar(n):\n    return n\n"
+            "async def testar():\n    assert await buscar(1) == 1\n",
+            encoding="utf-8")
+        caso("teste assíncrono que chama função do arquivo conta",
+             teste_toca_o_proprio_codigo(assincrono))
+        mista = raiz / "mista.py"
+        mista.write_text(
+            "async def buscar(n):\n    return n\n"
+            "def testar():\n    assert buscar(1)\n",
+            encoding="utf-8")
+        caso("teste comum que chama função assíncrona do arquivo conta",
+             teste_toca_o_proprio_codigo(mista))
 
     caso("o JSON sai de dentro de cerca de código",
          colher_json('```json\n{"a": 1}\n```') == {"a": 1})
@@ -594,7 +867,7 @@ def testar() -> int:
          all(chave in NUMEROS for provas in PROVAS.values()
              for _, chave in provas))
 
-    total = 28
+    total = 54
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
         for falha in falhas:
@@ -611,6 +884,8 @@ def main() -> int:
     ap.add_argument("--evidencia", choices=[p[0] for p in PASSOS],
                     help="emite a evidência de um passo, para o executor de roteiros")
     ap.add_argument("--numero", help="imprime um número só, para virar prova")
+    ap.add_argument("--vocabulario", action="store_true",
+                    help="mede o fechamento dos termos e sai 1 se algum reabriu")
     ap.add_argument("--resumo", action="store_true",
                     help="só o JSON, para comparar entre rodadas")
     ap.add_argument(BANDEIRA_DE_TESTE, action="store_true",
@@ -623,6 +898,9 @@ def main() -> int:
     raiz = Path.cwd()
     if not (raiz / PASTA_DO_CONHECIMENTO).is_dir():
         sys.exit(FORA_DA_RAIZ.format(PASTA_DO_CONHECIMENTO))
+
+    if a.vocabulario:
+        return vocabulario(raiz)
 
     if a.numero:
         return um_numero(raiz, a.numero)

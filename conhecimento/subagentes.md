@@ -25,6 +25,23 @@ Só endereços verificados numa máquina; outra ferramenta, procure na doc
 dela. No Devin, skill vira subagente pelo frontmatter (`subagent: true`) —
 recurso experimental.
 
+## O que a camada traz: `varredor`
+
+Um só, e de leitura pura (`Read, Grep, Glob`). Ele responde pergunta fechada
+sobre o repositório inteiro — *onde ainda aparece X*, *quantos Y existem* — e
+devolve conclusão com `caminho:linha`, nunca o despejo.
+
+**Por que ele não duplica o `Explore` do fabricante:** o `Explore` acha código.
+O `varredor` carrega as regras desta camada — devolve número no lugar de
+adjetivo, separa o total bruto do saldo aberto quando há exceção declarada, e
+não escreve "não existe" sem antes provar que a busca sabe achar (regra 2).
+Ele também **não roda comando**: devolve o comando que reproduz cada número,
+para quem o chamou rodar. É assim que a coleira fica curta e o número vira
+prova.
+
+O caso que o justifica: varredura larga come a janela da sessão que está
+trabalhando, e é por isso que inventário e renomeação grande nunca começam.
+
 ## Exemplo, no formato do Claude Code
 
 `.claude/agents/revisor.md`:

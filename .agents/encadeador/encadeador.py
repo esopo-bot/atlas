@@ -58,6 +58,7 @@ GH = shlex.split(os.environ.get("ENCADEADOR_GH", "gh"))
 CHAVE_DO_AJUDANTE_DE_CREDENCIAL = "credential.helper"
 AJUDANTE_QUE_LE_O_TOKEN = (
     '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f')
+INTERPRETADOR_NO_SHELL = '"' + sys.executable + '"'
 PADRAO_DA_SESSAO = "claude -p"
 MARCA_DO_GUIA = "<guia>"
 MARCA_DOS_TURNOS = "<turnos>"
@@ -1927,7 +1928,7 @@ def main(argv) -> int:
                     caminho_roteiro=str(Path(args.roteiro).resolve()))
 
 
-FANTOCHE_OK = ("python3 -c \"import json; print(json.dumps({'etapa':'x',"
+FANTOCHE_OK = (INTERPRETADOR_NO_SHELL + " -c \"import json; print(json.dumps({'etapa':'x',"
                "'trabalho':'x','quando':'2000-01-01T00:00:00Z','veredito':"
                "'segue','provado':[{'afirmacao':'a fantoche rodou','comando':"
                "'true','saida':''}],'suposto':[],'faltas':[],'ciclo':"

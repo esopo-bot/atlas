@@ -16,7 +16,7 @@ from encadeador import (
     CHAVE_DO_AJUDANTE_DE_CREDENCIAL,
     ARQUIVO_EXECUTOR, CLAUDE_QUE_PARA_NA_METADE, CLI_FALSO_DA_SESSAO,
     ESPERA_MAXIMA_S,
-    ESTE_INSTRUMENTO, EXIT_COMPLETA, EXIT_ERRO_DE_USO_OU_AMBIENTE,
+    ESTE_INSTRUMENTO, EXIT_COMPLETA, INTERPRETADOR_NO_SHELL, EXIT_ERRO_DE_USO_OU_AMBIENTE,
     EXIT_PAROU_NUM_PARA, EXIT_TESTE_CAIU, FALHA_DE_COMPORTAMENTO,
     FALHA_DE_RECUSA_COM_EXIT, FALHA_DE_RECUSA_PELO_MOTIVO_ERRADO, FALHOU,
     FALHOU_QUANTOS, FANTOCHE_OK, FOLGA_DO_TETO, FONTE_DO_DUBLE_DO_GH,
@@ -582,7 +582,7 @@ def _sobre_o_grafo(b) -> None:
 
 
 def _sobre_a_prova_e_o_ambiente(b) -> None:
-    FORJA = ("python3 -c \"import json; print(json.dumps({'etapa':'x',"
+    FORJA = (INTERPRETADOR_NO_SHELL + " -c \"import json; print(json.dumps({'etapa':'x',"
              "'trabalho':'x','quando':'2000-01-01T00:00:00Z','veredito':"
              "'segue','provado':[{'afirmacao':'eco','comando':'echo ola',"
              "'saida':'adeus'}],'suposto':[],'faltas':[],'ciclo':"
@@ -626,7 +626,7 @@ def _sobre_a_prova_e_o_ambiente(b) -> None:
     roteiro = _roteiro(b.pasta, "m-env.json", {
         "ambiente": {"env": str(arquivo_env.name)},
         "etapas": [{"nome": "aa", "tipo": "codigo", "comando":
-                    "python3 -c \"import json,os; print(json.dumps("
+                    INTERPRETADOR_NO_SHELL + " -c \"import json,os; print(json.dumps("
                     "{'etapa':'x','trabalho':'x',"
                     "'quando':'2000-01-01T00:00:00Z','veredito':'segue',"
                     "'provado':[],'suposto':["
@@ -832,7 +832,7 @@ def _sobre_os_ciclos_e_o_disco(b) -> None:
     roteiro = _roteiro(b.pasta, "m-aspas.json", {
         "ambiente": {"env": "aspas.env"},
         "etapas": [{"nome": "aa", "tipo": "codigo", "comando":
-                    "python3 -c \"import json,os; print(json.dumps("
+                    INTERPRETADOR_NO_SHELL + " -c \"import json,os; print(json.dumps("
                     "{'etapa':'x','trabalho':'x',"
                     "'quando':'2000-01-01T00:00:00Z','veredito':'segue',"
                     "'provado':[],'suposto':["
@@ -881,7 +881,7 @@ def _sobre_os_ciclos_e_o_disco(b) -> None:
         "ambiente": {"env": "herda.env"},
         "etapas": [
             {"nome": "aa", "tipo": "codigo", "comando":
-             "python3 -c \"import json; print(json.dumps("
+             INTERPRETADOR_NO_SHELL + " -c \"import json; print(json.dumps("
              "{'etapa':'x','trabalho':'x',"
              "'quando':'2000-01-01T00:00:00Z','veredito':'segue',"
              "'provado':[{'afirmacao':'a variavel do ambiente chega',"

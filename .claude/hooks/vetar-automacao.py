@@ -22,6 +22,13 @@ CAMINHOS_EMBUTIDOS = (
 FERRAMENTAS_DE_ESCRITA = ("Write", "Edit", "NotebookEdit")
 CAMPOS_DE_CAMINHO = ("file_path", "notebook_path")
 REDIRECIONAMENTO_DE_SHELL = re.compile(r">>?\s*([^\s;|&]+)")
+SEPARADORES_DE_COMANDO = re.compile(
+    r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
+DOCUMENTO_LITERAL_QUE_NAO_EXPANDE = re.compile(
+    r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
+ASPA_SIMPLES_COM_CORPO = re.compile(r"'[^']*'")
+ASPA_DUPLA_COM_CORPO = re.compile(r"\"[^\"]*\"")
+EXPANSAO_QUE_EXECUTA = ("$(", "`")
 COMANDOS_QUE_ESCREVEM_SEM_SETA = ("tee", "cp", "mv", "install", "touch",
                                   "rm", "sed")
 
@@ -89,6 +96,20 @@ def motivo_da_recusa(caminho: str, declarados) -> str:
     return PASSA
 
 
+def sem_o_que_e_so_dado(trecho: str) -> str:
+    sem_aspa_simples = ASPA_SIMPLES_COM_CORPO.sub(" ", trecho)
+    return ASPA_DUPLA_COM_CORPO.sub(
+        lambda achado: achado.group(0)
+        if any(marca in achado.group(0) for marca in EXPANSAO_QUE_EXECUTA)
+        else " ", sem_aspa_simples)
+
+
+def segmentos_que_executam(comando: str) -> list:
+    sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
+    return [sem_o_que_e_so_dado(s)
+            for s in SEPARADORES_DE_COMANDO.split(sem_documento)]
+
+
 def caminhos_que_o_pedido_toca(entrada: dict) -> list:
     ferramenta = entrada.get("tool_name", "")
     dado = entrada.get("tool_input", {}) or {}
@@ -100,13 +121,17 @@ def caminhos_que_o_pedido_toca(entrada: dict) -> list:
     comando = dado.get("command", "")
     if not comando:
         return []
-    achados = [m.group(1) for m in REDIRECIONAMENTO_DE_SHELL.finditer(comando)]
-    try:
-        pedacos = shlex.split(comando, posix=False)
-    except ValueError:
-        pedacos = comando.split()
-    if pedacos and Path(pedacos[0]).name in COMANDOS_QUE_ESCREVEM_SEM_SETA:
-        achados += pedacos[1:]
+    achados = []
+    for segmento in segmentos_que_executam(comando):
+        achados += [m.group(1)
+                    for m in REDIRECIONAMENTO_DE_SHELL.finditer(segmento)]
+        try:
+            pedacos = shlex.split(segmento, posix=False)
+        except ValueError:
+            pedacos = segmento.split()
+        if pedacos and Path(
+                pedacos[0]).name in COMANDOS_QUE_ESCREVEM_SEM_SETA:
+            achados += pedacos[1:]
     return [a.strip("\"'") for a in achados if a and not a.startswith("-")]
 
 
@@ -220,6 +245,46 @@ def testar() -> int:
                  "tool_name": "Bash",
                  "tool_input": {
                      "command": "sed -i s/a/b/ .github/workflows/e.yml"}})))
+    caso("apagar escondido depois de &&",
+         any(motivo_da_recusa(c, declarados) for c in
+             caminhos_que_o_pedido_toca({
+                 "tool_name": "Bash",
+                 "tool_input": {"command": "git status && rm " + ".github/workflows/e.yml"}})))
+    caso("mover escondido depois de ponto-e-vírgula",
+         any(motivo_da_recusa(c, declarados) for c in
+             caminhos_que_o_pedido_toca({
+                 "tool_name": "Bash",
+                 "tool_input": {"command": "ls ; mv " + ".github/workflows/e.yml" + " /tmp/x"}})))
+    caso("redirecionamento escondido depois de &&",
+         any(motivo_da_recusa(c, declarados) for c in
+             caminhos_que_o_pedido_toca({
+                 "tool_name": "Bash",
+                 "tool_input": {"command": "ls && echo x > " + ".github/workflows/e.yml"}})))
+    caso("subcomando dentro de aspas duplas ainda executa",
+         any(motivo_da_recusa(c, declarados) for c in
+             caminhos_que_o_pedido_toca({
+                 "tool_name": "Bash",
+                 "tool_input": {"command": 'echo "$(rm ' + ".github/workflows/e.yml" + ')"'}})))
+    caso("aspas simples seguram o comando inteiro",
+         not any(motivo_da_recusa(c, declarados) for c in
+                 caminhos_que_o_pedido_toca({
+                     "tool_name": "Bash",
+                     "tool_input": {"command": "echo 'x > " + ".github/workflows/e.yml" + "'"}})))
+    caso("aspas duplas sem expansão são dado",
+         not any(motivo_da_recusa(c, declarados) for c in
+                 caminhos_que_o_pedido_toca({
+                     "tool_name": "Bash",
+                     "tool_input": {"command": 'echo "x > ' + ".github/workflows/e.yml" + '"'}})))
+    caso("documento literal é dado, não comando",
+         not any(motivo_da_recusa(c, declarados) for c in
+                 caminhos_que_o_pedido_toca({
+                     "tool_name": "Bash",
+                     "tool_input": {"command": "cat <<'FIM'\nx > " + ".github/workflows/e.yml" + "\nFIM"}})))
+    caso("mensagem de commit que cita o caminho",
+         not any(motivo_da_recusa(c, declarados) for c in
+                 caminhos_que_o_pedido_toca({
+                     "tool_name": "Bash",
+                     "tool_input": {"command": 'git commit -m "documenta ' + ".github/workflows/e.yml" + '"'}})))
     caso("ler a automação passa calado",
          caminhos_que_o_pedido_toca({
              "tool_name": "Bash",

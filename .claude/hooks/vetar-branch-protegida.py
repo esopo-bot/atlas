@@ -48,6 +48,7 @@ PREFIXO_DE_FORCAR_POR_REFSPEC = "+"
 ACAO_APAGAR = "apagar"
 ACAO_RENOMEAR = "renomear"
 ACAO_COMMIT = "commit"
+VERBO_MERGE = "merge"
 
 NOMES_DO_GIT = {"git", "git.exe"}
 NOME_DO_GH = "gh"
@@ -67,7 +68,7 @@ SUBVERBOS_QUE_SO_PEDEM = {
 VERBOS_POR_ACAO = {
     "commit": ("commit",),
     "push": ("push",),
-    "publicar": ("pr", "release", "merge"),
+    "publicar": ("pr", "release", VERBO_MERGE),
 }
 OMISSAO_NAO_E_PERMISSAO = {"commit": False, "push": False, "publicar": False}
 
@@ -310,6 +311,9 @@ def acao_do_comando(tokens: list) -> str:
     segundo = tokens[i + 1].lower() if i + 1 < len(tokens) else ""
     if segundo in SUBVERBOS_QUE_SO_PEDEM.get(primeiro, frozenset()):
         return SEM_ACAO
+    e_do_git = Path(tokens[0]).name.lower() in NOMES_DO_GIT
+    if primeiro == VERBO_MERGE and e_do_git:
+        return ACAO_COMMIT
     for acao, verbos in VERBOS_POR_ACAO.items():
         if primeiro in verbos:
             return acao
@@ -524,6 +528,27 @@ DEIXA_PASSAR = [
      "\nFIM"),
 ]
 
+GIT_MERGE_NAO_E_PUBLICAR = [
+    ("merge local em branch de trabalho não é publicar",
+     "git merge --ff-only origin/main"),
+    ("merge local com mensagem também não",
+     'git merge homolog -m "junta"'),
+]
+GIT_MERGE_EM_PROTEGIDA = [
+    ("merge grava na protegida sem passar pelo pedido",
+     "git merge homolog"),
+]
+GH_MERGE_CONTINUA_SENDO_PUBLICAR = [
+    ("gh pr merge continua exigindo autorização de publicar",
+     "gh pr merge 8 --merge"),
+]
+FALHA_MERGE_LOCAL_BARRADO = (
+    "  DEVIA PASSAR: git merge local não é publicar — {}")
+FALHA_MERGE_EM_PROTEGIDA_PASSOU = (
+    "  DEVIA BARRAR: git merge grava na branch de incorporação — {}")
+FALHA_GH_MERGE_PASSOU = (
+    "  DEVIA BARRAR sem autorização de publicar — {}")
+
 BARRA_SEM_AUTORIZACAO = [
     ("commit sem autorização", "git commit -m x"),
     ("push sem autorização", "git push origin feature/minha"),
@@ -583,6 +608,22 @@ def testar() -> int:
                             AUTORIZA_TUDO, fora):
         falhas.append(FALHA_FORCA_MESMO_AUTORIZADO)
 
+    declaradas_do_merge = set(BRANCHES_POR_INCORPORACAO_DO_TESTE)
+    for rotulo, comando in GIT_MERGE_NAO_E_PUBLICAR:
+        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
+                            fora, declaradas_do_merge):
+            falhas.append(FALHA_MERGE_LOCAL_BARRADO.format(rotulo))
+    for rotulo, comando in GIT_MERGE_EM_PROTEGIDA:
+        for onde in declaradas_do_merge:
+            if not motivo_da_recusa(comando, protegidas, raiz,
+                                    AUTORIZA_TUDO, onde,
+                                    declaradas_do_merge):
+                falhas.append(
+                    FALHA_MERGE_EM_PROTEGIDA_PASSOU.format(rotulo))
+    for rotulo, comando in GH_MERGE_CONTINUA_SENDO_PUBLICAR:
+        if not motivo_da_recusa(comando, protegidas, raiz, None, fora):
+            falhas.append(FALHA_GH_MERGE_PASSOU.format(rotulo))
+
     declaradas = set(BRANCHES_POR_INCORPORACAO_DO_TESTE)
     for rotulo, comando in GRAVA_EM_PROTEGIDA:
         for onde in declaradas:
@@ -599,7 +640,11 @@ def testar() -> int:
     total = (len(GRAVA_EM_PROTEGIDA)
              * (len(BRANCHES_POR_INCORPORACAO_DO_TESTE) + 2)
              + len(SO_PEDEM) + len(BARRA) + len(DEIXA_PASSAR)
-             + len(BARRA_SEM_AUTORIZACAO) * 2 + 1)
+             + len(BARRA_SEM_AUTORIZACAO) * 2 + 1
+             + len(GIT_MERGE_NAO_E_PUBLICAR)
+             + len(GIT_MERGE_EM_PROTEGIDA)
+             * len(BRANCHES_POR_INCORPORACAO_DO_TESTE)
+             + len(GH_MERGE_CONTINUA_SENDO_PUBLICAR))
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))
         print("\n".join(falhas))
