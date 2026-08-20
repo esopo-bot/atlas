@@ -84,6 +84,7 @@ const daCamada = [
   'conhecimento/rodar-uma-execucao',
   'conhecimento/skills-criar-e-testar',
   'conhecimento/ganchos',
+  'conhecimento/paridade-entre-agentes',
   'conhecimento/estado-que-nao-viaja',
   'conhecimento/mudar-de-maquina',
   'conhecimento/mcp',

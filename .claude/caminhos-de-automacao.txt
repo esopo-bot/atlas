@@ -1,0 +1,19 @@
+# A configuração da automação deste repositório.
+#
+# O gancho .claude/hooks/vetar-automacao.py recusa escrever, apagar ou mover
+# qualquer caminho desta lista — pela ferramenta de edição ou por comando de
+# terminal. Ler passa calado.
+#
+# Linha terminada em barra é pasta: pega tudo que estiver dentro dela, em
+# qualquer profundidade. Linha sem barra é arquivo, e vale em qualquer pasta.
+#
+# Um caminho por linha; linha com # é comentário. Tire o que não existe aqui
+# e acrescente os caminhos do seu repositório — este arquivo é seu, e a
+# atualização da camada não o sobrescreve.
+.github/workflows/
+.gitlab-ci.yml
+.circleci/
+Jenkinsfile
+azure-pipelines.yml
+bitbucket-pipelines.yml
+.travis.yml

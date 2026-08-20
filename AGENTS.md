@@ -18,10 +18,12 @@ Para qualquer agente de IA neste repositório.
 
 ## Ordens deste repositório
 
-- Não commite, não empurre, não publique: deixe os arquivos para o dono
-  verificar. O teto é o ensaio, que mostra o que subiria sem subir. Destrutivo
-  é dele. Este é o único lugar desta regra: outro arquivo que disser diferente
-  está errado.
+- Publicar é do dono, sempre: publicação não se desfaz, e o teto da sessão é o
+  ensaio, que mostra o que subiria sem subir. Commit e push seguem
+  `autorizacoes` em `nucleo/configuracao.json`, que é a mesma fonte que o
+  gancho lê — omissão não é permissão, e sem declaração ninguém commita.
+  Destrutivo é do dono. Este é o único lugar desta regra: outro arquivo que
+  disser diferente está errado.
 - Repositório público: nada de nome de pessoa ou empresa, credencial ou caminho
   de máquina em arquivo, commit, branch ou issue. Na dúvida, pergunte.
 - Não altere o que não foi pedido.
@@ -46,6 +48,8 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 12. Branch de longa duração e configuração de integração contínua não se tocam.
 13. Publicar exige revisão semântica, não só varredura.
 14. Conhecimento nasce na língua de quem vai lê-lo.
+15. Editou a fonte, regenere a cópia e prove — antes de entregar.
+16. Ao dar por entregue, prove que não ficou commit fora da branch da entrega.
 
 ## Os nomes
 

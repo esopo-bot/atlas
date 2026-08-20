@@ -136,3 +136,9 @@ Todo gancho que **decide** carrega o próprio teste: `python .claude/hooks/<nome
   trivialidade (transcript pequeno, poucos turnos, nenhum Edit/Write/Bash,
   trabalho de fundo pendente). É orientação, nunca erro, e os filtros falham
   abertos. Sem gancho, o caminho é a skill `esfriamento`.
+
+## Quando há mais de um agente
+
+Gancho escrito para um fabricante só falha em silêncio no outro — o
+muro atravessa, a lição não. Os três parafusos que decidem isso estão
+em [paridade entre agentes](paridade-entre-agentes.md).

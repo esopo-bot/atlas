@@ -3,7 +3,7 @@
   "titulo": "O vocabulário da camada",
   "criterio": "O nome declara a responsabilidade da peça, em português puro. Nome que precisa de explicação é nome errado; nome abstrato que serviria para qualquer coisa também.",
   "verificacao": {
-    "comentario": "Como se confere o fechamento de um termo: rode o `pronto.padrao` na árvore rastreada e desconte as `excecoes`. Zero linha = fechado. O padrão é PCRE (grep -P) porque as fronteiras precisam valer com acento.",
+    "comentario": "Como se confere o fechamento de um termo: rode o `pronto.padrao` na árvore rastreada e desconte as `excecoes`. Zero linha = fechado. O padrão é PCRE (grep -P) porque as fronteiras precisam valer com acento, e carrega `(?i)` porque maiúscula escondia ocorrência: sensível a caixa, o termo dava zero e ainda havia prosa aberta.",
     "comando_molde": "git ls-files -z | grep -zvE '^(nucleo/vocabulario\\.json|montar\\.py)$' | xargs -0 grep -InP '<pronto.padrao>' || true",
     "fora_da_conta": [
       {
@@ -45,7 +45,7 @@
       "nota": "A separação dos dois sentidos já era decisão registrada em modulos/encadeador/LEIAME.md (16/08/2026): 'esteira, nas regras da camada, é a automação da casa'. Cuidado: a prosa do $comment em .agents/recibo/recibo.schema.json cita o termo — editar o arquivo do contrato é aprovação manual, não automático.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\besteiras?\\b"
+        "padrao": "(?i)\\besteiras?\\b"
       }
     },
     {
@@ -70,7 +70,7 @@
       "nota": "'roteiro' declara: a lista ordenada do que fazer, escrita antes de rodar. 'manifesto' pedia explicação — manifesto de quê?",
       "pronto": {
         "metrica": "zero ocorrência fora das exceções",
-        "padrao": "\\bmanifestos?\\b"
+        "padrao": "(?i)\\bmanifestos?\\b"
       }
     },
     {
@@ -110,7 +110,7 @@
       "nota": "'execução' já é a palavra que o próprio código usa para isso. As duas do adjetivo moram hoje em nucleo/configuracao.json (arquivo DA CASA, que a atualização não reescreve) e no molde dela em montar.py: trocar no molde é o que viaja; no arquivo da casa, é edição do dono.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\bcorrentes?\\b"
+        "padrao": "(?i)\\bcorrentes?\\b"
       }
     },
     {
@@ -129,7 +129,7 @@
       "nota": "'estágio' é o termo padrão de integração contínua e é português. O termo é variável (onda, ondas), função (ondas_de) E saída observável ('onda 1 [só]: …'): três casos de teste do executor comparam essa string literal — trocar sem tocar nos testes derruba o `--testar`.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\bondas?\\b"
+        "padrao": "(?i)\\bondas?\\b"
       }
     },
     {
@@ -170,7 +170,7 @@
       "nota": "Termo mais espalhado do repositório. Os CAMPOS do contrato não mudam (ver `intocaveis`); muda o nome do instrumento, do arquivo, do diretório e da prosa. Renomear o arquivo do schema muda a identidade que instrumentos carregam por caminho — é aprovação manual.",
       "pronto": {
         "metrica": "zero ocorrência fora das exceções",
-        "padrao": "\\brecibos?\\b"
+        "padrao": "(?i)\\brecibos?\\b"
       }
     },
     {
@@ -221,7 +221,7 @@
       "nota": "A troca ALINHA o vocabulário em vez de inventar: 'verificar' é o verbo que a casa já usa no verificador de agentes. Alcança também a flag `--conferir` do montar.py e do próprio instrumento, e os ganchos cadastrados por caminho em .claude/settings.json.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\bconfer(ência|encia|ências|encias|ir|e|em|ida|ido|idas|idos|indo|iu|iram)\\b"
+        "padrao": "(?i)\\bconfer(ência|encia|ências|encias|ir|e|em|ida|ido|idas|idos|indo|iu|iram)\\b"
       }
     },
     {
@@ -240,12 +240,17 @@
         {
           "caso": "o campo `aprovacao` da etapa, que guarda o caminho do arquivo .ok",
           "razao": "não é o termo velho e não muda de nome — é justamente por ele existir que o TIPO vira `aprovacao-manual`."
+        },
+        {
+          "caso": "os literais de nome de arquivo que só existem no disco do dono: PORTAO.md e .claude/hooks/injetar-portao.py, citados na lista NUNCA_PUBLICADOS de publicar.py e no comentário do .gitignore",
+          "ocorrencias": 3,
+          "razao": "não é prosa: é nome de arquivo que a lista compara literalmente. Trocar o texto sem renomear o arquivo faria a exclusão parar de casar, e o que ela protege é a publicação — a única ação sem desfazer. Renomear os arquivos é do dono: os dois estão fora do git, e o gancho está cadastrado por caminho no settings.local.json, que também é dele."
         }
       ],
       "nota": "No JSON o tipo vira `\"tipo\": \"aprovacao-manual\"`, NÃO `aprovacao`: o campo `aprovacao` já existe na mesma etapa, e tipo com o mesmo nome de campo é o oposto de declarar. O estado `aguardando-portao` vira `aguardando-aprovacao`.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\bport(ão|ões|ao|oes)\\b"
+        "padrao": "(?i)\\bport(ão|ões|ao|oes)\\b"
       }
     },
     {
@@ -264,7 +269,7 @@
       "nota": "Só o título e os links mudam: o arquivo já se chama conhecimento/skills-da-camada.md. 'catálogo' declara; 'canivete' era piada interna.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\bcanivetes?\\b"
+        "padrao": "(?i)\\bcanivetes?\\b"
       }
     },
     {
@@ -289,7 +294,7 @@
       "nota": "'falso negativo' é o termo técnico consagrado e é português. A página é citada por link em outras páginas e no site/sidebars.js: renomear sem trocar os links deixa página órfã.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "zero[- ]que[- ]mente"
+        "padrao": "(?i)zero[- ]que[- ]mente"
       }
     },
     {
@@ -334,7 +339,7 @@
       "nota": "Os quatro sentidos somam 334, mais as 7 do verbo `casar` = 341. Onde o levantamento diz 'repositório (259)', a soma incluiu as 7 do verbo; o sentido medido é 252.",
       "pronto": {
         "metrica": "zero ocorrência fora das exceções",
-        "padrao": "\\bcasas?\\b"
+        "padrao": "(?i)\\bcasas?\\b"
       }
     },
     {
@@ -364,7 +369,7 @@
       "nota": "Metáfora de parentesco para uma relação de vizinhança no disco.",
       "pronto": {
         "metrica": "zero ocorrência",
-        "padrao": "\\birm(ã|ão|ãs|ãos|a|as)\\b"
+        "padrao": "(?i)\\birm(ã|ão|ãs|ãos|a|as)\\b"
       }
     },
     {
@@ -389,7 +394,7 @@
       "nota": "ÚNICO caso em que o nome novo CONTÉM o velho. Logo a métrica geral ('zero ocorrência') é inaplicável aqui: o grep acharia as 83 para sempre. A métrica dele é a de baixo — 'painel' desacompanhado, isto é, sem 'de controle' ao lado.",
       "pronto": {
         "metrica": "zero ocorrência de 'painel' desacompanhado",
-        "padrao": "\\bpain(el|éis|eis)\\b(?!\\s+de\\s+controle)",
+        "padrao": "(?i)\\bpain(el|éis|eis)\\b(?!\\s+de\\s+controle)",
         "nota": "Nome de arquivo e de diretório casam neste padrão e são exceção declarada: confira a lista antes de dar por aberto."
       }
     }

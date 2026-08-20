@@ -1179,7 +1179,7 @@ def _sobre_o_disparo_e_a_regua(b) -> None:
     b.caso("nome com barra é recusado",
          recusa_do_nome_de_trabalho("a/b") is not None)
     b.caso("nome com maiúscula é recusado",
-         recusa_do_nome_de_trabalho("Painel") is not None)
+         recusa_do_nome_de_trabalho("Alfa") is not None)
     b.caso("nome vazio é recusado", recusa_do_nome_de_trabalho("") is not None)
     b.caso("nome de 65 é recusado",
          recusa_do_nome_de_trabalho("a" * 65) is not None)

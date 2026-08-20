@@ -57,6 +57,15 @@
             "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/vetar-conhecimento-em-codigo.py\""
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-automacao.py\""
+          }
+        ]
       }
     ],
     "Stop": [

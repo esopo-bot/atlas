@@ -14,7 +14,8 @@ from encadeador import (
     _conta_do_remoto,
     _com_a_conta_no_git,
     CHAVE_DO_AJUDANTE_DE_CREDENCIAL,
-    ARQUIVO_EXECUTOR, CLAUDE_QUE_PARA_NA_METADE, ESPERA_MAXIMA_S,
+    ARQUIVO_EXECUTOR, CLAUDE_QUE_PARA_NA_METADE, CLI_FALSO_DA_SESSAO,
+    ESPERA_MAXIMA_S,
     ESTE_INSTRUMENTO, EXIT_COMPLETA, EXIT_ERRO_DE_USO_OU_AMBIENTE,
     EXIT_PAROU_NUM_PARA, EXIT_TESTE_CAIU, FALHA_DE_COMPORTAMENTO,
     FALHA_DE_RECUSA_COM_EXIT, FALHA_DE_RECUSA_PELO_MOTIVO_ERRADO, FALHOU,
@@ -1050,6 +1051,26 @@ def _sobre_o_andamento(b) -> None:
          resposta.returncode == 2)
 
 
+def _sobre_a_troca_do_cli_da_sessao(b) -> None:
+    marca = Path(b.pasta) / "o-cli-falso-rodou"
+    falso = Path(b.pasta) / "cli-falso.sh"
+    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=marca),
+                     encoding="utf-8")
+    falso.chmod(0o755)
+    roteiro = _roteiro(b.pasta, "m-cli.json", {"etapas": [
+        {"nome": "conversa", "tipo": "sessao", "prompt": "oi",
+         "tempo-limite": TETO_DO_DUBLE}]})
+    resposta = subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-cli", "--dir", b.evidencias,
+         "--cwd", b.pasta],
+        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+        env=dict(os.environ, ENCADEADOR_SESSAO=str(falso)))
+    b.caso("ENCADEADOR_SESSAO troca o CLI: o falso rodou no lugar do padrão",
+         marca.exists())
+    b.caso("o CLI trocado não vira erro de ambiente",
+         resposta.returncode != EXIT_ERRO_DE_USO_OU_AMBIENTE)
+
 TEMAS = (
     _sobre_a_conta_no_remoto,
     _sobre_a_configuracao,
@@ -1060,6 +1081,7 @@ TEMAS = (
     _sobre_a_prova_e_o_ambiente,
     _sobre_a_sessao,
     _sobre_o_tempo_limite,
+    _sobre_a_troca_do_cli_da_sessao,
     _sobre_os_ciclos_e_o_disco,
     _sobre_o_prompt_montado,
     _sobre_o_andamento,

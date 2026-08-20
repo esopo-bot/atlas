@@ -38,7 +38,7 @@ chamada de interface e verificação de permissão.
   pedaço curto.
 - **9** — `404` responde igual para "não existe" e "você não enxerga".
   Pergunte ao token, não ao rótulo: só a chamada autenticada prova a
-  identidade em uso. Portão de identidade: duas provas no mesmo token,
+  identidade em uso. Verificação de identidade: duas provas no mesmo token,
   várias tentativas por prova, e qual prova respondeu aparece na tela.
   Resultado intermitente se conta, não se conclui da primeira.
 

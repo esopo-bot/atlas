@@ -134,6 +134,11 @@ TETO_DO_DUBLE = 30
 CLAUDE_QUE_PARA_NA_METADE = ('#!/bin/sh\n'
                             'printf \'{"type":"system","subtype":"init"\'\n'
                             'sleep 600\n')
+CLI_FALSO_DA_SESSAO = (
+    '#!/bin/sh\n'
+    'touch {marca}\n'
+    'printf \'{{"type":"result","subtype":"success","num_turns":1,'
+    '"session_id":"s-falsa","result":"pronto"}}\\n\'\n')
 ERRO_SITUACAO_DESCONHECIDA = ("defeito no encadeador: situação {!r} "
                               "fora de SITUACOES")
 ERRO_ETAPA_SEM_EVIDENCIA = (

@@ -15,6 +15,17 @@ DESCRICAO_DA_CLI = ("revisa a camada instalada neste repositório: o que ela "
                     "uma sessão de verdade lê e aplica as regras")
 
 CARREGADOS_EM_TODA_SESSAO = ("AGENTS.md", "CLAUDE.md")
+CONFIGURACOES_DO_CLAUDE = (".claude/settings.json",
+                          ".claude/settings.local.json")
+CHAVE_DOS_GANCHOS = "hooks"
+EVENTO_DE_ABERTURA = "SessionStart"
+CHAVE_DO_COMANDO = "command"
+CHAVE_DA_SAIDA_DO_GANCHO = "hookSpecificOutput"
+CHAVE_DO_CONTEXTO_INJETADO = "additionalContext"
+RAIZ_NO_COMANDO = "${CLAUDE_PROJECT_DIR}"
+RAIZ_NO_COMANDO_SEM_CHAVES = "$CLAUDE_PROJECT_DIR"
+ENTRADA_VAZIA_DO_GANCHO = "{}"
+TEMPO_DE_UM_GANCHO = 30
 PASTA_DAS_SKILLS = ".claude/skills"
 PASTA_DAS_SKILLS_FONTE = ".agents/skills"
 PASTA_DOS_GANCHOS = ".claude/hooks"
@@ -92,6 +103,43 @@ def catalogo_e_corpo(skill: Path) -> tuple:
     return listada, len(texto.encode()) - len(frente.group(1).encode())
 
 
+def comandos_de_abertura(raiz: Path) -> list:
+    comandos = []
+    for nome in CONFIGURACOES_DO_CLAUDE:
+        try:
+            dado = json.loads(
+                (raiz / nome).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        blocos = (dado.get(CHAVE_DOS_GANCHOS) or {}).get(
+            EVENTO_DE_ABERTURA) or []
+        for bloco in blocos:
+            for gancho in (bloco.get(CHAVE_DOS_GANCHOS) or []):
+                if gancho.get(CHAVE_DO_COMANDO):
+                    comandos.append(gancho[CHAVE_DO_COMANDO])
+    return comandos
+
+
+def bytes_que_os_ganchos_injetam(raiz: Path) -> int:
+    total = 0
+    for comando in comandos_de_abertura(raiz):
+        real = comando.replace(RAIZ_NO_COMANDO, str(raiz)).replace(
+            RAIZ_NO_COMANDO_SEM_CHAVES, str(raiz))
+        try:
+            pronto = subprocess.run(
+                real, shell=True, input=ENTRADA_VAZIA_DO_GANCHO,
+                capture_output=True, text=True, cwd=raiz,
+                timeout=TEMPO_DE_UM_GANCHO)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        with contextlib.suppress(ValueError, KeyError, TypeError,
+                                 AttributeError):
+            injetado = json.loads(pronto.stdout)[
+                CHAVE_DA_SAIDA_DO_GANCHO][CHAVE_DO_CONTEXTO_INJETADO]
+            total += len(injetado.encode())
+    return total
+
+
 def medir(raiz: Path) -> tuple:
     instrucoes = sum(len((raiz / n).read_bytes())
                      for n in CARREGADOS_EM_TODA_SESSAO if (raiz / n).is_file())
@@ -102,10 +150,12 @@ def medir(raiz: Path) -> tuple:
         catalogo += len(listada.encode())
         adiado += corpo
     paginas = sorted((raiz / PASTA_DO_CONHECIMENTO).glob(GLOB_PAGINA))
+    injetado_por_gancho = bytes_que_os_ganchos_injetam(raiz)
     dados = {
-        "largada": instrucoes + catalogo,
+        "largada": instrucoes + catalogo + injetado_por_gancho,
         "instrucoes": instrucoes,
         "catalogo": catalogo,
+        "injetado_por_gancho": injetado_por_gancho,
         "adiado": adiado,
         "skills": len(skills),
         "paginas": len(paginas),
@@ -120,6 +170,8 @@ def medir(raiz: Path) -> tuple:
                      f"{dados['instrucoes']} bytes"),
         LINHA.format(f"  catálogo de {dados['skills']} skills",
                      f"{dados['catalogo']} bytes"),
+        LINHA.format("  injetado por gancho de abertura",
+                     f"{dados['injetado_por_gancho']} bytes"),
         LINHA.format("corpo de skill — só ao disparar",
                      f"{dados['adiado']} bytes"),
         LINHA.format(f"páginas em {PASTA_DO_CONHECIMENTO}/",
@@ -315,6 +367,7 @@ NUMEROS = {
     "adiado": ("medir", "adiado"),
     "paginas": ("medir", "paginas"),
     "ganchos": ("medir", "ganchos"),
+    "injetado-por-gancho": ("medir", "injetado_por_gancho"),
     "instrumentos-que-caem": ("provar", "caem"),
     "ganchos-sem-teste": ("provar", "sem_teste"),
     "acertos-da-simulacao": ("simular", "acertos"),
@@ -434,6 +487,29 @@ def testar() -> int:
         _, dados = medir(raiz)
         caso("a largada soma instruções mais catálogo, nunca o corpo",
              dados["largada"] == 4 + len("- s: faz algo\n".encode()))
+
+        injecao = "regra que o gancho injeta\n"
+        (raiz / "gancho.py").write_text(
+            "import json\n"
+            "print(json.dumps({'hookSpecificOutput': "
+            "{'additionalContext': %r}}))\n" % injecao,
+            encoding="utf-8")
+        (raiz / ".claude").mkdir(exist_ok=True)
+        (raiz / ".claude" / "settings.json").write_text(
+            json.dumps({"hooks": {"SessionStart": [{"hooks": [
+                {"type": "command", "command":
+                 'python3 "${CLAUDE_PROJECT_DIR}/gancho.py"'}]}]}}),
+            encoding="utf-8")
+        _, com_gancho = medir(raiz)
+        caso("o gancho de abertura entra na conta",
+             com_gancho["injetado_por_gancho"] == len(injecao.encode()))
+        caso("e a largada cresce exatamente o que ele injeta",
+             com_gancho["largada"]
+             == dados["largada"] + len(injecao.encode()))
+        (raiz / "gancho.py").write_text("import sys\nsys.exit(1)\n",
+                                        encoding="utf-8")
+        caso("gancho que cai não derruba a medida",
+             medir(raiz)[1]["injetado_por_gancho"] == 0)
         caso("o corpo da skill fica no adiado", dados["adiado"] > 0)
         caso("conta as skills", dados["skills"] == 1)
 
@@ -518,7 +594,7 @@ def testar() -> int:
          all(chave in NUMEROS for provas in PROVAS.values()
              for _, chave in provas))
 
-    total = 25
+    total = 28
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
         for falha in falhas:

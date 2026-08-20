@@ -34,6 +34,10 @@ de consulta, não de sessão.
 4. **A memória mora no disco, não no contexto.**
     - O que vale amanhã se escreve — wiki, nota, decisão — nas subpastas de
       `conhecimento/`.
+    - A memória carrega a prova re-executável do que afirma. Afirmação com
+      número envelhece calada — uma nota de poucos dias atrás já discorda do
+      disco, e ninguém percebe porque ela parece um fato. A nota que traz junto
+      o comando que a derruba é a única que não mente.
 
 5. **Ao dar por pronto, faça a análise de promoção.**
     - Três pilhas: genérico, do workspace, descartável. Na dúvida se é
@@ -126,6 +130,30 @@ de consulta, não de sessão.
       é gerada dele.
     - Conhecimento não nasce em pasta de código — lá ninguém o procura, e ele
       viaja por engano no commit do repositório errado.
+
+15. **Editou a fonte, regenere a cópia e prove — antes de entregar.**
+    - Onde existe cópia gerada — carga embutida do instalador, espelho de
+      skills, página escrita a partir de dado —, editar a fonte e não regenerar
+      entrega a cópia velha. Quem instala recebe a cópia, não a sua fonte.
+    - Regenerar é consertar; provar é outra coisa. O que prova verifica sem
+      escrever e sai diferente de zero quando divergiu — `python montar.py
+      --verificar`. O `--sincronizar` escreve e não acusa: rodar só ele deixa a
+      divergência invisível.
+    - O gerado se declara gerado, e o gerado não se edita à mão — a edição se
+      perde na próxima sincronização, sem aviso.
+    - Procedência: [mapa do repositório](mapa-do-repositorio.md).
+
+16. **Ao dar por entregue, prove que não ficou commit fora da branch da
+    entrega.**
+    - A prova é uma listagem, não memória: `git log <branch-da-entrega>..HEAD
+      --oneline`. Vazio é a prova; qualquer linha é trabalho que fica para
+      trás.
+    - Commit em branch que ninguém vai incorporar não existe para o resto do
+      mundo, e some no dia em que a branch for podada.
+    - Este é o achado que depende de lembrar no fim da sessão mais longa do dia
+      — que é exatamente quando ninguém lembra. Como etapa de código, custa
+      zero.
+    - Procedência: [abrir e fechar a sessão](abrir-e-fechar-a-sessao.md).
 
 ## Como propor mudança — e como consultar por código
 
