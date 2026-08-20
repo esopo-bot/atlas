@@ -70,7 +70,7 @@
     },
     {
       "id": 8,
-      "regra": "Segredo não entra em git nenhum — e ler credencial localmente é livre.",
+      "regra": "Segredo não entra em git nenhum — em texto rastreado vai `${VARIAVEL}`, nunca o valor; ler credencial localmente é livre.",
       "faca": [
         "Ler é reversível; publicar não é. Em texto rastreado — arquivo, commit, issue — vai `${VARIAVEL}`, nunca o valor. Vale para git público E privado.",
         "O exemplo canônico: ler credencial para montar a camada MCP read-only do banco de produção, pode; o valor num `.mcp.json` rastreado, não.",

@@ -14,6 +14,7 @@ PROTEGIDAS_EMBUTIDAS = {
 ARQUIVO_DE_BRANCHES_PROTEGIDAS = ".claude/branches-protegidas.txt"
 ARQUIVO_CONFIGURACAO = "nucleo/configuracao.json"
 CHAVE_DAS_AUTORIZACOES = "autorizacoes"
+CHAVE_POR_INCORPORACAO = "branches_por_incorporacao"
 MARCA_DE_COMENTARIO = "#"
 PASTA_DO_GIT = ".git"
 
@@ -23,7 +24,8 @@ NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 BANDEIRAS_GLOBAIS_SIMPLES = {"--no-pager", "--paginate", "-p", "--bare",
                              "--literal-pathspecs"}
 BANDEIRAS_GLOBAIS_QUE_COMEM_O_TOKEN_SEGUINTE = {
-    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path",
+    "-R", "--repo"}
 
 SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
 EXPANSAO_QUE_ASPA_DUPLA_NAO_SEGURA = re.compile(r"\$\(|`|\)")
@@ -45,6 +47,7 @@ PREFIXO_DE_APAGAR_POR_REFSPEC = ":"
 PREFIXO_DE_FORCAR_POR_REFSPEC = "+"
 ACAO_APAGAR = "apagar"
 ACAO_RENOMEAR = "renomear"
+ACAO_COMMIT = "commit"
 
 NOMES_DO_GIT = {"git", "git.exe"}
 NOME_DO_GH = "gh"
@@ -56,6 +59,11 @@ TEMPO_LIMITE_DO_GIT = 5
 HEAD_SOLTA = "head"
 PREFIXO_DE_REFS_DE_BRANCH = re.compile(r"^refs/heads/")
 
+SUBVERBOS_QUE_SO_PEDEM = {
+    "pr": frozenset({"create", "view", "list", "status", "diff", "checks",
+                     "comment", "edit", "ready", "checkout", "close",
+                     "reopen", "review"}),
+}
 VERBOS_POR_ACAO = {
     "commit": ("commit",),
     "push": ("push",),
@@ -69,11 +77,18 @@ EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
 BANDEIRA_DE_TESTE = "--testar"
 SEM_ACAO = ""
+SEM_VERBO = -1
 SEM_RECUSA = ""
 SILENCIO = 0
 FALHA_ABERTO = 0
 
 MOTIVO_BRANCH_PROTEGIDA = "{} a branch protegida '{}'"
+MOTIVO_GRAVA_EM_PROTEGIDA = (
+    "{} direto na branch '{}', que este repositório declarou de "
+    "incorporação — o controle é o pedido de "
+    "incorporação, não a gravação. Abra uma branch de trabalho, "
+    "entregue nela e peça a incorporação. Autorização declarada não "
+    "vale para branch de longa duração.")
 MOTIVO_ESPELHO = ("reescrever todas as refs do remoto de uma vez (--mirror), "
                   "as protegidas inclusive")
 MOTIVO_APAGAR_POR_REFSPEC = (
@@ -197,7 +212,7 @@ def partir_em_tokens(segmento: str) -> list:
     return [sem_o_par_de_aspas_que_envolve(t) for t in tokens]
 
 
-def verbo_e_resto(tokens: list):
+def indice_do_verbo(tokens: list) -> int:
     i = 1
     while i < len(tokens):
         t = tokens[i]
@@ -213,8 +228,15 @@ def verbo_e_resto(tokens: list):
         if t.startswith("-"):
             i += 1
             continue
-        return t.lower(), tokens[i + 1:]
-    return None, []
+        return i
+    return SEM_VERBO
+
+
+def verbo_e_resto(tokens: list):
+    i = indice_do_verbo(tokens)
+    if i == SEM_VERBO:
+        return None, []
+    return tokens[i].lower(), tokens[i + 1:]
 
 
 def branch_atual(raiz: Path):
@@ -281,11 +303,15 @@ def acao_do_comando(tokens: list) -> str:
     programa = Path(tokens[0]).name.lower().removesuffix(EXTENSAO_EXE)
     if programa not in PROGRAMAS_QUE_ACIONAM:
         return SEM_ACAO
-    argumentos = [t for t in tokens[1:] if not t.startswith("-")]
-    if not argumentos:
+    i = indice_do_verbo(tokens)
+    if i == SEM_VERBO:
+        return SEM_ACAO
+    primeiro = tokens[i].lower()
+    segundo = tokens[i + 1].lower() if i + 1 < len(tokens) else ""
+    if segundo in SUBVERBOS_QUE_SO_PEDEM.get(primeiro, frozenset()):
         return SEM_ACAO
     for acao, verbos in VERBOS_POR_ACAO.items():
-        if argumentos[0].lower() in verbos:
+        if primeiro in verbos:
             return acao
     return SEM_ACAO
 
@@ -329,9 +355,26 @@ def recusa_do_verbo_push(bandeiras: set, resto: list, refs: list,
     return SEM_RECUSA
 
 
+def branches_por_incorporacao(raiz: Path) -> set:
+    try:
+        dado = json.loads(
+            (raiz / ARQUIVO_CONFIGURACAO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    declarado = (dado.get(CHAVE_POR_INCORPORACAO)
+                 if isinstance(dado, dict) else None)
+    if not isinstance(declarado, list):
+        return set()
+    return {str(nome).strip().lower() for nome in declarado if str(nome).strip()}
+
+
 def motivo_da_recusa(comando: str, protegidas: set, raiz: Path,
-                     permitido: dict = None):
+                     permitido: dict = None, aqui: str = None,
+                     por_incorporacao: set = None):
     permitido = OMISSAO_NAO_E_PERMISSAO if permitido is None else permitido
+    aqui = branch_atual(raiz) if aqui is None else aqui
+    por_incorporacao = (branches_por_incorporacao(raiz)
+                        if por_incorporacao is None else por_incorporacao)
     recusa_por_autorizacao_pendente = SEM_RECUSA
     for segmento in separar(comando):
         tokens = partir_em_tokens(segmento.strip())
@@ -339,6 +382,8 @@ def motivo_da_recusa(comando: str, protegidas: set, raiz: Path,
             continue
 
         acao = acao_do_comando(tokens)
+        if acao == ACAO_COMMIT and aqui in por_incorporacao:
+            return MOTIVO_GRAVA_EM_PROTEGIDA.format(acao, aqui)
         if (acao and not permitido.get(acao, False)
                 and not recusa_por_autorizacao_pendente):
             recusa_por_autorizacao_pendente = MOTIVO_SEM_AUTORIZACAO.format(
@@ -384,9 +429,10 @@ def main() -> int:
         return SILENCIO
 
     raiz = raiz_do_projeto_nunca_o_cwd()
+    alvo = repositorio_que_o_comando_muda(onde, raiz, comando)
     motivo = motivo_da_recusa(
-        comando, nomes_protegidos(raiz), raiz,
-        autorizacoes(repositorio_que_o_comando_muda(onde, raiz, comando)))
+        comando, nomes_protegidos(raiz), raiz, autorizacoes(alvo), None,
+        branches_por_incorporacao(alvo))
     if not motivo:
         return SILENCIO
 
@@ -435,6 +481,18 @@ BARRA = [
      "cat <<FIM\n$(git push --force origin main)\nFIM"),
 ]
 
+SO_PEDEM = [
+    ("abrir PR é pedir, não publicar — o dono é quem incorpora",
+     "gh pr create --fill"),
+    ("ver PR não muda nada", "gh pr view 1"),
+    ("listar PR não muda nada", "gh pr list"),
+    ("comentar em PR é falar, não publicar",
+     "gh pr comment 13 --body texto"),
+    ("etiquetar PR não incorpora nada", "gh pr edit 13 --add-label pronto"),
+    ("tirar o rascunho não incorpora nada", "gh pr ready 13"),
+    ("baixar o PR mexe só na cópia local", "gh pr checkout 13"),
+]
+
 DEIXA_PASSAR = [
     ("push normal na protegida", "git push origin develop"),
     ("push normal, sem ref", "git push"),
@@ -469,36 +527,78 @@ DEIXA_PASSAR = [
 BARRA_SEM_AUTORIZACAO = [
     ("commit sem autorização", "git commit -m x"),
     ("push sem autorização", "git push origin feature/minha"),
-    ("abrir PR sem autorização", "gh pr create --fill"),
     ("mesclar PR sem autorização", "gh pr merge 1 --merge"),
     ("publicar release sem autorização", "gh release create v1"),
+    ("bandeira global não esconde o merge",
+     "gh --repo d/r pr merge 13 --merge"),
+    ("bandeira global curta também não esconde",
+     "gh -R d/r pr merge 13 --merge"),
+    ("o caminho do -C não é o verbo", "git -C /tmp/x commit -m algo"),
+    ("a configuração do -c não é o verbo",
+     "git -c user.name=x commit -m algo"),
 ]
 
 AUTORIZA_TUDO = {"commit": True, "push": True, "publicar": True}
 FORCA_EM_PROTEGIDA = "git push --force origin main"
+BRANCH_DE_TRABALHO_DO_TESTE = "issue/1-algo"
+BRANCH_DE_INTEGRACAO_DO_TESTE = "homolog"
+BRANCHES_POR_INCORPORACAO_DO_TESTE = ("main",)
+GRAVA_EM_PROTEGIDA = (
+    ("commit direto", 'git commit -m "algo"'),
+    ("commit com todos", "git commit -am algo"),
+    ("commit por caminho absoluto", '/usr/bin/git commit -m "algo"'),
+)
+FALHA_GRAVOU_EM_PROTEGIDA = (
+    "  DEVIA BARRAR mesmo autorizado, em '{}' na branch '{}'")
+FALHA_BARROU_NA_DE_TRABALHO = (
+    "  DEVIA PASSAR na branch de trabalho — {}")
+FALHA_BARROU_NA_INTEGRACAO = (
+    "  DEVIA PASSAR na branch de integração não declarada — {}")
+FALHA_SO_PEDE_E_BARROU = (
+    "  DEVIA PASSAR sem autorização, porque só pede — {}")
 
 
 def testar() -> int:
     protegidas = set(PROTEGIDAS_EMBUTIDAS)
     raiz = Path.cwd()
     falhas = []
+    fora = BRANCH_DE_TRABALHO_DO_TESTE
     for rotulo, comando in BARRA:
-        if not motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO):
+        if not motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO, fora):
             falhas.append(FALHA_DEVIA_BARRAR.format(rotulo, comando))
     for rotulo, comando in DEIXA_PASSAR:
-        motivo = motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO)
+        motivo = motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO, fora)
         if motivo:
             falhas.append(FALHA_DEVIA_PASSAR.format(rotulo, comando, motivo))
+    for rotulo, comando in SO_PEDEM:
+        if motivo_da_recusa(comando, protegidas, raiz, None, fora):
+            falhas.append(FALHA_SO_PEDE_E_BARROU.format(rotulo))
+
     for rotulo, comando in BARRA_SEM_AUTORIZACAO:
-        if not motivo_da_recusa(comando, protegidas, raiz):
+        if not motivo_da_recusa(comando, protegidas, raiz, None, fora):
             falhas.append(FALHA_DEVIA_BARRAR_SEM_AUTORIZACAO.format(rotulo))
-        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO):
+        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO, fora):
             falhas.append(FALHA_DEVIA_PASSAR_COM_AUTORIZACAO.format(rotulo))
     if not motivo_da_recusa(FORCA_EM_PROTEGIDA, protegidas, raiz,
-                            AUTORIZA_TUDO):
+                            AUTORIZA_TUDO, fora):
         falhas.append(FALHA_FORCA_MESMO_AUTORIZADO)
 
-    total = (len(BARRA) + len(DEIXA_PASSAR)
+    declaradas = set(BRANCHES_POR_INCORPORACAO_DO_TESTE)
+    for rotulo, comando in GRAVA_EM_PROTEGIDA:
+        for onde in declaradas:
+            if not motivo_da_recusa(comando, protegidas, raiz,
+                                    AUTORIZA_TUDO, onde, declaradas):
+                falhas.append(FALHA_GRAVOU_EM_PROTEGIDA.format(rotulo, onde))
+        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO, fora,
+                            declaradas):
+            falhas.append(FALHA_BARROU_NA_DE_TRABALHO.format(rotulo))
+        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
+                            BRANCH_DE_INTEGRACAO_DO_TESTE, declaradas):
+            falhas.append(FALHA_BARROU_NA_INTEGRACAO.format(rotulo))
+
+    total = (len(GRAVA_EM_PROTEGIDA)
+             * (len(BRANCHES_POR_INCORPORACAO_DO_TESTE) + 2)
+             + len(SO_PEDEM) + len(BARRA) + len(DEIXA_PASSAR)
              + len(BARRA_SEM_AUTORIZACAO) * 2 + 1)
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))

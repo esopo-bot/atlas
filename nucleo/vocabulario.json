@@ -35,7 +35,13 @@
         }
       ],
       "renomeia_caminhos": [],
-      "excecoes": [],
+      "excecoes": [
+        {
+          "caso": "o $comment do contrato v1, em recibo.schema.json",
+          "ocorrencias": 1,
+          "razao": "prosa dentro do arquivo congelado: mexer nele para trocar um comentário mexeria no contrato sem necessidade."
+        }
+      ],
       "nota": "A separação dos dois sentidos já era decisão registrada em modulos/encadeador/LEIAME.md (16/08/2026): 'esteira, nas regras da camada, é a automação da casa'. Cuidado: a prosa do $comment em .agents/recibo/recibo.schema.json cita o termo — editar o arquivo do contrato é aprovação manual, não automático.",
       "pronto": {
         "metrica": "zero ocorrência",
@@ -156,9 +162,9 @@
       ],
       "excecoes": [
         {
-          "caso": "o valor de enum `recibo-invalido`, no campo `motivo` do schema",
-          "ocorrencias": 1,
-          "razao": "contrato v1 — não muda. Quem rodar o grep de fechamento tropeça nele: é exceção conhecida, não pendência."
+          "caso": "o contrato v1 da evidência e tudo que o nomeia: o arquivo .agents/evidencia/recibo.schema.json, o seu title, o valor de enum `recibo-invalido` no campo `motivo`, e as referências a esses dois em código, teste e página",
+          "ocorrencias": 21,
+          "razao": "decisão do dono, registrada: contrato v1 e CLI pública não se renomeiam sem aprovação manual — quebram roteiro, página e evidência já gravada. Versão nova é arquivo novo, diz o próprio schema."
         }
       ],
       "nota": "Termo mais espalhado do repositório. Os CAMPOS do contrato não mudam (ver `intocaveis`); muda o nome do instrumento, do arquivo, do diretório e da prosa. Renomear o arquivo do schema muda a identidade que instrumentos carregam por caminho — é aprovação manual.",
@@ -205,7 +211,13 @@
           "vira": ".claude/hooks/verificar-mcp.py"
         }
       ],
-      "excecoes": [],
+      "excecoes": [
+        {
+          "caso": "o $comment do contrato v1, em recibo.schema.json",
+          "ocorrencias": 1,
+          "razao": "mesma razão do termo esteira: prosa dentro do arquivo congelado."
+        }
+      ],
       "nota": "A troca ALINHA o vocabulário em vez de inventar: 'verificar' é o verbo que a casa já usa no verificador de agentes. Alcança também a flag `--conferir` do montar.py e do próprio instrumento, e os ganchos cadastrados por caminho em .claude/settings.json.",
       "pronto": {
         "metrica": "zero ocorrência",
@@ -309,9 +321,14 @@
       "renomeia_caminhos": [],
       "excecoes": [
         {
-          "caso": "o VERBO casar conjugado ('o $ do Python casa antes de um \\n') e a função _casa_padrao",
-          "ocorrencias": 7,
-          "razao": "mesma grafia, outro verbo: falso positivo do padrão. Fica, e o grep de fechamento vai continuar achando estas — exceção conhecida, não pendência."
+          "caso": "o VERBO casar conjugado — 'não casa com', 'casa com um esquema proibido', a variável `casa` do avaliador de esquema",
+          "ocorrencias": 11,
+          "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate."
+        },
+        {
+          "caso": "o caminho de mentira `/casa` nos casos de porta ocupada do painel de controle",
+          "ocorrencias": 10,
+          "razao": "outro referente: é um diretório inventado para o teste, não a casa de ninguém."
         }
       ],
       "nota": "Os quatro sentidos somam 334, mais as 7 do verbo `casar` = 341. Onde o levantamento diz 'repositório (259)', a soma incluiu as 7 do verbo; o sentido medido é 252.",
@@ -335,7 +352,13 @@
       "excecoes": [
         {
           "caso": "'página irmã divide a verdade em duas' (skill documentar-processo)",
-          "razao": "aí o referente é outra PÁGINA, não repositório: vira 'outra página', não 'repositório vizinho'."
+          "ocorrencias": 0,
+          "razao": "outro referente: fala de duas páginas, não de repositório."
+        },
+        {
+          "caso": "o `.md` irmão do roteiro — o arquivo de mesmo nome ao lado, de onde o painel de controle tira a descrição",
+          "ocorrencias": 6,
+          "razao": "outro referente: é arquivo vizinho no mesmo repositório, não repositório vizinho. 'repositório vizinho .md' não existe."
         }
       ],
       "nota": "Metáfora de parentesco para uma relação de vizinhança no disco.",
@@ -358,8 +381,9 @@
       "renomeia_caminhos": [],
       "excecoes": [
         {
-          "caso": "nome de arquivo, de diretório e de módulo — modulos/painel/, painel.py, painel.md",
-          "razao": "ficam curtos: 'painel-de-controle.py' é peso sem ganho, e 'painel' é a raiz do termo novo, não outra palavra."
+          "caso": "nome de arquivo, de diretório e de módulo — modulos/painel/, painel.py, painel.md, o prefixo do pedido e o da pasta temporária",
+          "ocorrencias": 16,
+          "razao": "nome próprio de peça no disco: renomear arquivo e pasta quebra instalação, roteiro e documentação de quem já montou. A prosa já diz 'painel de controle'."
         }
       ],
       "nota": "ÚNICO caso em que o nome novo CONTÉM o velho. Logo a métrica geral ('zero ocorrência') é inaplicável aqui: o grep acharia as 83 para sempre. A métrica dele é a de baixo — 'painel' desacompanhado, isto é, sem 'de controle' ao lado.",

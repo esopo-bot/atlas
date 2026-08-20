@@ -49,7 +49,8 @@ de consulta, não de sessão.
     - Chamada externa e MCP só quando a tarefa exigir, espaçadas.
     - No primeiro `403`/`429`, recue — não insista em rajada.
 
-8. **Segredo não entra em git nenhum — e ler credencial localmente é livre.**
+8. **Segredo não entra em git nenhum — em texto rastreado vai `${VARIAVEL}`,
+   nunca o valor; ler credencial localmente é livre.**
     - Ler é reversível; publicar não é. Em texto rastreado — arquivo, commit,
       issue — vai `${VARIAVEL}`, nunca o valor. Vale para git público E
       privado.

@@ -1,12 +1,15 @@
 import argparse
+import contextlib
 import errno
 import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -30,8 +33,8 @@ ERRO_CWD_NAO_E_PASTA = "erro de uso: --cwd não é pasta: {}"
 ERRO_SEM_ENCADEADOR = ("erro de ambiente: falta o encadeador — rode\n"
                        "  python montar.py --modulo encadeador")
 ERRO_SEM_O_COMANDO_CLAUDE = (
-    "erro de ambiente: o comando claude não está no PATH; a etapa de "
-    "sessão morreria.")
+    "erro de ambiente: o comando {} não está no PATH; a etapa de "
+    "sessão morreria. Quem manda no comando é ENCADEADOR_SESSAO.")
 ERRO_ARVORE_SUJA = (
     "PAREI — {} tem mudança não commitada.\n"
     "A sessão da execução roda com permissões puladas: numa árvore com "
@@ -127,6 +130,14 @@ ESTADO_EM_CURSO = "em-curso"
 ARQUIVO_ESTADO = "estado.json"
 ARQUIVO_EXECUTOR = "nucleo/executor.json"
 SUFIXO_DO_ROTEIRO = ".roteiro.json"
+SUFIXO_DA_DESCRICAO = ".md"
+INSTALADOR = "montar.py"
+BANDEIRA_DE_VERSAO = "--versao"
+MARCA_DA_VERSAO = "camada"
+TEMPO_DO_INSTALADOR = 60
+CHAVE_DESCRICAO = "descricao"
+SEM_DESCRICAO = ("Esta rotina não tem descrição: escreva um .md com o mesmo "
+                 "nome ao lado do roteiro, ou um campo \"descricao\" nele.")
 SUFIXO_DO_LOG = ".log"
 PREFIXO_DA_TRAVA = ".trava-"
 DIGITOS_DO_RESUMO_DO_ALVO = 12
@@ -195,12 +206,21 @@ def descendentes_lendo_proc(pai: int) -> list:
     return achados
 
 
+VARIAVEL_DA_SESSAO = "ENCADEADOR_SESSAO"
+PADRAO_DA_SESSAO = "claude"
+
+
+def comando_da_sessao() -> str:
+    declarado = os.environ.get(VARIAVEL_DA_SESSAO, PADRAO_DA_SESSAO)
+    return (shlex.split(declarado) or [PADRAO_DA_SESSAO])[0]
+
+
 def sessoes_de_modelo_entre(pids: list) -> int:
     vivas = 0
     for pid in pids:
         try:
             with open(f"/proc/{pid}/cmdline", "rb") as arquivo:
-                if b"claude" in arquivo.read():
+                if comando_da_sessao().encode() in arquivo.read():
                     vivas += 1
         except OSError:
             continue
@@ -306,6 +326,19 @@ def inteiro_na_faixa_ou_padrao(valor, minimo: int, maximo: int,
     return valor if esta_na_faixa else padrao
 
 
+def descricao_do_roteiro(caminho: Path) -> str:
+    irmao = caminho.with_suffix(SUFIXO_DA_DESCRICAO)
+    if irmao.is_file():
+        texto = irmao.read_text(encoding="utf-8", errors="replace").strip()
+        if texto:
+            return texto
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        dado = json.loads(caminho.read_text(encoding="utf-8"))
+        if isinstance(dado, dict) and isinstance(dado.get(CHAVE_DESCRICAO), str):
+            return dado[CHAVE_DESCRICAO].strip()
+    return SEM_DESCRICAO
+
+
 def parece_roteiro(dado) -> bool:
     return isinstance(dado, dict) and isinstance(dado.get("etapas"), list)
 
@@ -399,6 +432,11 @@ class PonteParaOEncadeador:
 
     def catalogo(self) -> list:
         return sorted(self._roteiros_por_nome_com_a_primeira_pasta_vencendo())
+
+    def catalogo_com_descricao(self) -> list:
+        achados = self._roteiros_por_nome_com_a_primeira_pasta_vencendo()
+        return [{"nome": nome, "descricao": descricao_do_roteiro(achados[nome])}
+                for nome in sorted(achados)]
 
     def ler_roteiro_do_catalogo(self, nome: str) -> tuple[dict | None, str | None]:
         alvo = self._roteiros_por_nome_com_a_primeira_pasta_vencendo().get(nome)
@@ -639,6 +677,9 @@ summary{cursor:pointer;font:500 10px/1 var(--mono);letter-spacing:.16em;
 pre{margin:8px 0 0;padding:13px 15px;background:var(--sulco);
   border:1px solid var(--linha);border-radius:3px;overflow:auto;max-height:300px;
   font:12px/1.6 var(--mono);white-space:pre-wrap;color:var(--grafite)}
+.oquefaz{grid-column:1/-1;margin:2px 0 6px;padding:8px 10px;
+  border-left:3px solid var(--linha);background:var(--fundo2, transparent);
+  font:12px/1.55 var(--mono);white-space:pre-wrap;color:var(--grafite)}
 @media(max-width:620px){
   .linha-r{grid-template-columns:28px 1fr;gap:6px}
   .vd,.ciclo{grid-column:2;text-align:left}
@@ -662,6 +703,7 @@ pre{margin:8px 0 0;padding:13px 15px;background:var(--sulco);
   <label class="campo">disparar
     <select id="modo"><option value="prompt">um pedido meu</option></select>
   </label>
+  <div id="oquefaz" class="oquefaz" hidden></div>
   <button id="b">Disparar</button>
   <label class="campo" id="lturnos">turnos
     <input id="turnos" type="number" value="24" min="4" max="120" style="width:62px">
@@ -697,9 +739,12 @@ function esc(s){return String(s??'').replace(/[<&>]/g,c=>({'<':'&lt;','&':'&amp;
 function mm(s){return s==null?'?':Math.floor(s/60)+'m'+String(s%60).padStart(2,'0')}
 function modoRoteiro(){return $('modo').value!=='prompt'}
 
+let ROTINAS={};
 function ajusta(){
   const m=modoRoteiro();
   for(const i of ['p','lteto','lturnos'])$(i).style.display=m?'none':'';
+  const cx=$('oquefaz'), texto=m?(ROTINAS[$('modo').value]||''):'';
+  cx.textContent=texto; cx.hidden=!texto;
   $('dica').textContent=m
     ?'execução de várias etapas — o prompt de cada uma está dentro do arquivo'
     :'vira uma execução de uma etapa mais a verificação. Turnos de menos = a sessão morre sem entregar nada';
@@ -802,8 +847,12 @@ async function ciclo(){
     md.dataset.chave=listaM.join('|');
     md.innerHTML='<option value="prompt">um pedido meu</option>'
       +d.roteiros.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
-    if(antesM)md.value=antesM; ajusta();
+    if(antesM)md.value=antesM;
   }
+  if(d.rotinas){
+    ROTINAS={}; for(const r of d.rotinas)ROTINAS[r.nome]=r.descricao;
+  }
+  ajusta();
   // O backlog do quadro configurado, e o disparo a partir de uma issue.
   const q=$('quadro');
   if(q){
@@ -904,6 +953,7 @@ def corpo_com_coordenadas_modo_e_quadro(ponte: PonteParaOEncadeador) -> dict:
             "evidencias": str(ponte.dir),
             "trabalhos": ponte.trabalhos(),
             "roteiros": ponte.catalogo(),
+            "rotinas": ponte.catalogo_com_descricao(),
             "modo": configuracao.get("modo"),
             "quadro": ponte.backlog_das_issues_com_cache()}
 
@@ -1013,17 +1063,30 @@ def fazer_handler(ponte: PonteParaOEncadeador):
     return Handler
 
 
-def testar() -> int:
-    casos, falhas = 0, []
+class BancadaDoPainel:
+    def __init__(self):
+        self.casos = 0
+        self.falhas = []
 
-    def caso(nome, ok):
-        nonlocal casos
-        casos += 1
+    def caso(self, nome, ok) -> None:
+        self.casos += 1
         if not ok:
-            falhas.append(nome)
+            self.falhas.append(nome)
 
-    import tempfile as _tmp
-    with _tmp.TemporaryDirectory(prefix="painel-h6-") as tmp:
+
+def versao_impressa_pelo_instalador():
+    instalador = RAIZ / INSTALADOR
+    if not instalador.is_file():
+        return versao_da_camada_declarada_no_topo_do_montar()
+    saida = subprocess.run(
+        [sys.executable, str(instalador), BANDEIRA_DE_VERSAO],
+        capture_output=True, text=True,
+        timeout=TEMPO_DO_INSTALADOR).stdout.split(MARCA_DA_VERSAO)[-1].split()
+    return saida[0] if saida else ""
+
+
+def _sobre_a_ponte_e_o_catalogo(b) -> None:
+    with tempfile.TemporaryDirectory(prefix="painel-h6-") as tmp:
         base = Path(tmp)
         (base / "evidencias" / "t-dorme").mkdir(parents=True)
         (base / "evidencias" / "t-dorme" / "estado.json").write_text(json.dumps({
@@ -1046,40 +1109,40 @@ def testar() -> int:
 
         v = vivacidade(ProcVivo(), time.time() - 60,
                        estado_que_o_motor_gravou(base / "evidencias", "t-dorme"))
-        caso("motor dormindo NÃO é 'trabalhando' na mesa",
+        b.caso("motor dormindo NÃO é 'trabalhando' na mesa",
              v["situacao"] == "dormindo" and v["ate"] == "12:36")
         v = vivacidade(ProcVivo(), time.time() - 60,
                        estado_que_o_motor_gravou(base / "evidencias", "t-espera"))
-        caso("aguardando resposta aparece com o número da issue",
+        b.caso("aguardando resposta aparece com o número da issue",
              v["situacao"] == "aguardando-resposta" and v["issue"] == 39)
         v = vivacidade(ProcVivo(), time.time() - 60, None)
-        caso("sem estado gravado, a mesa segue como era",
+        b.caso("sem estado gravado, a mesa segue como era",
              v["situacao"] == "trabalhando")
-        caso("estado ilegível não derruba a leitura",
+        b.caso("estado ilegível não derruba a leitura",
              estado_que_o_motor_gravou(base / "evidencias", "nao-existe") is None)
 
         ponte = PonteParaOEncadeador(base, base / "evidencias", [])
         situacoes = {x["nome"]: x["situacao"] for x in ponte.trabalhos()}
-        caso("a lista de trabalhos carrega a situação de cada um",
+        b.caso("a lista de trabalhos carrega a situação de cada um",
              situacoes == {"t-dorme": "dormindo",
                            "t-espera": "aguardando-resposta",
                            "t-pronta": "completa"})
-        caso("e ela sai do disco, sem um subprocesso por trabalho",
+        b.caso("e ela sai do disco, sem um subprocesso por trabalho",
              ponte.trabalhos() == ponte.trabalhos())
 
         e = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
             "processo": "rodando", "estado": "em-curso",
             "proxima_acao": "responda na issue",
             "vivacidade": {"situacao": "aguardando-resposta"}})
-        caso("quem espera não recebe 'rodando agora — espere'",
+        b.caso("quem espera não recebe 'rodando agora — espere'",
              e["proxima_acao"] == "responda na issue")
         e = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
             "processo": "rodando", "estado": "em-curso",
             "proxima_acao": "execute", "vivacidade": {}})
-        caso("mas o convite a disparar de novo continua calado",
+        b.caso("mas o convite a disparar de novo continua calado",
              "ão dispare de novo" in e["proxima_acao"])
 
-        caso("sem repositório configurado o quadro devolve recado, não erro",
+        b.caso("sem repositório configurado o quadro devolve recado, não erro",
              ponte.backlog_das_issues_com_cache()["issues"] == []
              and "sem repositório" in ponte.backlog_das_issues_com_cache()["recado"])
         (base / "nucleo").mkdir()
@@ -1087,92 +1150,104 @@ def testar() -> int:
             "modo": "so-issues",
             "issues": {"repositorio": "${DONO}/${REPO}"}}), encoding="utf-8")
         ponte._quadro = None
-        caso("repositório ainda no molde também não vira chamada de rede",
+        b.caso("repositório ainda no molde também não vira chamada de rede",
              "sem repositório" in ponte.backlog_das_issues_com_cache()["recado"])
-        caso("o modo do executor é lido para a mesa esconder o disparo",
+        b.caso("o modo do executor é lido para a mesa esconder o disparo",
              (configuracao_do_executor_sem_validar(base) or {}).get("modo")
              == "so-issues")
 
-    caso("o vínculo com a issue viaja no roteiro do pedido",
+
+
+def _sobre_o_disparo_e_a_regua(b) -> None:
+    b.caso("o vínculo com a issue viaja no roteiro do pedido",
          roteiro_do_pedido_com_verificacao("x", 3, 24, 39)["issue"] == 39)
-    caso("e sem issue o roteiro não inventa o campo",
+    b.caso("e sem issue o roteiro não inventa o campo",
          "issue" not in roteiro_do_pedido_com_verificacao("x"))
-    caso("o botão de disparar fecha com execução no ar",
+    b.caso("o botão de disparar fecha com execução no ar",
          "b.disabled=ocupada.length>0" in PAGINA
          and "'rodando','dormindo','aguardando-resposta'" in PAGINA)
-    caso("e o motivo aparece no próprio botão",
+    b.caso("e o motivo aparece no próprio botão",
          "a trava do alvo recusaria um segundo disparo" in PAGINA)
-    caso("a página desenha a execução e o backlog",
+    b.caso("a página desenha a execução e o backlog",
          'function desenho' in PAGINA and 'id="quadro"' in PAGINA
          and 'id="issue"' in PAGINA and 'id="historico"' in PAGINA)
-    caso("o desenho usa os tokens de cor que já existem",
+    b.caso("o desenho usa os tokens de cor que já existem",
          '.passo.segue' in PAGINA and '.passo.agora' in PAGINA)
 
-    caso("nome de trabalho passa na régua da evidência",
+    b.caso("nome de trabalho passa na régua da evidência",
          recusa_do_nome_de_trabalho(nome_de_trabalho()) is None)
-    caso("nome com barra é recusado",
+    b.caso("nome com barra é recusado",
          recusa_do_nome_de_trabalho("a/b") is not None)
-    caso("nome com maiúscula é recusado",
+    b.caso("nome com maiúscula é recusado",
          recusa_do_nome_de_trabalho("Painel") is not None)
-    caso("nome vazio é recusado", recusa_do_nome_de_trabalho("") is not None)
-    caso("nome de 65 é recusado",
+    b.caso("nome vazio é recusado", recusa_do_nome_de_trabalho("") is not None)
+    b.caso("nome de 65 é recusado",
          recusa_do_nome_de_trabalho("a" * 65) is not None)
 
-    m = roteiro_do_pedido_com_verificacao("olhe o repositório")
-    caso("prompt livre vira etapa de sessão", m["etapas"][0]["tipo"] == "sessao")
-    caso("o prompt viaja inteiro", m["etapas"][0]["prompt"] == "olhe o repositório")
-    caso("a verificação entra sempre", m["etapas"][1]["tipo"] == "verificacao")
-    caso("a verificação depende da sessão",
-         m["etapas"][1]["depende"] == ["pedido"])
-    caso("o teto viaja", roteiro_do_pedido_com_verificacao("x", 7)["teto"] == 7)
 
-    caso("o encadeador está no lugar esperado", ENCADEADOR.exists())
-    caso("a página cita o disparo", 'id="b"' in PAGINA and "/disparar" in PAGINA)
-    caso("a página não embute segredo",
+
+def _sobre_o_roteiro_do_pedido(b) -> None:
+    m = roteiro_do_pedido_com_verificacao("olhe o repositório")
+    b.caso("prompt livre vira etapa de sessão", m["etapas"][0]["tipo"] == "sessao")
+    b.caso("o prompt viaja inteiro", m["etapas"][0]["prompt"] == "olhe o repositório")
+    b.caso("a verificação entra sempre", m["etapas"][1]["tipo"] == "verificacao")
+    b.caso("a verificação depende da sessão",
+         m["etapas"][1]["depende"] == ["pedido"])
+    b.caso("o teto viaja", roteiro_do_pedido_com_verificacao("x", 7)["teto"] == 7)
+
+    b.caso("o encadeador está no lugar esperado", ENCADEADOR.exists())
+    b.caso("a página cita o disparo", 'id="b"' in PAGINA and "/disparar" in PAGINA)
+    b.caso("a página não embute segredo",
          "token" not in PAGINA.lower() and "senha" not in PAGINA.lower())
+
+
+
+def _sobre_o_servidor_e_a_porta(b) -> None:
     fonte = Path(__file__).read_text(encoding="utf-8")
-    caso("o servidor atende mais de uma conexão ao mesmo tempo",
+    b.caso("o servidor atende mais de uma conexão ao mesmo tempo",
          "ThreadingHTTPServer" in fonte)
-    caso("porta ocupada vira recado, não traceback",
+    b.caso("porta ocupada vira recado, não traceback",
          "EADDRINUSE" in fonte and "PAREI — a porta" in fonte)
-    caso("porta livre não tem painel de controle atendendo",
+    b.caso("porta livre não tem painel de controle atendendo",
          repositorio_que_responde_na_porta(1) is None)
-    caso("segundo F5 do MESMO repositório sai 0 — o que se queria já está no "
+    b.caso("segundo F5 do MESMO repositório sai 0 — o que se queria já está no "
          "ar, e sair 0 apaga o popup do depurador",
          decidir_porta_ocupada(4000, "/casa", "/casa")[0] == 0)
-    caso("e o recado dá o endereço em vez de reclamar",
+    b.caso("e o recado dá o endereço em vez de reclamar",
          "http://127.0.0.1:4000" in decidir_porta_ocupada(4000, "/casa", "/casa")[1])
-    caso("painel de controle de OUTRO repositório na porta sai 2",
+    b.caso("painel de controle de OUTRO repositório na porta sai 2",
          decidir_porta_ocupada(4000, "/casa", "/outra")[0] == 2)
-    caso("e o recado nomeia o outro repositório",
+    b.caso("e o recado nomeia o outro repositório",
          "/outra" in decidir_porta_ocupada(4000, "/casa", "/outra")[1])
-    caso("porta ocupada por quem não é painel de controle sai 2",
+    b.caso("porta ocupada por quem não é painel de controle sai 2",
          decidir_porta_ocupada(4000, "/casa", None)[0] == 2)
-    caso("a página mostra os três lugares",
+    b.caso("a página mostra os três lugares",
          all(f'id="{i}"' in PAGINA for i in ("repositorio", "alvo", "evidencias")))
-    caso("uma chamada por ciclo, não duas", "/estado?trabalho=" in PAGINA
+    b.caso("uma chamada por ciclo, não duas", "/estado?trabalho=" in PAGINA
          and "/andamento?trabalho=" not in PAGINA)
-    caso("só repinta quando o estado muda", "assinatura" in PAGINA)
-    caso("a fita de evidências é a peça central", 'class="fita"' in PAGINA
+    b.caso("só repinta quando o estado muda", "assinatura" in PAGINA)
+    b.caso("a fita de evidências é a peça central", 'class="fita"' in PAGINA
          and "fita de evidências" in PAGINA)
-    caso("todo texto de fora passa por escape", "function esc(" in PAGINA)
-    caso("respeita quem pediu menos movimento",
+    b.caso("todo texto de fora passa por escape", "function esc(" in PAGINA)
+    b.caso("respeita quem pediu menos movimento",
          "prefers-reduced-motion" in PAGINA)
-    caso("foco de teclado é visível", ":focus-visible" in PAGINA)
-    caso("tem tema claro e escuro", "prefers-color-scheme:dark" in PAGINA)
-    caso("a versão sai do montar.py, e é a mesma que o --versao imprime",
-         versao_da_camada_declarada_no_topo_do_montar() == subprocess.run(
-             [sys.executable, str(RAIZ / "montar.py"), "--versao"],
-             capture_output=True, text=True, timeout=60
-         ).stdout.split("camada")[-1].strip().split()[0])
-    caso("a página tem onde mostrar a versão", 'id="versao"' in PAGINA)
-    caso("o título da aba grita a pergunta, para quem trocou de aba ficar "
+    b.caso("foco de teclado é visível", ":focus-visible" in PAGINA)
+    b.caso("tem tema claro e escuro", "prefers-color-scheme:dark" in PAGINA)
+    b.caso("a versão sai do montar.py, e é a mesma que o --versao imprime",
+           versao_impressa_pelo_instalador() ==
+           versao_da_camada_declarada_no_topo_do_montar())
+    b.caso("a página tem onde mostrar a versão", 'id="versao"' in PAGINA)
+    b.caso("o título da aba grita a pergunta, para quem trocou de aba ficar "
          "sabendo que a execução travou esperando resposta",
          "aguardando-aprovacao':'❓ PERGUNTA" in PAGINA)
-    caso("o título distingue os quatro estados",
+    b.caso("o título distingue os quatro estados",
          all(e in PAGINA for e in ("parada", "completa", "em-curso")))
-    caso("a pergunta da etapa aparece na tela", "e.pergunta" in PAGINA)
-    caso("a pergunta tem caixa própria, separada da próxima ação",
+
+
+
+def _sobre_a_pergunta_e_a_vivacidade(b) -> None:
+    b.caso("a pergunta da etapa aparece na tela", "e.pergunta" in PAGINA)
+    b.caso("a pergunta tem caixa própria, separada da próxima ação",
          "recado perg" in PAGINA and ".recado.perg{" in PAGINA)
 
     class ProcFalso:
@@ -1182,24 +1257,27 @@ def testar() -> int:
         def poll(self):
             return None if self._esta_vivo else 0
 
-    caso("sem processo, a situação é desconhecida — não 'morto'",
+    b.caso("sem processo, a situação é desconhecida — não 'morto'",
          vivacidade(None, None)["situacao"] == "desconhecida")
-    caso("processo encerrado é dito encerrado",
+    b.caso("processo encerrado é dito encerrado",
          vivacidade(ProcFalso(False), time.time())["situacao"] == "encerrado")
     vv = vivacidade(ProcFalso(True), time.time() - 120)
-    caso("processo vivo é dito trabalhando", vv["situacao"] == "trabalhando")
-    caso("mostra quanto tempo já corre", vv["decorrido_s"] >= 120)
-    caso("e quanto falta para o teto que mata sozinho",
+    b.caso("processo vivo é dito trabalhando", vv["situacao"] == "trabalhando")
+    b.caso("mostra quanto tempo já corre", vv["decorrido_s"] >= 120)
+    b.caso("e quanto falta para o teto que mata sozinho",
          vv["resta_s"] == TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR - vv["decorrido_s"])
-    caso("o teto do painel de controle espelha o do encadeador",
+    b.caso("o teto do painel de controle espelha o do encadeador",
          f"TEMPO_SESSAO = {TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR}" in
          (ENCADEADOR.read_text(encoding="utf-8") if ENCADEADOR.exists() else
           f"TEMPO_SESSAO = {TETO_SESSAO_S_ESPELHO_DO_ENCADEADOR}"))
-    caso("este processo enxerga os próprios descendentes ou diz que não mede",
+    b.caso("este processo enxerga os próprios descendentes ou diz que não mede",
          isinstance(descendentes_lendo_proc(os.getpid()), list))
-    caso("a página mostra a vivacidade", "vivo(d.vivacidade)" in PAGINA)
+    b.caso("a página mostra a vivacidade", "vivo(d.vivacidade)" in PAGINA)
 
-    import tempfile
+
+
+
+def _sobre_a_mesa_e_os_turnos(b) -> None:
     with tempfile.TemporaryDirectory() as t:
         base = Path(t)
         (base / "evidencias" / "vinda-de-execucao").mkdir(parents=True)
@@ -1222,86 +1300,108 @@ def testar() -> int:
                                      [base / "oficiais", base / "roteiros"])
 
         marcas = {t["nome"]: t["execucao"] for t in ponte.trabalhos()}
-        caso("trabalho com roteiro é execução", marcas["vinda-de-execucao"])
-        caso("trilha de gancho NÃO é execução",
+        b.caso("trabalho com roteiro é execução", marcas["vinda-de-execucao"])
+        b.caso("trilha de gancho NÃO é execução",
              marcas["trilha-de-gancho"] is False)
 
-        caso("o catálogo junta as duas pastas, e só o que é roteiro — a "
+        b.caso("o catálogo junta as duas pastas, e só o que é roteiro — a "
              "quebrada e a sem-etapas ficam de fora",
              ponte.catalogo() == sorted(["boa.json", "so-daqui.json"]))
-        caso("nome repetido fica com a pasta oficial",
+
+        (base / "oficiais" / "boa.md").write_text(
+            "# A boa\n\nEla faz o que o dono precisa.\n", encoding="utf-8")
+        descricoes = {r["nome"]: r["descricao"]
+                      for r in ponte.catalogo_com_descricao()}
+        b.caso("a descrição vem do .md irmão, inteira",
+             "Ela faz o que o dono precisa." in descricoes["boa.json"])
+        b.caso("roteiro sem .md irmão nem campo confessa que não tem descrição",
+             descricoes["so-daqui.json"] == SEM_DESCRICAO)
+        (base / "roteiros" / "com-campo.json").write_text(
+            json.dumps(dict(roteiro_do_pedido_com_verificacao("x"),
+                            descricao="a descrição mora no roteiro")),
+            encoding="utf-8")
+        com_campo = {r["nome"]: r["descricao"]
+                     for r in ponte.catalogo_com_descricao()}
+        b.caso("sem .md irmão, o campo descricao do roteiro serve",
+             com_campo["com-campo.json"] == "a descrição mora no roteiro")
+        b.caso("nome repetido fica com a pasta oficial",
              ponte.ler_roteiro_do_catalogo("boa.json")[0]["etapas"][0]["prompt"]
              == "sou a oficial")
-        caso("pasta de roteiros que não existe não derruba",
+        b.caso("pasta de roteiros que não existe não derruba",
              PonteParaOEncadeador(base, base / "evidencias",
                                   [base / "nao-existe"]).catalogo() == [])
-        caso("nada rodando, nada ocupado", ponte.ocupado() is None)
-        caso("roteiro bom é lido",
+        b.caso("nada rodando, nada ocupado", ponte.ocupado() is None)
+        b.caso("roteiro bom é lido",
              ponte.ler_roteiro_do_catalogo("boa.json")[0] is not None)
-        caso("roteiro ilegível vira erro, não exceção",
+        b.caso("roteiro ilegível vira erro, não exceção",
              ponte.ler_roteiro_do_catalogo("quebrada.json")[1] is not None)
-        caso("roteiro sem etapas é recusado",
+        b.caso("roteiro sem etapas é recusado",
              ponte.ler_roteiro_do_catalogo("sem-etapas.json")[1] is not None)
-        caso("nome fora do catálogo é recusado",
+        b.caso("nome fora do catálogo é recusado",
              ponte.ler_roteiro_do_catalogo("../../etc/passwd")[1] is not None)
-        caso("caminho absoluto é recusado",
+        b.caso("caminho absoluto é recusado",
              ponte.ler_roteiro_do_catalogo("/etc/passwd")[1] is not None)
 
         (base / "roteiros" / "nao-e-roteiro.json").write_text(
             '{"regras": [{"id": 1}]}', encoding="utf-8")
-        caso("json sem etapas fica fora do catálogo — a proposta de regra que "
+        b.caso("json sem etapas fica fora do catálogo — a proposta de regra que "
              "a síntese escreve não é execução",
              "nao-e-roteiro.json" not in ponte.catalogo())
-        caso("json quebrado também fica fora",
+        b.caso("json quebrado também fica fora",
              "quebrada.json" not in ponte.catalogo())
-        caso("roteiro de verdade continua no catálogo",
+        b.caso("roteiro de verdade continua no catálogo",
              "boa.json" in ponte.catalogo())
 
         pid_que_nao_existe = 2 ** 22
         ponte.gravar_trava(os.getpid(), "trabalho-vivo")
-        caso("trava de dono vivo segura, mesmo sendo de OUTRO processo",
+        b.caso("trava de dono vivo segura, mesmo sendo de OUTRO processo",
              ponte.ocupado() is not None)
-        caso("a trava diz de quem é", "pid" in (ponte.ocupado() or ""))
+        b.caso("a trava diz de quem é", "pid" in (ponte.ocupado() or ""))
         ponte.gravar_trava(pid_que_nao_existe, "trabalho-fantasma")
-        caso("trava de dono morto não segura ninguém", ponte.ocupado() is None)
+        b.caso("trava de dono morto não segura ninguém", ponte.ocupado() is None)
         ponte._arquivo_de_trava_deste_alvo().write_text("isso não é json",
                                                         encoding="utf-8")
-        caso("trava ilegível não trava o repositório", ponte.ocupado() is None)
+        b.caso("trava ilegível não trava o repositório", ponte.ocupado() is None)
         ponte._arquivo_de_trava_deste_alvo().unlink()
-        caso("alvos diferentes, travas diferentes",
+        b.caso("alvos diferentes, travas diferentes",
              ponte._arquivo_de_trava_deste_alvo()
              != PonteParaOEncadeador(base / "outro", base / "evidencias", [])
              ._arquivo_de_trava_deste_alvo())
 
-    caso("o pedido do painel de controle declara os turnos, em vez de herdar "
+    b.caso("o pedido do painel de controle declara os turnos, em vez de herdar "
          "o padrão do motor, que matava o pedido no teto",
          roteiro_do_pedido_com_verificacao("x")["etapas"][0]["max-turnos"] == 24)
-    caso("e quem dispara pode escolher",
+    b.caso("e quem dispara pode escolher",
          roteiro_do_pedido_com_verificacao("x", 3, 60)["etapas"][0]["max-turnos"]
          == 60)
-    caso("turnos aparece na tela, não só ciclos",
+    b.caso("turnos aparece na tela, não só ciclos",
          'id="turnos"' in PAGINA and "turnos:+$('turnos').value" in PAGINA)
 
+
+
+def _sobre_a_proxima_acao(b) -> None:
     rodando = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
         "processo": "rodando", "estado": "em-curso",
         "proxima_acao": "nada rodou ainda — rode: python ... executar ..."})
-    caso("processo vivo: a próxima ação para de mandar executar",
+    b.caso("processo vivo: a próxima ação para de mandar executar",
          "executar" not in rodando["proxima_acao"])
-    caso("e diz que pasta vazia no começo é o esperado",
+    b.caso("e diz que pasta vazia no começo é o esperado",
          "evidência quando termina" in rodando["proxima_acao"])
     encerrado = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
         "processo": "encerrado", "estado": "em-curso",
         "proxima_acao": "nada rodou ainda — rode: ... executar ..."})
-    caso("processo morto: o convite a executar FICA — ali ele é verdade",
+    b.caso("processo morto: o convite a executar FICA — ali ele é verdade",
          "executar" in encerrado["proxima_acao"])
     completa = calar_o_convite_a_disparar_o_que_ja_esta_no_ar({
         "processo": "rodando", "estado": "completa",
         "proxima_acao": "leia as evidências"})
-    caso("execução completa não tem a mensagem trocada",
+    b.caso("execução completa não tem a mensagem trocada",
          completa["proxima_acao"] == "leia as evidências")
 
+
+
+def _sobre_o_encadeador_de_verdade(b) -> None:
     if ENCADEADOR.exists() and shutil.which("git"):
-        import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "m.json"
             p.write_text(json.dumps(roteiro_do_pedido_com_verificacao("oi")),
@@ -1310,18 +1410,36 @@ def testar() -> int:
                 [sys.executable, str(ENCADEADOR), "ensaio", "--roteiro", str(p),
                  "--trabalho", "teste-painel", "--dir", tmp, "--cwd", str(RAIZ)],
                 capture_output=True, text=True, timeout=60)
-            caso("o encadeador aceita de verdade o roteiro que o painel de "
+            b.caso("o encadeador aceita de verdade o roteiro que o painel de "
                  "controle escreve",
                  r.returncode == 0)
-            caso("o ensaio lista as duas etapas",
+            b.caso("o ensaio lista as duas etapas",
                  "pedido" in r.stdout and "verifica" in r.stdout)
 
-    for f in falhas:
-        print(RESULTADO_DO_CASO_FALHO.format(f))
-    print(RESUMO_DOS_CASOS.format(VEREDITO_FALHOU if falhas else VEREDITO_OK,
-                                  casos)
-          + (RESUMO_DAS_FALHAS.format(len(falhas)) if falhas else ""))
-    return 1 if falhas else 0
+
+
+TEMAS_DO_PAINEL = (
+    _sobre_a_ponte_e_o_catalogo,
+    _sobre_o_disparo_e_a_regua,
+    _sobre_o_roteiro_do_pedido,
+    _sobre_o_servidor_e_a_porta,
+    _sobre_a_pergunta_e_a_vivacidade,
+    _sobre_a_mesa_e_os_turnos,
+    _sobre_a_proxima_acao,
+    _sobre_o_encadeador_de_verdade,
+)
+
+
+def testar() -> int:
+    b = BancadaDoPainel()
+    for tema in TEMAS_DO_PAINEL:
+        tema(b)
+    for falha in b.falhas:
+        print(RESULTADO_DO_CASO_FALHO.format(falha))
+    print(RESUMO_DOS_CASOS.format(
+        VEREDITO_FALHOU if b.falhas else VEREDITO_OK, b.casos)
+        + (RESUMO_DAS_FALHAS.format(len(b.falhas)) if b.falhas else ""))
+    return 1 if b.falhas else 0
 
 
 def ler_argumentos():
@@ -1341,8 +1459,8 @@ def recusa_do_ambiente(cwd: Path, forcar_arvore_suja: bool) -> str | None:
         return ERRO_CWD_NAO_E_PASTA.format(cwd)
     if not ENCADEADOR.exists():
         return ERRO_SEM_ENCADEADOR
-    if not shutil.which("claude"):
-        return ERRO_SEM_O_COMANDO_CLAUDE
+    if not shutil.which(comando_da_sessao()):
+        return ERRO_SEM_O_COMANDO_CLAUDE.format(comando_da_sessao())
     if tem_mudanca_nao_commitada(cwd) and not forcar_arvore_suja:
         return ERRO_ARVORE_SUJA.format(cwd)
     return None

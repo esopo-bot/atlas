@@ -13,6 +13,9 @@ description: Padrão de qualidade de código - KISS, YAGNI, Tidy First, teste em
   misturada com comportamento faz diff que ninguém consegue revisar.
 - **Teste em três atos (AAA):** um comportamento por teste, nome que conta a
   história. Teste que não falha quando o código quebra não é teste.
+- **Instrumento tem `--testar` próprio:** a bandeira se lê **antes** de
+  converter qualquer argumento, e o teste chama as funções do próprio
+  arquivo — senão o `--testar` estoura no próprio nome.
 - **Erro se trata na fronteira:** valide na entrada, falhe com mensagem útil,
   nunca engula exceção.
 - **Nome diz o que é.** Se precisou de comentário para explicar, o nome está

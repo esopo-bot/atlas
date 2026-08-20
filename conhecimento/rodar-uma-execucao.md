@@ -58,6 +58,20 @@ python .agents/encadeador/encadeador.py executar --roteiro execucao.json --traba
 **Rode em worktree ou clone descartável** — a etapa de sessão pula
 permissões, porque sessão agendada não tem quem responder prompt.
 
+**A camada que o motor usa é a que está ao lado dele, não a do `--cwd`.**
+Cada instrumento acha a camada subindo a partir do próprio arquivo
+(`Path(__file__)`), então `--cwd` troca onde as etapas rodam, não de qual
+camada o motor se serve. Consequência prática: **execução que mexe nos
+instrumentos da própria camada roda de uma cópia fora da árvore que ela
+muda.** De dentro, o motor estaria reescrevendo o `evidencia.py` e o
+`verificar.py` que ele mesmo está usando no meio do caminho.
+
+```bash
+cp -r .agents /tmp/motor/.agents
+python /tmp/motor/.agents/encadeador/encadeador.py executar \
+  --roteiro <roteiro> --trabalho <nome> --dir <dir> --cwd <a árvore que muda>
+```
+
 Saída: `0` completa · `5` parou num `para` · `6` aguardando o dono ·
 `2` erro de uso.
 

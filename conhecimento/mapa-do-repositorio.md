@@ -53,7 +53,10 @@ abriga os repositórios. Conteúdo fora do git; a pasta viaja pelo LEIAME.
 Arquivo **seu** com o **mesmo caminho** de um da camada é tratado como da
 camada — dê nome próprio ao que é seu. Única exceção que acrescenta: se o seu
 `AGENTS.md` não citar `conhecimento/regras-da-camada.md`, a atualização
-acrescenta o endereço no fim — nunca as regras.
+acrescenta no fim o endereço da lista **e** o item operativo da regra 8 — em
+texto rastreado vai `${VARIAVEL}`, nunca o valor. As outras 13 continuam só no
+endereço. Quem recebeu o bloco antigo, só com o endereço, ganha a troca na
+próxima atualização; o resto do seu arquivo não se toca.
 
 ## Como uma regra chega
 
@@ -65,6 +68,30 @@ acrescenta o endereço no fim — nunca as regras.
 
 Regra que manda consultar uma fonte entrega a fonte junto — nunca confie que
 ela será buscada.
+
+### As 6 checagens, e o que responde cada uma
+
+Medido em 19/08/2026 no `AGENTS.md` desta camada, contra as checagens
+determinísticas do gabarito da simulação (`perguntas()`, em
+`.agents/camada/camada.py`). O registro existe para ninguém refazer a conta.
+
+| Checagem do gabarito                | Onde a resposta está no `AGENTS.md` |
+| ----------------------------------- | ----------------------------------- |
+| abre na raiz                        | frase da regra 1                    |
+| conta as regras                     | a lista numerada, 14 itens          |
+| não commita por conta               | ordem do repositório, e regra 9     |
+| segredo vira `${VARIAVEL}`          | frase da regra 8                    |
+| não toca em branch de longa duração | frase da regra 12                   |
+| pronto é o que instrumento provou   | frase da regra 2                    |
+
+Cinco já vinham respondidas porque a **frase** da regra carrega o item
+operativo. A regra 8 era a única que só mandava consultar a página — e por
+isso a frase dela passou a carregar o `${VARIAVEL}`.
+
+Onde a conta não fecha: no repositório que já tinha `AGENTS.md`, o bloco
+apendado leva a regra 8 e mais nada — as outras cinco ficam a um clique. Medir
+a checagem dentro desta camada dá falso negativo: aqui a sessão recebe o
+`AGENTS.md` gerado inteiro, com as 14 frases.
 
 ## Os comandos
 

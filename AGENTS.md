@@ -38,7 +38,8 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 5. Ao dar por pronto, faça a análise de promoção.
 6. Trabalhe econômico.
 7. Rede com cortesia.
-8. Segredo não entra em git nenhum — e ler credencial localmente é livre.
+8. Segredo não entra em git nenhum — em texto rastreado vai `${VARIAVEL}`,
+   nunca o valor; ler credencial localmente é livre.
 9. Destrutivo é do dono; commit e push seguem o que o repositório autorizou.
 10. Texto na régua.
 11. Não invente passo onde já existe receita.
