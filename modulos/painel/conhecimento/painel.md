@@ -4,7 +4,7 @@ Uma caixa de prompt, um botão e o estado da execução — no navegador, sem
 decorar caminho de script. Servidor de biblioteca padrão: nada para instalar.
 
 O painel de controle é **vidro, não motor**. Quem fala com o modelo é o
-[encadeador](rodar-uma-execucao.md); quem diz o estado é o
+encadeador; quem diz o estado é o
 `andamento` dele. O painel de controle não inventa nada.
 
 ## Subir

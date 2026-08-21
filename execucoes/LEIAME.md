@@ -1,18 +1,28 @@
-# execucoes
+# Roteiros que viajam com a camada
 
-Roteiro de execução mora aqui. O painel de controle procura nesta pasta
-primeiro.
+Esta pasta é o oposto da `execucoes/` da raiz: **aqui o conteúdo ENTRA no
+git**, e é essa a razão de ela existir.
 
-**O conteúdo não entra no git**, e isso é o desenho — veja o `.gitignore` ao
-lado. Execução é rotina de desenvolvedor: cita o caminho da sua máquina, o
-nome dos seus outros repositórios, o seu caso. Nada disso viaja, e por isso
-aqui não há barreira de publicação a respeitar.
+Roteiro que mora aqui é **da camada**: não sabe nada de ninguém, tira todo
+endereço da configuração, e serve a qualquer repositório que instale o
+módulo. Troque a configuração e o mesmo roteiro serve outro lugar — é esse o
+teste de que ele é mecanismo, e não o processo de alguém.
 
-A pasta é **durável**, ao contrário de `tmp/`. Rascunho se apaga sem aviso, e
-rotina que se mantém e se melhora não pode morar em rascunho.
+| Roteiro | O que faz | A página |
+| --- | --- | --- |
+| `catalogador.json` | reorganiza a camada de conhecimento e as anotações | `catalogador.md` |
+| `entrega.json` | exemplo de trabalho que termina em pedido de revisão | `entrega.md` |
 
-Execução que sirva a qualquer repositório não mora aqui: ela vira arquivo do
-módulo, em `modulos/<nome>/execucoes/`, e aí viaja com a camada.
+O `.gitignore` ao lado ignora tudo e **libera por nome**, um roteiro por
+linha — nunca `!*.json`, que reabriria a pasta e deixaria roteiro local
+vazar sem ninguém ver.
 
-Como se escreve e o que cada tipo de etapa faz:
-[rodar uma execução](../conhecimento/rodar-uma-execucao.md).
+## Onde mora o SEU roteiro
+
+Na `execucoes/` da raiz do seu repositório. Lá o conteúdo não entra no git,
+de propósito: roteiro de trabalho cita o caminho da sua máquina, o nome dos
+seus outros repositórios, o seu caso. Nada disso viaja.
+
+Quando um roteiro seu deixar de citar o seu caso e passar a servir qualquer
+repositório, ele é candidato a mudar para cá — e aí precisa da linha no
+`.gitignore` e da página ao lado.

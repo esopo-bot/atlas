@@ -50,6 +50,7 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 14. Conhecimento nasce na língua de quem vai lê-lo.
 15. Editou a fonte, regenere a cópia e prove — antes de entregar.
 16. Ao dar por entregue, prove que não ficou commit fora da branch da entrega.
+17. Explique na altura de quem lê, começando por júnior.
 
 ## Os nomes
 

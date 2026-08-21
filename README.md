@@ -9,12 +9,13 @@ passam a seguir — o mesmo jeito de trabalhar, em toda máquina. Todo o conteú
 
 ## O que vem dentro
 
-- **Um guia curto** ([conhecimento](conhecimento/)):
-  comece por [Comece aqui](conhecimento/comece-aqui.md).
+- **Um guia curto** ([conhecimento](conhecimento/)): as regras da camada,
+  em [regras da camada](conhecimento/regras-da-camada.md). As demais
+  páginas estão sendo reescritas.
 - **Skills prontas** ([.agents/skills](.agents/skills/)): padrão de qualidade
   de código (injetado por gancho), wiki local de projetos, procurar antes de
-  criar, e mais — a lista viva está em
-  [as skills da camada](conhecimento/skills-da-camada.md).
+  criar, e mais — a lista viva é a descrição de cada `SKILL.md`, em
+  `.agents/skills/<nome>/`.
 - **Um script**: [montar.py](montar.py) instala tudo isso, em qualquer
   repositório, e atualiza sem apagar o que é seu.
 
@@ -30,14 +31,7 @@ Deu certo quando terminar com `Pronto.` e a lista do que foi criado.
 
 Se a pasta for a raiz de um workspace — a que abriga os repositórios —, use
 `python montar.py --esqueleto` no primeiro passo: cria também `projetos/`,
-`.credenciais/` e `recursos/`. Para ver o guia como site, um comando por
-linha — `&&` não existe no Windows PowerShell:
-
-```bash
-cd site
-npm install
-npm run build
-```
+`.credenciais/` e `recursos/`.
 
 ## Atualizar uma máquina que já tem a camada
 
@@ -49,8 +43,8 @@ python montar.py --atualizar
 
 A atualização **só toca o que veio da camada**. `AGENTS.md`, `CLAUDE.md`, o
 `settings.local.json`, suas skills e seus arquivos ficam intactos — a
-fronteira completa está no
-[mapa do repositório](conhecimento/mapa-do-repositorio.md).
+fronteira completa é o que `montar.py` carrega embutido: o que não está
+lá, ele não toca.
 Todo comando imprime `camada 0.N`: número menor que o da origem significa
 atualização pendente.
 

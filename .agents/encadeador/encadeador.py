@@ -154,6 +154,7 @@ ERRO_CAMPO_DESCONHECIDO_NO_AMBIENTE = "ambiente: campo desconhecido {!r}"
 ERRO_CAMPO_DESCONHECIDO_NA_ETAPA = ("etapa {nome!r}: campo desconhecido "
                                     "{sobra!r}")
 ERRO_ISSUE_NAO_INTEIRA = "issue precisa ser o número da issue (inteiro >= 1)"
+VARIAVEL_DA_ISSUE = "ISSUE"
 ERRO_TETO_NAO_INTEIRO = "teto precisa ser inteiro >= 1"
 ERRO_ETAPA_NAO_E_OBJETO = "etapa {}: não é um objeto"
 ERRO_NOME_DUPLICADO = "etapa {ordem}: nome duplicado {nome!r}"
@@ -592,6 +593,15 @@ def _marca_do_estagio(estagio: list) -> str:
     if len(estagio) > 1:
         return MARCA_FORK.format(len(estagio))
     return MARCA_UMA
+
+
+def issue_do_roteiro_ou_do_ambiente(roteiro, ambiente=None):
+    declarada = (roteiro or {}).get("issue")
+    if declarada:
+        return declarada
+    posta = (os.environ if ambiente is None
+             else ambiente).get(VARIAVEL_DA_ISSUE, "").strip()
+    return int(posta) if posta.isdigit() and int(posta) > 0 else None
 
 
 def montar_ambiente(roteiro: dict, cwd: str, base: dict) -> dict:
@@ -1636,7 +1646,7 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
     for aviso in avisos_do_alvo(configuracao, roteiro, cwd):
         print(LOG_AVISO.format(aviso), file=sys.stderr)
 
-    issue = roteiro.get("issue")
+    issue = issue_do_roteiro_ou_do_ambiente(roteiro)
     provadas = set()
     if retomar:
         provadas = {nome for nome, (_, veredito) in

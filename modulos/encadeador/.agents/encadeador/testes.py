@@ -16,7 +16,8 @@ from encadeador import (
     CHAVE_DO_AJUDANTE_DE_CREDENCIAL,
     ARQUIVO_EXECUTOR, CLAUDE_QUE_PARA_NA_METADE, CLI_FALSO_DA_SESSAO,
     ESPERA_MAXIMA_S,
-    ESTE_INSTRUMENTO, EXIT_COMPLETA, INTERPRETADOR_NO_SHELL, EXIT_ERRO_DE_USO_OU_AMBIENTE,
+    ESTE_INSTRUMENTO, EXIT_COMPLETA,
+    issue_do_roteiro_ou_do_ambiente, INTERPRETADOR_NO_SHELL, EXIT_ERRO_DE_USO_OU_AMBIENTE,
     EXIT_PAROU_NUM_PARA, EXIT_TESTE_CAIU, FALHA_DE_COMPORTAMENTO,
     FALHA_DE_RECUSA_COM_EXIT, FALHA_DE_RECUSA_PELO_MOTIVO_ERRADO, FALHOU,
     FALHOU_QUANTOS, FANTOCHE_OK, FOLGA_DO_TETO, FONTE_DO_DUBLE_DO_GH,
@@ -1071,11 +1072,26 @@ def _sobre_a_troca_do_cli_da_sessao(b) -> None:
     b.caso("o CLI trocado não vira erro de ambiente",
          resposta.returncode != EXIT_ERRO_DE_USO_OU_AMBIENTE)
 
+def _sobre_a_issue_do_ambiente(b) -> None:
+    b.caso("o roteiro vence: declarada nele, o ambiente nao muda",
+         issue_do_roteiro_ou_do_ambiente({"issue": 7}, {"ISSUE": "9"}) == 7)
+    b.caso("sem roteiro declarando, o ambiente completa",
+         issue_do_roteiro_ou_do_ambiente({}, {"ISSUE": "9"}) == 9)
+    b.caso("sem os dois, nao ha onde reportar",
+         issue_do_roteiro_ou_do_ambiente({}, {}) is None)
+    b.caso("ambiente com texto que nao e numero nao vira issue",
+         issue_do_roteiro_ou_do_ambiente({}, {"ISSUE": "abc"}) is None)
+    b.caso("zero nao e issue",
+         issue_do_roteiro_ou_do_ambiente({}, {"ISSUE": "0"}) is None)
+    b.caso("espaco em volta do numero nao atrapalha",
+         issue_do_roteiro_ou_do_ambiente({}, {"ISSUE": " 12 "}) == 12)
+
 TEMAS = (
     _sobre_a_conta_no_remoto,
     _sobre_a_configuracao,
     _sobre_o_bloco_de_estado,
     _sobre_a_issue,
+    _sobre_a_issue_do_ambiente,
     _sobre_a_janela_e_o_ensaio,
     _sobre_o_grafo,
     _sobre_a_prova_e_o_ambiente,

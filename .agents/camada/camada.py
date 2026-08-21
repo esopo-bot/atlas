@@ -45,16 +45,43 @@ FONTE_DAS_REGRAS = "nucleo/regras.json"
 FONTE_DO_VOCABULARIO = "nucleo/vocabulario.json"
 FORA_DA_CONTA_DO_VOCABULARIO = ("nucleo/vocabulario.json", "montar.py")
 TITULO_VOCABULARIO = "O VOCABULÁRIO, TERMO A TERMO"
+TITULO_ENTREGA = "A ENTREGA — o que ainda não saiu da máquina"
+TITULO_LARGADA = "A LARGADA — o que toda sessão paga antes de trabalhar"
+ARQUIVO_DE_CONFIGURACAO = "nucleo/configuracao.json"
+CHAVE_DO_TETO = "teto_da_largada_em_bytes"
+LARGADA_SEM_TETO = ("Largada: {} bytes. Sem teto declarado em {} ({}) — "
+                    "medido, não cobrado.")
+LARGADA_NA_REGUA = "Largada: {} bytes, dentro do teto de {}."
+LARGADA_ACIMA = ("Largada: {} bytes, ACIMA do teto de {}. Cada byte "
+                 "aqui é pago por toda sessão, antes de ela trabalhar: "
+                 "corte página, skill ou gancho de abertura, ou mude o teto por decisão.")
+COMANDO_DA_BRANCH = "git rev-parse --abbrev-ref HEAD"
+COMANDO_DO_UPSTREAM = "git rev-parse --abbrev-ref --symbolic-full-name @{u}"
+COMANDO_DO_ESPELHO = "git rev-parse --abbrev-ref origin/{}"
+COMANDO_DO_QUE_FALTA = "git log {}..HEAD --oneline"
+ENTREGA_LIMPA = "Nada ficou para trás: {} não tem commit fora de {}."
+ENTREGA_COM_SOBRA = ("{} commit(s) em {} que NÃO estão em {} — trabalho "
+                     "que fica para trás se a sessão acabar agora:")
+SEM_ENTREGA = ("{} não tem para onde entregar — nem upstream declarado, "
+               "nem origin/{} no remoto. Nada saiu da máquina, então "
+               "não há como provar que nada ficou para trás.")
+FORA_DE_REPOSITORIO = "Sem git aqui — nada a medir."
 LINHA_DO_TERMO = "  {:<16} bruto {:>3}  exceção {:>3}  saldo {:>3}  {}"
 TERMO_FECHADO = "ok"
 TERMO_ABERTO = "ABERTO"
 TERMO_NAO_MEDIDO = "NÃO MEDIDO"
+TERMO_COM_FOLGA = "FOLGA {}"
 SEM_MEDIDA = "-"
 TETO_DE_ARGUMENTOS = 100000
 GREP_ERROU_A_PARTIR_DE = 2
 VOCABULARIO_NAO_MEDIDO = ("Vocabulário NÃO MEDIDO em {} termo(s): o grep falhou, "
                           "e falha não é zero.")
 VOCABULARIO_FECHADO = "Vocabulário fechado: nenhum termo com saldo."
+VOCABULARIO_COM_FOLGA = (
+    "Vocabulário com {} exceção(ões) a mais do que existe no disco — a "
+    "declaração envelheceu, e enquanto ela sobra o termo pode reabrir sem "
+    "ninguém ver: a ocorrência nova entra no lugar da que sumiu. Meça e "
+    "acerte o campo `ocorrencias` do termo.")
 VOCABULARIO_ABERTO = ("Vocabulário com {} ocorrência(s) em aberto — o "
                       "termo velho voltou, ou a exceção declarada envelheceu.")
 SEM_VOCABULARIO = "Sem {} — nada a medir."
@@ -244,6 +271,10 @@ def saldo_do_vocabulario(raiz: Path) -> list:
     return contas
 
 
+def folga_do_termo(bruto, perdoadas: int) -> int:
+    return 0 if bruto is None else max(perdoadas - bruto, 0)
+
+
 def vocabulario(raiz: Path) -> int:
     contas = saldo_do_vocabulario(raiz)
     if not contas:
@@ -251,20 +282,76 @@ def vocabulario(raiz: Path) -> int:
         return 0
     print(f"\n{TITULO_VOCABULARIO}")
     for nome, bruto, perdoadas, saldo in contas:
+        folga = folga_do_termo(bruto, perdoadas)
         print(LINHA_DO_TERMO.format(
             nome, SEM_MEDIDA if bruto is None else bruto, perdoadas,
             SEM_MEDIDA if saldo is None else saldo,
             TERMO_NAO_MEDIDO if saldo is None else
-            (TERMO_ABERTO if saldo else TERMO_FECHADO)))
+            (TERMO_ABERTO if saldo else
+             (TERMO_COM_FOLGA.format(folga) if folga else TERMO_FECHADO))))
     cegos = sum(1 for _, _, _, saldo in contas if saldo is None)
     aberto = sum(saldo for _, _, _, saldo in contas if saldo is not None)
+    folgas = sum(folga_do_termo(bruto, perdoadas)
+                 for _, bruto, perdoadas, _ in contas)
     if cegos:
         print(VOCABULARIO_NAO_MEDIDO.format(cegos))
     elif aberto:
         print(VOCABULARIO_ABERTO.format(aberto))
+    elif folgas:
+        print(VOCABULARIO_COM_FOLGA.format(folgas))
     else:
         print(VOCABULARIO_FECHADO)
-    return 1 if (aberto or cegos) else 0
+    return 1 if (aberto or cegos or folgas) else 0
+
+
+def entrega(raiz: Path) -> int:
+    codigo, atual = corre(f'cd "{raiz}" && {COMANDO_DA_BRANCH}')
+    if codigo != 0 or not atual:
+        print(FORA_DE_REPOSITORIO)
+        return 0
+    print(f"\n{TITULO_ENTREGA}")
+    codigo, alvo = corre(f'cd "{raiz}" && {COMANDO_DO_UPSTREAM}')
+    if codigo != 0 or not alvo:
+        codigo, alvo = corre(
+            f'cd "{raiz}" && {COMANDO_DO_ESPELHO.format(atual)}')
+    if codigo != 0 or not alvo:
+        print(SEM_ENTREGA.format(atual, atual))
+        return 1
+    _, sobra = corre(
+        f'cd "{raiz}" && {COMANDO_DO_QUE_FALTA.format(alvo)}')
+    linhas = [l for l in sobra.split("\n") if l.strip()]
+    if not linhas:
+        print(ENTREGA_LIMPA.format(atual, alvo))
+        return 0
+    print(ENTREGA_COM_SOBRA.format(len(linhas), atual, alvo))
+    for linha in linhas:
+        print(f"  {linha}")
+    return 1
+
+
+def teto_da_largada(raiz: Path):
+    try:
+        dado = json.loads(
+            (raiz / ARQUIVO_DE_CONFIGURACAO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    declarado = dado.get(CHAVE_DO_TETO) if isinstance(dado, dict) else None
+    return declarado if isinstance(declarado, int) else None
+
+
+def largada(raiz: Path) -> int:
+    print(f"\n{TITULO_LARGADA}")
+    paga = medir(raiz)[1]["largada"]
+    teto = teto_da_largada(raiz)
+    if teto is None:
+        print(LARGADA_SEM_TETO.format(paga, ARQUIVO_DE_CONFIGURACAO,
+                                      CHAVE_DO_TETO))
+        return 0
+    if paga > teto:
+        print(LARGADA_ACIMA.format(paga, teto))
+        return 1
+    print(LARGADA_NA_REGUA.format(paga, teto))
+    return 0
 
 
 def subagentes(raiz: Path) -> tuple:
@@ -753,6 +840,22 @@ def testar() -> int:
         caso("o que executa por dentro é o intérprete desta sessão",
              INTERPRETADOR == sys.executable
              and INTERPRETADOR_NO_SHELL.strip('"') == sys.executable)
+        caso("sem teto declarado, mede e não cobra",
+             teto_da_largada(raiz) is None and largada(raiz) == 0)
+        (raiz / "nucleo").mkdir(exist_ok=True)
+        (raiz / "nucleo" / "configuracao.json").write_text(
+            json.dumps({"teto_da_largada_em_bytes": 1}), encoding="utf-8")
+        caso("teto apertado reprova, e diz o número",
+             teto_da_largada(raiz) == 1 and largada(raiz) == 1)
+        (raiz / "nucleo" / "configuracao.json").write_text(
+            json.dumps({"teto_da_largada_em_bytes": 10 ** 9}),
+            encoding="utf-8")
+        caso("teto folgado passa", largada(raiz) == 0)
+        (raiz / "nucleo" / "configuracao.json").write_text(
+            json.dumps({"teto_da_largada_em_bytes": "muito"}),
+            encoding="utf-8")
+        caso("teto que não é número não vira cobrança",
+             teto_da_largada(raiz) is None)
         caso("sem vocabulario.json não há o que medir",
              saldo_do_vocabulario(raiz) == [])
         (raiz / "nucleo").mkdir(exist_ok=True)
@@ -794,6 +897,14 @@ def testar() -> int:
              vocabulario(raiz) == 1)
         caso("a medida conta o que não foi medido",
              medir(raiz)[1]["vocabulario_nao_medido"] == 1)
+        caso("exceção que sobra é folga, e folga esconde termo reabrindo",
+             folga_do_termo(10, 11) == 1)
+        caso("exceção que bate com o disco não é folga",
+             folga_do_termo(10, 10) == 0)
+        caso("exceção menor que o medido é saldo, não folga",
+             folga_do_termo(11, 10) == 0)
+        caso("termo não medido não vira folga inventada",
+             folga_do_termo(None, 7) == 0)
 
 
         bom = raiz / "bom.py"
@@ -867,7 +978,24 @@ def testar() -> int:
          all(chave in NUMEROS for provas in PROVAS.values()
              for _, chave in provas))
 
-    total = 54
+    with tempfile.TemporaryDirectory(prefix="camada-entrega-") as sozinho:
+        repositorio = Path(sozinho) / "repositorio"
+        repositorio.mkdir()
+        assinatura = ("-c user.name=t -c user.email=t@t "
+                      "-c commit.gpgsign=false")
+        corre(f'cd "{repositorio}" && git init -q && echo a > a.txt && git add -A && git {assinatura} commit -qm um')
+        caso("sem remoto nenhum, a entrega não se prova",
+             entrega(repositorio) == 1)
+        remoto = Path(sozinho) / "remoto.git"
+        corre(f'git init -q --bare "{remoto}"')
+        corre(f'cd "{repositorio}" && git remote add origin "{remoto}" && git push -q origin HEAD:refs/heads/$(git branch --show-current)')
+        caso("tudo empurrado, a entrega está limpa",
+             entrega(repositorio) == 0)
+        corre(f'cd "{repositorio}" && echo b > b.txt && git add -A && git {assinatura} commit -qm dois')
+        caso("commit que não saiu da máquina reprova",
+             entrega(repositorio) == 1)
+
+    total = 65
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
         for falha in falhas:
@@ -884,6 +1012,10 @@ def main() -> int:
     ap.add_argument("--evidencia", choices=[p[0] for p in PASSOS],
                     help="emite a evidência de um passo, para o executor de roteiros")
     ap.add_argument("--numero", help="imprime um número só, para virar prova")
+    ap.add_argument("--largada", action="store_true",
+                    help="cobra o teto de bytes que toda sessão paga")
+    ap.add_argument("--entrega", action="store_true",
+                    help="prova que nada ficou fora da branch de entrega")
     ap.add_argument("--vocabulario", action="store_true",
                     help="mede o fechamento dos termos e sai 1 se algum reabriu")
     ap.add_argument("--resumo", action="store_true",
@@ -898,6 +1030,12 @@ def main() -> int:
     raiz = Path.cwd()
     if not (raiz / PASTA_DO_CONHECIMENTO).is_dir():
         sys.exit(FORA_DA_RAIZ.format(PASTA_DO_CONHECIMENTO))
+
+    if a.largada:
+        return largada(raiz)
+
+    if a.entrega:
+        return entrega(raiz)
 
     if a.vocabulario:
         return vocabulario(raiz)

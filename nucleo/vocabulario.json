@@ -3,7 +3,7 @@
   "titulo": "O vocabulário da camada",
   "criterio": "O nome declara a responsabilidade da peça, em português puro. Nome que precisa de explicação é nome errado; nome abstrato que serviria para qualquer coisa também.",
   "verificacao": {
-    "comentario": "Como se confere o fechamento de um termo: rode o `pronto.padrao` na árvore rastreada e desconte as `excecoes`. Zero linha = fechado. O padrão é PCRE (grep -P) porque as fronteiras precisam valer com acento, e carrega `(?i)` porque maiúscula escondia ocorrência: sensível a caixa, o termo dava zero e ainda havia prosa aberta.",
+    "comentario": "Como se verifica o fechamento de um termo: rode o `pronto.padrao` na árvore rastreada e desconte as `excecoes`. Zero linha = fechado. O padrão é PCRE (grep -P) porque as fronteiras precisam valer com acento, e carrega `(?i)` porque maiúscula escondia ocorrência: sensível a caixa, o termo dava zero e ainda havia prosa aberta.",
     "comando_molde": "git ls-files -z | grep -zvE '^(nucleo/vocabulario\\.json|montar\\.py)$' | xargs -0 grep -InP '<pronto.padrao>' || true",
     "fora_da_conta": [
       {
@@ -12,7 +12,7 @@
       },
       {
         "caminho": "montar.py",
-        "razao": "carrega cópia embutida das páginas e deste arquivo: fecha por consequência quando as fontes fecham, e o `--conferir` prova que a cópia bate com o disco. O que sobra são as ocorrências no CÓDIGO do instalador — essas se trocam à mão, e a conferência é a leitura do diff, não o grep."
+        "razao": "carrega cópia embutida das páginas e deste arquivo: fecha por consequência quando as fontes fecham, e o `--verificar` prova que a cópia bate com o disco. O que sobra são as ocorrências no CÓDIGO do instalador — essas se trocam à mão, e a verificação é a leitura do diff, não o grep."
       }
     ],
     "ordem": "Um termo por vez, e o `--sincronizar` entre eles: montar.py carrega cópia das páginas, e medir antes de sincronizar conta o mesmo texto duas vezes."
@@ -42,7 +42,7 @@
           "razao": "prosa dentro do arquivo congelado: mexer nele para trocar um comentário mexeria no contrato sem necessidade."
         }
       ],
-      "nota": "A separação dos dois sentidos já era decisão registrada em modulos/encadeador/LEIAME.md (16/08/2026): 'esteira, nas regras da camada, é a automação da casa'. Cuidado: a prosa do $comment em .agents/recibo/recibo.schema.json cita o termo — editar o arquivo do contrato é aprovação manual, não automático.",
+      "nota": "A separação dos dois sentidos já era decisão registrada em modulos/encadeador/LEIAME.md (16/08/2026): 'esteira, nas regras da camada, é a automação da casa'. Cuidado: a prosa do $comment em .agents/evidencia/recibo.schema.json cita o termo — editar o arquivo do contrato é aprovação manual, não automático.",
       "pronto": {
         "metrica": "zero ocorrência",
         "padrao": "(?i)\\besteiras?\\b"
@@ -63,8 +63,8 @@
       "excecoes": [
         {
           "caso": "manifesto de dependências ou de publicação de um projeto (package.json, pyproject.toml, *.nuspec) e o manifesto de uma skill (author.name)",
-          "ocorrencias": 11,
-          "razao": "outro referente: é o arquivo que descreve um projeto de terceiro, não o roteiro de etapas. Fica em nucleo/regras.json (regra 6, e na página gerada), conhecimento/skills-da-camada.md e wiki-de-projetos/references/tipos-de-perfil.md (com o espelho em .claude/skills/)."
+          "ocorrencias": 10,
+          "razao": "outro referente: é o arquivo que descreve um projeto de terceiro, não o roteiro de etapas. Fica em nucleo/regras.json (regra 6, e na página gerada) e em wiki-de-projetos/references/tipos-de-perfil.md (com o espelho em .claude/skills/)."
         }
       ],
       "nota": "'roteiro' declara: a lista ordenada do que fazer, escrita antes de rodar. 'manifesto' pedia explicação — manifesto de quê?",
@@ -90,11 +90,6 @@
         }
       ],
       "renomeia_caminhos": [
-        {
-          "caminho": "conhecimento/rodar-uma-corrente.md",
-          "tipo": "arquivo",
-          "vira": "conhecimento/rodar-uma-execucao.md"
-        },
         {
           "caminho": "correntes",
           "tipo": "diretorio",
@@ -153,17 +148,12 @@
           "caminho": ".agents/recibo/recibo.py",
           "tipo": "arquivo",
           "vira": ".agents/evidencia/evidencia.py"
-        },
-        {
-          "caminho": ".agents/recibo/recibo.schema.json",
-          "tipo": "arquivo",
-          "vira": ".agents/evidencia/evidencia.schema.json"
         }
       ],
       "excecoes": [
         {
           "caso": "o contrato v1 da evidência e tudo que o nomeia: o arquivo .agents/evidencia/recibo.schema.json, o seu title, o valor de enum `recibo-invalido` no campo `motivo`, e as referências a esses dois em código, teste e página",
-          "ocorrencias": 21,
+          "ocorrencias": 20,
           "razao": "decisão do dono, registrada: contrato v1 e CLI pública não se renomeiam sem aprovação manual — quebram roteiro, página e evidência já gravada. Versão nova é arquivo novo, diz o próprio schema."
         }
       ],
@@ -266,7 +256,7 @@
       ],
       "renomeia_caminhos": [],
       "excecoes": [],
-      "nota": "Só o título e os links mudam: o arquivo já se chama conhecimento/skills-da-camada.md. 'catálogo' declara; 'canivete' era piada interna.",
+      "nota": "'catálogo' declara; 'canivete' era piada interna. A página que o termo nomeava saiu no zeramento, e o termo fecha por consequência.",
       "pronto": {
         "metrica": "zero ocorrência",
         "padrao": "(?i)\\bcanivetes?\\b"
@@ -283,15 +273,9 @@
           "reconhece_por": "único sentido: o conceito e a página que o ensina"
         }
       ],
-      "renomeia_caminhos": [
-        {
-          "caminho": "conhecimento/zero-que-mente.md",
-          "tipo": "arquivo",
-          "vira": "conhecimento/falso-negativo.md"
-        }
-      ],
+      "renomeia_caminhos": [],
       "excecoes": [],
-      "nota": "'falso negativo' é o termo técnico consagrado e é português. A página é citada por link em outras páginas e no site/sidebars.js: renomear sem trocar os links deixa página órfã.",
+      "nota": "'falso negativo' é o termo técnico consagrado e é português. A página saiu no zeramento e o conceito virou regra do núcleo: se ela voltar, entra com link de entrada, senão nasce órfã.",
       "pronto": {
         "metrica": "zero ocorrência",
         "padrao": "(?i)zero[- ]que[- ]mente"
@@ -327,7 +311,7 @@
       "excecoes": [
         {
           "caso": "o VERBO casar conjugado — 'não casa com', 'casa com um esquema proibido', a variável `casa` do avaliador de esquema",
-          "ocorrencias": 12,
+          "ocorrencias": 11,
           "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate. Este número anda com a prosa: o verbo aparece toda vez que alguém escreve que um padrão não casa, e por isso a conta envelhece sozinha — quem a mede é o ritual, não a memória."
         },
         {
@@ -387,8 +371,13 @@
       "excecoes": [
         {
           "caso": "nome de arquivo, de diretório e de módulo — modulos/painel/, painel.py, painel.md, o prefixo do pedido e o da pasta temporária",
-          "ocorrencias": 17,
-          "razao": "nome próprio de peça no disco: renomear arquivo e pasta quebra instalação, roteiro e documentação de quem já montou. A prosa já diz 'painel de controle'."
+          "ocorrencias": 15,
+          "razao": "nome próprio de peça no disco: renomear arquivo e pasta quebra instalação, roteiro e documentação de quem já montou. A prosa já diz 'painel de controle'. Inclui a página do próprio módulo, conhecimento/painel.md, onde as ocorrências são linha de comando e caminho de arquivo: `--modulo painel` e `.agents/painel/painel.py`. Também o alvo do link `painel.md`: link aponta ARQUIVO, e nome de arquivo é o caso que esta exceção existe para cobrir."
+        },
+        {
+          "caso": "o $comment do contrato v1, em recibo.schema.json",
+          "ocorrencias": 1,
+          "razao": "mesma razão dos termos esteira e conferência: prosa dentro do arquivo congelado, que não se edita para trocar um comentário."
         }
       ],
       "nota": "ÚNICO caso em que o nome novo CONTÉM o velho. Logo a métrica geral ('zero ocorrência') é inaplicável aqui: o grep acharia as 83 para sempre. A métrica dele é a de baixo — 'painel' desacompanhado, isto é, sem 'de controle' ao lado.",
@@ -400,7 +389,7 @@
     }
   ],
   "intocaveis": {
-    "decisao": "Ninguém renomeia. São os campos do contrato da evidência (.agents/recibo/recibo.schema.json) e um valor de enum. O schema é v1 e o próprio schema manda: versão nova é arquivo novo, nunca edição calada deste. Renomear o ARQUIVO não altera campo nenhum — mas é aprovação manual, porque instrumentos o carregam por caminho.",
+    "decisao": "Ninguém renomeia. São os campos do contrato da evidência (.agents/evidencia/recibo.schema.json) e um valor de enum. O schema é v1 e o próprio schema manda: versão nova é arquivo novo, nunca edição calada deste. Renomear o ARQUIVO não altera campo nenhum — mas é aprovação manual, porque instrumentos o carregam por caminho.",
     "campos": [
       "veredito",
       "provado",

@@ -70,7 +70,7 @@ Consulta que não funcionou **não é lixo** — é armadilha mapeada, e vai par
 segunda tabela do caderno com o motivo. Sem ela, a sessão de daqui a três
 meses reescreve a mesma consulta errada e perde a mesma meia hora.
 
-É o assunto de `conhecimento/falso-negativo.md`: consulta que devolve zero é o
-engano mais barato de acreditar. Campo com `@` onde não devia, serviço com
+Consulta que devolve zero é o engano mais barato de acreditar: falso
+negativo tem cara de resposta. Campo com `@` onde não devia, serviço com
 nome diferente do que se imagina, janela curta demais — os três devolvem vazio
 com cara de resposta.

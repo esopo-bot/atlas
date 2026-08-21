@@ -112,8 +112,7 @@ arquitetura**.
 
 ### Os nove passos, traduzidos
 
-A ordem genérica está em [investigação de
-incidente](investigacao-de-incidente.md) e não se repete aqui. O que
+A ordem genérica da investigação de incidente não se repete aqui. O que
 muda por ferramenta é onde se olha:
 
 | Passo | No Datadog |
@@ -130,7 +129,7 @@ Os passos 1, 2, 8 e 9 não mudam de ferramenta — a ordem inteira está no flux
 
 Não é enfeite: é o que separa "não existe" de "escrevi errado". Cada engano
 abaixo devolve **vazio com cara de resposta**, que é o assunto de
-[falso negativo](falso-negativo.md).
+falso negativo.
 
 | Regra | Certo | Errado, e devolve vazio |
 | --- | --- | --- |

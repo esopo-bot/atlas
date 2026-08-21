@@ -12,3 +12,12 @@
 *
 !.gitignore
 !LEIAME.md
+
+# Roteiro fixo da camada: viaja NOMEADO, um por linha. Nunca `!*.json`,
+# que reabriria a pasta inteira e deixaria roteiro local vazar.
+!catalogador.json
+!entrega.json
+!catalogador.md
+!entrega.md
+!revisar-a-camada.json
+!revisar-a-camada.md

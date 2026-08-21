@@ -514,7 +514,7 @@ def testar_a_porta_da_leitura_direta(caso) -> None:
     caso("leitura direta de .env orienta",
          decisao_de_arquivo("/home/x/repo/.env")[0] == RESPOSTA_ORIENTA)
     caso("leitura direta de página comum cala",
-         decisao_de_arquivo("conhecimento/mcp.md")
+         decisao_de_arquivo("conhecimento/regras-da-camada.md")
          == (RESPOSTA_CALA, SEM_ALVO))
     caso("leitura direta de nome só parecido cala",
          decisao_de_arquivo(".envision.md") == (RESPOSTA_CALA, SEM_ALVO))

@@ -120,7 +120,7 @@ def instrumentos_com_teste():
     achados = [Path(INSTALADOR)]
     for pasta in PASTAS_DE_INSTRUMENTO:
         achados += sorted(Path(pasta).rglob(GLOB_DE_INSTRUMENTO))
-    return [a for a in achados if a.is_file()
+    return [a.as_posix() for a in achados if a.is_file()
             and BANDEIRA_DE_TESTE in a.read_text(
                 encoding="utf-8", errors="replace")]
 
@@ -362,7 +362,14 @@ def relatorio(escolhidas):
     return resumo
 
 
+def medidas_que_nao_rodaram(resumo: dict) -> list:
+    return sorted(nome for nome, dados in resumo.items()
+                  if isinstance(dados, dict) and dados.get("rodou") is False)
+
+
 FALHA_DO_CASO = "  [{}]"
+NAO_MEDIDO = ("NÃO MEDIDO: {} — o número que falta não é zero, e sair 0 aqui "
+              "faria a medida morta passar por medida boa.")
 RESUMO_FALHOU_AQUI = "FALHOU: {} de {} casos"
 RESUMO_OK_AQUI = "OK: {} casos — contagem de comentário e forma de função"
 COM_SUJEIRA = """# um comentário
@@ -408,7 +415,15 @@ def testar() -> int:
         caso("função assíncrona é vista", "g" in achadas)
         caso("o tamanho da função sai em linhas", achadas["f"][0] == 2)
 
-    total = 7
+    caso("medida que não rodou é acusada pelo nome",
+         medidas_que_nao_rodaram({"simulacao": {"rodou": False},
+                                  "camada": {"paginas": 3}}) == ["simulacao"])
+    caso("medida que rodou não vira acusação",
+         medidas_que_nao_rodaram({"simulacao": {"rodou": True}}) == [])
+    caso("medida sem a chave rodou não vira acusação",
+         medidas_que_nao_rodaram({"camada": {"paginas": 3}, "outra": 1}) == [])
+
+    total = 10
     if falhas:
         for falha in falhas:
             print(FALHA_DO_CASO.format(falha))
@@ -430,9 +445,12 @@ def main():
         import contextlib
         with contextlib.redirect_stdout(io.StringIO()):
             resumo = relatorio(set(a.medida))
-        print(json.dumps(resumo, ensure_ascii=False, indent=2))
-        return 0
-    print(json.dumps(relatorio(set(a.medida)), ensure_ascii=False, indent=2))
+    else:
+        resumo = relatorio(set(a.medida))
+    print(json.dumps(resumo, ensure_ascii=False, indent=2))
+    if (nao_rodaram := medidas_que_nao_rodaram(resumo)):
+        print(NAO_MEDIDO.format(", ".join(nao_rodaram)), file=sys.stderr)
+        return 1
     return 0
 
 

@@ -1,16 +1,13 @@
-# Dependências e artefatos do site
-node_modules/
-site/build/
-site/.docusaurus/
-
 # A cópia em .claude/skills/ ENTRA no git de propósito: sessão na nuvem só
 # enxerga o que está commitado. O .claude/.gitignore esconde só o
 # settings.local.json.
 #
-# Os arquivos que existem só neste disco (PORTAO.md, CONTINUAR.md,
-# verificar-agentes.py, publicar.py, nucleo/executor.json) estão no
-# .git/info/exclude — que é LOCAL e não sobrevive a um clone novo. Nome de
-# arquivo ignorado não é segredo: quem quiser a trava durável põe aqui.
+# Os arquivos que existem só neste disco (PORTAO.md, o gancho que o injeta,
+# os roteiros locais do dono) estão no .git/info/exclude — que é LOCAL e não
+# sobrevive a um clone novo. Nome de arquivo ignorado não é segredo: o que
+# precisa de trava durável vem para cá. Os instrumentos vivos saíram do
+# exclude e entraram no git: quem barra a publicação deles é a lista
+# NUNCA_PUBLICADOS do publicar.py, não a ausência no repositório.
 nucleo/executor.json
 
 # Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
@@ -26,8 +23,13 @@ __pycache__/
 # pastas quando rodado com --esqueleto, na raiz de um workspace.
 
 # Descartáveis: rascunho e cache de ferramenta. Apagar não perde nada.
+# O pedido de revisão é nomeado porque um rastreado manda escrevê-lo — o
+# roteiro de entrega —, e o que fica fora do git por decisão se declara pelo
+# nome, senão a verificação de referências órfãs não sabe distinguir decisão
+# de acidente.
 /tmp/*
 !/tmp/LEIAME.md
+/tmp/pedido-de-revisao.md
 *.pyc
 .pytest_cache/
 .ruff_cache/

@@ -25,11 +25,7 @@
         "Fluxo que ninguém executou nem tem fonte citada é hipótese — grava-se marcado como hipótese, nunca como instrução.",
         "Resultado negativo pede contraprova: zero, vazio e \"sem permissão\" viram prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa. Sem isso, escreva \"não medido\", nunca \"não existe\".",
         "Prova só vale se re-executa: `grep` e `diff` respondem exit 1 para \"não achei\", e a verificação acusa exit diferente de zero — quando a saída já é a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e `origin/<branch>` envelhecem entre a prova e a verificação."
-      ],
-      "procedencia": {
-        "titulo": "falso negativo",
-        "endereco": "falso-negativo.md"
-      }
+      ]
     },
     {
       "id": 3,
@@ -78,11 +74,7 @@
         "Depois de usar credencial para configurar algo, avise o dono para tirá-la de vista — o backup é dele.",
         "O que aparece na tela entra na sessão: print e janela compartilhada carregam segredo sem passar por instrumento nenhum. Feche o que tem segredo antes de mandar imagem.",
         "Nomear credencial para EXCLUIR ou PROTEGER não é ler: `--exclude`, `--glob '!...'`, `#pasta`, `du -sh`, pathspec `:(exclude)` e a linha que escreve só o NOME no `.gitignore` passam calados. Quem decide é o que o comando faz com o alvo, não o alvo aparecer no comando."
-      ],
-      "procedencia": {
-        "titulo": "ganchos",
-        "endereco": "ganchos.md"
-      }
+      ]
     },
     {
       "id": 9,
@@ -157,11 +149,17 @@
         "A prova é uma listagem, não memória: `git log <branch-da-entrega>..HEAD --oneline`. Vazio é a prova; qualquer linha é trabalho que fica para trás.",
         "Commit em branch que ninguém vai incorporar não existe para o resto do mundo, e some no dia em que a branch for podada.",
         "Este é o achado que depende de lembrar no fim da sessão mais longa do dia — que é exatamente quando ninguém lembra. Como etapa de código, custa zero."
-      ],
-      "procedencia": {
-        "titulo": "abrir e fechar a sessão",
-        "endereco": "abrir-e-fechar-a-sessao.md"
-      }
+      ]
+    },
+    {
+      "id": 17,
+      "regra": "Explique na altura de quem lê, começando por júnior.",
+      "faca": [
+        "Um conceito por vez, conclusão primeiro, exemplo concreto antes do termo técnico — e nada de despejar todas as opções.",
+        "A altura é por assunto, não por pessoa: quem é sênior em rede pode ser júnior em banco de dados. O sinal vem do que a pessoa pede, não do cargo dela.",
+        "Suba de altura quando o domínio aparecer, e então pare de explicar o básico daquele assunto: repetir o que a pessoa já sabe também é sobrecarga.",
+        "Vale para tudo que a sessão escreve para gente ler — resposta, issue, relatório de entrega e proposta de melhoria."
+      ]
     }
   ],
   "rodape_titulo": "Como propor mudança — e como consultar por código",

@@ -1,11 +1,12 @@
 {
-  "comentario": "A configuração DESTE repositório: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores do seu repositório. O desenho e o porquê: conhecimento/historia-em-issue.md. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar.",
+  "comentario": "A configuração DESTE repositório: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores do seu repositório. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar.",
   "repositorio_das_issues": "ver nucleo/executor.json",
   "padrao_de_nome": "${PADRAO_DO_NOME_DA_ISSUE}",
   "regras": [
     "A automação deste repositório commita e empurra em branch de trabalho; a entrada na main é o pedido de incorporação, e o gancho recusa gravação direta nela. Publicar continua do dono.",
     "Enquanto houver ${...} sem valor nesta configuração, não se cria issue — pergunta-se ao dono.",
-    "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código."
+    "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código.",
+    "`teto_da_largada_em_bytes` é o que TODA sessão paga antes de trabalhar: AGENTS.md, CLAUDE.md, o catálogo das skills e o que os ganchos de abertura injetam. É DECISÃO, não medida — hoje a largada é 14.651 e o teto ficou em 16.000, folga de uma página ou uma skill. Ausente ou nulo, a rotina mede e não cobra: teto que a camada inventasse seria número sem procedência."
   ],
   "autorizacoes": {
     "commit": true,
@@ -14,5 +15,6 @@
   },
   "branches_por_incorporacao": [
     "main"
-  ]
+  ],
+  "teto_da_largada_em_bytes": 16000
 }

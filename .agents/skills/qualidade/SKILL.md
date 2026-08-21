@@ -18,6 +18,11 @@ description: Padrão de qualidade de código - KISS, YAGNI, Tidy First, teste em
   arquivo — senão o `--testar` estoura no próprio nome.
 - **Erro se trata na fronteira:** valide na entrada, falhe com mensagem útil,
   nunca engula exceção.
+- **Engolir erro em volta de uma CONTA é mentira.** Em volta de um efeito
+  colateral, `suppress` é tolerância; em volta de uma medição, ele
+  transforma falha em número — e o zero que sai parece um fato. Falha vira
+  "não medido", nunca zero. Vale também para código de saída: a
+  ferramenta que sai 2 errou, e errar não é achar nada.
 - **Nome diz o que é.** Se precisou de comentário para explicar, o nome está
   errado.
 - **Menor diff coerente:** mudança se fatia em entregas que passam sozinhas.

@@ -25,7 +25,6 @@ de consulta, não de sessão.
       achei", e a verificação acusa exit diferente de zero — quando a saída já
       é a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e
       `origin/<branch>` envelhecem entre a prova e a verificação.
-    - Procedência: [falso negativo](falso-negativo.md).
 
 3. **Antes de criar, procure e cite.**
     - O que o conjunto já oferece não se reimplementa; aplicação nova imita o
@@ -69,7 +68,6 @@ de consulta, não de sessão.
       `--glob '!...'`, `#pasta`, `du -sh`, pathspec `:(exclude)` e a linha que
       escreve só o NOME no `.gitignore` passam calados. Quem decide é o que o
       comando faz com o alvo, não o alvo aparecer no comando.
-    - Procedência: [ganchos](ganchos.md).
 
 9. **Destrutivo é do dono; commit e push seguem o que o repositório
    autorizou.**
@@ -153,7 +151,18 @@ de consulta, não de sessão.
     - Este é o achado que depende de lembrar no fim da sessão mais longa do dia
       — que é exatamente quando ninguém lembra. Como etapa de código, custa
       zero.
-    - Procedência: [abrir e fechar a sessão](abrir-e-fechar-a-sessao.md).
+
+17. **Explique na altura de quem lê, começando por júnior.**
+    - Um conceito por vez, conclusão primeiro, exemplo concreto antes do termo
+      técnico — e nada de despejar todas as opções.
+    - A altura é por assunto, não por pessoa: quem é sênior em rede pode ser
+      júnior em banco de dados. O sinal vem do que a pessoa pede, não do cargo
+      dela.
+    - Suba de altura quando o domínio aparecer, e então pare de explicar o
+      básico daquele assunto: repetir o que a pessoa já sabe também é
+      sobrecarga.
+    - Vale para tudo que a sessão escreve para gente ler — resposta, issue,
+      relatório de entrega e proposta de melhoria.
 
 ## Como propor mudança — e como consultar por código
 

@@ -10,8 +10,8 @@ não existe.** Toda sessão abre lendo a issue e fecha atualizando a issue —
 nessa ordem, sempre. É isso que permite investigar numa sessão, implementar
 noutra e verificar numa terceira sem ninguém reexplicar nada.
 
-O desenho e o porquê estão em `conhecimento/historia-em-issue.md`. Aqui está o que
-se executa.
+O estado do trabalho mora na issue, não num arquivo do disco: assim uma
+sessão nova retoma sem ninguém reexplicar. Aqui está o que se executa.
 
 ## Passo zero: perguntar uma vez, gravar para sempre
 
@@ -190,4 +190,4 @@ escolhida. Chamada de rede em rajada é o que derruba limite de taxa.
 
 Feche com motivo explícito (resolvido ou descartado) e pode o corpo — o
 obsoleto continua vivo no comentário. A lição que vale adiante sai para
-`conhecimento/`; o porquê do corte está em `conhecimento/historia-em-issue.md`.
+`conhecimento/`.
