@@ -144,6 +144,85 @@ DIGITOS_DO_RESUMO_DO_ALVO = 12
 INTERVALO_DO_QUADRO_S_POR_CORTESIA_DE_REDE = 120
 LIMITE_DE_ISSUES_NO_QUADRO = 30
 MARCA_DE_MOLDE_NAO_PREENCHIDO = "${"
+PASTA_DAS_SKILLS_FONTE = ".agents/skills"
+PASTA_DAS_SKILLS_COPIA = ".claude/skills"
+GLOB_DA_SKILL = "*/SKILL.md"
+FRONTMATTER_DA_SKILL = re.compile(r"^---\n(.*?)\n---\n", re.S)
+CAMPO_NOME_DA_SKILL = re.compile(r"^name:\s*(.+)$", re.M)
+CAMPO_DESCRICAO_DA_SKILL = re.compile(r"^description:\s*(.+)$", re.M)
+RECADO_SEM_PASTA_DE_SKILLS = ("não medido: nem .agents/skills nem "
+                              ".claude/skills existem aqui")
+
+COMANDO_DO_CLI_DE_SESSAO = "claude"
+ARGUMENTOS_DA_LISTA_DE_MCP = ("mcp", "list")
+SEPARADOR_DO_ESTADO_MCP = " - "
+MARCA_DE_MCP_CONECTADO = "Connected"
+TIMEOUT_DO_MCP_S = 60
+RECADO_SEM_CLI_PARA_MEDIR_MCP = ("não medido: o comando de sessão não está no "
+                                 "PATH desta máquina")
+RECADO_MCP_NAO_RESPONDEU = "não medido: a listagem de MCP não respondeu ({})"
+
+COMANDO_DO_AGENDADOR = "systemctl"
+ARGUMENTOS_DA_LISTA_DE_ROTINAS = ("--user", "list-units", "--type=timer",
+                                  "--all", "--no-legend", "--plain")
+ARGUMENTOS_DO_DETALHE_DA_ROTINA = ("--user", "show")
+PROPRIEDADES_DA_ROTINA = ("--property=NextElapseUSecRealtime",
+                          "--property=LastTriggerUSec",
+                          "--property=Unit")
+PROPRIEDADES_DO_SERVICO = ("--property=ExecStart",)
+PROPRIEDADE_DO_SERVICO = "Unit"
+PROPRIEDADE_DO_COMANDO = "ExecStart"
+CAMINHO_DENTRO_DO_COMANDO = re.compile(r"path=([^ ;]+)")
+PROPRIEDADE_DA_PROXIMA = "NextElapseUSecRealtime"
+PROPRIEDADE_DA_ULTIMA = "LastTriggerUSec"
+SUFIXO_DA_UNIDADE_DE_TEMPO = ".timer"
+TIMEOUT_DO_AGENDADOR_S = 20
+RECADO_SEM_AGENDADOR = ("não medido: esta máquina não tem o agendador que o "
+                        "painel de controle sabe ler")
+NOME_DO_WINDOWS = "nt"
+RECADO_AGENDADOR_DO_WINDOWS = (
+    "não medido: no Windows o agendador é outro, e o formato da saída dele "
+    "muda com o idioma e a versão. Escrever o leitor sem rodar num Windows "
+    "de verdade daria número sem procedência — que é o oposto do que este "
+    "painel de controle serve para mostrar. Para fechar, rode uma vez "
+    "`schtasks /query /fo csv /v` na máquina e leve a saída para quem "
+    "mantém a camada: com o formato real na mão, o leitor nasce com teste.")
+RECADO_AGENDADOR_NAO_RESPONDEU = "não medido: o agendador não respondeu ({})"
+
+INTERVALO_DA_MAQUINA_S = 300
+
+PASSOS_DO_GUIA = (
+    ("o que é", "O executor de roteiros roda um trabalho em estágios e "
+                "guarda a prova de cada um. Você dispara e vai embora: se "
+                "algum estágio não provar o que fez, ele para, escreve o "
+                "motivo na issue e devolve o estado anterior."),
+    ("um pedido meu", "Escreva o pedido inteiro na caixa. A sessão nasce sem "
+                      "contexto nenhum: diga onde olhar, o que mudar e o que "
+                      "você aceita como prova. Pedido vago volta trabalho "
+                      "vago."),
+    ("um roteiro", "Roteiro é receita pronta, escrita antes de rodar. Escolha "
+                   "no seletor; a descrição ao lado diz o que ele faz. "
+                   "Roteiro é melhor que pedido para o que se repete."),
+    ("turnos e ciclos", "Turnos é quantas vezes a sessão pode falar antes de "
+                        "ser interrompida. Ciclos é quantas vezes a execução "
+                        "pode reprovar antes de escalar para você. Os padrões "
+                        "servem: mexa só quando souber por quê."),
+    ("issue", "Se você puser o número da issue, a execução conta a história "
+              "lá — passo a passo, com a prova. É por isso que a sessão "
+              "seguinte retoma sem você reexplicar nada."),
+    ("onde as coisas caem", "A sessão roda em {alvo} e as evidências ficam em "
+                            "{evidencias}. O alvo é árvore descartável de "
+                            "propósito: a sessão roda sem pedir permissão a "
+                            "cada passo."),
+    ("quando ela para", "Parada quer dizer que uma verificação recusou — o "
+                        "motivo está na fita e na issue. Pergunta quer dizer "
+                        "que ela precisa de uma decisão sua: responda na "
+                        "issue e mande seguir."),
+    ("a prova", "Nada é pronto porque a sessão disse que é. O que vale é o "
+                "que um instrumento provou, e a evidência guarda o comando e "
+                "a saída para você reexecutar."),
+)
+
 CAUDA_DO_LOG_NA_TELA = 4000
 CAUDA_DO_ERRO_DO_ANDAMENTO = 400
 
@@ -381,6 +460,22 @@ class PonteParaOEncadeador:
         self.inicio: dict[str, float] = {}
         self.trava = threading.Lock()
         self._quadro, self._quadro_em = None, 0.0
+        self._maquina, self._maquina_em = None, 0.0
+
+    def maquina_com_cache(self, relendo: bool = False) -> dict:
+        momento = time.time()
+        with self.trava:
+            fresco = momento - self._maquina_em
+            if self._maquina and not relendo \
+                    and fresco < INTERVALO_DA_MAQUINA_S:
+                return self._maquina
+        achado = {"skills": skills_no_disco(RAIZ),
+                  "mcp": servidores_mcp_com_estado(),
+                  "rotinas": rotinas_do_workspace(RAIZ),
+                  "guia": guia_do_executor(self)}
+        with self.trava:
+            self._maquina, self._maquina_em = achado, momento
+        return achado
 
     def _arquivo_de_trava_deste_alvo(self) -> Path:
         resumo_do_caminho_do_alvo = hashlib.sha256(
@@ -610,6 +705,27 @@ button:disabled{opacity:.4;cursor:default}
 .nota{font:12px/1.5 var(--sans);color:var(--fraco);flex:1 1 220px}
 .direita{margin-left:auto}
 
+/* A MÁQUINA: o que existe aqui e não é do trabalho em curso. Fica fechada
+   porque é consulta, não acompanhamento — e o que ela mostra muda em dias,
+   não em segundos. A distinção que a cor carrega é uma só: medido e vazio é
+   um fato; não medido é a confissão de que ninguém olhou. */
+#maquina{margin-top:1.4rem;border-top:1px solid var(--linha);padding-top:.6rem}
+#maquina>summary{font:600 11px/1 var(--mono);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--grafite);cursor:pointer;padding:.3rem 0}
+.maq-topo{display:flex;align-items:center;gap:.6rem;margin:.4rem 0 .8rem}
+button.miudo{padding:.25rem .6rem;font-size:10px}
+.maq h3{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--grafite);margin:1.1rem 0 .4rem}
+.maq ul{list-style:none;padding:0;margin:0}
+.maq li{padding:.35rem 0;border-bottom:1px solid var(--sulco);
+  font:12px/1.5 var(--sans)}
+.maq li b{font:600 12px/1.5 var(--mono);color:var(--tinta)}
+.maq li span{color:var(--grafite)}
+.maq p{font:12px/1.6 var(--sans);color:var(--grafite);margin:.2rem 0 .6rem}
+.maq .naomedido{color:var(--pergunta)}
+.maq .depe{color:var(--segue)}
+.maq .caido{color:var(--para)}
+
 /* A ASSINATURA: a fita de evidências. O encadeador imprime uma evidência por etapa,
    em ordem — a tela mostra a fita saindo dele, com a borda serrilhada de
    papel picotado feita só com gradiente. */
@@ -724,6 +840,15 @@ pre{margin:8px 0 0;padding:13px 15px;background:var(--sulco);
 <textarea id="p" placeholder="O pedido, completo. A sessão nasce sem contexto: diga onde olhar, o que medir e o que você aceita como prova."></textarea>
 
 <div id="saida"></div>
+
+<details id="maquina">
+  <summary>a máquina — o guia, as skills, os servidores e as rotinas</summary>
+  <div class="maq-topo">
+    <span class="nota">lido uma vez e guardado; nada aqui é do trabalho em curso.</span>
+    <button id="maquina-reler" class="miudo">reler</button>
+  </div>
+  <div id="maquina-corpo"></div>
+</details>
 </div>
 <script>
 const $=i=>document.getElementById(i);
@@ -935,14 +1060,187 @@ async function disparar(){
   atual=d.trabalho; assinatura=''; await ciclo(); $('sel').value=atual; ciclo();
 }
 
+// Medido e vazio é um FATO; não medido é confissão. A tela separa os dois,
+// porque lista vazia com cara de resposta é o engano mais barato de acreditar.
+function blocoDeLista(titulo,d,linha){
+  const cabeca='<h3>'+esc(titulo)+'</h3>';
+  if(!d) return cabeca+'<p class="naomedido">não medido: o painel de controle não recebeu este bloco.</p>';
+  if(d.recado) return cabeca+'<p class="naomedido">'+esc(d.recado)+'</p>';
+  if(!d.itens||!d.itens.length) return cabeca+'<p>nenhum — e isto foi medido.</p>';
+  return cabeca+'<ul>'+d.itens.map(linha).join('')+'</ul>';
+}
+
+function pintaMaquina(d){
+  const guia=(d.guia||[]).map(p=>'<li><b>'+esc(p.titulo)+'</b><br><span>'+esc(p.corpo)+'</span></li>').join('');
+  return '<div class="maq">'
+    +'<h3>como usar</h3><ul>'+guia+'</ul>'
+    +blocoDeLista('skills desta máquina',d.skills,
+      s=>'<li><b>'+esc(s.nome)+'</b><br><span>'+esc(s.descricao)+'</span></li>')
+    +blocoDeLista('servidores MCP',d.mcp,
+      s=>'<li><b>'+esc(s.nome)+'</b> <span class="'+(s.de_pe?'depe':'caido')+'">'
+        +esc(s.estado)+'</span><br><span>'+esc(s.alvo)+'</span></li>')
+    +blocoDeLista('rotinas deste workspace',d.rotinas,
+      r=>'<li><b>'+esc(r.unidade)+'</b> <span>'+esc(r.ativa)+'</span><br><span>'
+        +esc(r.descricao)+'</span><br><span>próxima: '+esc(r.proxima||'—')
+        +' · última: '+esc(r.ultima||'—')+'</span></li>')
+    +((d.rotinas&&d.rotinas.de_fora)?'<p>e '+d.rotinas.de_fora
+      +' agendamento(s) do sistema operacional, que não são deste workspace.</p>':'')
+    +'</div>';
+}
+
+let maquinaLida=false;
+async function maquina(reler){
+  const alvo=$('maquina-corpo');
+  alvo.innerHTML='<p class="nota">lendo — o estado dos servidores custa rede.</p>';
+  try{
+    const d=await (await fetch('/maquina'+(reler?'?reler=1':''))).json();
+    alvo.innerHTML=pintaMaquina(d); maquinaLida=true;
+  }catch(e){
+    alvo.innerHTML='<div class="maq"><p class="naomedido">não medido: '+esc(e)+'</p></div>';
+  }
+}
+
 $('b').onclick=disparar;
 $('sel').onchange=()=>{assinatura='';ciclo()};
 $('modo').onchange=ajusta;
+$('maquina').addEventListener('toggle',()=>{
+  if($('maquina').open&&!maquinaLida)maquina(false)});
+$('maquina-reler').onclick=()=>maquina(true);
 ajusta(); ciclo();
 // Ritmo por necessidade: 2,5s enquanto a execução anda, 10s quando não há o
 // que ver. Uma mesa aberta a noite inteira não deve acordar o disco à toa.
 setInterval(()=>{if(!parado||Math.random()<.25)ciclo()},2500);
 </script></body></html>"""
+
+
+def nome_e_descricao_do_frontmatter(texto: str) -> tuple:
+    frente = FRONTMATTER_DA_SKILL.match(texto)
+    if not frente:
+        return "", ""
+    nome = CAMPO_NOME_DA_SKILL.search(frente.group(1))
+    descricao = CAMPO_DESCRICAO_DA_SKILL.search(frente.group(1))
+    return (nome.group(1).strip() if nome else "",
+            descricao.group(1).strip() if descricao else "")
+
+
+def skills_no_disco(raiz: Path) -> dict:
+    pastas = [raiz / PASTA_DAS_SKILLS_FONTE, raiz / PASTA_DAS_SKILLS_COPIA]
+    viva = next((p for p in pastas if p.is_dir()), None)
+    if viva is None:
+        return {"itens": [], "recado": RECADO_SEM_PASTA_DE_SKILLS}
+    achadas = {}
+    for skill in sorted(viva.glob(GLOB_DA_SKILL)):
+        with contextlib.suppress(OSError):
+            nome, descricao = nome_e_descricao_do_frontmatter(
+                skill.read_text(encoding="utf-8", errors="replace"))
+            chave = nome or skill.parent.name
+            achadas[chave] = {"nome": chave, "descricao": descricao}
+    return {"itens": list(achadas.values()), "recado": None,
+            "de_onde": str(viva.relative_to(raiz))}
+
+
+def linha_de_servidor_mcp(linha: str) -> dict | None:
+    if SEPARADOR_DO_ESTADO_MCP not in linha or ":" not in linha:
+        return None
+    endereco, _, estado = linha.rpartition(SEPARADOR_DO_ESTADO_MCP)
+    nome, _, alvo = endereco.partition(":")
+    if not nome.strip():
+        return None
+    return {"nome": nome.strip(), "alvo": alvo.strip(),
+            "estado": estado.strip(),
+            "de_pe": MARCA_DE_MCP_CONECTADO in estado}
+
+
+def servidores_mcp_com_estado() -> dict:
+    if not shutil.which(COMANDO_DO_CLI_DE_SESSAO):
+        return {"itens": [], "recado": RECADO_SEM_CLI_PARA_MEDIR_MCP}
+    try:
+        saida = subprocess.run(
+            [COMANDO_DO_CLI_DE_SESSAO, *ARGUMENTOS_DA_LISTA_DE_MCP],
+            capture_output=True, text=True, timeout=TIMEOUT_DO_MCP_S)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"itens": [], "recado": RECADO_MCP_NAO_RESPONDEU.format(e)}
+    itens = [s for s in map(linha_de_servidor_mcp, saida.stdout.splitlines())
+             if s]
+    if not itens and saida.returncode != 0:
+        return {"itens": [], "recado": RECADO_MCP_NAO_RESPONDEU.format(
+            saida.returncode)}
+    return {"itens": itens, "recado": None}
+
+
+def unidades_de_rotina(saida: str) -> list:
+    unidades = []
+    for linha in saida.splitlines():
+        partes = linha.split(None, 4)
+        if len(partes) >= 4 and partes[0].endswith(SUFIXO_DA_UNIDADE_DE_TEMPO):
+            unidades.append({"unidade": partes[0], "ativa": partes[2],
+                             "descricao": partes[4] if len(partes) > 4 else ""})
+    return unidades
+
+
+def propriedades_do_agendador(unidade: str, propriedades: tuple) -> dict:
+    try:
+        saida = subprocess.run(
+            [COMANDO_DO_AGENDADOR, *ARGUMENTOS_DO_DETALHE_DA_ROTINA, unidade,
+             *propriedades],
+            capture_output=True, text=True, timeout=TIMEOUT_DO_AGENDADOR_S)
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    return dict(linha.split("=", 1) for linha in saida.stdout.splitlines()
+                if "=" in linha)
+
+
+def quando_a_rotina_dispara(unidade: str) -> dict:
+    return propriedades_do_agendador(unidade, PROPRIEDADES_DA_ROTINA)
+
+
+def o_que_a_rotina_executa(servico: str) -> str:
+    bruto = propriedades_do_agendador(
+        servico, PROPRIEDADES_DO_SERVICO).get(PROPRIEDADE_DO_COMANDO, "")
+    achado = CAMINHO_DENTRO_DO_COMANDO.search(bruto)
+    return achado.group(1) if achado else ""
+
+
+def e_rotina_deste_workspace(comando: str, raiz: Path) -> bool:
+    if not comando or not Path(comando).is_absolute():
+        return False
+    with contextlib.suppress(ValueError, OSError):
+        return Path(comando).resolve().is_relative_to(raiz.resolve())
+    return False
+
+
+def rotinas_do_workspace(raiz: Path) -> dict:
+    if os.name == NOME_DO_WINDOWS:
+        return {"itens": [], "recado": RECADO_AGENDADOR_DO_WINDOWS}
+    if not shutil.which(COMANDO_DO_AGENDADOR):
+        return {"itens": [], "recado": RECADO_SEM_AGENDADOR}
+    try:
+        saida = subprocess.run(
+            [COMANDO_DO_AGENDADOR, *ARGUMENTOS_DA_LISTA_DE_ROTINAS],
+            capture_output=True, text=True, timeout=TIMEOUT_DO_AGENDADOR_S)
+    except (OSError, subprocess.SubprocessError) as e:
+        return {"itens": [], "recado": RECADO_AGENDADOR_NAO_RESPONDEU.format(e)}
+    if saida.returncode != 0:
+        return {"itens": [], "recado": RECADO_AGENDADOR_NAO_RESPONDEU.format(
+            saida.returncode)}
+    itens, de_fora = [], 0
+    for achada in unidades_de_rotina(saida.stdout):
+        detalhe = quando_a_rotina_dispara(achada["unidade"])
+        servico = detalhe.get(PROPRIEDADE_DO_SERVICO) or achada["unidade"]
+        comando = o_que_a_rotina_executa(servico)
+        if not e_rotina_deste_workspace(comando, raiz):
+            de_fora += 1
+            continue
+        itens.append({**achada, "comando": comando,
+                      "proxima": detalhe.get(PROPRIEDADE_DA_PROXIMA, ""),
+                      "ultima": detalhe.get(PROPRIEDADE_DA_ULTIMA, "")})
+    return {"itens": itens, "recado": None, "de_fora": de_fora}
+
+
+def guia_do_executor(ponte: PonteParaOEncadeador) -> list:
+    return [{"titulo": titulo, "corpo": corpo.format(
+        alvo=ponte.cwd, evidencias=ponte.dir)}
+        for titulo, corpo in PASSOS_DO_GUIA]
 
 
 def corpo_com_coordenadas_modo_e_quadro(ponte: PonteParaOEncadeador) -> dict:
@@ -1012,6 +1310,10 @@ def fazer_handler(ponte: PonteParaOEncadeador):
                 return self._envia(PAGINA.encode(), "text/html; charset=utf-8")
             if rota.path == "/trabalhos":
                 return self._json(corpo_com_coordenadas_modo_e_quadro(ponte))
+            if rota.path == "/maquina":
+                consulta = urllib.parse.parse_qs(rota.query)
+                return self._json(ponte.maquina_com_cache(
+                    relendo=bool(consulta.get("reler"))))
             if rota.path == "/estado":
                 consulta = urllib.parse.parse_qs(rota.query)
                 nome = (consulta.get("trabalho") or [""])[0]
@@ -1418,7 +1720,78 @@ def _sobre_o_encadeador_de_verdade(b) -> None:
 
 
 
+def _sobre_a_maquina(b) -> None:
+    b.caso("a página tem onde mostrar a máquina, e nasce fechada",
+           'id="maquina"' in PAGINA and "<details" in PAGINA
+           and "/maquina" in PAGINA)
+    b.caso("a máquina só é lida quando alguém abre — rede não se paga à toa",
+           "maquinaLida" in PAGINA and "addEventListener('toggle'" in PAGINA)
+
+    with tempfile.TemporaryDirectory() as pasta:
+        raiz = Path(pasta)
+        skill = raiz / PASTA_DAS_SKILLS_FONTE / "medir" / "SKILL.md"
+        skill.parent.mkdir(parents=True)
+        skill.write_text("---\nname: medir\ndescription: mede o que existe\n"
+                         "---\n\n# medir\n", encoding="utf-8")
+        achadas = skills_no_disco(raiz)
+        b.caso("a skill do disco entra com nome e descrição",
+               achadas["itens"] == [{"nome": "medir",
+                                     "descricao": "mede o que existe"}])
+        b.caso("e o painel de controle diz de qual pasta leu",
+               achadas["de_onde"] == PASTA_DAS_SKILLS_FONTE)
+    with tempfile.TemporaryDirectory() as pasta:
+        vazia = skills_no_disco(Path(pasta))
+        b.caso("sem pasta de skills o resultado é NÃO MEDIDO, nunca zero",
+               vazia["itens"] == [] and vazia["recado"] is not None)
+
+    b.caso("servidor conectado é lido com nome, alvo e estado",
+           linha_de_servidor_mcp("agenda: https://x/mcp - ✔ Connected")
+           == {"nome": "agenda", "alvo": "https://x/mcp",
+               "estado": "✔ Connected", "de_pe": True})
+    b.caso("servidor que pede autenticação não passa por de pé",
+           linha_de_servidor_mcp(
+               "desenho: https://y/mcp (HTTP) - ! Needs authentication"
+           )["de_pe"] is False)
+    b.caso("a linha de cabeçalho da listagem não vira servidor",
+           linha_de_servidor_mcp("Checking MCP server health…") is None)
+    b.caso("linha sem estado não vira servidor de mentira",
+           linha_de_servidor_mcp("") is None)
+
+    lista = ("relatorio-diario.timer loaded active waiting Dispara a rotina\n"
+             "outra.service loaded active running Um serviço qualquer\n")
+    achadas = unidades_de_rotina(lista)
+    b.caso("só o que é rotina agendada entra na lista",
+           [u["unidade"] for u in achadas] == ["relatorio-diario.timer"])
+    b.caso("e a descrição do agendador vem junto",
+           achadas[0]["descricao"] == "Dispara a rotina")
+
+    with tempfile.TemporaryDirectory() as pasta:
+        raiz = Path(pasta)
+        minha = raiz / "rotinas" / "executar.sh"
+        minha.parent.mkdir(parents=True)
+        minha.write_text("", encoding="utf-8")
+        b.caso("rotina que executa deste workspace é minha",
+               e_rotina_deste_workspace(str(minha), raiz) is True)
+        b.caso("rotina do sistema operacional não entra na lista",
+               e_rotina_deste_workspace("/usr/bin/apt-get", raiz) is False)
+        b.caso("rotina sem comando legível não vira minha por engano",
+               e_rotina_deste_workspace("", raiz) is False)
+        b.caso("comando sem caminho não vira meu pela pasta em que eu rodo",
+               e_rotina_deste_workspace("find", raiz) is False)
+    b.caso("a tela confessa quantos agendamentos ficaram de fora",
+           "de_fora" in PAGINA and "sistema operacional" in PAGINA)
+    b.caso("no Windows a confissão diz o comando que fecharia a lacuna",
+           "schtasks" in RECADO_AGENDADOR_DO_WINDOWS
+           and "não medido" in RECADO_AGENDADOR_DO_WINDOWS)
+
+    b.caso("o guia fala de prova, de parada e de pergunta",
+           {"a prova", "quando ela para"} <= {t for t, _ in PASSOS_DO_GUIA})
+    b.caso("a tela separa não medido de medido e vazio",
+           "naomedido" in PAGINA and "e isto foi medido" in PAGINA)
+
+
 TEMAS_DO_PAINEL = (
+    _sobre_a_maquina,
     _sobre_a_ponte_e_o_catalogo,
     _sobre_o_disparo_e_a_regua,
     _sobre_o_roteiro_do_pedido,

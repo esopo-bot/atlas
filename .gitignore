@@ -34,3 +34,18 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# O que é do emprego mora em trabalho/, com git PRÓPRIO e privado. O git do
+# atlas não o enxerga de propósito: o publicar.py leva o que está rastreado
+# aqui, e nada de lá está. A fronteira é estrutural, não uma lista que
+# alguém precisa manter certa.
+/trabalho/
+
+# Fora do git de propósito: cada pasta explica o porquê no seu LEIAME.
+/projetos/*
+!/projetos/LEIAME.md
+/.credenciais/*
+!/.credenciais/LEIAME.txt
+!/.credenciais/publicar-mcp-env.py
+/recursos/*
+!/recursos/LEIAME.md

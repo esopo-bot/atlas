@@ -98,6 +98,7 @@ CAMPO_DESCRICAO = re.compile(r"^description:\s*(.+)$", re.M)
 CAMPO_DAS_FERRAMENTAS = re.compile(r"^tools:\s*\S", re.M)
 FORMAS_DE_FUNCAO = (ast.FunctionDef, ast.AsyncFunctionDef)
 MARCA_DE_TESTE_NO_NOME = "test"
+MARCA_DA_BANDEIRA_DE_TESTE = "testar"
 LINHA_DO_CATALOGO = "- {}: {}\n"
 
 MODELO_DA_SIMULACAO = "claude-haiku-4-5-20251001"
@@ -513,19 +514,27 @@ def colher_json(texto: str) -> dict:
     return {}
 
 
+def regioes_de_teste(arvore: ast.AST) -> list:
+    achadas = []
+    for no in ast.walk(arvore):
+        if isinstance(no, FORMAS_DE_FUNCAO) \
+                and MARCA_DE_TESTE_NO_NOME in no.name.lower():
+            achadas.append((no, no.name))
+        elif isinstance(no, ast.If) \
+                and MARCA_DA_BANDEIRA_DE_TESTE in ast.dump(no.test).lower():
+            achadas.append((no, ""))
+    return achadas
+
+
 def teste_toca_o_proprio_codigo(caminho: Path) -> bool:
     with contextlib.suppress(OSError, SyntaxError):
         arvore = ast.parse(caminho.read_text(encoding="utf-8"))
         do_arquivo = {no.name for no in ast.walk(arvore)
                       if isinstance(no, FORMAS_DE_FUNCAO)}
-        for no in ast.walk(arvore):
-            if not isinstance(no, FORMAS_DE_FUNCAO):
-                continue
-            if MARCA_DE_TESTE_NO_NOME not in no.name:
-                continue
-            chamados = {c.func.id for c in ast.walk(no)
+        for regiao, nome_da_regiao in regioes_de_teste(arvore):
+            chamados = {c.func.id for c in ast.walk(regiao)
                         if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
-            if chamados & (do_arquivo - {no.name}):
+            if chamados & (do_arquivo - {nome_da_regiao}):
                 return True
     return False
 
@@ -918,6 +927,21 @@ def testar() -> int:
              teste_toca_o_proprio_codigo(bom))
         caso("teste que só usa embutido não conta",
              not teste_toca_o_proprio_codigo(ruim))
+        na_guarda = raiz / "na-guarda.py"
+        na_guarda.write_text(
+            'import sys\ndef somar(n):\n    return sum(n)\n'
+            'if "--testar" in sys.argv:\n    assert somar([1]) == 1\n'
+            '    sys.exit(0)\n', encoding="utf-8")
+        caso("teste na guarda da bandeira também conta — o repositório mede o que o "
+             "teste FAZ, não onde ele mora",
+             teste_toca_o_proprio_codigo(na_guarda))
+        guarda_vazia = raiz / "guarda-vazia.py"
+        guarda_vazia.write_text(
+            'import sys\ndef somar(n):\n    return sum(n)\n'
+            'if "--testar" in sys.argv:\n    assert 1 + 1 == 2\n'
+            '    sys.exit(0)\n', encoding="utf-8")
+        caso("teste na guarda que não chama o arquivo segue não contando",
+             not teste_toca_o_proprio_codigo(guarda_vazia))
         assincrono = raiz / "assincrono.py"
         assincrono.write_text(
             "async def buscar(n):\n    return n\n"
@@ -995,7 +1019,7 @@ def testar() -> int:
         caso("commit que não saiu da máquina reprova",
              entrega(repositorio) == 1)
 
-    total = 65
+    total = 67
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
         for falha in falhas:

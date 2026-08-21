@@ -7,6 +7,7 @@ import re
 import subprocess
 import shutil
 import sys
+import pathlib
 import tempfile
 import time
 import tokenize
@@ -65,6 +66,12 @@ LINHA_PERGUNTA = "  [{}] {:<34} {}"
 LINHA_CUSTO = "  {:<34} {}"
 SEM_CLAUDE = "  (claude fora do PATH — simulação não rodou)"
 SEM_O_ARQUIVO = "a sessão não escreveu o arquivo"
+MARCA_DO_CASO_DO_TESTE = "--testar"
+PASTA_DAS_EVIDENCIAS = "tmp/evidencias/simulacao"
+NOME_DO_ARTEFATO_REPROVADO = "artefato-que-reprovou.py"
+ARTEFATO_GUARDADO = ("  (o artefato reprovado ficou em {} — a árvore da "
+                     "simulação some, e medida que reprova sem deixar ver o "
+                     "que reprovou não se investiga)")
 SESSAO_MORREU = "  (a sessão morreu: {})"
 NADA_A_MOSTRAR = "  (nada acima do teto)"
 MAIOR_DO_MONTE = ("  o que a régua usa: maior arquivo {} linhas ({}), "
@@ -274,6 +281,19 @@ def _arvore_com_a_camada(pasta):
 
 
 
+def guardar_o_artefato_se_reprovou(alvo: Path, acertos: list) -> str:
+    reprovou = any(not ok for rotulo, ok, _ in acertos
+                   if ARQUIVO_PEDIDO in rotulo or MARCA_DO_CASO_DO_TESTE in rotulo)
+    if not reprovou or not alvo.is_file():
+        return ""
+    destino = Path(PASTA_DAS_EVIDENCIAS) / NOME_DO_ARTEFATO_REPROVADO
+    with contextlib.suppress(OSError):
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(alvo.read_text(encoding="utf-8"), encoding="utf-8")
+        return str(destino)
+    return ""
+
+
 def medir_simulacao():
     if not shutil.which("claude"):
         return [SEM_CLAUDE], {"rodou": False}
@@ -315,6 +335,9 @@ def medir_simulacao():
         linhas = [LINHA_PERGUNTA.format("OK  " if ok else "FALHA", rotulo, porque)
                   for rotulo, ok, porque in acertos]
         certos = sum(1 for _, ok, _ in acertos if ok)
+        guardado = guardar_o_artefato_se_reprovou(alvo, acertos)
+        if guardado:
+            linhas.append(ARTEFATO_GUARDADO.format(guardado))
         uso = sessao.get("usage") or {}
         linhas += [
             LINHA_CUSTO.format("acurácia", f"{certos}/{len(acertos)}"),
@@ -415,6 +438,18 @@ def testar() -> int:
         caso("função assíncrona é vista", "g" in achadas)
         caso("o tamanho da função sai em linhas", achadas["f"][0] == 2)
 
+    with tempfile.TemporaryDirectory() as pasta:
+        artefato = pathlib.Path(pasta) / "somar.py"
+        artefato.write_text("x = 1\n", encoding="utf-8")
+        passou = [("entregou tmp/somar.py com --testar que passa", True, ""),
+                  ("o --testar exercita o código do arquivo", True, "")]
+        caso("simulação que passou não deixa artefato para trás",
+             guardar_o_artefato_se_reprovou(artefato, passou) == "")
+        caso("sem artefato no disco não há o que guardar",
+             guardar_o_artefato_se_reprovou(
+                 pathlib.Path(pasta) / "nao-existe.py",
+                 [("o --testar exercita o código do arquivo", False, "")]) == "")
+
     caso("medida que não rodou é acusada pelo nome",
          medidas_que_nao_rodaram({"simulacao": {"rodou": False},
                                   "camada": {"paginas": 3}}) == ["simulacao"])
@@ -423,7 +458,7 @@ def testar() -> int:
     caso("medida sem a chave rodou não vira acusação",
          medidas_que_nao_rodaram({"camada": {"paginas": 3}, "outra": 1}) == [])
 
-    total = 10
+    total = 12
     if falhas:
         for falha in falhas:
             print(FALHA_DO_CASO.format(falha))
