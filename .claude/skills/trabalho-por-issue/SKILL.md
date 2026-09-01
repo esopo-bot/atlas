@@ -149,6 +149,12 @@ link, nunca sub-issue.
 
 O molde do corpo da issue está em `references/moldes.md`; abra ao criar.
 
+**O trabalho que não acaba tem molde próprio.** Projeto que segue vivo, caixa
+de entrada, território que acumula defeito: a issue não fecha, enche e esvazia,
+e não se executa — quem a dispara está executando um quadro, não uma tarefa. O
+molde do **quadro fixo** está no mesmo `references/moldes.md`: cinco seções, a
+linha de pendência que carrega dono e data, e a régua que diz quando ela vence.
+
 **Quem vai executar é uma sessão sem ninguém por perto?** O corpo ganha cinco
 seções **sobre** o molde comum — `O pedido, como veio`, `O prompt para a
 sessão`, `Onde rodar`, `Branch e trabalho em andamento` e `Commit de

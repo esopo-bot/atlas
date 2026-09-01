@@ -26,6 +26,14 @@ enxerga de fora. O valor está nas regras, não na prosa:
 - **Exemplo comercial não carrega preço.** Se o relatório é isca ou
   cortesia, nenhum valor de quem assina entra nele — e nenhuma promessa
   de resultado em número.
+- **A coleta é do negócio, nunca da pessoa.** O que entra é vitrine
+  comercial: ficha, perfil de negócio, avaliação, cadastro público de
+  empresa. Nome, telefone e rosto de cliente que aparecem em comentário
+  ou avaliação não são coletados, contados nem citados — nem em anexo.
+  A ANPD trata raspagem como tratamento de dado pessoal mesmo quando o
+  dado é público (Radar Tecnológico nº 3, nov/2024), e o princípio da
+  necessidade é o que reprova coleta indiscriminada. O relatório fala de
+  quantos avaliaram, nunca de quem avaliou.
 
 ## Fase 0 — enquadramento e a pasta do caso
 
@@ -100,6 +108,10 @@ no relatório, senão o número mente por omissão.
 
 ## Fase 5 — a vitrine digital e a captura da marca
 
+A curadoria de fontes — o que cada uma responde, como se chama e a
+armadilha dela — mora em `references/fontes.md`; fonte nova só entra lá
+depois de medida em rodada real.
+
 Na ordem, porque uma alimenta a outra:
 
 1. **Site**: título, meta, para onde apontam os CTAs (número existe?),
@@ -125,6 +137,72 @@ Tudo vira o retrato datado (JSON) da regra de ouro. E **HTTP 200 não
 prova página viva em rede social** — o código vem da casca; abra a
 página no navegador e leia o que ela diz.
 
+### O mergulho no Instagram — três páginas, três datasets
+
+O perfil rende muito mais que seguidores e último post, sem abrir post
+nenhum:
+
+1. **A aba Reels mostra as visualizações públicas de cada reel** — o
+   dataset de alcance que o grid de posts esconde, numa página só.
+   Alcance não é seguidor: reel viaja além da base, e o contraste entre
+   a base recente e os picos diz qual formato funciona. Date os reels
+   pelo cruzamento com o grid de posts e confesse o "aprox" no retrato.
+2. **As legendas do grid são o mix de conteúdo inteiro**: o snapshot do
+   perfil traz legenda por legenda — classifique tema, formato e CTA, e
+   procure o formato que a própria conta já provou (o que os fixados e
+   os picos têm em comum). Recomendação de pauta nasce daí, não de
+   opinião.
+3. **Fixado tem data**: fixado antigo com números altos é músculo
+   provado E vitrine parada — as duas leituras entram.
+4. **Cace os hubs de link da era anterior** (Linktree, biolink, beacons…)
+   na busca da marca: hub órfão continua indexado, e cada botão dele se
+   verifica no navegador, um a um — agendamento antigo, handle apagado e
+   formulário ainda vivo são três achados diferentes.
+
+### Imprensa — a pauta ocupada e a não ocupada
+
+Busque a marca + praça; depois busque o SEGMENTO no veículo da praça. A
+segunda busca é a contraprova positiva: zero da marca num veículo que
+cobre o setor é pauta não ocupada — item do plano de captação, não
+passivo. Homônimo de outra praça vence busca: confira a cidade antes de
+atribuir qualquer matéria.
+
+### Registro público — o que se mede e o que espera o CNPJ
+
+- **RDAP do domínio** e **Wayback (CDX)**: receitas abaixo — datam a
+  presença web e dizem em nome de quem ela está (CPF ou CNPJ — marca em
+  CPF é achado).
+- **Com o CNPJ em mãos**: dados abertos da Receita (quadro societário,
+  endereço cadastral, situação), diário oficial e NFS-e da praça.
+- **Sem o CNPJ**: essas consultas viram pergunta da última página, não
+  achado. Diário oficial via buscador é melhor-esforço e se confessa;
+  transparência municipal/federal rende para prospecto B2B (vende ao
+  poder público?), quase nada para B2C pequeno — diga isso em vez de
+  imprimir zero.
+
+### O domínio e o passado do site — dois comandos, achado grande
+
+A vitrine de hoje não conta o que já existiu. Dois registros públicos
+gratuitos contam, e ambos devolvem prova citável:
+
+- **O domínio, no RDAP do `registro.br`** — 200 é registrado, 404 é
+  livre. `curl -s -w '\nHTTP=%{http_code}\n'
+  https://rdap.registro.br/domain/<dominio>`. A resposta traz `entities`
+  (o titular), `events` (criação e expiração) e os `nameservers`: dá para
+  ver se o domínio da marca está com o dono, com um terceiro, ou
+  abandonado. Cada consulta roda com **contraprova positiva** — um
+  domínio sabidamente vivo na mesma execução, senão o 404 não prova nada.
+- **O passado do site, no Wayback Machine** —
+  `https://archive.org/wayback/available?url=<dominio>` devolve o último
+  retrato, e `https://web.archive.org/cdx/search/cdx?url=<dominio>&output=json`
+  devolve a linha do tempo inteira, com data e código HTTP de cada
+  captura. É a única forma barata de datar quando o site morreu.
+
+Site fora do ar **com o domínio livre** é o achado mais caro que esta
+fase produz: a marca perdeu o endereço dela e qualquer um pode registrar.
+Entra no relatório com as duas saídas coladas, e vira a primeira pergunta
+da página do dono.
+
 ### Prints datados — evidência de primeira classe
 
 Print de navegador é prova tanto quanto comando: ficha do Maps (a própria
@@ -140,6 +218,21 @@ ficar em torno de 1–2 MB.
 Busque o número de penetração/benchmark do setor em fonte nomeável
 (associação setorial, Sebrae, relatório anual) e aplique à população do
 raio. Premissa nacional em território acima da média é piso — diga isso.
+
+**A régua do município sai de graça, e é oficial.** A API de agregados do
+IBGE (a mesma que alimenta o SIDRA) responde sem chave nenhuma e devolve
+o número já com nome de tabela e unidade — dá para comparar o município
+com o estado sem baixar base:
+
+```bash
+curl -s 'https://servicodados.ibge.gov.br/api/v3/agregados/5938/periodos/2021/variaveis/37?localidades=N6%5B<codigo_ibge>%5D'
+```
+
+`5938` é o PIB dos municípios e `37` o PIB a preços correntes;
+`/agregados/<n>/metadados` diz o que cada tabela mede, e
+`/api/v3/agregados` lista todas. **Codifique os colchetes** (`%5B` e
+`%5D`): sem isso a API devolve corpo vazio com HTTP 200 — parece "não
+tem dado" e é erro de chamada.
 
 ## Fase 7 — o plano de captação premium
 
@@ -182,8 +275,13 @@ Antes de dar por pronto, rode o cético (a skill `cetico` é o rito):
 - **Re-meça todo link** no navegador — não por código HTTP.
 - **Zero só vale com contraprova positiva**: o instrumento que devolve
   vazio tem que provar que acha algo onde algo existe.
+- **Todo número do relatório tem endereço**: releia o PDF caçando
+  número por número e aponte cada um ao arquivo datado de `dados/` ou
+  ao print que o produziu. Número sem endereço sai — essa releitura é a
+  que pega o valor digitado de memória.
 - **Fragilidade se confessa no texto**, no mesmo volume da evidência:
-  amostra fina, fonte de 2010, OSM incompleto, premissa nacional.
+  amostra fina, fonte de 2010, OSM incompleto, premissa nacional, data
+  "aprox" de reel.
 
 O que não passar sai do relatório — não se reescreve mais bonito.
 
@@ -223,6 +321,31 @@ Medidas em uso real — não são hipóteses:
   cache e o cabeçalho renderizado é o vivo — números levemente
   diferentes na mesma tela. Registre no retrato qual dos dois foi lido;
   a diferença é banda de ruído, não erro.
+- **Domínio que não resolve não devolve HTTP nenhum**: `curl` sai com
+  código `000` e a tentação é ler isso como "site fora do ar hoje". Não
+  é: NXDOMAIN quer dizer que o endereço deixou de existir. Confirme com
+  `host <dominio>` e com o RDAP antes de escrever a frase.
+- **API oficial devolve 200 com o corpo vazio**: colchete não codificado
+  na chamada do IBGE, período inexistente, localidade errada. Vazio de
+  fonte oficial é erro de chamada até prova em contrário — repita com
+  um parâmetro sabidamente bom antes de imprimir "sem dado".
+- **Agregador de CNPJ costuma estar atrás de Cloudflare**: a resposta
+  vem `Just a moment...` com HTTP 200, e código nenhum acusa. Quem lê o
+  status em vez do corpo registra dado que nunca chegou — e o desafio
+  não se contorna. O caminho legítimo é a base de dados abertos da
+  Receita ou a consulta oficial, um CNPJ por vez.
 - **Na paginação do PDF, a leitura vem antes do print**: figura sozinha
   na página seguinte parece intencional; a nota de leitura órfã parece
   descuido. Confira as quebras com o PDF convertido em imagem.
+- **Snapshot de página pesada colhido cedo demais vem quase vazio**: a
+  rede social ainda está montando o DOM e o snapshot sai com meia dúzia
+  de nós. Vazio ali não é página vazia — recolha depois que ela carregar.
+- **Ferramenta de fetch que recusa um domínio não é "sem dado"**: o
+  harness pode bloquear o endereço (o Wayback, por exemplo) e o mesmo
+  `curl` responde na hora. Troque o instrumento antes de declarar a
+  fonte indisponível.
+- **O hub de links da era anterior não morre sozinho**: continua
+  indexado, vence busca da marca e aponta para agendamento desativado e
+  handle apagado. Verifique cada botão no navegador — e o que ainda
+  estiver VIVO ali (um formulário, um número) é achado tanto quanto o
+  que morreu.

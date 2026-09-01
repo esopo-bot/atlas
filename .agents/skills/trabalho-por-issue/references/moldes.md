@@ -139,3 +139,91 @@ no mesmo corpo.
 O título leva o prefixo `<projeto>_pergunta -`, e a etiqueta `parado-em-voce` —
 é ela que faz a coluna do quadro mostrar que a issue espera o dono, e que o
 executor de roteiros não a dispare sozinho.
+
+## Molde do quadro fixo
+
+Para o trabalho que não acaba: um projeto que segue vivo, uma caixa de entrada,
+um território que acumula defeito. A issue **não fecha** — ela enche e esvazia.
+O corpo é o estado de hoje; os comentários são o log de cada movimento.
+
+Cinco seções, nesta ordem:
+
+```markdown
+# O quadro de <o trabalho> — o que ainda falta
+
+**Esta issue não fecha.** Ela é a orquestradora: enche com pendências, esvazia
+quando cada uma resolve, e guarda o estado entre sessões. Toda sessão que for
+trabalhar aqui começa lendo o corpo desta issue.
+
+## Onde o trabalho mora
+<o repositório, a pasta, o remoto e o que cada um autoriza. É o endereço que a
+sessão nova precisa antes de tocar em qualquer coisa.>
+
+## Regras deste trabalho
+<as ordens que valem sempre, uma por linha: o que não se publica, com quem não
+se fala, o que nunca entra nesta issue.>
+
+## Pendências
+<uma linha por assunto, cada uma com dono e data — formato abaixo.>
+
+## Vencidos
+<a régua escrita, e o que ela pega hoje. Quase sempre vazia: é assim que se
+sabe que alguém a está lendo.>
+
+## Ponto de retomada
+<o bloco da seção "Virar a sessão" da skill.>
+```
+
+Uma linha por **assunto**, não por evento: o mesmo problema que chegou por três
+caminhos é uma linha só.
+
+### A linha de pendência: dono e data
+
+```markdown
+- [ ] `<dono>` · desde <dd/mm> — <a pendência em uma frase, com o endereço da prova>
+```
+
+Linha sem dono é linha órfã: todo mundo lê e ninguém pega. Linha sem data não
+envelhece — some do radar sem nunca vencer.
+
+O **dono** é quem dá o próximo passo, nunca quem pediu. Três bastam, e é o
+repositório que os nomeia, no perfil do passo zero: o que só o responsável pode
+fazer, o que é trabalho de sessão, e o que espera resposta de fora.
+
+A **data** é a de quando a linha passou às mãos do dono da vez — nunca a de
+hoje. Carimbar a data de hoje ao arrumar o quadro zera o relógio de todas as
+linhas de uma vez, e o quadro passa a parecer novo para sempre.
+
+Linha resolvida não some: vira `[x]` riscada com o que a fechou, ou sai por
+poda registrada em comentário.
+
+### A régua de vencimento
+
+`Vencidos` não é lista que alguém mantém à mão: é a régua escrita, e o que ela
+pega no dia em que foi verificada.
+
+```markdown
+## Vencidos
+
+Linha de pendência parada além da régua, medida pela data da própria linha:
+
+| Dono da vez | Vence em |
+| --- | --- |
+| <trabalho de sessão> | mais de <n> dias |
+| <decisão do responsável> | mais de <n> dias |
+| <resposta de fora> | mais de <n> dias |
+
+**Nenhuma hoje** — verificado em <data>.
+```
+
+Os prazos são **do repositório**, não da skill: espera por gente de fora aguenta
+mais que trabalho parado na própria mão, e quanto mais, cada repositório
+decide. Sem
+prazo declarado não há vencido — e quadro que nunca acusa vencido não é lido
+duas vezes.
+
+**"Esperando resposta de fora" só vale com pedido registrado.** Se ninguém
+consegue dizer a data em que alguém pediu, a linha não espera terceiro: ela
+espera a gente pedir. Chamar de bloqueio externo o que é tarefa nossa parada é
+a issue mentindo para a próxima sessão — e é a mentira mais cara, porque
+ninguém cobra quem está esperando.
