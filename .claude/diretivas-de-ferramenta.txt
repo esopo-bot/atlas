@@ -1,0 +1,25 @@
+# As diretivas de ferramenta que o veto de comentário deixa passar.
+#
+# O gancho .claude/hooks/vetar-comentario-explicativo.py recusa toda linha
+# de comentário acrescentada a arquivo de código. Passam o shebang e a linha
+# que contém um dos trechos desta lista — a diretiva que uma FERRAMENTA lê e
+# obedece, nunca a prosa que explica o código para gente.
+#
+# A lista é do dono: o próprio gancho recusa Write e Edit sobre este
+# arquivo, porque cerca que o agente afrouxa não é cerca. Quem a muda é
+# você, no editor.
+#
+# Sem este arquivo o gancho falha fechado — só o shebang passa, e a recusa
+# nomeia a falta.
+#
+# Um trecho por linha, procurado em minúsculas dentro da linha inteira;
+# linha com # é comentário. Tire o que não existe aqui e acrescente as
+# diretivas do seu repositório — este arquivo é seu, e a atualização da
+# camada não o sobrescreve.
+eslint-
+@ts-
+noqa
+pragma
+type:
+shellcheck
+coding:

@@ -1,0 +1,33 @@
+{
+  "teto": 2,
+  "etapas": [
+    {
+      "nome": "quanto-cobra",
+      "tipo": "codigo",
+      "comando": "python3 .agents/camada/camada.py --evidencia medir"
+    },
+    {
+      "nome": "se-prova",
+      "tipo": "codigo",
+      "comando": "python3 .agents/camada/camada.py --evidencia provar",
+      "tempo-limite": 1800
+    },
+    {
+      "nome": "sessao-simulada",
+      "tipo": "codigo",
+      "comando": "python3 .agents/camada/camada.py --evidencia simular",
+      "tempo-limite": 1800,
+      "depende": [
+        "quanto-cobra",
+        "se-prova"
+      ]
+    },
+    {
+      "nome": "verificacao",
+      "tipo": "verificacao",
+      "depende": [
+        "sessao-simulada"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# Trabalhar no workspace
+
+Faça o trabalho desta issue na branch que a etapa anterior abriu. O que fazer está no corpo da issue: leia o prompt refinado e siga por ele.
+
+O QUE VOCÊ NÃO PODE FAZER NESTA ETAPA: mesclar em branch de longa duração, empurrar para ela, ou abrir e mesclar PR por conta própria — o gancho recusa, e a recusa é a regra 9 virando código. COMMITE O QUE FIZER, na branch de trabalho, antes de fechar a sua evidência: a etapa seguinte para se a árvore ficar suja, e evidência que diz `segue` sem commit não entrega nada — o trabalho fica numa pasta temporária e se perde. Só deixe de commitar se `autorizacoes` em nucleo/configuracao.json negar; aí diga na evidência que deixou os arquivos e por quê.
+
+A FRONTEIRA É DE ETAPA, NÃO DE SEMPRE. Aqui você só commita na branch de trabalho. Quem leva o trabalho para a branch declarada em `branches.integracao` é a ENTREGA, depois da aprovação manual — a rodada mescla lá, e é por isso que a proibição acima não vale para a rodada inteira. Onde o repositório alvo pede PR da integração para a branch de publicação, quem o abre também é a rodada, nunca esta etapa. Mesclar a branch de publicação e publicar seguem do dono, sempre.
+
+O CRITÉRIO DE PARADA: só feche a sua evidência quando os critérios de aceitação estiverem cumpridos, ou quando o orçamento de turnos acabar. Evidência que diz `segue` com uma lista de faltas e orçamento sobrando é trabalho abandonado, não entrega — e quem retoma paga de novo o contexto que você já tinha. Falta que você não conseguiu cumprir se declara com a MEDIÇÃO que te barrou, nunca como item de lista sem porquê.
+
+A PROVA: cada afirmação da sua evidência tem comando e saída COLADA do terminal — saída redigida de memória é opinião vestida de medida. Escreva cada afirmação com as PALAVRAS DO CRITÉRIO que ela responde: a etapa de verificação casa critério com evidência pelo vocabulário, e dizer o certo com outras palavras custa um ciclo inteiro. Teste ANTES de dar por pronto — o teste que não falha quando o código quebra não é teste. O CÓDIGO SEGUE AS REGRAS DE QUALIDADE injetadas na abertura (grandes autores; comentário explicativo é sinal de nome errado — o porquê mora na issue, nunca no código). Revise o seu diff contra elas antes de commitar.

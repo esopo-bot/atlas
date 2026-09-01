@@ -1,0 +1,93 @@
+{
+  "teto": 2,
+  "etapas": [
+    {
+      "nome": "abrir-branch",
+      "tipo": "codigo",
+      "comando": "python3 -c \"import json,os,subprocess;cfg=json.load(open('nucleo/executor.json'));b=cfg['branches'];issue=os.environ.get('ISSUE','0');nome=b['padrao_de_trabalho'].replace('<numero>',issue).replace('<assunto-em-kebab>',os.environ.get('ASSUNTO','trabalho'));base=b['base'];g=lambda *a:subprocess.run(['git',*a],capture_output=True,text=True);f=g('fetch','origin',base);buscou=f.returncode==0;erro=(f.stderr.strip() or f.stdout.strip())[:300];r=g('checkout','-b',nome,f'origin/{base}') if buscou else None;atual=g('branch','--show-current').stdout.strip() if buscou else '';nasceu=buscou and atual==nome;sha=g('rev-parse',f'origin/{base}').stdout.strip() if buscou else '';ancora=g('rev-parse',f'{sha}^{{commit}}').stdout.strip() if buscou else '';print(json.dumps({'veredito':'segue' if nasceu else 'para','provado':[{'afirmacao':f'a branch de trabalho nasceu de {base}','comando':'git branch --show-current','saida':atual},{'afirmacao':f'a branch de trabalho nasceu no commit {sha} da base {base}, e esse commit segue existindo neste repositório','comando':f'git rev-parse {sha}^{{commit}}','saida':ancora}] if buscou else [{'afirmacao':f'o remoto não respondeu pela base {base}','comando':f'git fetch origin {base} 2>&1 || true','saida':erro}],'suposto':[],'faltas':[] if nasceu else ([f'não consegui criar {nome}: {r.stderr.strip()[:200]}'] if buscou else [f'não consegui buscar a base {base} no remoto: {erro}']),'proximo':None if nasceu else ('Confira se a branch já existe e se o remoto responde, e reexecute.' if buscou else 'Confira a conta declarada em issues.conta_gh e o acesso dela ao remoto, e reexecute.'),'etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}},default=str))\" | python3 -c \"import json,sys;d=json.load(sys.stdin);print(json.dumps({k:v for k,v in d.items() if v is not None}))\"",
+      "tempo-limite": 300
+    },
+    {
+      "nome": "trabalhar",
+      "tipo": "sessao",
+      "depende": [
+        "abrir-branch"
+      ],
+      "max-turnos": 40,
+      "prompt-de": "execucoes/prompts/trabalhar-no-workspace.md"
+    },
+    {
+      "nome": "trabalho-commitado",
+      "tipo": "codigo",
+      "comando": "python3 -c \"import json,os,subprocess;cfg=json.load(open('nucleo/executor.json'));base=cfg['branches']['base'];g=lambda *a:subprocess.run(['git',*a],capture_output=True,text=True);sujo=g('status','--porcelain').stdout.strip();novos=g('log','--oneline',f'origin/{base}..HEAD').stdout.strip();faltas=([] if novos else ['a branch de trabalho nao tem commit novo sobre a base'])+([f'a arvore ficou suja: {len(sujo.splitlines())} arquivo(s) sem commit'] if sujo else []);print(json.dumps({'veredito':'segue' if not faltas else 'para','provado':[{'afirmacao':'a arvore de trabalho esta limpa','comando':'git status --porcelain','saida':sujo},{'afirmacao':f'ha commit novo sobre {base}','comando':f'git log --oneline origin/{base}..HEAD','saida':novos}],'suposto':[],'faltas':faltas,'proximo':None if not faltas else 'Commite o que voce fez na branch de trabalho e reexecute: evidencia que diz segue sem commit nao entrega nada.','etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}}))\" | python3 -c \"import json,sys;d=json.load(sys.stdin);print(json.dumps({k:v for k,v in d.items() if v is not None}))\"",
+      "depende": [
+        "trabalhar"
+      ]
+    },
+    {
+      "nome": "trabalho-empurrado",
+      "tipo": "codigo",
+      "depende": [
+        "trabalho-commitado"
+      ],
+      "comando": "python3 -c \"import json,subprocess;g=lambda *a:subprocess.run(['git',*a],capture_output=True,text=True);branch=g('branch','--show-current').stdout.strip();local=g('rev-parse','HEAD').stdout.strip();enviado=g('push','origin','HEAD:refs/heads/'+branch) if branch else None;erro=((enviado.stderr.strip() or enviado.stdout.strip())[:300] if enviado is not None and enviado.returncode else '');remoto=g('ls-remote','--heads','origin',branch).stdout.strip() if branch else '';sha=remoto.split()[0] if remoto else '';chegou=bool(sha) and sha==local;faltas=([] if chegou else ['a branch de trabalho nao chegou ao repositorio duravel: o que foi commitado existe so nesta arvore descartavel, e some com ela'] + ([erro] if erro else []));print(json.dumps({'veredito':'segue' if chegou else 'para','provado':[{'afirmacao':'o commit desta arvore de trabalho','comando':'git rev-parse HEAD','saida':local},{'afirmacao':'a branch de trabalho existe no repositorio duravel, no mesmo commit','comando':'git ls-remote --heads origin '+branch,'saida':remoto}],'suposto':[],'faltas':faltas,'proximo':None if chegou else 'Empurre a branch para o repositorio duravel (git push origin HEAD) e reexecute: trabalho que so existe na arvore descartavel some com ela.','etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}}))\" | python3 -c \"import json,sys;d=json.load(sys.stdin);print(json.dumps({k:v for k,v in d.items() if v is not None}))\""
+    },
+    {
+      "nome": "revisar-pela-stack",
+      "tipo": "sessao",
+      "depende": [
+        "trabalho-empurrado"
+      ],
+      "max-turnos": 10,
+      "prompt-de": "execucoes/prompts/revisar-pela-regua-da-stack.md"
+    },
+    {
+      "nome": "revisao-geral",
+      "tipo": "sessao",
+      "depende": [
+        "revisar-pela-stack"
+      ],
+      "max-turnos": 10,
+      "prompt-de": "execucoes/prompts/revisao-geral-do-diff.md"
+    },
+    {
+      "nome": "testar-na-integracao",
+      "tipo": "codigo",
+      "depende": [
+        "revisao-geral"
+      ],
+      "comando": "python3 -c \"import json,subprocess;cfg=json.load(open('nucleo/executor.json'));i=cfg['branches']['integracao'];g=lambda *a:subprocess.run(['git',*a],capture_output=True,text=True);t=g('branch','--show-current').stdout.strip();f=g('fetch','origin',i);buscou=f.returncode==0;erro=(f.stderr.strip() or f.stdout.strip())[:300];limpo=buscou and g('merge-tree','--write-tree','HEAD',f'origin/{i}').returncode==0;print(json.dumps({'veredito':'segue' if limpo else 'para','provado':[{'afirmacao':f'o trabalho de {t} mescla em {i} sem conflito','comando':f'git merge-tree --write-tree HEAD origin/{i} >/dev/null 2>&1 && echo sem conflito || echo conflito','saida':'sem conflito' if limpo else 'conflito'}] if buscou else [{'afirmacao':f'o remoto não respondeu pela integração {i}','comando':f'git fetch origin {i} 2>&1 || true','saida':erro}],'suposto':['os testes do repositório rodam na integração, não aqui — quem os declara é o roteiro de quem instala'],'faltas':[] if limpo else (['conflito com a integração'] if buscou else [f'não consegui buscar a integração {i} no remoto: {erro}']),'proximo':None if limpo else ('Resolva o conflito com a integração na sua branch e reexecute.' if buscou else 'Confira a conta declarada em issues.conta_gh e o acesso dela ao remoto, e reexecute.'),'etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}},default=str))\" | python3 -c \"import json,sys;d=json.load(sys.stdin);print(json.dumps({k:v for k,v in d.items() if v is not None}))\"",
+      "tempo-limite": 600
+    },
+    {
+      "nome": "verificacao",
+      "tipo": "verificacao",
+      "depende": [
+        "testar-na-integracao"
+      ]
+    },
+    {
+      "nome": "corpo-do-pedido",
+      "tipo": "sessao",
+      "depende": [
+        "verificacao"
+      ],
+      "max-turnos": 15,
+      "prompt": "Escreva o corpo do pedido de revisão desta entrega, em pt-BR, e grave em tmp/pedido-de-revisao.md. Quatro seções obrigatórias, nesta ordem e com estes títulos exatos:\n\n## O que foi testado\nO comando e a saída de cada verificação — o que passou e o que não foi medido. Sem comando e sem saída não é teste, é opinião.\n\n## Risco de quebrar em produção\nO que este diff pode derrubar, e por quê. \"Nenhum\" só vale com a razão medida.\n\n## Mitigação\nO que já está no lugar para o risco não virar incidente.\n\n## Plano de reversão\nO comando exato que desfaz, e o que ele NÃO desfaz (migração de dado, efeito em terceiro, aviso já enviado).\n\nO corpo cobre o que o diff entrega: confira as seções contra a lista real de commits. Corpo que não cobre o diff é revisão aprovando sem ver.\n\nVocê NÃO abre o pedido de revisão — quem abre é o dono, com o texto na mão. Sua evidência prova que o arquivo existe e tem as quatro seções.",
+      "modelo": "sonnet",
+      "ferramentas-negadas": [
+        "WebSearch",
+        "WebFetch",
+        "Task"
+      ]
+    },
+    {
+      "nome": "entregar",
+      "tipo": "aprovacao-manual",
+      "depende": [
+        "corpo-do-pedido"
+      ],
+      "aprovacao": "aprovacoes/entrega.ok"
+    }
+  ]
+}

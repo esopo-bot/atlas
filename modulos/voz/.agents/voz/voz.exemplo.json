@@ -1,0 +1,6 @@
+{
+  "ligada": true,
+  "voz": "pt-BR-FranciscaNeural",
+  "ritmo": "-8%",
+  "tratamento": "${COMO_CHAMAR_QUEM_OPERA}"
+}

@@ -1,0 +1,6 @@
+# O venv se regenera; versionar venv é publicar binário de uma máquina só.
+venv/
+
+# A configuração é local: ela carrega o nome de quem opera. O molde
+# rastreado é o voz.exemplo.json, e ele só tem ${PLACEHOLDER}.
+voz.json

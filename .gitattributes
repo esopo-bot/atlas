@@ -1,0 +1,14 @@
+# A cópia de skills é gerada pelo montar.py — colapsa nos diffs do GitHub.
+.claude/skills/** linguist-generated=true
+
+# O instalador é gerado e 87% dele é depósito, mas o depósito agora sai uma
+# linha por linha do original: o git o diffa e o mescla como texto. Colapsa no
+# GitHub, e continua revisável linha a linha quando alguém precisar.
+montar.py linguist-generated=true
+
+# As cópias em uso dos módulos são regravadas pelo --sincronizar a partir
+# da fonte em modulos/ — o diff que interessa é o da fonte.
+.agents/encadeador/encadeador.py linguist-generated=true -diff
+.agents/encadeador/testes.py linguist-generated=true -diff
+.agents/painel/painel.py linguist-generated=true -diff
+.agents/auditor/auditor.py linguist-generated=true -diff

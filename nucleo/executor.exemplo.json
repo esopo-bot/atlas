@@ -1,0 +1,56 @@
+{
+  "comentario": "O EXEMPLO da configuração do executor de roteiros. Copie para nucleo/executor.json, troque os ${...} pelos valores deste repositório, e mantenha o executor.json FORA do git — a linha `nucleo/executor.json` no .gitignore, que é rastreado e sobrevive ao próximo clone (o .git/info/exclude não: ele é local e um clone novo nasce sem ele). Sem executor.json válido o executor RECUSA disparar: a automação não adivinha onde a issue nasce nem para onde a branch aponta. O ensaio continua rodando sem ele — ensaio não toca o mundo.",
+  "modo": "${completo | so-issues}",
+  "issues": {
+    "repositorio": "${DONO}/${REPOSITORIO_DE_ISSUES}",
+    "conta_gh": "${CONTA_DA_AUTOMACAO}"
+  },
+  "remoto": {
+    "conta_gh": "${CONTA_QUE_FALA_COM_O_REMOTO_GIT}"
+  },
+  "projeto": {
+    "url": "${URL_DO_QUADRO}"
+  },
+  "branches": {
+    "padrao_de_trabalho": "${PADRAO_DO_NOME_DA_BRANCH}",
+    "base": "${BRANCH_BASE}",
+    "integracao": "${BRANCH_DE_INTEGRACAO}"
+  },
+  "diretorios_so_codigo": [
+    "${DIRETORIO_QUE_SO_GUARDA_CODIGO}"
+  ],
+  "caixas": {
+    "defeitos": "${NUMERO_DA_ISSUE_PERMANENTE_DE_DEFEITOS}",
+    "melhorias": "${NUMERO_DA_ISSUE_PERMANENTE_DE_MELHORIAS}"
+  },
+  "existe_arquivo_limpeza": false,
+  "arquivo_limpeza": "${CAMINHO_DO_SCRIPT_QUANDO_EXISTE_FOR_TRUE}",
+  "notas": [
+    "modo: em `completo` o executor roda a execução inteira; em `so-issues` ele SÓ abre issue — executar fica desligado, e o disparo recusa com recado.",
+    "conta_gh nomeia a conta, nunca a credencial: o token mora no gh da máquina. Segredo não entra em arquivo, nem neste.",
+    "remoto.conta_gh nomeia a conta que fala com o remoto GIT do repositório onde a execução roda, e é dela que o executor tira o token que injeta como GH_TOKEN em cada estágio. É chave separada de issues.conta_gh de propósito: a fila de issues pode morar em outro repositório, de outra conta. Sem esta chave vale a das issues — e quando as duas contas são diferentes, o fetch e o push saem com a credencial errada e o estágio para dizendo que o remoto não respondeu. Aqui vai o NOME da conta; o token mora no gh da máquina.",
+    "branches.base e branches.integracao dizem para onde o trabalho APONTA. O que não se toca está em .claude/branches-protegidas.txt — outro arquivo, outro assunto. A validação avisa quando as duas não constam de lá.",
+    "projetos é a UNICA lista de projetos: cada chave é a etiqueta da issue E o `<projeto>` que abre o título (a primeira parte do `padrao_de_nome` da configuração), `repositorio` nomeia a PASTA — sem dono e sem caminho —, `somente_leitura` diz se dele só se lê, `stack` nomeia a régua que o estágio revisor do diff aplica — sem ela ele passa com recado, porque a camada não adivinha stack de ninguém —, `autorizacoes` diz o que a automação faz sozinha NESTE vizinho, e `revisor` nomeia quem cuida dele. O gancho .claude/hooks/vetar-escrita-em-somente-leitura.py lê daqui e recusa escrita em projeto somente leitura por qualquer caminho: Write, Edit, NotebookEdit, git que muda o repositório, gh que cria, redirecionamento, rm, mv e sed -i. Ler continua livre, e a recusa ensina o caminho: pedido de incorporação como SUGESTÃO, com o revisor declarado. Campo ausente, comportamento de antes: a camada não inventa projeto de ninguém. E é por ele carregar nome de repositório que a lista mora AQUI, no arquivo local — nunca em texto rastreado.",
+    "diretorios_so_codigo e arquivo_limpeza são lidos por quem veta conhecimento em pasta de código e pela rotina de limpeza.",
+    "caixas nomeia as DUAS issues permanentes que não fecham — a de defeitos e a de melhorias da camada — onde achado de sessão e de auditoria vira linha. Quem escreve nelas é .agents/caixa/caixa.py, e ele só escreve entre as marcas do bloco: texto posto à mão fora dele sobrevive. Cada linha leva a etiqueta do seu tipo, e por isso as duas chaves podem apontar para a MESMA issue — um quadro só, defeito e melhoria lado a lado. Linha que acabou sai por `podar --id <identidade>`, que deixa o registro do fechamento em comentário da caixa. Sem esta chave o instrumento RECUSA e sai diferente de zero — não inventa issue. O número mora AQUI, no arquivo local, porque número de issue não entra em texto rastreado.",
+    "Enquanto houver ${...} sem valor, o disparo recusa e nomeia o campo.",
+    "As autorizações do PRÓPRIO repositório não moram aqui: ficam em nucleo/configuracao.json, campo `autorizacoes` ({commit, push, publicar}), porque são do repositório e não da automação. Em repositório VIZINHO a autorização é outra: vale o `autorizacoes` do cadastro do projeto acima, e só na falta dele o configuracao.json do alvo. Nos dois lugares o padrão é não — omissão não é permissão, e quem lê são o gancho .claude/hooks/vetar-branch-protegida.py e o estágio trabalho-empurrado do roteiro de mexida em vizinho.",
+    "notificacao.ferramenta é o caminho da ferramenta de notificação de desktop, e o executor a chama SÓ nos quatro marcos: execução parada, aprovação pedida, verificação verde e execução completa. O caminho sai daqui e nunca do código, porque cada máquina põe a ferramenta num lugar — no Linux costuma ser /usr/bin/notify-send. Ela recebe UM argumento, a frase do marco: o marco e o trabalho, nunca a saída de um comando — quem quiser saber o que aconteceu abre a issue, que é onde a evidência mora. Chave ausente, molde por preencher ou arquivo que não está no disco: a execução roda igual e em silêncio, sem imprimir erro. Aviso é conforto, não guarda."
+  ],
+  "projetos": {
+    "${ETIQUETA_DO_PROJETO}": {
+      "repositorio": "${NOME_DA_PASTA_DO_REPOSITORIO}",
+      "somente_leitura": false,
+      "stack": "${STACK_DO_PROJETO_EX_DOTNET_REACT_PYTHON}",
+      "autorizacoes": {
+        "commit": false,
+        "push": false,
+        "publicar": false
+      },
+      "revisor": "${CONTA_DE_QUEM_CUIDA_DELE_QUANDO_SO_LEITURA}"
+    }
+  },
+  "notificacao": {
+    "ferramenta": "${CAMINHO_DA_FERRAMENTA_DE_NOTIFICACAO_DE_DESKTOP}"
+  }
+}

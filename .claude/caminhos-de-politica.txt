@@ -1,0 +1,30 @@
+# Os arquivos que decidem qual cerca existe neste repositório.
+#
+# O gancho .claude/hooks/vetar-escrita-em-politica.py recusa escrever, apagar
+# ou mover qualquer caminho desta lista DURANTE uma etapa do executor de
+# roteiros — pela ferramenta de edição ou por comando de terminal. Ler passa
+# calado, e em sessão interativa do dono a cerca não morde: é ela que muda
+# esta lista e o código dos ganchos.
+#
+# Linha terminada em barra é pasta: pega tudo que estiver dentro dela, em
+# qualquer profundidade. Linha sem barra pega o caminho que TERMINA
+# nela, então
+# `nucleo/regras.json` pega o arquivo em qualquer repositório e não pega
+# `outro-regras.json`.
+#
+# A lista está nela mesma, de propósito: cerca que o agente afrouxa não é
+# cerca. Os caminhos também vivem embutidos no gancho, e o que vale é a união
+# dos dois — apagar este arquivo não derruba a cerca.
+#
+# Um caminho por linha; linha com # é comentário. Tire o que não existe aqui
+# e acrescente os caminhos do seu repositório — este arquivo é seu, e a
+# atualização da camada não o sobrescreve.
+.claude/settings.json
+.claude/hooks/
+.claude/branches-protegidas.txt
+.claude/caminhos-de-automacao.txt
+.claude/diretivas-de-ferramenta.txt
+.claude/caminhos-de-politica.txt
+nucleo/regras.json
+nucleo/vocabulario.json
+nucleo/configuracao.json

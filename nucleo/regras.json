@@ -1,0 +1,191 @@
+{
+  "comentario": "A fonte das regras da camada. A página conhecimento/regras-da-camada.md é GERADA daqui pelo `montar.py --sincronizar` — edite aqui, nunca lá. O id é citado por número em outras páginas: não renumerar, não reordenar. A regra é a frase imperativa e os itens dela; a história de onde veio mora na página de procedência linkada.",
+  "titulo": "As regras da camada",
+  "introducao": [
+    "A lista numerada do que não muda sem decisão do dono. **Proponha; não aplique**: o protocolo de proposta está no fim da página.",
+    "Cada regra é a ordem, direta. A procedência mora nas páginas linkadas — leitura de consulta, não de sessão."
+  ],
+  "regras": [
+    {
+      "id": 1,
+      "regra": "Abra a sessão na raiz — a pasta que tem o `AGENTS.md`.",
+      "faca": [
+        "O que decide é onde você abre, não onde o arquivo mora: numa subpasta, a sessão roda sem as skills da raiz, e nada avisa."
+      ],
+      "procedencia": {
+        "titulo": "mapa do repositório",
+        "endereco": "mapa-do-repositorio.md"
+      }
+    },
+    {
+      "id": 2,
+      "regra": "Só é pronto o que um instrumento provou.",
+      "faca": [
+        "Prova é build, teste ou listagem — \"o modelo disse\" não é prova, e saída colada de outra sessão é citação, não prova.",
+        "A saída de prova se cola do terminal, nunca se redige — saída montada à mão é opinião vestida de medida, e a verificação a pega tarde, depois de a sessão já ter dito pronto.",
+        "Fluxo que ninguém executou nem tem fonte citada é hipótese — grava-se marcado como hipótese, nunca como instrução.",
+        "Resultado negativo pede contraprova: zero, vazio e \"sem permissão\" viram prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa. Sem isso, escreva \"não medido\", nunca \"não existe\".",
+        "Prova só vale se re-executa: `grep` e `diff` respondem exit 1 para \"não achei\", e a verificação acusa exit diferente de zero — quando a saída já é a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e `origin/<branch>` envelhecem entre a prova e a verificação.",
+        "Saída cortada se declara com `(...)` em linha própria: a re-execução compara BLOCO de linhas seguidas, e o pedaço que você resumiu no meio de uma saída composta vira acusação sem essa marca.",
+        "Prova lenta declara o teto dela — `\"tempo-limite\": <segundos>` no item do provado —, porque a re-execução corta em 60 s por padrão: tempo esgotado não é divergência, e lenta não é errada.",
+        "A prova morre com a escrita seguinte: o número do relatório final se mede depois do último comando que altera disco. Sincronização, formatador ou regeneração que rode depois do teste desfaz o que ele mediu — re-rode a prova como último ato, ou o relatório afirma um instante que não sobreviveu.",
+        "Antes de agir sobre uma conclusão importante, rode a skill `cetico`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição."
+      ]
+    },
+    {
+      "id": 3,
+      "regra": "Antes de criar, procure e cite.",
+      "faca": [
+        "O que o conjunto já oferece não se reimplementa; aplicação nova imita o repositório vizinho mais parecido.",
+        "Procurar não é só no repositório: antes de escrever o próprio, meça o que a plataforma já entrega de fábrica — o que ela já publica não se reimplementa."
+      ]
+    },
+    {
+      "id": 4,
+      "regra": "A memória mora no disco, não no contexto.",
+      "faca": [
+        "O que vale amanhã se escreve — wiki, nota, decisão — nas subpastas de `conhecimento/`.",
+        "A memória carrega a prova re-executável do que afirma. Afirmação com número envelhece calada — uma nota de poucos dias atrás já discorda do disco, e ninguém percebe porque ela parece um fato. A nota que traz junto o comando que a derruba é a única que não mente."
+      ]
+    },
+    {
+      "id": 5,
+      "regra": "Ao dar por pronto, faça a análise de promoção.",
+      "faca": [
+        "Três pilhas: genérico, do workspace, descartável. Na dúvida se é genérico: é pessoal, e fica."
+      ]
+    },
+    {
+      "id": 6,
+      "regra": "Trabalhe econômico.",
+      "faca": [
+        "Repositório grande não se varre inteiro: índice, wiki e busca dirigida primeiro.",
+        "Identifique a linguagem pelo manifesto e leia LEIAME e pontos de entrada antes do resto.",
+        "Consulta de código a repositório satélite se faz na branch principal, buscada na hora: sem buscar antes de ler, você lê a branch em que o clone local parou.",
+        "A varredura da sessão honra o `.gitignore` e responde menos do que existe: o zero que sai não é zero, é falso negativo. Quem varre para decidir confirma com `command grep -r`.",
+        "Workflow e subagente custam caro e drenam limite rápido: use-os só quando a tarefa é grande demais para uma conversa (reconhecimento amplo, dezenas de itens em paralelo) — nunca por padrão. Conserto de um item, com vermelho e prova, faz-se direto na sessão.",
+        "Verificação de ponta a ponta (`--verificar`, `verificacoes.py ritual`) roda uma vez, detalhada, antes da entrega final — não a cada arquivo mexido. Repetir a mesma verificação sem mudança nova desde a última vez é releitura, não prova."
+      ]
+    },
+    {
+      "id": 7,
+      "regra": "Rede com cortesia.",
+      "faca": [
+        "Chamada externa e MCP só quando a tarefa exigir, espaçadas.",
+        "No primeiro `403`/`429`, recue — não insista em rajada.",
+        "Recusa de conteúdo — a resposta do lado do cliente que nega o pedido — pede o mesmo recuo: não repita em rajada; mude o pedido ou pare e pergunte."
+      ]
+    },
+    {
+      "id": 8,
+      "regra": "Segredo não entra em git nenhum — em texto rastreado vai `${VARIAVEL}`, nunca o valor; ler credencial localmente é livre.",
+      "faca": [
+        "Ler é reversível; publicar não é. Em texto rastreado — arquivo, commit, issue — vai `${VARIAVEL}`, nunca o valor. Vale para git público E privado.",
+        "O exemplo canônico: ler credencial para montar um cliente MCP somente leitura de um banco remoto, pode; o valor num `.mcp.json` rastreado, não.",
+        "Depois de usar credencial para configurar algo, avise o dono para tirá-la de vista — o backup é dele.",
+        "O que aparece na tela entra na sessão: print e janela compartilhada carregam segredo sem passar por instrumento nenhum. Feche o que tem segredo antes de mandar imagem.",
+        "Nomear credencial para EXCLUIR ou PROTEGER não é ler: `--exclude`, `--glob '!...'`, `#pasta`, `du -sh`, pathspec `:(exclude)` e a linha que escreve só o NOME no `.gitignore` passam calados. Quem decide é o que o comando faz com o alvo, não o alvo aparecer no comando."
+      ]
+    },
+    {
+      "id": 9,
+      "regra": "Destrutivo é do dono; commit e push seguem o que o repositório autorizou.",
+      "faca": [
+        "O que a automação pode fazer sozinha se declara em `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`, `publicar`) — é de cada repositório, e o gancho de veto lê dali. Sem declaração, nega: omissão não é permissão.",
+        "Em repositório vizinho a autorização é outra: vale o `autorizacoes` do cadastro do projeto, e só na falta dele o `configuracao.json` do alvo — nos dois lugares, omissão nega.",
+        "O que aciona automação — integração contínua, implantação, aviso a outras pessoas — é sempre do dono, mesmo onde o resto é liberado: sincronizar não é entregar.",
+        "Propor não é publicar: abrir o pedido de incorporação é da sessão, quando o repositório autorizar; publicar é o merge, e é do dono; sincronizar não é nem um nem outro.",
+        "Antes de empurrar para branch compartilhada, olhe os PRs abertos dela: push em branch com PR aberto entra na entrega em rota, e o corpo do PR precisa cobrir o que entrou — corpo que não cobre o diff é revisão aprovando sem ver.",
+        "Decisão do dono vira pergunta — uma por vez, com a recomendação primeiro; o agente prepara e executa o não-destrutivo.",
+        "Etapa que trava numa decisão do dono devolve veredito de pergunta em vez de escolher por ele: a execução para, a pergunta vai a quem decide, e a resposta volta pela retomada — o que já foi provado não roda de novo. Chutar para não parar é decidir no lugar do dono, calado.",
+        "Redesenho de experiência pede esboço e pergunta fechada antes do código; conserto de defeito não pede."
+      ]
+    },
+    {
+      "id": 10,
+      "regra": "Texto na régua.",
+      "faca": [
+        "Markdown validado, conclusão primeiro, frases curtas, pt-BR."
+      ]
+    },
+    {
+      "id": 11,
+      "regra": "Não invente passo onde já existe receita.",
+      "faca": [
+        "Antes de propor como se faz algo que o repositório já faz — subir uma peça de infraestrutura, publicar, abrir acesso —, procure o procedimento na documentação dele e cite de onde saiu cada passo.",
+        "Não achou? Peça o endereço, não improvise: integração contínua improvisada parece pronta, e quebra longe de onde nasceu."
+      ]
+    },
+    {
+      "id": 12,
+      "regra": "Branch de longa duração e configuração de integração contínua não se tocam.",
+      "faca": [
+        "As branches que o repositório mantém — integração, homologação, produção, quaisquer que sejam os nomes — não se apagam, não se renomeiam, não recebem push forçado e não têm a história reescrita; e a configuração da automação não se altera de passagem. As duas são infraestrutura de outras pessoas.",
+        "Os nomes estão em `.claude/branches-protegidas.txt` — e na dúvida se uma branch é dessas, ela é."
+      ]
+    },
+    {
+      "id": 13,
+      "regra": "Publicar exige revisão semântica, não só varredura.",
+      "faca": [
+        "Releia exemplo, fixture e caso de teste perguntando: um colega reconheceria o workspace nisto? E releia o texto perguntando: isto conta algo sobre quem escreveu?",
+        "Varredura por padrão acha nome e segredo; jeito de trabalhar e procedência não têm padrão — passam inteiros.",
+        "Publicação não se desfaz: reescrever a história tira das listagens, não do alcance de quem já copiou."
+      ]
+    },
+    {
+      "id": 14,
+      "regra": "Conhecimento nasce na língua de quem vai lê-lo.",
+      "faca": [
+        "O que a IA consome nasce em linguagem de máquina — dado estruturado, como `nucleo/regras.json`: campo com nome, valor sem prosa em volta, um fato por chave. Instrumento lê dado; prosa ele adivinha.",
+        "O que a pessoa lê nasce organizado para leitura e pesquisa: por assunto, denso, o máximo de informação útil por página. Página que obriga a abrir outras três para entender uma está mal cortada.",
+        "Todo arquivo tem um dos dois destinos, e o destino se declara. Texto que serve aos dois serve mal aos dois: vira dado, e a página que a pessoa lê é gerada dele.",
+        "Conhecimento não nasce em pasta de código — lá ninguém o procura, e ele viaja por engano no commit do repositório errado."
+      ]
+    },
+    {
+      "id": 15,
+      "regra": "Editou a fonte, regenere a cópia e prove — antes de entregar.",
+      "faca": [
+        "Onde existe cópia gerada — carga embutida do instalador, espelho de skills, página escrita a partir de dado —, editar a fonte e não regenerar entrega a cópia velha. Quem instala recebe a cópia, não a sua fonte.",
+        "Regenerar é consertar; provar é outra coisa. O que prova verifica sem escrever e sai diferente de zero quando divergiu — `python montar.py --verificar`. O `--sincronizar` escreve e não acusa: rodar só ele deixa a divergência invisível.",
+        "O gerado não se edita à mão — a edição se perde na próxima sincronização, sem aviso. Nem todo gerado se declara: alguns abrem com a marca na primeira linha, e a cópia em código não abre, porque este repositório recusa comentário em código rastreado. Onde não há marca, a relação é pelo caminho, e são estes: a cópia em `.claude/skills/X` tem fonte em `.agents/skills/X`; a cópia em `.agents/<módulo>/…` tem fonte em `modulos/<módulo>/.agents/<módulo>/…`; e o que o instalador carrega embutido é cópia de tudo isso, nunca a fonte de nada. Na dúvida, PERGUNTE AO GANCHO em vez de deduzir: a recusa dele nomeia a fonte. E o teste que engana: editar a cópia e ver a sincronização desfazer não prova que você achou a fonte — prova o contrário.",
+        "**Arquivo novo que precisa viajar se matricula, e a matrícula se prova instalando.** O `--verificar` checa a carga dos arquivos que conhece e cala sobre o que ninguém matriculou: a regra pega quem edita fonte existente, e não pega quem cria. A prova não é ler o instalador — é montar árvore virgem, instalar, e ver o arquivo chegar.",
+        "Cópia gerada não se resolve à mão numa mescla: tome um lado qualquer e regenere. O conflito é do gerador, não do texto — e quem edita a cópia no meio do conflito entrega um arquivo que a próxima sincronização apaga."
+      ],
+      "procedencia": {
+        "titulo": "mapa do repositório",
+        "endereco": "mapa-do-repositorio.md"
+      }
+    },
+    {
+      "id": 16,
+      "regra": "Ao dar por entregue, prove que nada ficou sem destino — nem commit fora da branch, nem entrega sem o passo seguinte.",
+      "faca": [
+        "A prova é uma listagem, não memória: `git log <branch-da-entrega>..HEAD --oneline`. Vazio é a prova; qualquer linha é trabalho que fica para trás.",
+        "Commit em branch que ninguém vai incorporar não existe para o resto do mundo, e some no dia em que a branch for podada.",
+        "Este é o achado que depende de lembrar no fim da sessão mais longa do dia — que é exatamente quando ninguém lembra. Como etapa de código, custa zero.",
+        "Destino inclui o passo seguinte, não só a branch. Se a promoção do trabalho é por pedido de incorporação, ele fica **aberto**, não planejado para depois: trabalho parado antes disso não chegou a lugar nenhum, só parece pronto.",
+        "Ou vai, ou é descartado — não existe terceiro estado. O que não serve se apaga, com a razão dita em uma linha. O meio-termo é exatamente o que se perde quando a sessão fecha, e ninguém fica sabendo que existiu.",
+        "A sessão não fica calada com entrega pendente: se ninguém interrompeu e há trabalho sem destino, quem fala primeiro é a sessão, antes de atender o assunto seguinte. Assunto novo é justamente quando o pendente some da vista, então o esquecimento é sistemático, não azar.",
+        "Vale para arquivo que a sessão não criou, quando ele é do universo da camada — código, texto, configuração. Árvore suja não pergunta de quem foi a mudança: quem fecha com ela ali é quem dá o destino, mesmo que o achado seja de uma sessão anterior. A exceção é o arquivo que a camada não sabe julgar — imagem, binário, despejo de dados solto na árvore. Esse se NOMEIA no relatório e não impede a entrega: commitá-lo é adotar o que não é seu, e apagá-lo é destrutivo, que é do dono. O item de cima existe contra preguiça; esta exceção existe contra impotência."
+      ]
+    },
+    {
+      "id": 17,
+      "regra": "Explique na altura de quem lê, começando por júnior.",
+      "faca": [
+        "Um conceito por vez, conclusão primeiro, exemplo concreto antes do termo técnico — e nada de despejar todas as opções.",
+        "A altura é por assunto, não por pessoa: quem é sênior em rede pode ser júnior em banco de dados. O sinal vem do que a pessoa pede, não do cargo dela.",
+        "Suba de altura quando o domínio aparecer, e então pare de explicar o básico daquele assunto: repetir o que a pessoa já sabe também é sobrecarga.",
+        "Vale para tudo que a sessão escreve para gente ler — resposta, issue, relatório de entrega e proposta de melhoria."
+      ]
+    }
+  ],
+  "rodape_titulo": "Como propor mudança — e como consultar por código",
+  "rodape": [
+    "No fechamento da sessão (o prompt de esfriamento pede): *\"regra N atrapalhou neste caso porque X; proponho trocar por Y\"* — ou *\"faltou uma regra para Z\"*. A proposta fica no relatório; o dono aceita, adapta ou recusa.",
+    "Regra nova ou mudada se edita em `nucleo/regras.json` — esta página é gerada dali e qualquer edição aqui se perde na sincronização.",
+    "Sessão ou script que precise das regras como dado lê a fonte direto: `nucleo/regras.json`, campo `regras` — cada item tem `id`, `regra` (a frase imperativa) e `faca` (os itens). É o que o encadeador injeta em toda etapa de sessão; não há servidor nem API — o arquivo é o contrato."
+  ]
+}

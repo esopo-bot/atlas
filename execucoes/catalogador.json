@@ -1,0 +1,45 @@
+{
+  "teto": 2,
+  "etapas": [
+    {
+      "nome": "inventariar",
+      "tipo": "codigo",
+      "comando": "python3 .agents/limpeza/limpeza.py inventariar --workspace . > /dev/null 2>&1; python3 -c \"import json,subprocess,hashlib,os;arq=[p for p in subprocess.run(['git','ls-files','conhecimento'],capture_output=True,text=True).stdout.split() if p.endswith('.md')];tot=sum(os.path.getsize(a) for a in arq);print(json.dumps({'veredito':'segue','provado':[{'afirmacao':f'a camada de conhecimento tem {len(arq)} páginas, {tot} bytes','comando':'git ls-files conhecimento | grep -c .md$','saida':str(len(arq))},{'afirmacao':'nucleo/ é entrada e nunca saída desta rotina','comando':'git ls-files nucleo','saida':subprocess.run(['git','ls-files','nucleo'],capture_output=True,text=True).stdout.strip()}],'suposto':[],'faltas':[],'etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}}))\"",
+      "tempo-limite": 300
+    },
+    {
+      "nome": "reorganizar",
+      "tipo": "sessao",
+      "depende": [
+        "inventariar"
+      ],
+      "max-turnos": 40,
+      "prompt": "Você é o catalogador do conhecimento. Reorganize a camada de conhecimento e as anotações deste repositório.\n\nA REGRA QUE MANDA (regra 14 do núcleo, leia-a em nucleo/regras.json): conhecimento nasce na língua de quem vai lê-lo. O que a IA consome nasce em DADO ESTRUTURADO — campo com nome, um fato por chave, como nucleo/regras.json já é. O que a pessoa lê nasce organizado para LEITURA E PESQUISA — por assunto, denso, o máximo de informação útil por página. Cada arquivo que você tocar recebe um dos dois destinos, declarado no relatório.\n\nO QUE FAZER:\n1. Consolide o disperso: o mesmo assunto espalhado em três páginas vira uma. Fato repetido em dois lugares envelhece torto e passa a mentir de um dos lados — deixe UM lugar por fato e faça os outros apontarem para ele.\n2. Separe por assunto, não por data nem por origem.\n3. Elimine duplicata. Ao fundir, o texto que sobrevive é o que tem prova; o que só tem opinião vira pergunta aberta ou sai.\n4. Toda página movida ou renomeada mantém o caminho de chegada: um link vindo de página que já é lida. Página órfã cobra contexto de toda sessão e não entrega a nenhuma.\n\nO QUE VOCÊ NÃO PODE FAZER, e é cerca de código, não combinado:\n- NÃO escreva em diretório que a configuração declara como só de código (o gancho recusa, e a verificação acusa).\n- NÃO escreva em nenhum diretório com .git próprio: lá mora código de outra pessoa.\n- NÃO reescreva nucleo/. Você LÊ o núcleo e nunca o altera. O que você acha que deveria mudar lá vai como SUGESTÃO no relatório, e o dono decide.\n- NÃO commite, não empurre, não publique. O diff fica para o dono revisar.\n- NÃO apague: o que sai de lugar se MOVE com `git mv`. Destino ocupado vira pergunta, não sobrescrita.\n\nSE UMA DECISÃO FOR DO DONO — apagar algo com conteúdo próprio, fundir duas páginas que discordam, mudar uma regra — devolva veredito `pergunta` com UMA pergunta, recomendação primeiro. Não decida por ele.\n\nA PROVA: seu evidência declara, no `provado`, o comando e a saída de cada afirmação. `git status --short` de cada rodada é prova obrigatória — e ele não pode mostrar mudança em nucleo/ nem em diretório de código."
+    },
+    {
+      "nome": "verificar-alcance",
+      "tipo": "codigo",
+      "depende": [
+        "reorganizar"
+      ],
+      "comando": "python3 -c \"import json,subprocess;m=[l[3:] for l in subprocess.run(['git','status','--porcelain'],capture_output=True,text=True).stdout.splitlines() if l.strip()];fora=[p for p in m if p.startswith('nucleo/')];v='para' if fora else 'segue';d={'veredito':v,'provado':[{'afirmacao':'a rotina não tocou o núcleo','comando':'git status --porcelain | grep ^..nucleo/ || true','saida':'\\n'.join(fora)}],'suposto':[],'faltas':fora and ['a rotina alterou '+', '.join(fora)+' — o núcleo é entrada, nunca saída'] or [],'etapa':'x','trabalho':'x','quando':'2000-01-01T00:00:00Z','ciclo':{'i':1,'teto':1}};d['proximo']='Reverta as mudanças em nucleo/ com git checkout -- nucleo/ e leve o que você queria mudar para o relatório, como sugestão ao dono.' if fora else None;d={k:x for k,x in d.items() if x is not None};print(json.dumps(d))\"",
+      "tempo-limite": 120
+    },
+    {
+      "nome": "verificacao",
+      "tipo": "verificacao",
+      "depende": [
+        "verificar-alcance"
+      ]
+    },
+    {
+      "nome": "relatorio",
+      "tipo": "sessao",
+      "depende": [
+        "verificacao"
+      ],
+      "max-turnos": 20,
+      "prompt": "Escreva o relatório desta rodada do catalogador, em pt-BR, conclusão primeiro. Três seções, nesta ordem:\n\n1. O QUE MUDOU — arquivo por arquivo, com o destino declarado de cada um: DADO (para a IA consumir) ou PÁGINA (para a pessoa ler). Uma linha por arquivo tocado.\n2. POR QUE MUDOU — o critério de cada decisão, não a lista de novo. Onde você fundiu, diga qual texto sobreviveu e por quê. Onde não mexeu tendo vontade, diga por que não.\n3. SUGESTÕES AO NÚCLEO — o que melhoraria em nucleo/ para a organização se manter sozinha, sem esta rotina precisar rodar de novo. Você NÃO altera o núcleo: aqui você propõe, e o dono decide.\n\nO relatório vai para tmp/, que é descartável e não viaja. Ele não substitui o diff: o dono revisa o diff, e o relatório explica o diff.\n\nSeu evidência prova que o relatório existe e que o diff está de pé, com `git status --short` e `wc -l` do relatório."
+    }
+  ]
+}

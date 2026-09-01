@@ -1,0 +1,32 @@
+# O conteúdo desta pasta NÃO entra no git, e isso é o desenho.
+#
+# Execução é rotina de desenvolvedor: ela cita o caminho da sua máquina, o
+# nome dos seus outros repositórios, o seu caso. Nada disso viaja. Aqui você
+# escreve à vontade, sem barreira de publicação a respeitar.
+#
+# A pasta é DURÁVEL, ao contrário de tmp/: rascunho se apaga sem aviso, e
+# rotina que se mantém e se melhora não pode morar em rascunho.
+#
+# Execução que sirva a QUALQUER repositório não mora aqui — ela vira arquivo do
+# módulo, em modulos/<nome>/execucoes/, e aí viaja com a camada.
+*
+!.gitignore
+!LEIAME.md
+
+# Roteiro fixo da camada: viaja NOMEADO, um por linha. Nunca `!*.json`,
+# que reabriria a pasta inteira e deixaria roteiro local vazar.
+!catalogador.json
+!entrega.json
+!catalogador.md
+!entrega.md
+!revisar-a-camada.json
+!revisar-a-camada.md
+!mexida-em-vizinho.json
+!mexida-em-vizinho.md
+
+# Prompts de família, referenciados por prompt-de nas etapas acima.
+!prompts/
+!prompts/trabalhar-no-workspace.md
+!prompts/trabalhar-no-vizinho.md
+!prompts/revisar-pela-regua-da-stack.md
+!prompts/revisao-geral-do-diff.md

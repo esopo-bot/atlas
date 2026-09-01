@@ -1,0 +1,35 @@
+Senhas, chaves e tokens.
+
+Esta pasta fica fora de todo git, inclusive de repositorio privado.
+Nenhum agente abre arquivo daqui.
+
+TOKENS DE MCP
+
+Escreva NOME=valor no arquivo mcp.env, ao lado deste, e rode:
+
+    python .credenciais/publicar-mcp-env.py
+
+No .mcp.json fica so ${NOME} - segredo nunca no arquivo. Nenhum valor e
+exibido pelo publicador: so os nomes.
+
+POR QUE O PUBLICADOR FAZ DUAS COISAS NO LINUX
+
+Sao dois canais, e a diferenca foi medida: o aplicativo aberto pelo icone
+nao le o perfil do shell, entao variavel publicada so para o terminal nao
+chega nele - e o servidor MCP morre em silencio, com o mcp.env perfeito.
+
+  - uma linha em ~/.profile e ~/.bashrc carrega o mcp.env na abertura do
+    shell. Terminal novo enxerga na hora, e o valor continua morando aqui.
+  - um arquivo em ~/.config/environment.d/ e o canal que a sessao grafica
+    le. O icone so enxerga depois de deslogar e logar.
+
+O segundo canal e COPIA do valor, e por isso: trocou token, rode o
+publicador de novo. No Windows nao ha essa divisao - cada NOME=valor vira
+variavel do usuario, e uma sessao ja aberta so enxerga depois de fechar e
+abrir o terminal.
+
+QUANDO FALTA ALGUMA COISA
+
+O que este workspace espera do ambiente se declara pelo NOME em
+nucleo/ambiente.json, e o gancho verificar-ambiente acusa a falta na
+abertura da sessao. Nome de variavel nao e segredo; valor e.

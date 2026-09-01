@@ -1,0 +1,393 @@
+{
+  "comentario": "O par velho→novo do vocabulário da camada. É DADO, não prosa: quem lê são instrumentos — o passo que renomeia e o gerador do AGENTS.md. Termo que não está aqui não se troca; sentido que não está aqui não se inventa. Este arquivo NÃO renomeia nada sozinho: ele é a fonte que os passos de renomeação consomem e a métrica que a definição de pronto cobra. As contagens de uma varredura e a fila de termos ainda por decidir são estado de um trabalho, não da camada — moram na issue que os pediu.",
+  "titulo": "O vocabulário da camada",
+  "criterio": "O nome declara a responsabilidade da peça, em português puro. Nome que precisa de explicação é nome errado; nome abstrato que serviria para qualquer coisa também.",
+  "verificacao": {
+    "comentario": "Como se verifica o fechamento de um termo: rode o `pronto.padrao` na árvore rastreada e desconte as `excecoes`. Zero linha = fechado. O padrão é PCRE (grep -P) porque as fronteiras precisam valer com acento, e carrega `(?i)` porque maiúscula escondia ocorrência: sensível a caixa, o termo dava zero e ainda havia prosa aberta.",
+    "comando_molde": "git ls-files -z | grep -zvE '^(nucleo/vocabulario\\.json|montar\\.py)$' | xargs -0 grep -InP '<pronto.padrao>' || true",
+    "fora_da_conta": [
+      {
+        "caminho": "nucleo/vocabulario.json",
+        "razao": "cita todo termo velho por definição — é o que ele é. Contá-lo faria o fechamento nunca fechar."
+      },
+      {
+        "caminho": "montar.py",
+        "razao": "carrega cópia embutida das páginas e deste arquivo: fecha por consequência quando as fontes fecham, e o `--verificar` prova que a cópia bate com o disco. O que sobra são as ocorrências no CÓDIGO do instalador — essas se trocam à mão, e a verificação é a leitura do diff, não o grep."
+      }
+    ],
+    "ordem": "Um termo por vez, e o `--sincronizar` entre eles: montar.py carrega cópia das páginas, e medir antes de sincronizar conta o mesmo texto duas vezes.",
+    "referente": "Exceção que perdoa ocorrência declara `arquivos`: os caminhos rastreados que CARREGAM as ocorrências. A verificação conta o padrão só dentro deles e desconta o menor entre o declarado e o achado — exceção sem `arquivos` não desconta nada e é acusada pelo caso. Existe porque número solto já cunhou falso verde: a contagem batia com o total enquanto as ocorrências mudavam de arquivo."
+  },
+  "termos": [
+    {
+      "id": "esteira",
+      "velho": "esteira",
+      "papel": "o mecanismo que executa etapas com prova por etapa",
+      "destinos": [
+        {
+          "sentido": "mecanismo-do-atlas",
+          "novo": "executor de roteiros",
+          "reconhece_por": "fala do que roda aqui dentro — painel, evidência, schema, ganchos"
+        },
+        {
+          "sentido": "integracao-continua-da-casa",
+          "novo": "integração contínua",
+          "reconhece_por": "fala da automação do repositório de quem montou a camada — regras 9 e 12, AGENTS.md, skill trabalho-por-issue"
+        },
+        {
+          "sentido": "a-rodada-de-uma-issue",
+          "novo": "execução",
+          "reconhece_por": "fala do fluxo de entrega de UMA issue, do disparo à mescla na integração — 'uma esteira por vez', 'esteira de projeto', e o '(esteira da issue N)' que fecha mensagem de commit"
+        }
+      ],
+      "renomeia_caminhos": [],
+      "excecoes": [
+        {
+          "caso": "o $comment do contrato v1, em recibo.schema.json",
+          "ocorrencias": 1,
+          "razao": "prosa dentro do arquivo congelado: mexer nele para trocar um comentário mexeria no contrato sem necessidade.",
+          "arquivos": [
+            ".agents/evidencia/recibo.schema.json"
+          ]
+        }
+      ],
+      "nota": "A separação dos dois primeiros sentidos já era decisão registrada em modulos/encadeador/LEIAME.md (16/08/2026): 'esteira, nas regras da camada, é a automação da casa'. O terceiro sentido entrou em 25/08/2026 (issue de trabalho 73): o uso corrente também chama de esteira a RODADA de uma issue, e esse referente é o mesmo do termo velho 'corrente' — por isso os dois fecham em 'execução'. Cuidado: a prosa do $comment em .agents/evidencia/recibo.schema.json cita o termo — editar o arquivo do contrato é aprovação manual, não automático.",
+      "pronto": {
+        "metrica": "zero ocorrência",
+        "padrao": "(?i)\\besteiras?\\b"
+      }
+    },
+    {
+      "id": "manifesto",
+      "velho": "manifesto",
+      "papel": "a definição declarativa das etapas, em JSON",
+      "destinos": [
+        {
+          "sentido": "definicao-das-etapas",
+          "novo": "roteiro",
+          "reconhece_por": "a lista ordenada do que fazer, escrita antes de rodar — alcança a flag --manifesto, o arquivo de exemplo e a função validar_manifesto"
+        }
+      ],
+      "renomeia_caminhos": [],
+      "excecoes": [
+        {
+          "caso": "manifesto de dependências ou de publicação de um projeto (package.json, pyproject.toml, *.nuspec) e o manifesto de uma skill (author.name)",
+          "ocorrencias": 11,
+          "razao": "outro referente: é o arquivo que descreve um projeto de terceiro, não o roteiro de etapas. Fica em nucleo/regras.json (regra 6, e na página gerada) e em wiki-de-projetos/references/tipos-de-perfil.md (com o espelho em .claude/skills/). O AGENTS.md entra na lista porque o INSTALADOR escreve um AGENTS.md no repositório de destino, e o molde dele cita o manifesto de dependências pelo nome: aqui o arquivo carrega zero ocorrência, lá carrega uma, e a conta fecha nas duas árvores.",
+          "arquivos": [
+            ".agents/skills/wiki-de-projetos/references/tipos-de-perfil.md",
+            ".claude/skills/wiki-de-projetos/references/tipos-de-perfil.md",
+            "conhecimento/regras-da-camada.md",
+            "nucleo/regras.json",
+            "AGENTS.md"
+          ]
+        }
+      ],
+      "nota": "'roteiro' declara: a lista ordenada do que fazer, escrita antes de rodar. 'manifesto' pedia explicação — manifesto de quê?",
+      "pronto": {
+        "metrica": "zero ocorrência fora das exceções",
+        "padrao": "(?i)\\bmanifestos?\\b"
+      }
+    },
+    {
+      "id": "recibo",
+      "velho": "recibo",
+      "papel": "o veredito de uma etapa mais a prova re-executável",
+      "destinos": [
+        {
+          "sentido": "veredito-com-prova",
+          "novo": "evidência",
+          "reconhece_por": "único sentido: o instrumento, o arquivo, o diretório e a prosa"
+        }
+      ],
+      "renomeia_caminhos": [
+        {
+          "caminho": ".agents/recibo",
+          "tipo": "diretorio",
+          "vira": ".agents/evidencia"
+        },
+        {
+          "caminho": ".agents/recibo/recibo.py",
+          "tipo": "arquivo",
+          "vira": ".agents/evidencia/evidencia.py"
+        }
+      ],
+      "excecoes": [
+        {
+          "caso": "o contrato v1 da evidência e tudo que o nomeia: o arquivo .agents/evidencia/recibo.schema.json, o seu title, o valor de enum `recibo-invalido` no campo `motivo`, e as referências a esses dois em código, teste e página",
+          "ocorrencias": 20,
+          "razao": "decisão do dono, registrada: contrato v1 e CLI pública não se renomeiam sem aprovação manual — quebram roteiro, página e evidência já gravada. Versão nova é arquivo novo, diz o próprio schema.",
+          "arquivos": [
+            ".agents/evidencia/evidencia.py",
+            ".agents/evidencia/recibo.schema.json",
+            ".agents/encadeador/testes.py",
+            "modulos/encadeador/.agents/encadeador/testes.py"
+          ]
+        }
+      ],
+      "nota": "Termo mais espalhado do repositório. Os CAMPOS do contrato não mudam (ver `intocaveis`); muda o nome do instrumento, do arquivo, do diretório e da prosa. Renomear o arquivo do schema muda a identidade que instrumentos carregam por caminho — é aprovação manual.",
+      "pronto": {
+        "metrica": "zero ocorrência fora das exceções",
+        "padrao": "(?i)\\brecibos?\\b"
+      }
+    },
+    {
+      "id": "conferencia",
+      "velho": "conferência / conferir",
+      "papel": "a etapa que re-executa o `provado` e acusa divergência",
+      "destinos": [
+        {
+          "sentido": "a-peca",
+          "novo": "verificação",
+          "reconhece_por": "o substantivo que nomeia a etapa e o instrumento"
+        },
+        {
+          "sentido": "verbo-comum",
+          "novo": "verificar",
+          "reconhece_por": "o verbo em prosa — 'confira antes', 'confere se existe'. Trocar por 'verificar' é natural e é o que faz o fechamento fechar."
+        }
+      ],
+      "renomeia_caminhos": [
+        {
+          "caminho": ".agents/conferir",
+          "tipo": "diretorio",
+          "vira": ".agents/verificar"
+        },
+        {
+          "caminho": ".agents/conferir/conferir.py",
+          "tipo": "arquivo",
+          "vira": ".agents/verificar/verificar.py"
+        },
+        {
+          "caminho": ".claude/hooks/conferir-ambiente.py",
+          "tipo": "arquivo",
+          "vira": ".claude/hooks/verificar-ambiente.py"
+        },
+        {
+          "caminho": ".claude/hooks/conferir-mcp.py",
+          "tipo": "arquivo",
+          "vira": ".claude/hooks/verificar-mcp.py"
+        }
+      ],
+      "excecoes": [
+        {
+          "caso": "o $comment do contrato v1, em recibo.schema.json",
+          "ocorrencias": 1,
+          "razao": "mesma razão do termo esteira: prosa dentro do arquivo congelado.",
+          "arquivos": [
+            ".agents/evidencia/recibo.schema.json"
+          ]
+        }
+      ],
+      "nota": "A troca ALINHA o vocabulário em vez de inventar: 'verificar' é o verbo que a casa já usa no verificador de agentes. Alcança também a flag `--conferir` do montar.py e do próprio instrumento, e os ganchos cadastrados por caminho em .claude/settings.json.",
+      "pronto": {
+        "metrica": "zero ocorrência",
+        "padrao": "(?i)\\bconfer(ência|encia|ências|encias|ir|e|em|ida|ido|idas|idos|indo|iu|iram)\\b"
+      }
+    },
+    {
+      "id": "portao",
+      "velho": "portão",
+      "papel": "a etapa que espera decisão humana num arquivo",
+      "destinos": [
+        {
+          "sentido": "espera-decisao-humana",
+          "novo": "aprovação manual",
+          "reconhece_por": "único sentido: o tipo de etapa, o estado e a prosa"
+        }
+      ],
+      "renomeia_caminhos": [],
+      "excecoes": [
+        {
+          "caso": "o campo `aprovacao` da etapa, que guarda o caminho do arquivo .ok",
+          "razao": "não é o termo velho e não muda de nome — é justamente por ele existir que o TIPO vira `aprovacao-manual`."
+        },
+        {
+          "caso": "os literais de nome de arquivo que só existem no disco do dono: PORTAO.md e .claude/hooks/injetar-portao.py, citados na lista NUNCA_PUBLICADOS de publicar.py e no comentário do .gitignore",
+          "ocorrencias": 3,
+          "razao": "não é prosa: é nome de arquivo que a lista compara literalmente. Trocar o texto sem renomear o arquivo faria a exclusão parar de casar, e o que ela protege é a publicação — a única ação sem desfazer. Renomear os arquivos é do dono: os dois estão fora do git, e o gancho está cadastrado por caminho no settings.local.json, que também é dele.",
+          "arquivos": [
+            "publicar.py",
+            ".gitignore"
+          ]
+        },
+        {
+          "caso": "o nome literal da skill de barreiras da camada, citado no prompt de abertura e no comando de barra que o carrega",
+          "ocorrencias": 2,
+          "razao": "não é o termo velho da etapa de espera: é o comando que a pessoa digita para disparar a skill, e a skill se chama assim no disco. Renomear a skill é decisão própria, fora deste termo.",
+          "arquivos": [
+            ".agents/prompts/01-abertura-de-sessao-na-camada.md",
+            ".claude/commands/bootstart.md"
+          ]
+        },
+        {
+          "caso": "a skill `portao` da camada — o nome no frontmatter, o título e a prosa que o cita, na fonte .agents/skills/portao/SKILL.md e no espelho .claude/skills/portao/SKILL.md",
+          "ocorrencias": 10,
+          "razao": "não é o termo velho da etapa que espera decisão humana: é a doutrina das nove barreiras que decide o que entra na camada, e o nome dela é o que a pessoa digita para disparar. Renomear a skill quebraria a citação do prompt de abertura, que a chama pelo nome. São quatro linhas por arquivo e dois arquivos, porque a cópia em .claude/skills é gerada da fonte.",
+          "arquivos": [
+            ".agents/skills/portao/SKILL.md",
+            ".claude/skills/portao/SKILL.md"
+          ]
+        }
+      ],
+      "nota": "No JSON o tipo vira `\"tipo\": \"aprovacao-manual\"`, NÃO `aprovacao`: o campo `aprovacao` já existe na mesma etapa, e tipo com o mesmo nome de campo é o oposto de declarar. O estado `aguardando-portao` vira `aguardando-aprovacao`.",
+      "pronto": {
+        "metrica": "zero ocorrência",
+        "padrao": "(?i)\\bport(ão|ões|ao|oes)\\b"
+      }
+    },
+    {
+      "id": "casa",
+      "velho": "casa",
+      "papel": "onde a sessão trabalha — e mais três coisas, por isso não diz nada",
+      "destinos": [
+        {
+          "sentido": "repositorio",
+          "novo": "repositório",
+          "reconhece_por": "o repositório onde a camada é montada — 'toda casa que montar a camada'"
+        },
+        {
+          "sentido": "workspace",
+          "novo": "workspace",
+          "reconhece_por": "o CONJUNTO de repositórios — 'as aplicações da casa', 'a casa inteira'. Traduzir para 'repositório' seria errado; o repositório já usa 'workspace' nesse sentido na skill analise-de-promocao."
+        },
+        {
+          "sentido": "pagina",
+          "novo": "página",
+          "reconhece_por": "a página que já trata do assunto — 'Achou a casa?', 'não confere a casa existente'"
+        },
+        {
+          "sentido": "lugar",
+          "novo": "lugar",
+          "reconhece_por": "o único lugar onde um fato mora — 'um fato, uma casa', 'esta é a única casa desta regra'"
+        }
+      ],
+      "renomeia_caminhos": [],
+      "excecoes": [
+        {
+          "caso": "o VERBO casar conjugado — 'não casa com', 'casa com um esquema proibido', a variável `casa` do avaliador de esquema",
+          "ocorrencias": 14,
+          "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate. Este número anda com a prosa: o verbo aparece toda vez que alguém escreve que um padrão não casa, e por isso a conta envelhece sozinha — quem a mede é o ritual, não a memória.",
+          "arquivos": [
+            ".agents/encadeador/testes.py",
+            ".agents/evidencia/evidencia.py",
+            ".agents/higiene/higiene.py",
+            "execucoes/entrega.json",
+            "execucoes/prompts/trabalhar-no-workspace.md",
+            "modulos/encadeador/.agents/encadeador/testes.py",
+            "modulos/encadeador/execucoes/entrega.json",
+            "modulos/encadeador/execucoes/prompts/trabalhar-no-workspace.md"
+          ]
+        }
+      ],
+      "nota": "Os quatro sentidos somam 334, mais as 7 do verbo `casar` = 341. Onde o levantamento diz 'repositório (259)', a soma incluiu as 7 do verbo; o sentido medido é 252.",
+      "pronto": {
+        "metrica": "zero ocorrência fora das exceções",
+        "padrao": "(?i)\\bcasas?\\b"
+      }
+    },
+    {
+      "id": "irmao",
+      "velho": "irmã / irmão",
+      "papel": "outro repositório do mesmo workspace",
+      "destinos": [
+        {
+          "sentido": "outro-repositorio",
+          "novo": "repositório vizinho",
+          "reconhece_por": "'imita a irmã mais parecida' → 'imita o repositório vizinho mais parecido'"
+        }
+      ],
+      "renomeia_caminhos": [],
+      "excecoes": [
+        {
+          "caso": "'página irmã divide a verdade em duas' (skill documentar-processo)",
+          "ocorrencias": 0,
+          "razao": "outro referente: fala de duas páginas, não de repositório."
+        },
+        {
+          "caso": "o `.md` irmão do roteiro — o arquivo de mesmo nome ao lado, de onde o painel de controle tira a descrição",
+          "ocorrencias": 8,
+          "razao": "outro referente: é arquivo vizinho no mesmo repositório, não repositório vizinho. 'repositório vizinho .md' não existe.",
+          "arquivos": [
+            ".agents/camada/camada.py",
+            ".agents/painel/painel.py",
+            "modulos/painel/.agents/painel/painel.py"
+          ]
+        }
+      ],
+      "nota": "Metáfora de parentesco para uma relação de vizinhança no disco.",
+      "pronto": {
+        "metrica": "zero ocorrência",
+        "padrao": "(?i)\\birm(ã|ão|ãs|ãos|a|as)\\b"
+      }
+    },
+    {
+      "id": "painel",
+      "velho": "painel",
+      "papel": "onde se dispara a execução e se acompanha o estado",
+      "destinos": [
+        {
+          "sentido": "onde-se-dispara-e-acompanha",
+          "novo": "painel de controle",
+          "reconhece_por": "único sentido: o módulo, a página e a prosa"
+        }
+      ],
+      "renomeia_caminhos": [],
+      "excecoes": [
+        {
+          "caso": "nome de arquivo, de diretório e de módulo — modulos/painel/, painel.py, painel.md, o prefixo do pedido e o da pasta temporária",
+          "ocorrencias": 16,
+          "razao": "nome próprio de peça no disco: renomear arquivo e pasta quebra instalação, roteiro e documentação de quem já montou. A prosa já diz 'painel de controle'. Inclui a página do próprio módulo, conhecimento/painel.md, onde as ocorrências são linha de comando e caminho de arquivo: `--modulo painel` e `.agents/painel/painel.py`. Também o alvo do link `painel.md`: link aponta ARQUIVO, e nome de arquivo é o caso que esta exceção existe para cobrir. Inclui a linha do .gitattributes que declara a cópia em uso como gerada.",
+          "arquivos": [
+            ".agents/painel/painel.py",
+            "modulos/painel/.agents/painel/painel.py",
+            "modulos/painel/conhecimento/painel.md",
+            "modulos/painel/LEIAME.md",
+            ".gitattributes"
+          ]
+        },
+        {
+          "caso": "o $comment do contrato v1, em recibo.schema.json",
+          "ocorrencias": 1,
+          "razao": "mesma razão dos termos esteira e conferência: prosa dentro do arquivo congelado, que não se edita para trocar um comentário.",
+          "arquivos": [
+            ".agents/evidencia/recibo.schema.json"
+          ]
+        },
+        {
+          "caso": "AGENTS.md gerado — a régua de quebra de linha do instalador às vezes separa 'painel de' de 'controle' em linhas diferentes, e o regex por linha não vê o par completo",
+          "ocorrencias": 1,
+          "razao": "falso positivo mecânico da quebra de linha, não uso desacompanhado de verdade — o texto-fonte sempre diz 'painel de controle' inteiro.",
+          "arquivos": [
+            "AGENTS.md"
+          ]
+        }
+      ],
+      "nota": "ÚNICO caso em que o nome novo CONTÉM o velho. Logo a métrica geral ('zero ocorrência') é inaplicável aqui: o grep acharia as 83 para sempre. A métrica dele é a de baixo — 'painel' desacompanhado, isto é, sem 'de controle' ao lado.",
+      "pronto": {
+        "metrica": "zero ocorrência de 'painel' desacompanhado",
+        "padrao": "(?i)\\bpain(el|éis|eis)\\b(?!\\s+de\\s+controle)",
+        "nota": "Nome de arquivo e de diretório casam neste padrão e são exceção declarada: confira a lista antes de dar por aberto."
+      }
+    }
+  ],
+  "intocaveis": {
+    "decisao": "Ninguém renomeia. São os campos do contrato da evidência (.agents/evidencia/recibo.schema.json) e um valor de enum. O schema é v1 e o próprio schema manda: versão nova é arquivo novo, nunca edição calada deste. Renomear o ARQUIVO não altera campo nenhum — mas é aprovação manual, porque instrumentos o carregam por caminho.",
+    "campos": [
+      "veredito",
+      "provado",
+      "suposto",
+      "faltas",
+      "ciclo",
+      "etapa",
+      "trabalho"
+    ],
+    "valores": [
+      {
+        "valor": "recibo-invalido",
+        "campo": "motivo",
+        "razao": "contém o termo velho e MESMO ASSIM não muda: é valor de contrato v1."
+      }
+    ]
+  }
+}

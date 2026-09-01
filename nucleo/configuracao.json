@@ -1,0 +1,95 @@
+{
+  "comentario": "A configuração DESTE repositório: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores do seu repositório. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar. `enderecos_do_onde_esta` é a lista das páginas que situam quem chega: a que existir no cwd entra no bloco onde-está pelo ENDEREÇO, nunca pelo conteúdo; a que não existir não aparece, e a lista não é cobrada de novo neste bloco.",
+  "repositorio_das_issues": "ver nucleo/executor.json",
+  "padrao_de_nome": "<projeto>[_<classe>] - <assunto>",
+  "enderecos_do_onde_esta": [
+    "conhecimento/mapa-do-repositorio.md",
+    "conhecimento/projetos/indice.json"
+  ],
+  "regras": [
+    "A automação deste repositório commita e empurra em branch de trabalho, E MESCLA NA `homolog` — a integração é dela. Para a `main` não se mescla nem se empurra: a entrada lá é o pedido de incorporação, que o DONO aprova. Publicar continua do dono.",
+    "Enquanto houver ${...} sem valor nesta configuração, não se cria issue — pergunta-se ao dono.",
+    "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código.",
+    "`teto_da_largada_em_bytes` é o que TODA sessão paga antes de trabalhar: AGENTS.md, CLAUDE.md, o catálogo das skills e o que os ganchos de abertura injetam. É DECISÃO, não medida — o teto ficou em 10.000, decidido em 24/08/2026, depois que a doutrina de porteiro virou skill disparada por assunto e a largada caiu de 15.559 para 8.984; a largada de hoje sai de `python .agents/camada/camada.py --largada`, nunca desta prosa. Ausente ou nulo, a rotina mede e não cobra: teto que a camada inventasse seria número sem procedência.",
+    "O `<projeto>` do nome é a chave de `projetos` em nucleo/executor.json, e a mesma chave vira ETIQUETA da issue. A lista mora no arquivo LOCAL porque carrega nome de repositório — nome de projeto não entra em arquivo rastreado. Sem `projetos` declarado, o nome sai sem o prefixo e a issue nasce sem etiqueta: a camada não inventa projeto de ninguém.",
+    "Pedido de incorporação só se abre em repositório VIZINHO — os declarados `somente_leitura` em `projetos` —, e só com autorização EXPRESSA do dono, uma por vez. Nos repositórios próprios não se abre PR: o caminho é branch de trabalho e mescla na `homolog`."
+  ],
+  "referencias_que_ficam_fora_do_git": [
+    {
+      "caminho": ".vscode/",
+      "motivo": "pasta do editor, de cada máquina: a página do módulo painel de controle manda editar o launch.json, que nasce no primeiro F5. Estava declarada no .gitignore quando a checagem de órfãs perguntava ao disco; a declaração mora aqui desde que a checagem passou a ler esta lista."
+    },
+    {
+      "caminho": ".claude/settings.local.json",
+      "motivo": "configuração pessoal do Claude Code, criada automaticamente e fora do git por decisão. O prompt de verificação pós-atualização manda conferi-la."
+    },
+    {
+      "caminho": "nucleo/executor.json",
+      "motivo": "a configuração local do executor de roteiros carrega nome de conta e de repositório, e por isso nunca entra em git nenhum. Quem instala recebe o nucleo/executor.exemplo.json."
+    },
+    {
+      "caminho": "conhecimento/projetos/",
+      "motivo": "a wiki dos repositórios vizinhos, que a skill wiki-de-projetos escreve: perfil de repositório vizinho não é da camada e fica fora do git."
+    },
+    {
+      "caminho": ".agents/voz/",
+      "motivo": "chega por `python montar.py --modulo voz`; as páginas do módulo citam o endereço que o instrumento terá depois de instalado."
+    },
+    {
+      "caminho": "conhecimento/observabilidade.md",
+      "motivo": "chega por `python montar.py --modulo observabilidade`; a skill do módulo cita a página pelo endereço que ela terá depois de instalada."
+    },
+    {
+      "caminho": "conhecimento/observabilidade/",
+      "motivo": "as páginas do módulo observabilidade citam umas às outras pelo endereço de depois da instalação, não pelo lugar em que moram dentro de modulos/."
+    },
+    {
+      "caminho": "references/ingestao.md",
+      "motivo": "as páginas do módulo observabilidade citam o anexo pelo caminho de dentro da skill, que é como ele aparece para quem instalou o módulo."
+    }
+  ],
+  "autorizacoes": {
+    "commit": true,
+    "push": true,
+    "publicar": false
+  },
+  "branches_por_incorporacao": [
+    "main"
+  ],
+  "teto_da_largada_em_bytes": 10000,
+  "chaves_de_configuracao_sem_leitor": [
+    {
+      "arquivo": "nucleo/executor.json",
+      "chave": "ressalva_de_18_08_2026",
+      "motivo": "recado de quem preencheu a configuração para quem for reabri-la: o que já foi medido errado e foi corrigido. Nenhum instrumento a lê, e é isso mesmo — quem lê é gente, antes de mexer no arquivo."
+    },
+    {
+      "arquivo": "nucleo/executor.exemplo.json",
+      "chave": "notas",
+      "motivo": "a prosa que explica cada chave para quem copia o exemplo. Instrumento nenhum a lê de propósito: ela existe para o arquivo se explicar sozinho, já que o exemplo é a única declaração que quem instala recebe."
+    },
+    {
+      "arquivo": "nucleo/regras.json",
+      "chave": "introducao",
+      "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
+    },
+    {
+      "arquivo": "nucleo/regras.json",
+      "chave": "rodape_titulo",
+      "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
+    },
+    {
+      "arquivo": "nucleo/vocabulario.json",
+      "chave": "criterio",
+      "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
+    },
+    {
+      "arquivo": "nucleo/vocabulario.json",
+      "chave": "intocaveis",
+      "motivo": "a decisão de quais nomes ninguém renomeia, escrita para gente. Instrumento nenhum a lê, e é isso mesmo: quem a lê é quem for propor uma renomeação."
+    }
+  ],
+  "modelo_por_etapa": {
+    "corpo-do-pedido": "sonnet"
+  }
+}

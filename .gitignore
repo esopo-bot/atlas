@@ -1,0 +1,79 @@
+# A cópia em .claude/skills/ ENTRA no git de propósito: sessão na nuvem só
+# enxerga o que está commitado. O .claude/.gitignore esconde só o
+# settings.local.json.
+#
+# Os arquivos que existem só neste disco (PORTAO.md, o gancho que o injeta,
+# os roteiros locais do dono) estão no .git/info/exclude — que é LOCAL e não
+# sobrevive a um clone novo. Nome de arquivo ignorado não é segredo: o que
+# precisa de trava durável vem para cá. Os instrumentos vivos saíram do
+# exclude e entraram no git: quem barra a publicação deles é a lista
+# NUNCA_PUBLICADOS do publicar.py, não a ausência no repositório.
+nucleo/executor.json
+
+# Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
+# lado do log quando o verificador roda com --debug-file: artefato dela, não
+# nosso. Entrou no git uma vez por acidente, quando core.symlinks=false o fazia
+# parecer um arquivo de texto com o caminho dentro.
+*.log
+latest
+__pycache__/
+
+# O esqueleto (projetos/, .credenciais/, recursos/) não existe aqui: este
+# repositório é a camada, não uma área de trabalho. O montar.py só cria essas
+# pastas quando rodado com --esqueleto, na raiz de um workspace.
+
+# Descartáveis: rascunho e cache de ferramenta. Apagar não perde nada.
+# O pedido de revisão é nomeado porque um rastreado manda escrevê-lo — o
+# roteiro de entrega —, e o nome aqui avisa quem lê que o arquivo é esperado,
+# não esquecido. A verificação de referências órfãs não lê deste arquivo: o
+# que ela aceita fora do git se declara em nucleo/configuracao.json, campo
+# referencias_que_ficam_fora_do_git, com o motivo ao lado.
+/tmp/*
+!/tmp/LEIAME.md
+/tmp/pedido-de-revisao.md
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# A pasta do editor é de cada máquina, e um rastreado manda escrever dentro
+# dela: a página do painel de controle manda editar o launch.json. A exceção
+# que a verificação de referências órfãs respeita não é esta linha — ela mora
+# em nucleo/configuracao.json, campo referencias_que_ficam_fora_do_git.
+.vscode/
+
+# O que não é da camada mora em trabalho/, com git próprio. O git daqui não o
+# enxerga de propósito: o publicar.py leva o que está rastreado aqui, e nada
+# de lá está. A fronteira é estrutural, não uma lista que alguém precisa
+# manter certa.
+/trabalho/
+
+# A wiki dos repositórios do workspace, que a skill wiki-de-projetos escreve:
+# ela guarda o perfil de cada repositório vizinho — nome de quadro, etapas,
+# quem cuida —, e nada disso é da camada. Fica fora do git pelo mesmo motivo
+# de trabalho/. Quem a poupa da verificação de referências órfãs é a
+# declaração em nucleo/configuracao.json, campo
+# referencias_que_ficam_fora_do_git, não esta linha.
+/conhecimento/projetos/
+
+# Fora do git de propósito: cada pasta explica o porquê no seu LEIAME.
+/projetos/*
+!/projetos/LEIAME.md
+/.credenciais/*
+!/.credenciais/LEIAME.txt
+!/.credenciais/publicar-mcp-env.py
+/recursos/*
+!/recursos/LEIAME.md
+
+# O .mcp.json fica fora do git aqui. A regra da camada diz que ele é seguro
+# com ${VARIAVEL} — e é, quanto a VALOR. Mas o NOME de um servidor conta com
+# que sistemas se fala, e isso não passa por varredura de segredo. O modelo
+# genérico dele mora fora do git, junto do que não é da camada.
+/.mcp.json
+
+.playwright-mcp/
+
+# Resultado de execução, não fato da camada: a pasta guarda a decisão do
+# dono numa rodada. Rastreá-la faria a aprovação de ontem viajar, e uma
+# aprovação que ninguém deu ficaria valendo no disco de outra pessoa.
+aprovacoes/
