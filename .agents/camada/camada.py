@@ -70,6 +70,33 @@ SEM_ENTREGA = ("{} não tem para onde entregar — nem upstream declarado, "
                "nem origin/{} no remoto. Nada saiu da máquina, então "
                "não há como provar que nada ficou para trás.")
 FORA_DE_REPOSITORIO = "Sem git aqui — nada a medir."
+ARQUIVO_DAS_PROTEGIDAS = ".claude/branches-protegidas.txt"
+CHAVE_POR_INCORPORACAO = "branches_por_incorporacao"
+MARCA_DE_COMENTARIO_NA_LISTA = "#"
+PREFIXO_DO_REMOTO = "origin/"
+CABECA_DO_REMOTO = "origin/HEAD"
+SEPARADOR_DO_REMOTO = "/"
+COMANDO_DA_REFERENCIA = "git rev-parse --verify --quiet {}"
+COMANDO_DAS_LOCAIS = "git branch --format='%(refname:short)'"
+COMANDO_DAS_REMOTAS = "git branch -r --format='%(refname:short)'"
+COMANDO_DO_QUE_ACRESCENTA = "git diff --quiet {}...{}"
+COMANDO_DO_TOPO = "git rev-parse {}"
+NAO_ACRESCENTA_NADA = 0
+ACRESCENTA_ALGUMA_COISA = 1
+PODA_SEM_INCORPORACAO = ("Branch entregue por podar: não medido — {} não "
+                         "declara {}, e sem a branch de incorporação não dá "
+                         "para dizer o que já entregou de verdade.")
+PODA_NAO_MEDIDA = ("Branch entregue por podar: NÃO MEDIDO — `git branch` "
+                   "falhou. Sem a listagem não existe universo a julgar, e o "
+                   "que o erro imprime não é nome de branch: contá-lo seria "
+                   "acusar quem não existe.")
+PODA_LIMPA = "E nada sobrou do que já entregou: nenhuma branch por podar."
+PODA_COM_SOBRA = ("{} branch(es) que não acrescentam nada a {} e seguem de pé "
+                  "— o rastro da entrega, que se acumula porque ninguém o vê:")
+PODA_LOCAL = "  poda local:  git branch -d {}"
+PODA_REMOTA = "  poda remota: git push origin --delete {}"
+PODA_ESCAPE = ("  Quer guardar alguma? Declare o nome em {} — o arquivo é seu, "
+               "e a atualização da camada não o sobrescreve.")
 
 TITULO_MATRICULA = ("A MATRÍCULA — todo gancho e instrumento rastreado viaja "
                     "no instalador")
@@ -583,12 +610,88 @@ def vocabulario(raiz: Path) -> int:
     return 1 if (aberto or cegos or folgas) else 0
 
 
-def entrega(raiz: Path) -> int:
-    codigo, atual = corre(f'cd "{raiz}" && {COMANDO_DA_BRANCH}')
-    if codigo != 0 or not atual:
-        print(FORA_DE_REPOSITORIO)
-        return 0
-    print(f"\n{TITULO_ENTREGA}")
+def branches_de_longa_duracao(raiz: Path) -> set:
+    try:
+        linhas = (raiz / ARQUIVO_DAS_PROTEGIDAS).read_text(
+            encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    return {l.strip().lower() for l in linhas if l.strip()
+            and not l.strip().startswith(MARCA_DE_COMENTARIO_NA_LISTA)}
+
+
+def branch_de_incorporacao(raiz: Path) -> str:
+    try:
+        dado = json.loads((raiz / ARQUIVO_DE_CONFIGURACAO).read_text(
+            encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    declaradas = dado.get(CHAVE_POR_INCORPORACAO) if isinstance(dado, dict) \
+        else None
+    if not isinstance(declaradas, list):
+        return ""
+    nomes = [n for n in declaradas if isinstance(n, str) and n.strip()]
+    return nomes[0].strip() if nomes else ""
+
+
+def referencia_que_existe(raiz: Path, nome: str) -> str:
+    for candidata in (f"{PREFIXO_DO_REMOTO}{nome}", nome):
+        codigo, _ = corre(
+            f'cd "{raiz}" && {COMANDO_DA_REFERENCIA.format(candidata)}')
+        if codigo == 0:
+            return candidata
+    return ""
+
+
+def nome_curto_da_branch(bruta: str) -> str:
+    sem_remoto = bruta.split(PREFIXO_DO_REMOTO, 1)[-1] \
+        if bruta.startswith(PREFIXO_DO_REMOTO) else bruta
+    return sem_remoto.strip()
+
+
+def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
+                          protegidas: set) -> tuple:
+    def topo(nome):
+        codigo, saida = corre(f'cd "{raiz}" && {COMANDO_DO_TOPO.format(nome)}')
+        return saida.strip() if codigo == 0 else ""
+
+    topo_da_referencia = topo(referencia)
+
+    def e_rastro(bruta):
+        if topo(bruta) == topo_da_referencia:
+            return False, True
+        codigo, _ = corre(
+            f'cd "{raiz}" && '
+            f'{COMANDO_DO_QUE_ACRESCENTA.format(referencia, bruta)}')
+        if codigo not in (NAO_ACRESCENTA_NADA, ACRESCENTA_ALGUMA_COISA):
+            return False, False
+        return codigo == NAO_ACRESCENTA_NADA, True
+
+    def colher(comando, e_remota):
+        codigo, saida = corre(f'cd "{raiz}" && {comando}')
+        if codigo != 0 or not topo_da_referencia:
+            return [], False
+        colhidas, mediu = [], True
+        for bruta in saida.split("\n"):
+            bruta = bruta.strip().lstrip("* ").strip()
+            if not bruta or bruta.startswith(CABECA_DO_REMOTO):
+                continue
+            if e_remota and SEPARADOR_DO_REMOTO not in bruta:
+                continue
+            curto = nome_curto_da_branch(bruta)
+            if not curto or curto == atual or curto.lower() in protegidas:
+                continue
+            rastro, julgou = e_rastro(bruta)
+            mediu = mediu and julgou
+            if rastro:
+                colhidas.append(bruta)
+        return colhidas, mediu
+    locais, mediu_locais = colher(COMANDO_DAS_LOCAIS, False)
+    remotas, mediu_remotas = colher(COMANDO_DAS_REMOTAS, True)
+    return locais, remotas, mediu_locais and mediu_remotas
+
+
+def o_que_ainda_nao_saiu(raiz: Path, atual: str) -> int:
     codigo, alvo = corre(f'cd "{raiz}" && {COMANDO_DO_UPSTREAM}')
     if codigo != 0 or not alvo:
         codigo, alvo = corre(
@@ -606,6 +709,46 @@ def entrega(raiz: Path) -> int:
     for linha in linhas:
         print(f"  {linha}")
     return 1
+
+
+def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
+    incorporacao = branch_de_incorporacao(raiz)
+    if not incorporacao:
+        print(PODA_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
+                                           CHAVE_POR_INCORPORACAO))
+        return 0
+    referencia = referencia_que_existe(raiz, incorporacao)
+    if not referencia:
+        print(PODA_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
+                                           CHAVE_POR_INCORPORACAO))
+        return 0
+    locais, remotas, mediu = branches_ja_entregues(
+        raiz, referencia, atual, branches_de_longa_duracao(raiz))
+    if not mediu:
+        print(PODA_NAO_MEDIDA)
+        return 1
+    if not locais and not remotas:
+        print(PODA_LIMPA)
+        return 0
+    print(PODA_COM_SOBRA.format(len(locais) + len(remotas), referencia))
+    if locais:
+        print(PODA_LOCAL.format(" ".join(locais)))
+    if remotas:
+        print(PODA_REMOTA.format(
+            " ".join(nome_curto_da_branch(r) for r in remotas)))
+    print(PODA_ESCAPE.format(ARQUIVO_DAS_PROTEGIDAS))
+    return 1
+
+
+def entrega(raiz: Path) -> int:
+    codigo, atual = corre(f'cd "{raiz}" && {COMANDO_DA_BRANCH}')
+    if codigo != 0 or not atual:
+        print(FORA_DE_REPOSITORIO)
+        return 0
+    print(f"\n{TITULO_ENTREGA}")
+    faltou = o_que_ainda_nao_saiu(raiz, atual)
+    sobrou = o_que_saiu_e_ficou(raiz, atual)
+    return 1 if (faltou or sobrou) else 0
 
 
 def dias_parado(arquivo: Path, agora: float) -> int:
@@ -1924,6 +2067,85 @@ def testar() -> int:
         corre(f'cd "{repositorio}" && echo b > b.txt && git add -A && git {assinatura} commit -qm dois')
         caso("commit que não saiu da máquina reprova",
              entrega(repositorio) == 1)
+
+    with tempfile.TemporaryDirectory(prefix="camada-poda-") as sozinho:
+        repositorio = Path(sozinho) / "repositorio"
+        (repositorio / "nucleo").mkdir(parents=True)
+        (repositorio / ".claude").mkdir()
+        (repositorio / "nucleo" / "configuracao.json").write_text(
+            json.dumps({CHAVE_POR_INCORPORACAO: ["main"]}), encoding="utf-8")
+        (repositorio / ".claude" / "branches-protegidas.txt").write_text(
+            "# as de longa duração\nmain\nhomolog\n", encoding="utf-8")
+        assinatura = ("-c user.name=t -c user.email=t@t "
+                      "-c commit.gpgsign=false")
+        corre(f'cd "{repositorio}" && git init -q -b main && git add -A && git {assinatura} commit -qm um')
+        remoto = Path(sozinho) / "remoto.git"
+        corre(f'git init -q --bare "{remoto}"')
+        corre(f'cd "{repositorio}" && git remote add origin "{remoto}" && git push -q origin main')
+        protegidas = branches_de_longa_duracao(repositorio)
+        caso("a lista de longa duração se lê, sem os comentários",
+             protegidas == {"main", "homolog"})
+        caso("a branch de incorporação sai da configuração, nunca de palpite",
+             branch_de_incorporacao(repositorio) == "main")
+        referencia = referencia_que_existe(repositorio, "main")
+        caso("a referência preferida é a do remoto, que é a que entregou",
+             referencia == "origin/main")
+
+        corre(f'cd "{repositorio}" && git checkout -q -b entregue && echo b > b.txt && git add -A && git {assinatura} commit -qm dois')
+        corre(f'cd "{repositorio}" && git push -q origin entregue')
+        corre(f'cd "{repositorio}" && git checkout -q main && git {assinatura} merge -q --no-ff -m mescla entregue && git push -q origin main')
+        corre(f'cd "{repositorio}" && git checkout -q -b viva && echo c > c.txt && git add -A && git {assinatura} commit -qm tres && git checkout -q main')
+        locais, remotas, mediu = branches_ja_entregues(
+            repositorio, referencia_que_existe(repositorio, "main"),
+            "main", protegidas)
+        caso("a listagem se declara medida quando o git respondeu", mediu)
+        corre(f'cd "{repositorio}" && git remote set-head origin main')
+        caso("o ponteiro origin/HEAD, que encurta para o nome do remoto, "
+             "não vira branch acusada",
+             "origin" not in branches_ja_entregues(
+                 repositorio, referencia_que_existe(repositorio, "main"),
+                 "main", protegidas)[1])
+        caso("git que falha vira NÃO MEDIDO e reprova, nunca acusação falsa",
+             branches_ja_entregues(repositorio, "referencia-que-nao-existe",
+                                   "main", protegidas)[2] is False
+             and o_que_saiu_e_ficou(Path(sozinho) / "sem-git", "main") == 0)
+        caso("a branch já entregue é acusada, local e remota",
+             locais == ["entregue"] and "origin/entregue" in remotas)
+        caso("a branch viva, que ninguém mesclou, NÃO é acusada",
+             "viva" not in locais and "origin/viva" not in remotas)
+        caso("a de longa duração e a atual não entram na acusação",
+             not any(nome_curto_da_branch(b) in ("main", "homolog")
+                     for b in locais + remotas))
+        caso("branch entregue e de pé reprova a entrega",
+             o_que_saiu_e_ficou(repositorio, "main") == 1)
+        corre(f'cd "{repositorio}" && git branch -q -D entregue && git push -q origin --delete entregue')
+        caso("podadas as duas pontas, a entrega fica limpa",
+             o_que_saiu_e_ficou(repositorio, "main") == 0)
+
+        corre(f'cd "{repositorio}" && git checkout -q -b garfo && echo d > d.txt && git add -A && git {assinatura} commit -qm quatro')
+        corre(f'cd "{repositorio}" && git checkout -q main && git {assinatura} merge -q --no-ff -m mescla garfo')
+        corre(f'cd "{repositorio}" && git checkout -q garfo && git {assinatura} merge -q --no-ff -m "no orfao" main && git checkout -q main && git push -q origin main')
+        orfaos = branches_ja_entregues(
+            repositorio, referencia_que_existe(repositorio, "main"),
+            "main", protegidas)[0]
+        caso("o no de mescla orfao, cujos pais ja estao na incorporacao, "
+             "e acusado — nada dele falta la",
+             "garfo" in orfaos)
+        corre(f'cd "{repositorio}" && git checkout -q -b recem-criada && git checkout -q main')
+        caso("branch recem-criada, identica ao topo da incorporacao, NAO e "
+             "acusada — ali nao ha rastro, ha comeco",
+             "recem-criada" not in branches_ja_entregues(
+                 repositorio, referencia_que_existe(repositorio, "main"),
+                 "main", protegidas)[0])
+        caso("a branch viva continua fora da acusacao depois de tudo",
+             "viva" not in branches_ja_entregues(
+                 repositorio, referencia_que_existe(repositorio, "main"),
+                 "main", protegidas)[0])
+        (repositorio / "nucleo" / "configuracao.json").write_text(
+            json.dumps({}), encoding="utf-8")
+        caso("sem incorporação declarada é NÃO MEDIDO, nunca zero calado",
+             o_que_saiu_e_ficou(repositorio, "main") == 0
+             and branch_de_incorporacao(repositorio) == "")
 
     with tempfile.TemporaryDirectory(prefix="camada-rascunho-") as pasta:
         raiz = Path(pasta)

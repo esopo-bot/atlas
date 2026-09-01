@@ -47,7 +47,12 @@ em nada que a camada rastreie.
    a branch de publicação, na conta que o fluxo do alvo pedir, sempre
    deixando claro o que é trabalho de agente. Quem mescla a publicação é
    o dono. Só trabalho auditado entra.
-6. Registre o andamento NA issue; critérios com saída colada. **Não
+6. Entregue e **pode o rastro**: a branch de trabalho já contida na
+   branch de incorporação não fica de pé, nem local nem remota — a poda
+   remota é a que se esquece, e é a que todo mundo vê. Quem acusa é
+   `python .agents/camada/camada.py --entrega`; guardar uma delas é
+   declará-la em `.claude/branches-protegidas.txt`.
+7. Registre o andamento NA issue; critérios com saída colada. **Não
    existe arquivo de andamento** — nem `andamento.md`, nem
    `onde-parei.md`. Arquivo assim vira uma segunda verdade que ninguém
    atualiza junto, e é ele que a próxima sessão lê. O `.md` só entra no

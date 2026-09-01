@@ -43,7 +43,7 @@ rotinas sai por `python3 verificacoes.py --lista`, que não viaja. Divergiu dest
 | 13 — publicar exige revisão semântica | rotina `ensaio`, **em parte** | a varredura acha nome e segredo; jeito de trabalhar e procedência não têm padrão e passam inteiros. A parte que falta **não é mecanizável** |
 | 14 — conhecimento nasce na língua de quem vai lê-lo | rotina `vocabulario`; ganchos `vetar-conhecimento-em-codigo` e `vetar-comentario-explicativo` | a rotina mede o fechamento de cada termo na árvore rastreada e acusa saldo; os ganchos recusam a página nascendo em pasta de código e o porquê nascendo em comentário |
 | 15 — editou a fonte, regenere a cópia | gancho `vetar-escrita-em-copia-gerada`; rotina `sincronia` | o gancho recusa a escrita na cópia nomeando a fonte; a rotina regenera e compara o texto inteiro |
-| 16 — nada sem destino | ganchos `cobrar-destino-da-entrega` e `vetar-escrita-fora-da-execucao`; rotinas `entrega` e `higiene` | o primeiro cobra na parada da sessão; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina `entrega` lista o que não saiu da branch, e a `higiene` varre o rastreador pelos termos do assunto — issue que fala do trabalho e não aponta para a que o consolidou, e texto que descreve como aberta uma issue já fechada. As três primeiras guardas olham para o disco e para o git; nenhuma via o rastreador, e era ali que a issue vizinha ficava para trás |
+| 16 — nada sem destino | ganchos `cobrar-destino-da-entrega` e `vetar-escrita-fora-da-execucao`; rotinas `entrega` e `higiene` | o primeiro cobra na parada da sessão; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina `entrega` lista as duas pontas — o que não saiu da branch e, desde 01/09/2026, o que já saiu e ficou: a branch contida na branch de incorporação e ainda de pé, local e remota, que se acumulava porque ninguém a via; guardar uma delas é declará-la em `.claude/branches-protegidas.txt`. A `higiene` varre o rastreador pelos termos do assunto — issue que fala do trabalho e não aponta para a que o consolidou, e texto que descreve como aberta uma issue já fechada. As três primeiras guardas olham para o disco e para o git; nenhuma via o rastreador, e era ali que a issue vizinha ficava para trás |
 | 17 — explique na altura de quem lê | nada | **não mecanizável**: altura de explicação não se mede por padrão |
 
 ## O que este quadro ensina
@@ -85,3 +85,28 @@ resolvida no GitHub. Confira com `gh pr view <número> --json state` e
 abrir um PR novo: `state: MERGED` e 0 commits de diferença fecham o caso sem
 nenhuma ação — não é um alarme falso do gancho, é uma corrida entre a
 mesclagem e a leitura.
+
+**Guarda nova se prova duas vezes: na suíte, e contra o repositório de
+verdade.** Suíte verde não é prova de que a guarda funciona — o cenário de
+mentira só contém os casos que quem escreveu imaginou. Medido em 01/09/2026
+numa rotina que acusa branch entregue e não podada: ela passou na própria
+suíte com três defeitos que só a população real mostrou.
+
+- **O erro virou acusação falsa.** O `--format` do `git branch` leva
+  parênteses, que o shell quebra; e como o auxiliar que roda comando devolve
+  a saída padrão e a de erro **juntas**, o texto do erro entrou na lista como
+  se fosse nome de branch. Engolir erro em volta de uma medição já transforma
+  falha em número; em volta de uma **acusação**, é pior — inventa acusado.
+  Falha vira "não medido", nunca lista.
+- **O ponteiro do remoto virou branch.** `origin/HEAD` encurta para o nome do
+  remoto, sem barra, e entrou como mais uma — pondo um nome errado no comando
+  que a rotina mandava rodar.
+- **O critério óbvio errava nas duas direções.** "Está contida na branch de
+  incorporação" deixava passar a branch cujo topo é um nó de mescla nunca
+  mesclado adiante, embora todos os pais dele já estivessem lá, e acusava a
+  branch recém-criada, que ainda não tem rastro nenhum. O critério que
+  fecha é **não acrescentar nada** ao destino, mais a comparação de topo.
+
+A regra que sai daí: **guarda que acusa precisa de população real antes de
+alguém dizer que ela funciona** — e o caso de controle, aquele que ela NÃO
+pode acusar, entra na suíte junto com os que ela deve.
