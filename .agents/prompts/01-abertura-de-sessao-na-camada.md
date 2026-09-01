@@ -36,7 +36,9 @@ prompt 03, vizinho deste.
 - Registre o andamento NA issue do trabalho: o corpo dela é o único
   contexto que sobrevive entre sessões. Issue contém somente a VERDADE,
   checada no repositório — corpo desatualizado mente para a próxima
-  sessão; atualize a cada marco, não no fim.
+  sessão; atualize a cada marco, não no fim. **Arquivo de andamento não
+  existe**: o `.md` só entra no encerramento, para extrair o que vale
+  adiante — o gancho `vetar-andamento-em-arquivo` recusa o resto.
 
 ## A receita do executor de roteiros — pedágios já pagos
 

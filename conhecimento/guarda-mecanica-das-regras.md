@@ -31,7 +31,7 @@ rotinas sai por `python3 verificacoes.py --lista`, que não viaja. Divergiu dest
 | 1 — abra a sessão na raiz | nada | não mecanizável aqui: quem abre no lugar errado não tem a camada carregada para ser avisado |
 | 2 — só é pronto o que um instrumento provou | rotina `verificacao` do motor | acusa veredito `segue` com `provado` vazio, e re-executa cada prova declarada |
 | 3 — antes de criar, procure e cite | nada | **só prosa** |
-| 4 — a memória mora no disco | as dez recusas dos ganchos | nenhuma rotina reprova, mas **toda recusa manda gravar** o aprendizado em `conhecimento/`, com a linha concreta do que gravar — memória previne, gancho ensina |
+| 4 — a memória mora no disco | gancho `vetar-andamento-em-arquivo`; as dez recusas dos ganchos | o gancho recusa o arquivo de andamento nascendo com o corpo de uma issue, e nomeia a exceção: o `.md` do encerramento, em `conhecimento/`. Para o resto da regra nenhuma rotina reprova, mas **toda recusa manda gravar** o aprendizado em `conhecimento/`, com a linha concreta do que gravar — memória previne, gancho ensina |
 | 5 — ao dar por pronto, faça a análise de promoção | nada | **só prosa** |
 | 6 — trabalhe econômico | rotina `largada` | cobra o teto de bytes que toda sessão paga, declarado em `nucleo/configuracao.json` |
 | 7 — rede com cortesia | nada | **só prosa** |
@@ -53,11 +53,16 @@ rotinas sai por `python3 verificacoes.py --lista`, que não viaja. Divergiu dest
 candidatas, e a candidata mais barata é sempre a que já tem instrumento e
 não tem quem o chame.
 
-**A regra 4 saiu da lista sem ganhar rotina.** Nada reprova a sessão que
-não grava. O que mudou é que toda recusa passou a mandar gravar, com a
-linha pronta: memória previne, gancho ensina. Guarda por prompt é mais
-fraca que guarda por rotina, e o quadro diz isso em vez de fingir o
-contrário.
+**A regra 4 tem guarda de um lado só.** O item do estado do trabalho ganhou
+gancho em 01/09/2026: o `vetar-andamento-em-arquivo` recusa o arquivo que
+nasce com o corpo de uma issue, porque a regra já vivia em três prosas — os
+dois prompts de abertura e a skill `trabalho-por-issue` — e uma instalação a
+atravessou assim mesmo. Guarda por prompt é mais fraca que guarda por rotina,
+e este é o caso que provou.
+
+Do outro lado, nada reprova a sessão que não grava o aprendizado. O que existe
+é toda recusa mandar gravar, com a linha pronta: memória previne, gancho
+ensina.
 
 **Guarda mecânica não é tudo.** A classe de erro que nenhum gancho pega é
 outra: **interpretar errado um texto lido corretamente**. Foi o que aconteceu

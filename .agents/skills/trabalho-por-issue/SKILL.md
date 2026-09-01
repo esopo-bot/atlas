@@ -15,8 +15,22 @@ não existe.** Toda sessão abre lendo a issue e fecha atualizando a issue —
 nessa ordem, sempre. É isso que permite investigar numa sessão, implementar
 noutra e verificar numa terceira sem ninguém reexplicar nada.
 
-O estado do trabalho mora na issue, não num arquivo do disco: assim uma
-sessão nova retoma sem ninguém reexplicar. Aqui está o que se executa.
+## O arquivo de andamento é a armadilha
+
+O estado do trabalho mora na issue, **não num arquivo do disco**. Não existe
+`andamento.md`, `onde-parei.md`, `estado-da-issue.md`. Um arquivo desses vira
+uma segunda verdade: ele começa igual à issue, ninguém o atualiza junto, e é
+ele que a próxima sessão lê. A issue passa a mentir sem ninguém perceber.
+
+**A única hora em que o `.md` entra é o ENCERRAMENTO** — para extrair o que
+vale adiante, e aí ele nasce em `conhecimento/`, como lição, não como cópia do
+estado. É a seção "Fechar", no fim desta skill.
+
+Isto tem gancho: o `vetar-andamento-em-arquivo` recusa o arquivo que nasce com
+as seções do corpo de issue. Se ele te barrar, a resposta não é achar outro
+caminho — é escrever na issue.
+
+Aqui está o que se executa.
 
 ## Passo zero: perguntar uma vez, gravar para sempre
 

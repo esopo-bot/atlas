@@ -45,7 +45,8 @@
       "regra": "A memória mora no disco, não no contexto.",
       "faca": [
         "O que vale amanhã se escreve — wiki, nota, decisão — nas subpastas de `conhecimento/`.",
-        "A memória carrega a prova re-executável do que afirma. Afirmação com número envelhece calada — uma nota de poucos dias atrás já discorda do disco, e ninguém percebe porque ela parece um fato. A nota que traz junto o comando que a derruba é a única que não mente."
+        "A memória carrega a prova re-executável do que afirma. Afirmação com número envelhece calada — uma nota de poucos dias atrás já discorda do disco, e ninguém percebe porque ela parece um fato. A nota que traz junto o comando que a derruba é a única que não mente.",
+        "O estado do TRABALHO é a exceção: ele mora na issue, não num arquivo. Arquivo de andamento vira uma segunda verdade, ninguém o atualiza junto, e é ele que mente para a próxima sessão. O `.md` só entra no encerramento, para extrair o que vale adiante — e aí nasce em `conhecimento/`. Quem cobra é o gancho `vetar-andamento-em-arquivo`."
       ]
     },
     {

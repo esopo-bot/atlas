@@ -47,7 +47,12 @@ em nada que a camada rastreie.
    a branch de publicação, na conta que o fluxo do alvo pedir, sempre
    deixando claro o que é trabalho de agente. Quem mescla a publicação é
    o dono. Só trabalho auditado entra.
-6. Registre o andamento NA issue; critérios com saída colada.
+6. Registre o andamento NA issue; critérios com saída colada. **Não
+   existe arquivo de andamento** — nem `andamento.md`, nem
+   `onde-parei.md`. Arquivo assim vira uma segunda verdade que ninguém
+   atualiza junto, e é ele que a próxima sessão lê. O `.md` só entra no
+   ENCERRAMENTO, para extrair o que vale adiante, e nasce em
+   `conhecimento/`. Quem cobra é o gancho `vetar-andamento-em-arquivo`.
 
 ## A receita do executor de roteiros para vizinho
 

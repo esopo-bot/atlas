@@ -57,6 +57,11 @@ de consulta, não de sessão.
       número envelhece calada — uma nota de poucos dias atrás já discorda do
       disco, e ninguém percebe porque ela parece um fato. A nota que traz junto
       o comando que a derruba é a única que não mente.
+    - O estado do TRABALHO é a exceção: ele mora na issue, não num arquivo.
+      Arquivo de andamento vira uma segunda verdade, ninguém o atualiza junto,
+      e é ele que mente para a próxima sessão. O `.md` só entra no
+      encerramento, para extrair o que vale adiante — e aí nasce em
+      `conhecimento/`. Quem cobra é o gancho `vetar-andamento-em-arquivo`.
 
 5. **Ao dar por pronto, faça a análise de promoção.**
     - Três pilhas: genérico, do workspace, descartável. Na dúvida se é

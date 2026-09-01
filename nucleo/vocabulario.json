@@ -212,12 +212,14 @@
           ]
         },
         {
-          "caso": "o nome literal da skill de barreiras da camada, citado no prompt de abertura e no comando de barra que o carrega",
-          "ocorrencias": 2,
+          "caso": "o nome literal da skill de barreiras da camada, citado no prompt de abertura, no comando de barra que o carrega e na linha dela no catálogo das skills — fonte e espelho",
+          "ocorrencias": 4,
           "razao": "não é o termo velho da etapa de espera: é o comando que a pessoa digita para disparar a skill, e a skill se chama assim no disco. Renomear a skill é decisão própria, fora deste termo.",
           "arquivos": [
             ".agents/prompts/01-abertura-de-sessao-na-camada.md",
-            ".claude/commands/bootstart.md"
+            ".claude/commands/bootstart.md",
+            ".agents/skills/README.md",
+            ".claude/skills/README.md"
           ]
         },
         {
