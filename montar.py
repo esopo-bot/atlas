@@ -1,4 +1,4 @@
-VERSAO = "0.611"
+VERSAO = "0.612"
 
 import functools
 import datetime
@@ -2709,7 +2709,15 @@ PAGINAS = {
         '  incorporação" deixava passar a branch cujo topo é um nó de mescla nunca\n'
         '  mesclado adiante, embora todos os pais dele já estivessem lá, e acusava a\n'
         '  branch recém-criada, que ainda não tem rastro nenhum. O critério que\n'
-        '  fecha é **não acrescentar nada** ao destino, mais a comparação de topo.\n'
+        '  fecha é **não acrescentar nada** ao destino, mais a comparação de topo — e\n'
+        '  ele fecha até onde o git deixa: a branch recém-criada só é isenta quando\n'
+        '  nasce do topo da incorporação. Cortada de um ponto anterior, ela é acusada,\n'
+        '  porque o git não guarda em que branch um commit nasceu: a que foi entregue e\n'
+        '  a que acabou de sair de um ponto antigo apontam, as duas, para um commit que\n'
+        '  já está no destino. Contar commits próprios não separa uma da outra —\n'
+        '  medido: dá zero nos dois casos —, e por isso o limite fica declarado aqui e\n'
+        '  preso por um caso na suíte, em vez de ser "consertado" com um critério que\n'
+        '  deixaria a branch entregue passar.\n'
         '\n'
         'A regra que sai daí: **guarda que acusa precisa de população real antes de\n'
         'alguém dizer que ela funciona** — e o caso de controle, aquele que ela NÃO\n'
@@ -13720,6 +13728,19 @@ PAGINAS = {
         '             "recem-criada" not in branches_ja_entregues(\n'
         '                 repositorio, referencia_que_existe(repositorio, "main"),\n'
         '                 "main", protegidas)[0])\n'
+        '        corre(f\'cd "{repositorio}" && git branch -q nova-do-passado main~1\')\n'
+        '        acusadas_com_a_nova = branches_ja_entregues(\n'
+        '            repositorio, referencia_que_existe(repositorio, "main"),\n'
+        '            "main", protegidas)[0]\n'
+        '        caso("o limite declarado: branch nova cortada de um ponto anterior ao "\n'
+        '             "topo E acusada, porque o git nao diz em que branch um commit "\n'
+        '             "nasceu — e contar commits proprios nao separa, da zero nos dois",\n'
+        '             "nova-do-passado" in acusadas_com_a_nova\n'
+        '             and "entregue" not in acusadas_com_a_nova\n'
+        '             and corre(f\'cd "{repositorio}" && \'\n'
+        "                       'git rev-list --count main..nova-do-passado')[1].strip()\n"
+        '             == "0")\n'
+        '        corre(f\'cd "{repositorio}" && git branch -q -D nova-do-passado\')\n'
         '        caso("a branch viva continua fora da acusacao depois de tudo",\n'
         '             "viva" not in branches_ja_entregues(\n'
         '                 repositorio, referencia_que_existe(repositorio, "main"),\n'

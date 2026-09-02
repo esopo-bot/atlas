@@ -2137,6 +2137,19 @@ def testar() -> int:
              "recem-criada" not in branches_ja_entregues(
                  repositorio, referencia_que_existe(repositorio, "main"),
                  "main", protegidas)[0])
+        corre(f'cd "{repositorio}" && git branch -q nova-do-passado main~1')
+        acusadas_com_a_nova = branches_ja_entregues(
+            repositorio, referencia_que_existe(repositorio, "main"),
+            "main", protegidas)[0]
+        caso("o limite declarado: branch nova cortada de um ponto anterior ao "
+             "topo E acusada, porque o git nao diz em que branch um commit "
+             "nasceu — e contar commits proprios nao separa, da zero nos dois",
+             "nova-do-passado" in acusadas_com_a_nova
+             and "entregue" not in acusadas_com_a_nova
+             and corre(f'cd "{repositorio}" && '
+                       'git rev-list --count main..nova-do-passado')[1].strip()
+             == "0")
+        corre(f'cd "{repositorio}" && git branch -q -D nova-do-passado')
         caso("a branch viva continua fora da acusacao depois de tudo",
              "viva" not in branches_ja_entregues(
                  repositorio, referencia_que_existe(repositorio, "main"),

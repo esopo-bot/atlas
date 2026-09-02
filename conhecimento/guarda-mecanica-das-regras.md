@@ -145,7 +145,15 @@ suíte com três defeitos que só a população real mostrou.
   incorporação" deixava passar a branch cujo topo é um nó de mescla nunca
   mesclado adiante, embora todos os pais dele já estivessem lá, e acusava a
   branch recém-criada, que ainda não tem rastro nenhum. O critério que
-  fecha é **não acrescentar nada** ao destino, mais a comparação de topo.
+  fecha é **não acrescentar nada** ao destino, mais a comparação de topo — e
+  ele fecha até onde o git deixa: a branch recém-criada só é isenta quando
+  nasce do topo da incorporação. Cortada de um ponto anterior, ela é acusada,
+  porque o git não guarda em que branch um commit nasceu: a que foi entregue e
+  a que acabou de sair de um ponto antigo apontam, as duas, para um commit que
+  já está no destino. Contar commits próprios não separa uma da outra —
+  medido: dá zero nos dois casos —, e por isso o limite fica declarado aqui e
+  preso por um caso na suíte, em vez de ser "consertado" com um critério que
+  deixaria a branch entregue passar.
 
 A regra que sai daí: **guarda que acusa precisa de população real antes de
 alguém dizer que ela funciona** — e o caso de controle, aquele que ela NÃO
