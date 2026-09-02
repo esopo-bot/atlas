@@ -33,6 +33,14 @@ COMANDO_CD = "cd"
 COMANDOS_QUE_ESCREVEM_NOS_ARGUMENTOS = ("rm", "rmdir", "mv", "tee", "touch",
                                         "mkdir", "truncate", "chmod", "chown")
 COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install")
+SUFIXOS_DE_ARQUIVO = (".py", ".md", ".json", ".yml", ".yaml", ".ts",
+                      ".js", ".txt", ".jsonc")
+INTERPRETADORES = ("python", "python3", "node", "nodejs", "ruby",
+                   "perl", "php")
+MARCA_DE_ESCRITA_DENTRO_DO_SCRIPT = re.compile(
+    r"""write|truncate|unlink|remove|rename|\bmkdir\b|['"]w[+bt]*['"]""")
+ENTRE_ASPAS_SIMPLES = re.compile(r"'([^'\n]{3,300})'")
+ENTRE_ASPAS_DUPLAS = re.compile(r'"([^"\n]{3,300})"')
 COMANDO_QUE_ESCREVE_NO_LUGAR = "sed"
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
@@ -286,8 +294,31 @@ def relativo_a_raiz(caminho: str, raiz: Path, onde: str) -> str:
         return SEM_NOME
 
 
+def o_comando_chama_interpretador(comando: str) -> bool:
+    for segmento in separar(comando):
+        tokens = partir_em_tokens(segmento.strip())
+        if not tokens:
+            continue
+        programa = Path(tokens[0].replace("\\", "/")).name.lower()
+        if programa in INTERPRETADORES:
+            return True
+    return False
+
+
+def caminhos_escritos_dentro_do_script(comando: str) -> list:
+    if not o_comando_chama_interpretador(comando):
+        return []
+    if not MARCA_DE_ESCRITA_DENTRO_DO_SCRIPT.search(comando):
+        return []
+    achados = [m.group(1) for m in ENTRE_ASPAS_SIMPLES.finditer(comando)]
+    achados += [m.group(1) for m in ENTRE_ASPAS_DUPLAS.finditer(comando)]
+    return [a for a in achados
+            if "'" not in a and '"' not in a
+            and ("/" in a or a.endswith(SUFIXOS_DE_ARQUIVO))]
+
+
 def caminhos_escritos_pelo_comando(comando: str, onde: str) -> list:
-    escritos = []
+    escritos = [(c, onde) for c in caminhos_escritos_dentro_do_script(comando)]
     for segmento in separar(comando):
         tokens = partir_em_tokens(segmento.strip())
         for caminho in caminhos_escritos_pelo_segmento(segmento, tokens):
@@ -371,7 +402,7 @@ def decidir() -> int:
     return SILENCIO
 
 
-SKILL_ESPELHADA = "cetico/SKILL.md"
+SKILL_ESPELHADA = "verificacao-adversarial/SKILL.md"
 SKILL_SEM_FONTE = ".claude/skills/so-daqui/SKILL.md"
 MODULO_DE_MENTIRA = "mod"
 INSTRUMENTO_DE_MODULO = ".agents/mod/mod.py"
@@ -429,6 +460,15 @@ BARRA = [
      pedido_de_escrita("NotebookEdit", CARTAO_DE_EXECUCOES)),
     ("Edit no arquivo que abre com a marca de gerado",
      pedido_de_escrita("Edit", INSTRUCOES_COM_MARCA)),
+    ("heredoc de interpretador que ESCREVE na cópia — a bandeira do "
+     "shell é a mesma, e o alvo mora dentro do script",
+     pedido_de_shell(
+         "python3 - <<'PY'\nimport pathlib\n"
+         f"p = pathlib.Path('{INSTRUMENTO_DE_MODULO}')\n"
+         "p.write_text(p.read_text() + 'x')\nPY")),
+    ("o mesmo por -c, sem heredoc",
+     pedido_de_shell(
+         f"python3 -c \"open('{INSTRUMENTO_DE_MODULO}','w').write('x')\"")),
     ("redirecionamento de shell para dentro do espelho",
      pedido_de_shell(f"echo novo > {ESPELHO_NA_COPIA}")),
     ("sed -i na cópia de módulo",
@@ -453,18 +493,27 @@ DEIXA_PASSAR = [
      pedido_de_leitura(ESPELHO_NA_COPIA)),
     ("cat da cópia de módulo pelo shell",
      pedido_de_shell(f"cat {INSTRUMENTO_DE_MODULO}")),
+    ("interpretador que só LÊ a cópia continua livre — regra 8, ler é livre",
+     pedido_de_shell(
+         "python3 - <<'PY'\n"
+         f"print(open('{INSTRUMENTO_DE_MODULO}').read())\nPY")),
+    ("interpretador que só LÊ a cópia continua livre",
+     pedido_de_shell(
+         "python3 - <<'PY'\n"
+         f"print(open('{INSTRUMENTO_DE_MODULO}').read())\n"
+         "PY")),
     ("grep no espelho", pedido_de_shell(f"grep -n x {ESPELHO_NA_COPIA}")),
     ("git log, que não escreve em arquivo nenhum",
      pedido_de_shell("git log --oneline -3")),
 ]
 
 DESTE_REPOSITORIO_BARRA = [
-    (".claude/skills/cetico/SKILL.md", ".agents/skills/cetico/SKILL.md"),
+    (".claude/skills/verificacao-adversarial/SKILL.md", ".agents/skills/verificacao-adversarial/SKILL.md"),
     (".agents/encadeador/encadeador.py",
      "modulos/encadeador/.agents/encadeador/encadeador.py"),
     ("execucoes/LEIAME.md", "modulos/encadeador/execucoes/LEIAME.md"),
 ]
-DESTE_REPOSITORIO_PASSA = (".agents/skills/cetico/SKILL.md",)
+DESTE_REPOSITORIO_PASSA = (".agents/skills/verificacao-adversarial/SKILL.md",)
 
 FALHA_FONTE_ERRADA = "BARRA [{}]: negou nomeando {!r}, e a fonte é {!r}"
 FALHA_DESTE_REPOSITORIO = "BARRA [{}]: deixou passar neste repositório"

@@ -50,6 +50,14 @@ ACAO_RENOMEAR = "renomear"
 ACAO_COMMIT = "commit"
 VERBO_MERGE = "merge"
 VERBO_INIT = "init"
+VERBO_CHECKOUT = "checkout"
+VERBO_SWITCH = "switch"
+VERBOS_QUE_TROCAM_DE_BRANCH = {VERBO_CHECKOUT, VERBO_SWITCH}
+BANDEIRAS_QUE_CRIAM_BRANCH = {"-b", "-c"}
+FIM_DAS_BANDEIRAS = "--"
+SEPARADOR_QUE_ENCADEIA = "&&"
+COMANDO_DAS_BRANCHES = ["git", "for-each-ref", "--format=%(refname:short)",
+                        "refs/heads/"]
 
 NOMES_DO_GIT = {"git", "git.exe"}
 NOME_DO_GH = "gh"
@@ -273,6 +281,52 @@ def branch_atual(alvo: Path):
     return nome if r.returncode == 0 and nome and nome != HEAD_SOLTA else None
 
 
+def branches_conhecidas(alvo: Path) -> set:
+    try:
+        r = subprocess.run(COMANDO_DAS_BRANCHES, cwd=alvo,
+                           capture_output=True, text=True,
+                           timeout=TEMPO_LIMITE_DO_GIT)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if r.returncode != 0:
+        return set()
+    return {linha.strip().lower() for linha in r.stdout.splitlines()
+            if linha.strip()}
+
+
+def branch_pedida_ao_checkout(resto: list):
+    if FIM_DAS_BANDEIRAS in resto:
+        return "", False
+    espera_o_nome = False
+    for token in resto:
+        if espera_o_nome:
+            return token.lower(), True
+        if token.lower() in BANDEIRAS_QUE_CRIAM_BRANCH:
+            espera_o_nome = True
+            continue
+        if token.startswith("-"):
+            continue
+        return token.lower(), False
+    return "", False
+
+
+def a_linha_so_encadeia(comando: str) -> bool:
+    return not SEPARADORES_DE_COMANDO.search(
+        comando.replace(SEPARADOR_QUE_ENCADEIA, " "))
+
+
+def branch_depois_do_segmento(tokens: list, aqui: str, conhecidas: set) -> str:
+    if not tokens or not e_git(tokens[0]):
+        return aqui
+    verbo, resto = verbo_e_resto(tokens)
+    if verbo not in VERBOS_QUE_TROCAM_DE_BRANCH:
+        return aqui
+    nome, criada = branch_pedida_ao_checkout(resto)
+    if not nome:
+        return aqui
+    return nome if criada or nome in conhecidas else aqui
+
+
 def cd_que_abre_o_comando(comando: str) -> str:
     segmentos = separar(comando)
     primeiro = segmentos[0].strip() if segmentos else ""
@@ -365,7 +419,8 @@ def recusa_do_verbo_branch(bandeiras: set, atingidas: list) -> str:
 
 
 def recusa_do_verbo_push(bandeiras: set, resto: list, refs: list,
-                         atingidas: list, protegidas: set, alvo: Path) -> str:
+                         atingidas: list, protegidas: set, alvo: Path,
+                         aqui: str = None) -> str:
     if BANDEIRA_DE_ESPELHO in bandeiras:
         return MOTIVO_ESPELHO
 
@@ -388,7 +443,7 @@ def recusa_do_verbo_push(bandeiras: set, resto: list, refs: list,
     if forca and atingidas:
         return MOTIVO_REESCREVER_HISTORIA.format(atingidas[0])
     if forca and not refs:
-        atual = branch_atual(alvo)
+        atual = branch_atual(alvo) if aqui is None else aqui
         if atual in protegidas:
             return MOTIVO_REESCREVER_A_BRANCH_ATUAL.format(atual)
     return SEM_RECUSA
@@ -409,16 +464,21 @@ def branches_por_incorporacao(raiz: Path) -> set:
 
 def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
                      permitido: dict = None, aqui: str = None,
-                     por_incorporacao: set = None):
+                     por_incorporacao: set = None, conhecidas: set = None):
     permitido = OMISSAO_NAO_E_PERMISSAO if permitido is None else permitido
     aqui = branch_atual(alvo) if aqui is None else aqui
     por_incorporacao = (branches_por_incorporacao(alvo)
                         if por_incorporacao is None else por_incorporacao)
+    conhecidas = (branches_conhecidas(alvo) if conhecidas is None
+                  else conhecidas)
     recusa_por_autorizacao_pendente = SEM_RECUSA
+    segue_a_branch = a_linha_so_encadeia(comando)
     for segmento in separar(comando):
         tokens = partir_em_tokens(segmento.strip())
         if not tokens or not (e_git(tokens[0]) or e_gh(tokens[0])):
             continue
+        if segue_a_branch:
+            aqui = branch_depois_do_segmento(tokens, aqui, conhecidas)
 
         acao = acao_do_comando(tokens)
         if acao == ACAO_COMMIT and aqui in por_incorporacao:
@@ -440,7 +500,7 @@ def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
         recusa = (recusa_do_verbo_branch(bandeiras, atingidas)
                   if verbo == VERBO_BRANCH else
                   recusa_do_verbo_push(bandeiras, resto, refs, atingidas,
-                                       protegidas, alvo))
+                                       protegidas, alvo, aqui))
         if recusa:
             return recusa
     return recusa_por_autorizacao_pendente or None
@@ -638,6 +698,44 @@ GH_MERGE_CONTINUA_SENDO_PUBLICAR = [
     ("gh pr merge continua exigindo autorização de publicar",
      "gh pr merge 8 --merge"),
 ]
+SAI_DA_PROTEGIDA_ANTES_DE_GRAVAR = [
+    ("o checkout na mesma linha tira a gravação da protegida",
+     "git checkout homolog && git merge --ff-only main"),
+    ("switch vale igual ao checkout",
+     "git switch homolog && git merge main"),
+    ("branch nova nasce fora da protegida, e o commit cai nela",
+     "git checkout -b issue/9-x && git commit -m x"),
+    ("switch -c também cria fora", "git switch -c issue/9-x && git commit -m x"),
+]
+ENTRA_NA_PROTEGIDA_E_GRAVA = [
+    ("entrar na protegida e gravar continua barrado",
+     "git checkout main && git commit -m x"),
+    ("switch para a protegida idem", "git switch main && git merge outra"),
+    ("checkout que pode FALHAR nao livra o commit seguinte quando o "
+     "separador nao encadeia: com ponto e virgula o commit roda de todo "
+     "jeito, e cai na protegida",
+     "git checkout -b issue/9 ; git commit -m x"),
+    ("nem com o ou-senao, que roda o seguinte justamente quando falhou",
+     "git switch -c issue/9 || echo ja existe ; git commit -m x"),
+]
+RESTAURA_ARQUIVO_E_NAO_TROCA_DE_BRANCH = [
+    ("restaurar arquivo de outra branch nao e trocar de branch",
+     "git checkout main -- montar.py && git commit -m x"),
+    ("com o switch nao existe pathspec, mas o checkout de arquivo solto "
+     "tambem nao troca nada",
+     "git checkout main -- . && git commit -m x"),
+]
+FALHA_RESTAURO_VIROU_TROCA = (
+    "  DEVIA PASSAR: restaurar arquivo de outra branch nao muda a branch "
+    "atual — {}")
+BRANCHES_CONHECIDAS_DO_TESTE = {"main", "homolog", "outra"}
+FALHA_SAIU_DA_PROTEGIDA_E_BARROU = (
+    "  DEVIA PASSAR: o checkout na linha muda a branch antes da gravação — {}")
+FALHA_ENTROU_NA_PROTEGIDA_E_PASSOU = (
+    "  DEVIA BARRAR: a linha entra na branch de incorporação e grava — {}")
+FALHA_ARQUIVO_VIROU_BRANCH = (
+    "  DEVIA BARRAR: 'git checkout arquivo.txt' não é troca de branch, e o "
+    "commit seguinte ainda cai na protegida")
 FALHA_MERGE_LOCAL_BARRADO = (
     "  DEVIA PASSAR: git merge local não é publicar — {}")
 FALHA_MERGE_EM_PROTEGIDA_PASSOU = (
@@ -869,6 +967,26 @@ def testar() -> int:
         falhas.append(FALHA_FORCA_MESMO_AUTORIZADO)
 
     declaradas_do_merge = set(BRANCHES_POR_INCORPORACAO_DO_TESTE)
+    sabidas = set(BRANCHES_CONHECIDAS_DO_TESTE)
+    for rotulo, comando in SAI_DA_PROTEGIDA_ANTES_DE_GRAVAR:
+        for onde in declaradas_do_merge:
+            if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
+                                onde, declaradas_do_merge, sabidas):
+                falhas.append(
+                    FALHA_SAIU_DA_PROTEGIDA_E_BARROU.format(rotulo))
+    for rotulo, comando in ENTRA_NA_PROTEGIDA_E_GRAVA:
+        if not motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
+                                "main", declaradas_do_merge, sabidas):
+            falhas.append(
+                FALHA_ENTROU_NA_PROTEGIDA_E_PASSOU.format(rotulo))
+    for rotulo, comando in RESTAURA_ARQUIVO_E_NAO_TROCA_DE_BRANCH:
+        if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
+                            fora, declaradas_do_merge, sabidas):
+            falhas.append(FALHA_RESTAURO_VIROU_TROCA.format(rotulo))
+    if motivo_da_recusa("git checkout arquivo.txt && git commit -m x",
+                        protegidas, raiz, AUTORIZA_TUDO, "main",
+                        declaradas_do_merge, sabidas) is None:
+        falhas.append(FALHA_ARQUIVO_VIROU_BRANCH)
     for rotulo, comando in GIT_MERGE_NAO_E_PUBLICAR:
         if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
                             fora, declaradas_do_merge):

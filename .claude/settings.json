@@ -9,7 +9,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/injetar-qualidade.py\""
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/injetar-padrao-de-codigo.py\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
           }
         ]
       },
@@ -129,6 +137,15 @@
             "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-politica.py\""
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-sessao-paralela.py\""
+          }
+        ]
       }
     ],
     "Stop": [
@@ -136,7 +153,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-esfriamento.py\""
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-encerramento.py\""
           }
         ]
       },
@@ -145,6 +162,14 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-destino-da-entrega.py\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-relato-da-sessao.py\""
           }
         ]
       }

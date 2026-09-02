@@ -23,9 +23,10 @@ Acabou de instalar a camada? São **quatro passos**, e nenhum deles é ler tudo.
 
    `medir` diz quanto a camada cobra de contexto em toda sessão; `provar`
    roda o teste de cada gancho e instrumento.
-4. **Veja o que você ganhou em skills**, em
-   [as skills da camada](../.agents/skills/README.md) — dez, com as duas
-   essenciais no topo.
+4. **Veja o que você ganhou em skills**: elas se listam sozinhas na
+   sessão, pela `description` de cada uma. Para escrever a sua e fazê-la
+   disparar, [a skill que dispara](skill-que-dispara.md) traz a receita
+   medida.
 
 Pronto. **O resto desta página é sob demanda**: são páginas que se abrem
 quando o assunto aparece, não leitura de largada. E a máquina precisa de

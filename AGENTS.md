@@ -58,7 +58,6 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 
 O nome declara a responsabilidade da peça, em português puro. Os nomes
 aprovados, que toda peça NOVA usa: executor de roteiros, roteiro, evidência,
-verificação, aprovação manual, repositório, repositório vizinho, painel de
-controle. Onde o código ainda usar o nome velho, ele está esperando a
-renomeação — o par velho→novo, o sentido de cada um e as exceções estão em
-`nucleo/vocabulario.json`.
+verificação, aprovação manual, repositório, repositório vizinho. Onde o código
+ainda usar o nome velho, ele está esperando a renomeação — o par velho→novo, o
+sentido de cada um e as exceções estão em `nucleo/vocabulario.json`.

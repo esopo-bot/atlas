@@ -24,7 +24,6 @@ def _achar_a_camada() -> Path:
 
 
 VERIFICADOR = _achar_a_camada() / INSTRUMENTO_QUE_ANCORA
-CAIXA = _achar_a_camada() / "caixa/caixa.py"
 GLOB_DE_EVIDENCIA = "*.json"
 NOME_DA_EVIDENCIA = re.compile(r"^(\d+)-(.+)-c(\d+)\.json$")
 ACUSACAO_ROTULADA = re.compile(r"^ACUSA \[([^\]]+)\]")
@@ -39,9 +38,7 @@ VEREDITO_PARA = "para"
 VEREDITO_PERGUNTA = "pergunta"
 ORIGEM_DO_MOTOR = "encadeador"
 BANDEIRA_DE_TESTE = "--testar"
-BANDEIRA_DE_PROMOCAO = "--promover"
 TEMPO_DA_VERIFICACAO = 900
-TEMPO_DA_CAIXA = 120
 
 TIPO_DEFEITO = "defeito"
 TIPO_MELHORIA = "melhoria"
@@ -100,15 +97,7 @@ VERIFICADOR_AUSENTE = ("verificador não encontrado em {} — a re-execução n�
 VERIFICADOR_OK = "o verificador re-executou as provas e não acusou divergência"
 VERIFICADOR_ACUSOU = "o verificador acusou (saída {}):"
 
-TITULO_PROMOVIDO = "PROMOVIDO — o achado que virou linha na caixa"
-ASSUNTO_DO_ACHADO = "{trabalho}: {texto}"
-NADA_A_PROMOVER = ("nada: dos supostos acima, nenhum é dos que o auditor sabe "
-                   "nomear — os outros ficam só impressos")
-PROMOCAO_DESLIGADA = ("desligada: o achado fica só impresso. Ligue com {} — "
-                      "quem chama o auditor decide se o achado vira linha")
-CAIXA_AUSENTE = ("instrumento da caixa não encontrado em {} — nada foi "
-                 "promovido, e isso é não promovido, não é caixa vazia")
-FALHOU_AO_PROMOVER = "não promovi {}: {}"
+RECUSA_DE_USO = 2
 
 
 def evidencias_da_pasta(pasta: Path) -> tuple:
@@ -281,31 +270,6 @@ def os_que_sabe_nomear(lidos: list) -> list:
     return [um for um in lidos if um["id"]]
 
 
-def promover(trabalho: str, lidos: list, cwd: str = "") -> tuple:
-    if not CAIXA.is_file():
-        return False, [CAIXA_AUSENTE.format(CAIXA)]
-    recados, inteiro = [], True
-    for um in lidos:
-        comando = [sys.executable, str(CAIXA), um["tipo"], "--id", um["id"],
-                   "--assunto", ASSUNTO_DO_ACHADO.format(trabalho=trabalho,
-                                                         texto=um["texto"])]
-        if cwd:
-            comando += ["--cwd", cwd]
-        try:
-            feito = subprocess.run(comando, capture_output=True, text=True,
-                                   timeout=TEMPO_DA_CAIXA)
-        except (OSError, subprocess.SubprocessError) as erro:
-            recados.append(FALHOU_AO_PROMOVER.format(um["id"], erro))
-            inteiro = False
-            continue
-        if feito.returncode != 0:
-            inteiro = False
-        recados.append((feito.stdout + feito.stderr).strip()
-                       or FALHOU_AO_PROMOVER.format(um["id"],
-                                                    feito.returncode))
-    return inteiro, recados
-
-
 def reexecutar(pasta: Path, cwd: str) -> tuple:
     if not VERIFICADOR.is_file():
         return None, VERIFICADOR_AUSENTE.format(VERIFICADOR)
@@ -321,17 +285,21 @@ def reexecutar(pasta: Path, cwd: str) -> tuple:
     return pronto.returncode, (pronto.stdout + pronto.stderr).strip()
 
 
-def auditar(pasta: Path, cwd: str = "", promovendo: bool = False) -> int:
+def auditar(pasta: Path, cwd: str = "") -> int:
+    return auditar_e_nomear(pasta, cwd)[0]
+
+
+def auditar_e_nomear(pasta: Path, cwd: str = "") -> tuple:
     if not pasta.is_dir():
         print(PASTA_INEXISTENTE.format(pasta))
-        return 2
+        return 2, []
     evidencias, ilegiveis = evidencias_da_pasta(pasta)
     if not evidencias:
         print(TUDO_ILEGIVEL.format(pasta, len(ilegiveis)) if ilegiveis
               else SEM_EVIDENCIA.format(pasta))
         for caminho, erro in ilegiveis:
             print(LINHA_ILEGIVEL.format(caminho, erro))
-        return 2
+        return 2, []
 
     conta = contar(evidencias, ilegiveis)
     print(CABECALHO.format(pasta.name, conta["etapas"], conta["arquivos"],
@@ -376,24 +344,9 @@ def auditar(pasta: Path, cwd: str = "", promovendo: bool = False) -> int:
     for lido in lidos:
         print(LINHA_SIMPLES.format(lido["texto"]))
 
-    print(f"\n{TITULO_PROMOVIDO}")
-    nomeados = os_que_sabe_nomear(lidos)
-    promoveu = True
-    if not promovendo:
-        print(LINHA_SIMPLES.format(
-            PROMOCAO_DESLIGADA.format(BANDEIRA_DE_PROMOCAO)))
-    elif not nomeados:
-        print(LINHA_SIMPLES.format(NADA_A_PROMOVER))
-    else:
-        promoveu, recados = promover(pasta.name, nomeados, cwd)
-        for recado in recados:
-            print(LINHA_SIMPLES.format(recado))
-
-    if not promoveu:
-        return 2
     houve_falha = (conta["para"] > 0 or bool(conta["ilegiveis"])
                    or (codigo not in (0, None)))
-    return 1 if houve_falha else 0
+    return (1 if houve_falha else 0), os_que_sabe_nomear(lidos)
 
 
 def _evidencia(etapa, veredito=VEREDITO_SEGUE, ciclo=1, provado=None,
@@ -412,15 +365,6 @@ def _escrever(pasta: Path, ordem, etapa, **troca) -> None:
     alvo.write_text(json.dumps(_evidencia(etapa, **troca), ensure_ascii=False),
                     encoding="utf-8")
 
-
-FALSA_CAIXA = """import os
-import sys
-from pathlib import Path
-
-with Path(os.environ["AUDITOR_TESTE_LOG"]).open("a", encoding="utf-8") as log:
-    log.write(" ".join(sys.argv[1:]).replace(chr(10), " ") + chr(10))
-sys.exit(2 if os.environ.get("AUDITOR_TESTE_RECUSA") else 0)
-"""
 
 FALSO_VERIFICADOR = """import os
 import sys
@@ -460,6 +404,10 @@ def testar() -> int:
         with contextlib.redirect_stdout(conversa):
             codigo = auditar(*argumentos, **troca)
         return codigo, conversa.getvalue()
+
+    def falado_e_nomeado(*argumentos, **troca):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return auditar_e_nomear(*argumentos, **troca)
 
     with tempfile.TemporaryDirectory(prefix="auditor-teste-") as pasta:
         vazia = Path(pasta) / "vazia"
@@ -699,76 +647,55 @@ def testar() -> int:
             if token_de_quem_audita is not None:
                 os.environ["GH_TOKEN"] = token_de_quem_audita
 
-        falsa_caixa = Path(pasta) / "falsa_caixa.py"
-        registro = Path(pasta) / "registro.txt"
-        falsa_caixa.write_text(FALSA_CAIXA, encoding="utf-8")
-        os.environ["AUDITOR_TESTE_LOG"] = str(registro)
-        global CAIXA
-        guardada = CAIXA
-        CAIXA = falsa_caixa
-        try:
-            evidencias, _ = evidencias_da_pasta(suja)
-            conta = contar(evidencias)
-            nomeados = os_que_sabe_nomear(
-                lidos_da_execucao(evidencias, conta, reproduz=False))
-            porid = {um["id"]: um["tipo"] for um in nomeados}
-            caso("prova que não reproduz é achado de defeito, nomeado",
-                 porid.get(ACHADO_PROVA_NAO_REPRODUZ) == TIPO_DEFEITO)
-            caso("etapa que repetiu ciclo é achado de melhoria",
-                 porid.get(ACHADO_CICLO_REPETIDO) == TIPO_MELHORIA)
-            caso("evidência escrita pelo motor é achado de defeito",
-                 porid.get(ACHADO_EVIDENCIA_SINTETICA) == TIPO_DEFEITO)
-            caso("etapa que seguiu sem prova é achado de defeito",
-                 porid.get(ACHADO_SEGUIU_SEM_PROVA) == TIPO_DEFEITO)
-            nomeados_do_ilegivel = os_que_sabe_nomear(lidos_da_execucao(
-                legiveis, contar(legiveis, nao_abriram)))
-            caso("evidência que não abre é achado de defeito, nomeado",
-                 {um["id"]: um["tipo"] for um in nomeados_do_ilegivel}
-                 .get(ACHADO_EVIDENCIA_ILEGIVEL) == TIPO_DEFEITO)
-            caso("execução que parou não vira achado: fica só impressa",
-                 len(nomeados) == 4
-                 and SUPOSTO_PAROU_EM.split("{")[0]
-                 in " ".join(supostos(evidencias, conta, reproduz=False)))
+        evidencias, _ = evidencias_da_pasta(suja)
+        conta = contar(evidencias)
+        nomeados = os_que_sabe_nomear(
+            lidos_da_execucao(evidencias, conta, reproduz=False))
+        porid = {um["id"]: um["tipo"] for um in nomeados}
+        caso("prova que não reproduz é achado de defeito, nomeado",
+             porid.get(ACHADO_PROVA_NAO_REPRODUZ) == TIPO_DEFEITO)
+        caso("etapa que repetiu ciclo é achado de melhoria",
+             porid.get(ACHADO_CICLO_REPETIDO) == TIPO_MELHORIA)
+        caso("evidência escrita pelo motor é achado de defeito",
+             porid.get(ACHADO_EVIDENCIA_SINTETICA) == TIPO_DEFEITO)
+        caso("etapa que seguiu sem prova é achado de defeito",
+             porid.get(ACHADO_SEGUIU_SEM_PROVA) == TIPO_DEFEITO)
+        nomeados_do_ilegivel = os_que_sabe_nomear(lidos_da_execucao(
+            legiveis, contar(legiveis, nao_abriram)))
+        caso("evidência que não abre é achado de defeito, nomeado",
+             {um["id"]: um["tipo"] for um in nomeados_do_ilegivel}
+             .get(ACHADO_EVIDENCIA_ILEGIVEL) == TIPO_DEFEITO)
+        caso("execução que parou não vira achado: fica só impressa",
+             len(nomeados) == 4
+             and SUPOSTO_PAROU_EM.split("{")[0]
+             in " ".join(supostos(evidencias, conta, reproduz=False)))
 
-            limpa, _ = evidencias_da_pasta(boa)
-            caso("execução limpa não promove nada",
-                 os_que_sabe_nomear(
-                     lidos_da_execucao(limpa, contar(limpa))) == [])
+        limpa, _ = evidencias_da_pasta(boa)
+        caso("execução limpa não promove nada",
+             os_que_sabe_nomear(
+                 lidos_da_execucao(limpa, contar(limpa))) == [])
 
-            de_outro, _ = evidencias_da_pasta(perguntou)
-            caso("execução que perguntou também não vira achado",
-                 os_que_sabe_nomear(
-                     lidos_da_execucao(de_outro, contar(de_outro))) == [])
+        de_outro, _ = evidencias_da_pasta(perguntou)
+        caso("execução que perguntou também não vira achado",
+             os_que_sabe_nomear(
+                 lidos_da_execucao(de_outro, contar(de_outro))) == [])
 
-            registro.write_text("", encoding="utf-8")
-            caso("sem --promover, o auditor não chama a caixa",
-                 auditar(suja) == 1
-                 and registro.read_text(encoding="utf-8") == "")
-
-            registro.write_text("", encoding="utf-8")
-            auditar(suja, promovendo=True)
-            chamadas = registro.read_text(encoding="utf-8").splitlines()
-            caso("com --promover, chama a caixa uma vez por achado nomeado",
-                 len(chamadas) == len(os_que_sabe_nomear(
-                     lidos_da_execucao(evidencias, conta, reproduz=False))))
-            caso("e o assunto promovido diz de qual trabalho veio",
-                 all("suja" in uma for uma in chamadas))
-            caso("a identidade não carrega o trabalho: é estável entre eles",
-                 sum(1 for uma in chamadas
-                     if "--id " + ACHADO_PROVA_NAO_REPRODUZ in uma) == 1)
-
-            registro.write_text("", encoding="utf-8")
-            os.environ["AUDITOR_TESTE_RECUSA"] = "1"
-            caso("caixa que recusa faz o auditor sair diferente de zero",
-                 auditar(suja, promovendo=True) == 2)
-            os.environ.pop("AUDITOR_TESTE_RECUSA")
-
-            CAIXA = Path(pasta) / "nao-existe.py"
-            caso("caixa ausente é não promovido, não é caixa vazia",
-                 auditar(suja, promovendo=True) == 2)
-        finally:
-            CAIXA = guardada
-            os.environ.pop("AUDITOR_TESTE_LOG", None)
+        codigo, nomeados_da_suja = falado_e_nomeado(suja)
+        caso("auditar_e_nomear devolve o código da auditoria e os "
+             "achados que sabe nomear, para quem promove fora daqui",
+             codigo == 1 and len(nomeados_da_suja) == 4)
+        saida_da_suja = io.StringIO()
+        with contextlib.redirect_stdout(saida_da_suja):
+            auditar(suja)
+        caso("o auditor que viaja não fala em promoção: verifica e acusa",
+             "PROMOVIDO" not in saida_da_suja.getvalue())
+        bandeira = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(suja),
+             "--promover"], capture_output=True, text=True)
+        caso("--promover não existe no auditor: rodar com a bandeira "
+             "devolve erro de uso, não promoção desligada",
+             bandeira.returncode == RECUSA_DE_USO
+             and "--promover" in bandeira.stderr)
 
     total = len(rodados)
     if falhas:
@@ -785,11 +712,8 @@ def main() -> int:
     ap.add_argument("pasta", help="a pasta de evidências de um trabalho")
     ap.add_argument("--cwd", default="",
                     help="onde re-executar as provas (padrão: aqui)")
-    ap.add_argument(BANDEIRA_DE_PROMOCAO, action="store_true",
-                    dest="promovendo",
-                    help="põe na caixa o achado que o auditor sabe nomear")
     a = ap.parse_args()
-    return auditar(Path(a.pasta), a.cwd, a.promovendo)
+    return auditar(Path(a.pasta), a.cwd)
 
 
 if __name__ == "__main__":

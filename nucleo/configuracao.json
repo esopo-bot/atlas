@@ -17,7 +17,7 @@
   "referencias_que_ficam_fora_do_git": [
     {
       "caminho": ".vscode/",
-      "motivo": "pasta do editor, de cada máquina: a página do módulo painel de controle manda editar o launch.json, que nasce no primeiro F5. Estava declarada no .gitignore quando a checagem de órfãs perguntava ao disco; a declaração mora aqui desde que a checagem passou a ler esta lista."
+      "motivo": "pasta do editor, de cada máquina: o launch.json nasce no primeiro F5 e não é o mesmo em duas. Quem a nomeia em texto rastreado é o .gitignore, que a declara, e o caso de teste da própria checagem de órfãs em verificar-agentes.py. Estava declarada no .gitignore quando a checagem de órfãs perguntava ao disco; a declaração mora aqui desde que a checagem passou a ler esta lista."
     },
     {
       "caminho": ".claude/settings.local.json",
@@ -29,7 +29,7 @@
     },
     {
       "caminho": "conhecimento/projetos/",
-      "motivo": "a wiki dos repositórios vizinhos, que a skill wiki-de-projetos escreve: perfil de repositório vizinho não é da camada e fica fora do git."
+      "motivo": "a wiki dos repositórios vizinhos, que a skill perfil-de-repositorio escreve: perfil de repositório vizinho não é da camada e fica fora do git."
     },
     {
       "caminho": ".agents/voz/",
@@ -76,6 +76,11 @@
     {
       "arquivo": "nucleo/regras.json",
       "chave": "rodape_titulo",
+      "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
+    },
+    {
+      "arquivo": "nucleo/regras.json",
+      "chave": "rodape",
       "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
     },
     {

@@ -29,9 +29,10 @@
         "Saída cortada se declara com `(...)` em linha própria: a re-execução compara BLOCO de linhas seguidas, e o pedaço que você resumiu no meio de uma saída composta vira acusação sem essa marca.",
         "Prova lenta declara o teto dela — `\"tempo-limite\": <segundos>` no item do provado —, porque a re-execução corta em 60 s por padrão: tempo esgotado não é divergência, e lenta não é errada.",
         "A prova morre com a escrita seguinte: o número do relatório final se mede depois do último comando que altera disco. Sincronização, formatador ou regeneração que rode depois do teste desfaz o que ele mediu — re-rode a prova como último ato, ou o relatório afirma um instante que não sobreviveu.",
-        "Antes de agir sobre uma conclusão importante, rode a skill `cetico`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição.",
+        "Antes de agir sobre uma conclusão importante, rode a skill `verificacao-adversarial`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição.",
         "Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova.",
-        "Estado que se relata se lê na hora: antes de dizer a alguém o que falta numa issue, num pedido de incorporação ou num arquivo, abra e leia. Resumo de memória envelhece calado, e o que sai dele é dedução vestida de fato."
+        "Estado que se relata se lê na hora: antes de dizer a alguém o que falta numa issue, num pedido de incorporação ou num arquivo, abra e leia. Resumo de memória envelhece calado, e o que sai dele é dedução vestida de fato.",
+        "Prova feita aqui não vale lá. Proposta que depende de ferramenta — instalar pacote, subir container, baixar modelo, registrar servidor MCP — vem com o comando de UMA linha que a pessoa roda no ambiente dela ANTES de tentar, e com o contorno quando ele já é conhecido. Ambiente corporativo trancado é a regra em empresa grande, não a exceção: proxy que reassina TLS com autoridade interna, política que barra comando de linha, registro de pacote bloqueado por categoria, proxy autenticado que derruba download de binário nativo. Quem propõe sem o teste do ambiente empurra a descoberta para quem instala, e ela custa o dobro lá."
       ]
     },
     {

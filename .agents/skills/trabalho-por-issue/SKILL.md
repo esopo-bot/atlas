@@ -1,6 +1,6 @@
 ---
 name: trabalho-por-issue
-description: Use quando o pedido for pela ISSUE em si — "abre uma issue disso", "registra isso", "deixa anotado onde eu parei" —, ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao retomar trabalho que já tem issue, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela REGISTRA o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da esfriamento; procurar o que já existe antes de criar é da antes-de-criar; escrever ou atualizar documentação é da documentar-processo.
+description: Use quando o pedido for pela ISSUE em si — "abre uma issue disso", "registra isso", "deixa anotado onde eu parei" —, ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao retomar trabalho que já tem issue, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela REGISTRA o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da encerramento-de-sessao; procurar o que já existe antes de criar é da busca-de-codigo-existente; escrever ou atualizar documentação é da documentar-processo.
 metadata:
   pedidos-de-exemplo:
     - "abre uma issue disso: o relatório de fechamento sai com o total errado quando tem estorno"
@@ -202,6 +202,13 @@ veredito**. O teste: ele começa pelo instrumento ou pelo adjetivo? Critério
 bom cabe numa linha e não precisa de você para ser lido. A tabela de
 exemplos — o que serve e o que não serve — está em `references/moldes.md`.
 
+Critério que pede **medição repetida** — mediana de N rodadas, antes e
+depois — diz quanto cada conjunto leva e lembra que a etapa de sessão do
+executor morre em 3600 s: a issue manda a cópia local do roteiro declarar
+`tempo-limite` na etapa que mede. Sem isso a etapa morre com o trabalho
+feito e sem commit, e a retomada refaz o pronto. A receita está no
+`execucoes/LEIAME.md` do módulo.
+
 ## O que vai em comentário — e o que não vai
 
 O corpo é o estado; o comentário é o evento. Comentário tem **quatro tipos e
@@ -258,8 +265,7 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 - **Na dúvida sobre o que pode ser empurrado, não empurre.** Push que aciona
   automação acorda gente e gasta a integração contínua; desfazer é caro
   e público.
-- **Abrir a issue não dispara a execução.** Quem dispara é o
-  painel de controle, ou o dono.
+- **Abrir a issue não dispara a execução.** Quem dispara é o dono.
 - **A branch de trabalho é a única que a sessão cria e apaga** — regra 12. As
   de longa duração não entram na limpeza de fim de trabalho, por mais órfãs
   que pareçam.

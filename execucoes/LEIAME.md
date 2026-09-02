@@ -47,6 +47,24 @@ json.dump({'auditoria': True, 'issue': <n>, **r},
           ensure_ascii=False, indent=2)"
 ```
 
+**Issue que pede medição repetida declara o teto da etapa.** Etapa de sessão
+morre em 3600 s, e medição que a própria issue exige — mediana de cinco
+rodadas antes e cinco depois, ~550 s por conjunto — não cabe nisso: a etapa
+`trabalhar` morreu com o trabalho feito e sem commit, e a retomada gastou um
+ciclo refazendo o pronto. A cópia local declara `tempo-limite` na etapa que
+mede, em segundos, e o ensaio mostra o teto de cada sessão antes de gastar:
+
+```bash
+python3 -c "
+import json
+r = json.load(open('execucoes/roteiro-issue-<n>.json'))
+for etapa in r['etapas']:
+    if etapa['nome'] == 'trabalhar':
+        etapa['tempo-limite'] = <segundos>
+json.dump(r, open('execucoes/roteiro-issue-<n>.json', 'w'),
+          ensure_ascii=False, indent=2)"
+```
+
 **2. A árvore descartável.** Clone local, nunca worktree: o clone nasce com
 `origin` apontando para o repositório daqui, e é isso que salva a entrega
 quando o remoto de verdade não está disponível.

@@ -34,6 +34,7 @@ CAMPOS_CONDICIONAIS = ("proximo", "pergunta", "motivo", "origem", "provado")
 CAMPOS_RESERVADOS_AO_SINTETICO = ("origem", "motivo")
 CAMPO_DOS_TURNOS = "turnos"
 CAMPO_DO_CUSTO = "custo"
+CAMPO_DA_DURACAO = "duracao"
 
 ORDEM_MINIMA = 1
 ORDEM_MAXIMA = 99
@@ -46,6 +47,7 @@ ROTULO_ARG_ETAPA = "argumento --etapa"
 ROTULO_ARG_TRABALHO = "argumento --trabalho"
 ROTULO_ARG_TETO = "argumento --teto"
 ROTULO_ARG_CUSTO = "argumento --custo"
+ROTULO_ARG_DURACAO = "argumento --duracao"
 
 ERRO_PALAVRA_DESCONHECIDA = ("{}: o validador não conhece {} — atualize "
                              "evidencia.py junto com o contrato")
@@ -119,6 +121,8 @@ AJUDA_TURNOS = ("turnos que a sessão gastou (num_turns); opcional, "
 AJUDA_CUSTO = ("custo que a sessão devolveu (total_cost_usd e usage), como "
                "JSON no formato do contrato; opcional, carimbado pelo "
                "código na evidência")
+AJUDA_DURACAO = ("segundos de relógio que a etapa levou; opcional, "
+                 "carimbado pelo código na evidência")
 AJUDA_SINTETICO = "escreve a evidência de etapa desligada/morta/teto"
 AJUDA_ESQUEMA_SESSAO = "o contrato enxuto da sessão, para --json-schema"
 
@@ -307,6 +311,17 @@ def escrever_atomico(caminho: Path, evidencia: dict) -> Path:
     return caminho
 
 
+def _carimbo_do_codigo(turnos, custo, duracao) -> dict:
+    medido = {}
+    if turnos:
+        medido[CAMPO_DOS_TURNOS] = turnos
+    if custo:
+        medido[CAMPO_DO_CUSTO] = custo
+    if duracao is not None:
+        medido[CAMPO_DA_DURACAO] = duracao
+    return medido
+
+
 def _corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe) -> dict:
     dito = detalhe or DETALHE_AUSENTE
     if motivo == MOTIVO_DESLIGADA:
@@ -323,7 +338,7 @@ def _corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe) -> dict:
 
 
 def sintetizar(dir_base, trabalho, etapa, ordem, teto, motivo, detalhe,
-               esquema):
+               esquema, turnos=None, custo=None, duracao=None):
     if motivo not in MOTIVOS:
         sys.exit(ERRO_MOTIVO_DESCONHECIDO.format(motivo, ", ".join(MOTIVOS)))
     caminho, i = caminho_da_evidencia(dir_base, trabalho, ordem, etapa)
@@ -341,6 +356,7 @@ def sintetizar(dir_base, trabalho, etapa, ordem, teto, motivo, detalhe,
         "ciclo": {"i": i, "teto": teto},
     }
     evidencia.update(_corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe))
+    evidencia.update(_carimbo_do_codigo(turnos, custo, duracao))
 
     erros = validar_evidencia(evidencia, esquema)
     if erros:
@@ -366,7 +382,7 @@ def _candidato_da_entrada(texto: str):
 
 
 def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema,
-                 turnos=None, custo=None):
+                 turnos=None, custo=None, duracao=None):
     candidato, erro = _candidato_da_entrada(texto)
     if candidato is not None:
         for reservado in CAMPOS_RESERVADOS_AO_SINTETICO:
@@ -376,12 +392,9 @@ def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema,
         candidato["trabalho"] = trabalho
         candidato["quando"] = agora()
         candidato["ciclo"] = {"i": i, "teto": teto}
-        candidato.pop(CAMPO_DOS_TURNOS, None)
-        if turnos:
-            candidato[CAMPO_DOS_TURNOS] = turnos
-        candidato.pop(CAMPO_DO_CUSTO, None)
-        if custo:
-            candidato[CAMPO_DO_CUSTO] = custo
+        for medido in (CAMPO_DOS_TURNOS, CAMPO_DO_CUSTO, CAMPO_DA_DURACAO):
+            candidato.pop(medido, None)
+        candidato.update(_carimbo_do_codigo(turnos, custo, duracao))
         erros = validar_evidencia(candidato, esquema)
         if not erros:
             return escrever_atomico(caminho, candidato), 0
@@ -406,14 +419,19 @@ def montar_parser() -> argparse.ArgumentParser:
         p.add_argument("--ordem", required=True, type=int)
         p.add_argument("--teto", required=True, type=int)
 
+    def medidas(p):
+        p.add_argument("--turnos", type=int, help=AJUDA_TURNOS)
+        p.add_argument("--custo", help=AJUDA_CUSTO)
+        p.add_argument("--duracao", type=float, help=AJUDA_DURACAO)
+
     materializa = sub.add_parser("materializar", help=AJUDA_MATERIALIZAR)
     comuns(materializa)
+    medidas(materializa)
     materializa.add_argument("--entrada", default="-", help=AJUDA_ENTRADA)
-    materializa.add_argument("--turnos", type=int, help=AJUDA_TURNOS)
-    materializa.add_argument("--custo", help=AJUDA_CUSTO)
 
     sintetiza = sub.add_parser("sintetico", help=AJUDA_SINTETICO)
     comuns(sintetiza)
+    medidas(sintetiza)
     sintetiza.add_argument("--motivo", required=True, choices=MOTIVOS)
     sintetiza.add_argument("--detalhe", default="")
 
@@ -506,6 +524,10 @@ def _problemas_dos_argumentos(args, esquema: dict) -> list:
     elif custo is not None:
         problemas += _erros(esquema["properties"][CAMPO_DO_CUSTO], custo,
                             ROTULO_ARG_CUSTO)
+    duracao = getattr(args, "duracao", None)
+    if duracao is not None:
+        problemas += _erros(esquema["properties"][CAMPO_DA_DURACAO], duracao,
+                            ROTULO_ARG_DURACAO)
     return problemas
 
 
@@ -530,7 +552,8 @@ def _materializar_pela_linha_de_comando(args, esquema: dict) -> int:
     try:
         caminho, codigo = materializar(args.dir, args.trabalho, args.etapa,
                                        args.ordem, args.teto, texto, esquema,
-                                       turnos=args.turnos, custo=custo)
+                                       turnos=args.turnos, custo=custo,
+                                       duracao=args.duracao)
     except FileExistsError as colisao:
         print(ERRO_COLISAO.format(colisao), file=sys.stderr)
         return 2
@@ -541,9 +564,12 @@ def _materializar_pela_linha_de_comando(args, esquema: dict) -> int:
 
 
 def _sintetizar_pela_linha_de_comando(args, esquema: dict) -> int:
+    custo, _ = _custo_do_argumento(args.custo)
     try:
         caminho = sintetizar(args.dir, args.trabalho, args.etapa, args.ordem,
-                             args.teto, args.motivo, args.detalhe, esquema)
+                             args.teto, args.motivo, args.detalhe, esquema,
+                             turnos=args.turnos, custo=custo,
+                             duracao=args.duracao)
     except FileExistsError as colisao:
         print(ERRO_COLISAO.format(colisao), file=sys.stderr)
         return 2
@@ -575,7 +601,7 @@ def main(argv) -> int:
 
 EXEMPLO_DA_ISSUE = r'''
 {
-  "etapa": "cetico",
+  "etapa": "verificacao-adversarial",
   "trabalho": "issue-42",
   "quando": "2026-08-16T16:02:47-03:00",
   "veredito": "para",
@@ -628,6 +654,8 @@ ACEITA = [
     ("custo carimbado pelo encadeador", _base(custo={
         "usd": 0.1234, "tokens": {"entrada": 10, "saida": 2,
                                   "cache-lido": 100, "cache-criado": 50}})),
+    ("duração carimbada pelo encadeador", _base(duracao=93.4)),
+    ("duração zero — etapa que nem começou", _base(duracao=0)),
 ]
 
 RECUSA = [
@@ -671,6 +699,9 @@ RECUSA = [
                               "cache-lido": 0, "cache-criado": 0}}),
      "menor que o mínimo"),
     ("custo sem tokens", _base(custo={"usd": 0.1}), "obrigatório 'tokens'"),
+    ("duração negativa — relógio que anda para trás",
+     _base(duracao=-1), "menor que o mínimo"),
+    ("duração como texto", _base(duracao="93s"), "deveria ser number"),
 ]
 
 FANTOCHE = """\
@@ -797,6 +828,59 @@ def _o_codigo_manda_nos_campos(pasta, caso):
     caso("--custo que não é JSON é erro de uso: exit 2 e nada escrito",
          resposta.returncode == 2
          and not (Path(pasta) / "t-custo-quebrado").exists())
+
+
+def _a_duracao_e_o_custo_sao_carimbo_do_codigo(pasta, caso):
+    _cli(["materializar", "--dir", pasta, "--trabalho", "t-duracao",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3",
+          "--duracao", "93.4"],
+         entrada=json.dumps({"structured_output":
+                             json.loads(EXEMPLO_DA_ISSUE)}))
+    caso("duração vem do argumento — o carimbo é do código",
+         _ler(pasta, "t-duracao", "01-alfa-c1.json").get("duracao") == 93.4)
+    _cli(["materializar", "--dir", pasta, "--trabalho", "t-duracao-zero",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3",
+          "--duracao", "0"],
+         entrada=json.dumps({"structured_output":
+                             json.loads(EXEMPLO_DA_ISSUE)}))
+    caso("duração zero é medida, não ausência — o falsy não apaga o campo",
+         _ler(pasta, "t-duracao-zero", "01-alfa-c1.json").get("duracao") == 0)
+    com_forja = dict(json.loads(EXEMPLO_DA_ISSUE), duracao=0.001)
+    _cli(["materializar", "--dir", pasta, "--trabalho", "t-duracao-forjada",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
+         entrada=json.dumps({"structured_output": com_forja}))
+    caso("modelo não escreve duração: a forjada some sem o argumento",
+         "duracao" not in _ler(pasta, "t-duracao-forjada",
+                               "01-alfa-c1.json"))
+    resposta = _cli(["materializar", "--dir", pasta,
+                     "--trabalho", "t-duracao-quebrada",
+                     "--etapa", "alfa", "--ordem", "1", "--teto", "3",
+                     "--duracao", "ontem"],
+                    entrada=json.dumps({"structured_output":
+                                        json.loads(EXEMPLO_DA_ISSUE)}))
+    caso("--duracao que não é número é erro de uso: exit 2 e nada escrito",
+         resposta.returncode == 2
+         and not (Path(pasta) / "t-duracao-quebrada").exists())
+    custo = ('{"usd": 0.5, "tokens": {"entrada": 10, "saida": 2, '
+             '"cache-lido": 100, "cache-criado": 50}}')
+    _cli(["sintetico", "--dir", pasta, "--trabalho", "t-morta-cara",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3",
+          "--motivo", "morta", "--detalhe", "limite de uso da sessão",
+          "--turnos", "7", "--custo", custo, "--duracao", "612.5"])
+    morta = _ler(pasta, "t-morta-cara", "01-alfa-c1.json")
+    caso("sessão morta grava o que gastou: o retrabalho tem preço",
+         morta.get("custo") == json.loads(custo)
+         and morta.get("turnos") == 7 and morta.get("duracao") == 612.5)
+    caso("e continua sendo evidência sintética de parada",
+         morta.get("origem") == "encadeador" and morta.get("motivo") == "morta"
+         and morta.get("veredito") == "para")
+    _cli(["sintetico", "--dir", pasta, "--trabalho", "t-morta-nao-medida",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3",
+          "--motivo", "morta", "--detalhe", "morreu cedo"])
+    caso("morte sem medição não vira zero: os campos ficam ausentes",
+         all(campo not in _ler(pasta, "t-morta-nao-medida",
+                               "01-alfa-c1.json")
+             for campo in ("custo", "turnos", "duracao")))
 
 
 def _entrada_ruim_vira_para_sintetico(pasta, caso):
@@ -1007,6 +1091,7 @@ def _comportamento(pasta):
         resultados.append((rotulo, bool(condicao)))
 
     _o_codigo_manda_nos_campos(pasta, caso)
+    _a_duracao_e_o_custo_sao_carimbo_do_codigo(pasta, caso)
     _entrada_ruim_vira_para_sintetico(pasta, caso)
     _a_escrita_nao_deixa_temporario(pasta, caso)
     _tres_fantoches_encadeadas(pasta, caso)

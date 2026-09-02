@@ -57,6 +57,30 @@ ela não conta o que foi feito — ensina o que funciona.
    entrada. Na hora de podar, a conta se inverte: página sem link de entrada é
    candidata a sair por definição, não por opinião.
 
+## O teste do colega — a barreira que nenhuma varredura pega
+
+As nove barreiras medem se o texto **se entende**. Nenhuma delas mede **de
+onde ele veio**. Por isso, no fim, uma pergunta a mais:
+
+> Alguém que trabalha com o dono leria esta página e reconheceria a
+> empresa dele?
+
+Se reconhece, é da empresa dele — e não é seu para publicar, por mais anônimo
+que o texto esteja. Caem aqui: cadência de entrega, quem aprova e quantos,
+nome e ordem das etapas, janela de implantação, ritual de reunião, formato de
+chamado, política de branch, quem é dono de quê. Isso é processo de uma
+empresa, não técnica de agente — a camada ensina a lidar com o agente; o
+jeito de trabalhar de uma empresa é dela.
+
+## As três provas de que uma página é da camada
+
+- **Um estranho entende sem contexto nenhum.** Se precisa saber quem é o
+  dono, onde ele trabalha ou o que aconteceu numa sessão, não é da camada.
+- **Serve amanhã.** Se só vale para o trabalho de hoje, é anotação — e
+  anotação mora no workspace de quem a fez.
+- **Cabe no bolso.** A camada é pequena de propósito: guia curto, poucas
+  skills. Página que ninguém abre é peso, não riqueza.
+
 ## Quando dizer não
 
 Dizer não é parte do trabalho, e quem pediu espera isso:

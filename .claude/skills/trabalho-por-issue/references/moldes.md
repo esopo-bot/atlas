@@ -78,7 +78,7 @@ arquivo por NOME (função, seção); número de linha só como dica datada.>
 
 ## Onde rodar
 Diretório: <o caminho do alvo, e por que é esse>
-Como disparar: <painel de controle, ou o comando literal>
+Como disparar: <o comando literal>
 
 ## Branch e trabalho em andamento
 Conflita? <sim | não> — <o que a medição mostrou>
@@ -105,6 +105,7 @@ O teste da skill: o critério começa pelo instrumento ou pelo adjetivo?
 | "o login está funcionando bem"  | "`<comando de teste>` passa, incluindo o caso de senha errada" |
 | "o código foi revisado"         | "a revisão apontou N achados e todos estão resolvidos ou respondidos" |
 | "ficou mais rápido"             | "a mesma chamada, medida do mesmo jeito, cai de X para menos de Y" |
+| "medir cinco vezes antes e depois" | "mediana de 5 rodadas antes e 5 depois, ~N s por conjunto; a etapa que mede declara `tempo-limite` no roteiro acima do padrão de 3600 s" |
 | "documentado"                   | "a página `<caminho>` existe e um estranho executa o passo a passo dela" |
 
 ## Molde da issue de pergunta

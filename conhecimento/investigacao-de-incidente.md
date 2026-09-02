@@ -22,7 +22,7 @@ errada passar por prova.
    código, configuração, infraestrutura, rede.
 7. **Separe defeito seu de dependência externa** — muda o que se faz a
    seguir.
-8. **Rode o cético** (skill `cetico`) antes de concluir.
+8. **Rode o cético** (skill `verificacao-adversarial`) antes de concluir.
 9. **Conclua — e diga o que ficou sem prova.**
 
 O raciocínio que fecha: código idêntico + infraestrutura idêntica + hora exata

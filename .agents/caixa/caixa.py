@@ -3,10 +3,12 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gh"))
+import gh
 
 DESCRICAO_DA_CLI = (
     "põe, atualiza e poda linha no quadro — a caixa permanente onde defeito "
@@ -27,6 +29,7 @@ PODA = "podar"
 RELATO = "relatar"
 
 SEPARADOR = " · visto em "
+LIGA_ASSUNTO_AO_CORPO = " — "
 LINHA_DO_ACHADO = "- **{id}** `{tipo}` — {assunto}" + SEPARADOR + "{quando}"
 LEITURA_DA_LINHA = re.compile(
     r"^- \*\*(?P<id>[a-z0-9][a-z0-9-]*)\*\* `(?P<tipo>"
@@ -67,13 +70,14 @@ CAMPO_DAS_ISSUES = "issues"
 CAMPO_DO_REPOSITORIO = "repositorio"
 CAMPO_DA_CONTA = "conta_gh"
 MARCA_DE_VALOR_POR_PREENCHER = "${"
-VARIAVEL_DO_GH = "CAIXA_GH"
-GH_PADRAO = "gh"
-TEMPO_DO_GH = 60
 TENTATIVAS_DE_GRAVACAO = 3
-LIMITE_DO_ERRO_DO_GH = 300
 
 RECUSA_TIPO = "erro de uso: tipo {valor!r} não existe. Os que existem: {tipos}"
+RECUSA_QUADRO = (
+    "erro de uso: --quadro {valor!r} não é número de issue. Aponte o "
+    "instrumento para o quadro de outro assunto com o número dele — o "
+    "repositório e a conta continuam vindo da configuração, porque o quadro "
+    "do cliente nasce no mesmo repositório")
 RECUSA_SEM_CONFIGURACAO = (
     "erro de ambiente: não li {alvo} ({erro}). É lá que moram os números das "
     "caixas, e é por ele ser local que eles não entram em texto rastreado")
@@ -95,7 +99,6 @@ FALHA_AO_COMENTAR = (
 FALHA_AO_RELATAR = (
     "erro de ambiente: não comentei o relatório na caixa {issue} — {motivo}. "
     "Nada foi escrito: o quadro não mudou")
-GH_NAO_RODOU = "o gh não rodou"
 NAO_ESTA_LA = (
     "erro de ambiente: gravei na caixa {issue} e reli, e a linha {id} NÃO "
     "está lá. Duas sessões escrevendo ao mesmo tempo é a explicação mais "
@@ -132,10 +135,14 @@ AJUDA_ID = "a identidade estável do achado, em kebab minúsculo"
 AJUDA_ASSUNTO = "o que a linha diz — o assunto, nunca a ocorrência"
 AJUDA_MOTIVO = "por que a linha saiu — entra no comentário do fechamento"
 AJUDA_QUANDO = "a data do avistamento (padrão: hoje)"
-AJUDA_CORPO = ("o relatório inteiro, que vira o comentário novo — só a ação "
-               "`" + RELATO + "` o lê")
+AJUDA_CORPO = ("em `" + RELATO + "`, o relatório inteiro, que vira o "
+               "comentário novo; em defeito e melhoria, o detalhe que entra "
+               "na linha atrás do assunto — nunca é descartado")
 AJUDA_CWD = "a raiz onde mora " + ARQUIVO_DO_EXECUTOR + " (padrão: aqui)"
 AJUDA_ENSAIO = "mostra o que subiria, sem escrever na caixa"
+AJUDA_QUADRO = ("número da issue do quadro, quando não for o declarado na "
+                "configuração — é assim que um assunto com quadro próprio "
+                "recebe as linhas dele")
 
 
 def identidade_serve(valor) -> bool:
@@ -146,9 +153,17 @@ def na_linha(texto: str) -> str:
     return ESPACO_DEMAIS.sub(" ", (texto or "").strip())
 
 
-def achado(tipo: str, identidade: str, assunto: str, quando: str) -> dict:
-    return {"id": identidade, "tipo": tipo, "assunto": na_linha(assunto),
+def achado(tipo: str, identidade: str, assunto: str, quando: str,
+           corpo: str = "") -> dict:
+    return {"id": identidade, "tipo": tipo,
+            "assunto": na_linha(assunto_com_o_corpo(assunto, corpo)),
             "quando": quando}
+
+
+def assunto_com_o_corpo(assunto: str, corpo: str) -> str:
+    if not (corpo or "").strip():
+        return assunto
+    return assunto + LIGA_ASSUNTO_AO_CORPO + corpo
 
 
 def partes_do_corpo(corpo: str) -> tuple:
@@ -239,9 +254,12 @@ def preenchido(valor) -> bool:
     return MARCA_DE_VALOR_POR_PREENCHER not in str(valor)
 
 
-def endereco_da_caixa(tipo: str, cwd: str = "") -> tuple:
+def endereco_da_caixa(tipo: str, cwd: str = "", quadro: str = "") -> tuple:
     if tipo not in TIPOS:
         return {}, RECUSA_TIPO.format(valor=tipo, tipos=", ".join(TIPOS))
+    pedido = str(quadro).strip()
+    if quadro and not (pedido.isascii() and pedido.isdigit()):
+        return {}, RECUSA_QUADRO.format(valor=quadro)
     alvo = (Path(cwd) if cwd else Path.cwd()) / ARQUIVO_DO_EXECUTOR
     try:
         dado = json.loads(alvo.read_text(encoding="utf-8"))
@@ -262,15 +280,15 @@ def endereco_da_caixa(tipo: str, cwd: str = "") -> tuple:
         return {}, RECUSA_SEM_REPOSITORIO.format(alvo=ARQUIVO_DO_EXECUTOR,
                                                  campo=CAMPO_DAS_ISSUES,
                                                  qual=CAMPO_DO_REPOSITORIO)
-    return {"issue": caixas[qual],
+    return {"issue": int(quadro) if quadro else caixas[qual],
             "repositorio": issues[CAMPO_DO_REPOSITORIO],
             "conta": issues.get(CAMPO_DA_CONTA) or ""}, ""
 
 
-def enderecos_das_caixas(cwd: str = "") -> tuple:
+def enderecos_das_caixas(cwd: str = "", quadro: str = "") -> tuple:
     enderecos, primeiro_erro = [], ""
     for tipo in TIPOS:
-        endereco, erro = endereco_da_caixa(tipo, cwd)
+        endereco, erro = endereco_da_caixa(tipo, cwd, quadro)
         if erro:
             primeiro_erro = primeiro_erro or erro
         elif endereco["issue"] not in [um["issue"] for um in enderecos]:
@@ -278,45 +296,14 @@ def enderecos_das_caixas(cwd: str = "") -> tuple:
     return enderecos, "" if enderecos else primeiro_erro
 
 
-def _token_da_conta(conta: str) -> str:
-    if not conta:
-        return ""
-    achou = _rodar_o_gh(["auth", "token", "--user", conta], {})
-    return achou.stdout.strip() if achou and achou.returncode == 0 else ""
-
-
-def _rodar_o_gh(argumentos: list, ambiente: dict, entrada=None):
-    comando = shlex.split(os.environ.get(VARIAVEL_DO_GH, GH_PADRAO))
-    try:
-        return subprocess.run(comando + argumentos, input=entrada,
-                              capture_output=True, text=True,
-                              timeout=TEMPO_DO_GH,
-                              env=dict(os.environ, **ambiente))
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-
-def _gh_na_conta(conta: str, argumentos: list, entrada=None):
-    token = _token_da_conta(conta)
-    return _rodar_o_gh(argumentos, {"GH_TOKEN": token} if token else {},
-                       entrada)
-
-
-def _berro(feito) -> str:
-    if feito is None:
-        return GH_NAO_RODOU
-    return ((feito.stderr or feito.stdout).strip()
-            or str(feito.returncode))[:LIMITE_DO_ERRO_DO_GH]
-
-
 def ler_corpo(endereco: dict) -> tuple:
-    feito = _gh_na_conta(endereco["conta"],
+    feito = gh.na_conta(endereco["conta"],
                          ["issue", "view", str(endereco["issue"]),
                           "--repo", endereco["repositorio"],
                           "--json", "body"])
     if feito is None or feito.returncode != 0:
         return "", FALHA_AO_LER.format(issue=endereco["issue"],
-                                       motivo=_berro(feito))
+                                       motivo=gh.berro(feito))
     try:
         return json.loads(feito.stdout).get("body") or "", ""
     except (ValueError, AttributeError) as erro:
@@ -324,23 +311,23 @@ def ler_corpo(endereco: dict) -> tuple:
 
 
 def gravar_corpo(endereco: dict, corpo: str) -> str:
-    feito = _gh_na_conta(endereco["conta"],
+    feito = gh.na_conta(endereco["conta"],
                          ["issue", "edit", str(endereco["issue"]),
                           "--repo", endereco["repositorio"],
                           "--body-file", "-"], entrada=corpo)
     if feito is None or feito.returncode != 0:
         return FALHA_AO_GRAVAR.format(issue=endereco["issue"],
-                                      motivo=_berro(feito))
+                                      motivo=gh.berro(feito))
     return ""
 
 
 def comentar(endereco: dict, texto: str) -> str:
-    feito = _gh_na_conta(endereco["conta"],
+    feito = gh.na_conta(endereco["conta"],
                          ["issue", "comment", str(endereco["issue"]),
                           "--repo", endereco["repositorio"],
                           "--body-file", "-"], entrada=texto)
     if feito is None or feito.returncode != 0:
-        return _berro(feito)
+        return gh.berro(feito)
     return ""
 
 
@@ -422,17 +409,19 @@ def por_na_caixa(endereco: dict, novo: dict, ensaio: bool = False) -> tuple:
 
 
 def rodar(tipo: str, identidade: str, assunto: str, quando: str,
-          cwd: str = "", ensaio: bool = False) -> tuple:
+          cwd: str = "", ensaio: bool = False, quadro: str = "",
+          corpo: str = "") -> tuple:
     if not identidade_serve(identidade):
         return 2, RECUSA_IDENTIDADE.format(valor=identidade)
     if not na_linha(assunto):
         return 2, RECUSA_SEM_ASSUNTO
     if not PADRAO_DA_DATA.match(quando or ""):
         return 2, RECUSA_DATA.format(valor=quando)
-    endereco, erro = endereco_da_caixa(tipo, cwd)
+    endereco, erro = endereco_da_caixa(tipo, cwd, quadro)
     if erro:
         return 2, erro
-    return por_na_caixa(endereco, achado(tipo, identidade, assunto, quando),
+    return por_na_caixa(endereco,
+                        achado(tipo, identidade, assunto, quando, corpo),
                         ensaio)
 
 
@@ -481,12 +470,12 @@ def podar_da_caixa(endereco: dict, corpo: str, identidade: str,
 
 
 def podar(identidade: str, quando: str, cwd: str = "", motivo: str = "",
-          ensaio: bool = False) -> tuple:
+          ensaio: bool = False, quadro: str = "") -> tuple:
     if not identidade_serve(identidade):
         return 2, RECUSA_IDENTIDADE.format(valor=identidade)
     if not PADRAO_DA_DATA.match(quando or ""):
         return 2, RECUSA_DATA.format(valor=quando)
-    enderecos, erro = enderecos_das_caixas(cwd)
+    enderecos, erro = enderecos_das_caixas(cwd, quadro)
     if erro:
         return 2, erro
     endereco, corpo, erro = achar_a_linha(enderecos, identidade)
@@ -497,10 +486,11 @@ def podar(identidade: str, quando: str, cwd: str = "", motivo: str = "",
         registro_da_poda(a_linha(corpo, identidade), quando, motivo), ensaio)
 
 
-def relatar(corpo: str, cwd: str = "", ensaio: bool = False) -> tuple:
+def relatar(corpo: str, cwd: str = "", ensaio: bool = False,
+            quadro: str = "") -> tuple:
     if not (corpo or "").strip():
         return 2, RECUSA_SEM_CORPO
-    enderecos, erro = enderecos_das_caixas(cwd)
+    enderecos, erro = enderecos_das_caixas(cwd, quadro)
     if erro:
         return 2, erro
     endereco = enderecos[0]
@@ -554,6 +544,15 @@ def testar() -> int:
                 "a prova declarada dá outra coisa", hoje)
     velha = "- **linha-velha** — sem etiqueta nenhuma" + SEPARADOR + hoje
 
+    com_corpo = achado(DEFEITO, "com-corpo", "o assunto curto", hoje,
+                       corpo="a receita de repetir\ne o contorno")
+    caso("--corpo não é descartado: o detalhe entra na linha, atrás do "
+         "assunto, e a linha continua de uma linha só",
+         com_corpo["assunto"] == "o assunto curto — a receita de repetir "
+         "e o contorno")
+    caso("sem corpo, o assunto sai como sempre",
+         achado(DEFEITO, "sem-corpo", "só o assunto", hoje)["assunto"]
+         == "só o assunto")
     caso("identidade em kebab minúsculo serve",
          identidade_serve("prova-nao-reproduz"))
     caso("identidade com espaço não serve", not identidade_serve("prova nao"))
@@ -699,7 +698,7 @@ def testar() -> int:
                 corpo.read_text(encoding="utf-8")))
 
         guardado = dict(os.environ)
-        os.environ[VARIAVEL_DO_GH] = " ".join(
+        os.environ[gh.VARIAVEL_DO_GH] = " ".join(
             shlex.quote(str(parte)) for parte in (sys.executable, falso_gh))
         os.environ["CAIXA_TESTE_CORPO"] = str(corpo)
         os.environ["CAIXA_TESTE_LOG"] = str(registro)
@@ -720,6 +719,29 @@ def testar() -> int:
                  CAMPO_DAS_CAIXAS in recado)
             caso("e recusando, não chama o GitHub nenhuma vez",
                  chamadas("issue") == 0)
+
+            com_configuracao(quadro)
+            do_zero()
+            codigo, recado = rodar(DEFEITO, "linha-do-cliente", "o que for",
+                                   hoje, cwd=str(base), quadro="99")
+            caso("com --quadro, a linha vai para a issue apontada, não para "
+                 "a declarada na configuração",
+                 codigo == 0 and chamadas("99") >= 1
+                 and chamadas("issue 7") == 0)
+            caso("e o repositório continua vindo da configuração — o quadro "
+                 "do cliente nasce no mesmo repositório",
+                 chamadas("exemplo/exemplo") >= 1)
+            codigo, recado = rodar(DEFEITO, "quadro-torto", "o que for",
+                                   hoje, cwd=str(base), quadro="nao-e-numero")
+            caso("--quadro que não é número de issue é erro de uso",
+                 codigo == 2)
+            codigo, _ = rodar(DEFEITO, "quadro-exotico", "o que for", hoje,
+                              cwd=str(base), quadro="\u00b2")
+            caso("dígito que não é ASCII é recusa declarada, não traceback: "
+                 "isdigit() aceita o expoente e int() não",
+                 codigo == 2)
+            caso("e recusando, não chama o GitHub", chamadas("nao-e-numero") == 0)
+            do_zero()
 
             com_configuracao({"caixas": {"melhorias": 8},
                               "issues": {"repositorio": "exemplo/exemplo"}})
@@ -1006,15 +1028,16 @@ def main() -> int:
                     help=AJUDA_QUANDO)
     ap.add_argument("--cwd", default="", help=AJUDA_CWD)
     ap.add_argument("--ensaio", action="store_true", help=AJUDA_ENSAIO)
+    ap.add_argument("--quadro", default="", help=AJUDA_QUADRO)
     a = ap.parse_args()
     if a.acao == RELATO:
-        codigo, recado = relatar(a.corpo, a.cwd, a.ensaio)
+        codigo, recado = relatar(a.corpo, a.cwd, a.ensaio, a.quadro)
     elif a.acao == PODA:
         codigo, recado = podar(a.identidade, a.quando, a.cwd, a.motivo,
-                               a.ensaio)
+                               a.ensaio, a.quadro)
     else:
         codigo, recado = rodar(a.acao, a.identidade, a.assunto, a.quando,
-                               a.cwd, a.ensaio)
+                               a.cwd, a.ensaio, a.quadro, a.corpo)
     print(recado, file=sys.stderr if codigo else sys.stdout)
     return codigo
 

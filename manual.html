@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>O manual do atlas</title>
+<style>
+:root{--tinta:#1c1c1c;--fraca:#5b5b5b;--papel:#fdfcfa;--borda:#dcd7cf;
+--realce:#7a3e12;--caixa:#f4f1ec}
+*{box-sizing:border-box}
+body{margin:0;background:var(--papel);color:var(--tinta);
+font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+font-size:16px;line-height:1.6}
+.folha{max-width:1180px;margin:0 auto;padding:0 24px 80px;
+display:grid;grid-template-columns:250px 1fr;gap:40px}
+header{grid-column:1/-1;padding:36px 0 8px;border-bottom:2px solid var(--tinta)}
+header h1{margin:0 0 8px;font-size:2rem;letter-spacing:-.02em}
+header p{margin:0;color:var(--fraca);max-width:60ch}
+nav{position:sticky;top:0;align-self:start;padding-top:28px;
+max-height:100vh;overflow:auto;font-size:.9rem}
+nav h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;
+color:var(--fraca);margin:20px 0 8px}
+nav ol{list-style:none;margin:0;padding:0}
+nav li{margin:0 0 6px}
+nav a{color:var(--tinta);text-decoration:none;border-left:2px solid var(--borda);
+padding-left:10px;display:block}
+nav a:hover{border-left-color:var(--realce);color:var(--realce)}
+main{min-width:0;padding-top:28px}
+section{margin:0 0 52px;scroll-margin-top:16px}
+h2{font-size:1.5rem;margin:0 0 14px;padding-bottom:6px;
+border-bottom:1px solid var(--borda)}
+h3{font-size:1.15rem;margin:30px 0 10px}
+h4{font-size:1rem;margin:22px 0 8px;color:var(--fraca)}
+p{margin:0 0 14px;max-width:74ch}
+ul,ol{margin:0 0 14px;padding-left:24px;max-width:74ch}
+li{margin:0 0 6px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+font-size:.88em;background:var(--caixa);padding:1px 4px;border-radius:3px}
+pre{background:var(--caixa);border:1px solid var(--borda);border-radius:4px;
+padding:12px 14px;overflow:auto;margin:0 0 14px}
+pre code{background:none;padding:0;font-size:.85rem;line-height:1.5}
+table{border-collapse:collapse;margin:0 0 16px;width:100%;font-size:.92rem}
+th,td{border:1px solid var(--borda);padding:7px 10px;text-align:left;
+vertical-align:top}
+th{background:var(--caixa)}
+a{color:var(--realce)}
+.selo{background:#fff6e8;border-left:3px solid var(--realce);padding:8px 12px;
+margin:0 0 16px;font-size:.9rem;color:var(--realce)}
+.origem{font-size:.8rem;color:var(--fraca);margin:0 0 6px}
+.pergunta{font-weight:600}
+@media(max-width:900px){.folha{grid-template-columns:1fr}
+nav{position:static;max-height:none}}
+</style>
+</head>
+<body>
+<div class="folha">
+<header><h1>O manual do atlas</h1><p>Um arquivo só, gerado das páginas de <code>conhecimento/</code> por <code>python3 .agents/manual/manual.py --escrever</code>. Editar este HTML é trabalho perdido: a próxima geração o reescreve.</p></header>
+<nav>
+<h2>O manual</h2>
+<ol>
+<li><a href="#o-que-este-manual-responde">O que este manual responde</a></li>
+<li><a href="#os-comandos-do-dia-a-dia">Os comandos do dia a dia</a></li>
+</ol>
+<h2>As páginas, inteiras</h2>
+<ol>
+<li><a href="#conhecimento-leiame-md">conhecimento</a></li>
+<li><a href="#conhecimento-mapa-do-repositorio-md">Onde escrever cada coisa</a></li>
+<li><a href="#conhecimento-estado-que-nao-viaja-md">O estado que não viaja</a></li>
+<li><a href="#conhecimento-guarda-mecanica-das-regras-md">A guarda mecânica de cada regra</a></li>
+<li><a href="#conhecimento-investigacao-de-incidente-md">Investigação de incidente</a></li>
+<li><a href="#conhecimento-navegador-por-projeto-md">Um navegador por projeto</a></li>
+<li><a href="#conhecimento-regras-da-camada-md">As regras da camada</a></li>
+<li><a href="#conhecimento-rotina-de-erros-novos-md">A rotina que abre issue só para erro novo</a></li>
+<li><a href="#conhecimento-skill-que-dispara-md">A skill que dispara</a></li>
+<li><a href="#execucoes-leiame-md">Roteiros que viajam com a camada</a></li>
+</ol>
+</nav>
+<main>
+<section id="o-que-este-manual-responde">
+<h2>O que este manual responde</h2>
+<ul>
+<li><span class="pergunta">O que cada pasta é</span> — <a href="#as-pastas-uma-linha-cada">As pastas, uma linha cada</a></li>
+<li><span class="pergunta">O que ali não se edita porque é regenerado, e qual é a fonte</span> — <a href="#fonte-e-copia-edite-sempre-a-fonte">Fonte e cópia: edite sempre a fonte</a></li>
+<li><span class="pergunta">A receita do executor de roteiros</span> — <a href="#a-receita-do-disparo-em-linhas-copiaveis">A receita do disparo, em linhas copiáveis</a></li>
+<li><span class="pergunta">Os comandos do dia a dia</span> — <a href="#os-comandos-do-dia-a-dia">Os comandos do dia a dia</a></li>
+</ul>
+</section>
+<section id="os-comandos-do-dia-a-dia">
+<h2>Os comandos do dia a dia</h2>
+<p>Todo bloco de comando das páginas, junto. A origem de cada um leva ao texto que o explica.</p>
+<p class="origem"><a href="#conhecimento-mapa-do-repositorio-md">conhecimento/mapa-do-repositorio.md</a></p>
+<pre><code>python montar.py --sincronizar</code></pre>
+<p class="origem"><a href="#conhecimento-mapa-do-repositorio-md">conhecimento/mapa-do-repositorio.md</a></p>
+<pre><code>python3 verificacoes.py matricula              # aqui, no atlas
+python .agents/camada/camada.py --matricula    # em quem instalou a camada</code></pre>
+<p class="origem"><a href="#conhecimento-mapa-do-repositorio-md">conhecimento/mapa-do-repositorio.md</a></p>
+<pre><code>python3 .agents/travessia/travessia.py            # as cercas atravessam?
+python3 .agents/travessia/travessia.py --custa &quot;&lt;pedido&gt;&quot;   # e quanto custa</code></pre>
+<p class="origem"><a href="#conhecimento-estado-que-nao-viaja-md">conhecimento/estado-que-nao-viaja.md</a></p>
+<pre><code>command -v &lt;comando&gt; || echo &#x27;não está no PATH desta sessão&#x27;
+find ~ -maxdepth 6 -name &#x27;&lt;comando&gt;&#x27; -type f 2&gt;/dev/null | head</code></pre>
+<p class="origem"><a href="#conhecimento-guarda-mecanica-das-regras-md">conhecimento/guarda-mecanica-das-regras.md</a></p>
+<pre><code>for h in .claude/hooks/*.py; do
+  printf &#x27;%-34s &#x27; &quot;$(basename &quot;$h&quot; .py)&quot;
+  grep -oE &#x27;[Rr]egra [0-9]+&#x27; &quot;$h&quot; | sort -u | tr &#x27;\n&#x27; &#x27; &#x27;; echo
+done
+python3 .agents/camada/camada.py medir provar</code></pre>
+<p class="origem"><a href="#conhecimento-guarda-mecanica-das-regras-md">conhecimento/guarda-mecanica-das-regras.md</a></p>
+<pre><code>grep -l DECISAO_DE_PERGUNTAR .claude/hooks/vetar-*.py</code></pre>
+<p class="origem"><a href="#conhecimento-skill-que-dispara-md">conhecimento/skill-que-dispara.md</a></p>
+<pre><code>python3 .agents/gatilho/gatilho.py &lt;nome-da-skill&gt;</code></pre>
+<p class="origem"><a href="#execucoes-leiame-md">execucoes/LEIAME.md</a></p>
+<pre><code>python3 -c &quot;
+import json
+r = json.load(open(&#x27;execucoes/entrega.json&#x27;))
+json.dump({&#x27;auditoria&#x27;: True, &#x27;issue&#x27;: &lt;n&gt;, **r},
+          open(&#x27;execucoes/roteiro-issue-&lt;n&gt;.json&#x27;, &#x27;w&#x27;),
+          ensure_ascii=False, indent=2)&quot;</code></pre>
+<p class="origem"><a href="#execucoes-leiame-md">execucoes/LEIAME.md</a></p>
+<pre><code>python3 -c &quot;
+import json
+r = json.load(open(&#x27;execucoes/roteiro-issue-&lt;n&gt;.json&#x27;))
+for etapa in r[&#x27;etapas&#x27;]:
+    if etapa[&#x27;nome&#x27;] == &#x27;trabalhar&#x27;:
+        etapa[&#x27;tempo-limite&#x27;] = &lt;segundos&gt;
+json.dump(r, open(&#x27;execucoes/roteiro-issue-&lt;n&gt;.json&#x27;, &#x27;w&#x27;),
+          ensure_ascii=False, indent=2)&quot;</code></pre>
+<p class="origem"><a href="#execucoes-leiame-md">execucoes/LEIAME.md</a></p>
+<pre><code>git clone --no-hardlinks . /tmp/issue-&lt;n&gt;
+mkdir -p /tmp/issue-&lt;n&gt;/nucleo
+cp nucleo/executor.json /tmp/issue-&lt;n&gt;/nucleo/
+cp .mcp.json /tmp/issue-&lt;n&gt;/ 2&gt;/dev/null || true
+cp .git/info/exclude /tmp/issue-&lt;n&gt;/.git/info/exclude</code></pre>
+<p class="origem"><a href="#execucoes-leiame-md">execucoes/LEIAME.md</a></p>
+<pre><code>ISSUE=&lt;n&gt; ASSUNTO=&lt;assunto&gt; \
+python3 .agents/encadeador/encadeador.py ensaio \
+  --roteiro execucoes/roteiro-issue-&lt;n&gt;.json \
+  --trabalho issue-&lt;n&gt; \
+  --dir execucoes/evidencias \
+  --cwd /tmp/issue-&lt;n&gt;</code></pre>
+<p class="origem"><a href="#execucoes-leiame-md">execucoes/LEIAME.md</a></p>
+<pre><code>ISSUE=&lt;n&gt; ASSUNTO=&lt;assunto&gt; \
+nohup python3 .agents/encadeador/encadeador.py executar \
+  --roteiro execucoes/roteiro-issue-&lt;n&gt;.json \
+  --trabalho issue-&lt;n&gt; \
+  --dir execucoes/evidencias \
+  --cwd /tmp/issue-&lt;n&gt; \
+  &gt; execucoes/evidencias/issue-&lt;n&gt;.log 2&gt;&amp;1 &amp;</code></pre>
+<p class="origem"><a href="#execucoes-leiame-md">execucoes/LEIAME.md</a></p>
+<pre><code>python3 .agents/auditor/auditor.py execucoes/evidencias/issue-&lt;n&gt; \
+  --cwd /tmp/issue-&lt;n&gt;
+touch /tmp/issue-&lt;n&gt;/aprovacoes/entrega.ok</code></pre>
+</section>
+<section id="conhecimento-leiame-md">
+<h2>conhecimento</h2>
+<p class="origem"><code>conhecimento/LEIAME.md</code></p>
+<p>Saber genérico: técnicas, ferramentas e processos passo a passo. O que existe hoje está nos links desta página — e só.</p>
+<h3 id="o-minimo-para-comecar">O mínimo para começar</h3>
+<p>Acabou de instalar a camada? São <strong>quatro passos</strong>, e nenhum deles é ler tudo.</p>
+<ol><li>**Leia o <code>AGENTS.md</code> da raiz.** É o único arquivo que toda sessão carrega sozinha. Ele já diz o essencial das regras; a lista numerada inteira mora em <a href="#conhecimento-regras-da-camada-md">as regras da camada</a>, e só se lê quando for propor procedimento ou mexer em branch de longa duração.</li><li>**Preencha o <code>nucleo/configuracao.json</code>.** Enquanto houver <code>${...}</code> sem valor, a camada não sabe onde sua issue nasce nem o que você autorizou — e, sem autorização escrita, ela não commita e não empurra. É o único arquivo que você precisa editar para a camada funcionar.</li><li><strong>Prove que ela está de pé</strong>, com o comando que viaja junto:</li></ol>
+<p>``<code>bash python .agents/camada/camada.py medir provar </code>``</p>
+<p><code>medir</code> diz quanto a camada cobra de contexto em toda sessão; <code>provar</code> roda o teste de cada gancho e instrumento.</p>
+<ol><li><strong>Veja o que você ganhou em skills</strong>: elas se listam sozinhas na sessão, pela <code>description</code> de cada uma. Para escrever a sua e fazê-la disparar, <a href="#conhecimento-skill-que-dispara-md">a skill que dispara</a> traz a receita medida.</li></ol>
+<p>Pronto. <strong>O resto desta página é sob demanda</strong>: são páginas que se abrem quando o assunto aparece, não leitura de largada. E a máquina precisa de coisas que o instalador não traz — isso está em <a href="#conhecimento-estado-que-nao-viaja-md">o estado que não viaja</a>.</p>
+<h3 id="as-paginas-uma-a-uma">As páginas, uma a uma</h3>
+<p>Outras páginas foram escritas e saíram para serem refeitas uma a uma; enquanto não voltarem, elas não são citadas aqui, porque sumário que nomeia página inexistente manda procurar o que ninguém escreveu.</p>
+<ul><li><a href="#conhecimento-investigacao-de-incidente-md">investigação de incidente</a> — a ordem dos nove passos, e as armadilhas de medição que fazem conclusão errada passar por prova.</li><li><a href="#conhecimento-estado-que-nao-viaja-md">o estado que não viaja</a> — o que a máquina precisa ter e o instalador não traz.</li><li><a href="#conhecimento-navegador-por-projeto-md">um navegador por projeto</a> — como a sessão ganha navegação assistida.</li><li><a href="#conhecimento-rotina-de-erros-novos-md">a rotina que abre issue só para erro novo</a>.</li><li><a href="#conhecimento-guarda-mecanica-das-regras-md">a guarda mecânica das regras</a> — o que cobra cada regra na prática: gancho, rotina, ou nada.</li></ul>
+<p>Duas receitas que a camada manda usar e por muito tempo não ensinou: montar <a href="#conhecimento-navegador-por-projeto-md">um navegador por projeto</a>, para a sessão ganhar navegação assistida, e <a href="#conhecimento-rotina-de-erros-novos-md">a rotina que abre issue só para erro novo</a>.</p>
+<p>O que segura cada regra na prática — gancho, rotina ou nada: <a href="#conhecimento-guarda-mecanica-das-regras-md">a guarda mecânica das regras</a>.</p>
+</section>
+<section id="conhecimento-mapa-do-repositorio-md">
+<h2>Onde escrever cada coisa</h2>
+<p class="origem"><code>conhecimento/mapa-do-repositorio.md</code></p>
+<p>Antes de criar arquivo, ache a pasta certa aqui. O erro que esta página evita é o mais caro do repositório: escrever no lugar errado, o texto não chegar em quem precisava, e ninguém perceber.</p>
+<p>A regra que resolve quase tudo: <strong>quem vai ler decide onde mora.</strong> Se quem lê é gente, é página. Se quem lê é instrumento, é dado. Se só serve à sua máquina, fica fora do git.</p>
+<h3 id="as-pastas-uma-linha-cada">As pastas, uma linha cada</h3>
+<table><thead><tr><th>Pasta</th><th>O que mora ali</th><th>Viaja para quem instala?</th></tr></thead><tbody><tr><td><code>conhecimento/</code></td><td>página que gente lê</td><td>sim</td></tr><tr><td><code>conhecimento/projetos/</code></td><td>a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill <code>perfil-de-repositorio</code></td><td>não: é conteúdo do workspace, fora do git</td></tr><tr><td><code>.agents/</code></td><td>instrumentos (Python), as skills (fonte) e os prompts de abertura em <code>.agents/prompts/</code></td><td>os instrumentos e as skills, sim; dos prompts, o de verificação pós-atualização e o de abertura de projeto — o de abertura NA camada fica, porque só serve a quem melhora o atlas</td></tr><tr><td><code>.claude/</code></td><td>o que o Claude Code lê: ganchos, subagentes, cópia das skills</td><td>sim</td></tr><tr><td><code>nucleo/</code></td><td>os dados que instrumento lê (JSON)</td><td>sim</td></tr><tr><td><code>modulos/</code></td><td>peça opcional, que só chega para quem pedir pelo nome</td><td>não</td></tr><tr><td><code>execucoes/</code></td><td>roteiros do executor, <strong>cópia gerada</strong> de <code>modulos/encadeador/execucoes/</code> — edite lá, nunca aqui; o resultado de cada rodada fica fora do git</td><td>só com <code>--modulo encadeador</code>: os roteiros nomeados chegam pelo módulo, não pela camada base</td></tr><tr><td><code>tmp/</code></td><td>rascunho. Apagar não perde nada</td><td>não</td></tr></tbody></table>
+<p>Na raiz ficam as instruções (<code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>README.md</code>) e os instrumentos que agem sobre o repositório inteiro. Destes, só o <code>montar.py</code> — que instala a camada — viaja. Os outros três ficam neste repositório e <strong>não chegam a quem instala</strong>: <code>publicar.py</code> leva o que é público para fora, <code>verificacoes.py</code> é a porta única das verificações e <code>verificar-agentes.py</code> é a mais larga delas.</p>
+<p>Nem toda verificação protege quem instala. A rotina <code>camada</code> — a mais larga — roda o <code>verificar-agentes.py</code>, que <strong>não viaja</strong>: consertar algo nela protege este repositório e mais ninguém. Quem instalou a camada é protegido pelo <code>.agents/camada/camada.py</code>, que viaja junto. O alcance de cada rotina está declarado no catálogo do <code>verificacoes.py</code>, campo <code>alcance</code>: <strong>fica no atlas</strong> ou <strong>viaja com a camada</strong>. No atlas, <code>python3 verificacoes.py --lista</code> mostra a coluna; onde a camada foi instalada esse arquivo não existe, e o que se tem é <code>python3 .agents/camada/camada.py medir provar</code>.</p>
+<h3 id="pagina-ou-dado">Página ou dado?</h3>
+<p>Esta é a decisão que mais erra, e a regra 14 é quem manda.</p>
+<ul><li><strong>Dado</strong> é o que instrumento consome: um fato por chave, sem prosa em volta. Mora em <code>nucleo/*.json</code>. Exemplo: as regras da camada nascem em <code>nucleo/regras.json</code>.</li><li><strong>Página</strong> é o que uma pessoa lê para entender. Mora em <code>conhecimento/</code>.</li></ul>
+<p>Quando o mesmo fato interessa aos dois, ele nasce como dado e a página é <strong>gerada</strong> a partir dele — nunca escrita à mão em dois lugares. É o que acontece com <code>conhecimento/regras-da-camada.md</code>: editar essa página é trabalho perdido, porque a próxima sincronização a reescreve.</p>
+<p>Depois de mexer em página, skill, módulo ou <code>nucleo/</code>, rode:</p>
+<pre><code>python montar.py --sincronizar</code></pre>
+<h3 id="fonte-e-copia-edite-sempre-a-fonte">Fonte e cópia: edite sempre a fonte</h3>
+<p>Três pares neste repositório parecem duplicados e não são. Em cada um há uma fonte e uma cópia gerada; editar a cópia é trabalho que a próxima sincronização apaga.</p>
+<table><thead><tr><th>Fonte (edite aqui)</th><th>Cópia (gerada)</th></tr></thead><tbody><tr><td><code>.agents/skills/</code></td><td><code>.claude/skills/</code></td></tr><tr><td><code>modulos/&lt;nome&gt;/</code></td><td>os arquivos correspondentes na raiz</td></tr><tr><td><code>nucleo/regras.json</code></td><td><code>conhecimento/regras-da-camada.md</code> e o <code>AGENTS.md</code></td></tr></tbody></table>
+<p>A cópia das skills <strong>entra no git de propósito</strong>: sessão que roda na nuvem só enxerga o que está commitado.</p>
+<p>O depósito embutido no <code>montar.py</code> é a terceira cópia, e pesa pouco no git. Medido em 01/09/2026 (#245): a história inteira dele são 5 MB de um clone de 7 MB, 13 KB por revisão, porque o diff é por linha e o pacote faz delta. <code>.git</code> local muito acima disso é objeto solto sem <code>git gc</code>, não o instalador: <code>git count-objects -vH</code> separa, <code>size</code> é o solto e <code>size-pack</code> o empacotado.</p>
+<p>A metade que falta: <strong>skill pessoal não entra aqui.</strong> Skill que só serve a você vai para as skills de usuário, em <code>~/.claude/skills/</code> — fora do repositório, fora do git. Skill que entra em <code>.agents/skills/</code> é skill que todo mundo que instalar a camada recebe, e passa a cobrar contexto de toda sessão de todo mundo.</p>
+<h3 id="gancho-novo-se-matricula-em-cinco-pontos">Gancho novo se matricula em cinco pontos</h3>
+<p>Arquivo que precisa chegar em quem instala se matricula no <code>montar.py</code>. O <code>--verificar</code> checa a carga dos arquivos que conhece e cala sobre o que ninguém matriculou: gancho commitado e ligado atravessa o &quot;tudo em dia&quot; sem viajar.</p>
+<p>Página nova em <code>conhecimento/</code> já entra sozinha — a tupla <code>FONTES</code> carrega a pasta inteira por padrão. Gancho novo, não. São <strong>cinco pontos</strong>, todos no <code>montar.py</code>:</p>
+<ol><li>A constante com o caminho do arquivo.</li><li>A constante com o comando que entra no <code>settings.json</code>.</li><li>O <code>GanchoDeclarado</code>, que amarra evento, matcher e comando.</li><li>A tupla <code>FONTES</code>, que diz o que se embute.</li><li>A sequência <code>garantir_ajustes</code>, que instala.</li></ol>
+<p>O gabarito é o commit que estreia um gancho: os cinco pontos aparecem juntos no mesmo diff. E a prova não é reler o instalador: é montar árvore virgem, rodar o <code>montar.py</code> nela, e ver o arquivo chegar.</p>
+<p><strong>Gancho se edita em sessão do dono, não dentro de uma execução.</strong> O <code>vetar-escrita-em-politica</code> recusa escrita em <code>.claude/hooks/</code>, no <code>settings.json</code>, nas listas que as cercas leem e em <code>nucleo/regras.json</code> enquanto a marca <code>ENCADEADOR_ETAPA</code> estiver no ambiente. Em sessão interativa a marca não existe e a cerca não morde: é essa a saída do laço — o gancho que protege os ganchos protege a si mesmo, e quem o muda é quem não está sendo vetado por ele.</p>
+<h3 id="instrumento-novo-se-matricula-em-um-ponto">Instrumento novo se matricula em um ponto</h3>
+<p>Instrumento de <code>.agents/</code> é mais barato que gancho: ele não tem evento nem matcher, então basta **a tupla <code>FONTES</code>** do <code>montar.py</code> — o mesmo quinto ponto do gancho, sozinho. Quem seguir a receita das cinco linhas para um instrumento procura quatro pontos que não existem.</p>
+<p>Duas saídas dessa matrícula, e as duas são declaração:</p>
+<ul><li><strong>Instrumento que só serve a este repositório não viaja.</strong> Ele se declara em <code>INSTRUMENTOS_QUE_FICAM</code>, no <code>.agents/camada/camada.py</code>, com o motivo escrito ao lado. É o caso do <code>.agents/saude/saude.py</code>, que mede este repositório contra o instalador dele.</li><li><strong>Instrumento que chega por módulo já viaja embutido</strong> no bloco <code>MODULOS</code>. Repetir a linha no <code>FONTES</code> faria o mesmo arquivo entrar duas vezes.</li></ul>
+<p>A rotina <code>matricula</code> cobra o saldo dos dois lados: rastreado fora do <code>FONTES</code> (não viaja, e quem instala não recebe) e declaração que sobra (a exceção sobreviveu ao arquivo). Rode-a sempre que entrar ou sair instrumento — e repare em QUAL comando, porque o <code>verificacoes.py</code> <strong>não viaja</strong>:</p>
+<pre><code>python3 verificacoes.py matricula              # aqui, no atlas
+python .agents/camada/camada.py --matricula    # em quem instalou a camada</code></pre>
+<h3 id="funcao-repetida-entre-ganchos-muda-em-todos">Função repetida entre ganchos muda em todos</h3>
+<p>Cada gancho é um arquivo que roda sozinho, sem biblioteca comum — de propósito. O preço é que a mesma função está copiada em vários ganchos — conte com <code>grep -h &#x27;^def &#x27; .claude/hooks/*.py | sort | uniq -c | sort -rn</code>, porque número escrito aqui envelhece calado.</p>
+<p>Consertar uma dessas em um gancho só reprova a rotina <code>camada</code>: ela compara as <strong>cópias</strong> de mesmo nome entre ganchos e acusa quando duas divergem. Ou muda em todos, ou declara a divergência em <code>FUNCOES_QUE_PODEM_DIVERGIR</code>, com o motivo escrito ao lado.</p>
+<h3 id="pagina-nova-precisa-de-quem-a-leia">Página nova precisa de quem a leia</h3>
+<p>Uma página que nenhuma outra cita é órfã: ela cobra contexto de toda sessão e não entrega a nenhuma. Por isso a verificação da camada reprova página sem link de entrada. Ao criar uma, cite-a de algum texto que já é lido — e, se não houver de onde citar, provavelmente ela não devia existir.</p>
+<h3 id="achado-que-nao-vira-arquivo-vai-para-a-caixa">Achado que não vira arquivo vai para a caixa</h3>
+<p>Nem tudo que a sessão descobre vira página. Defeito e ideia de melhoria viram linha nas issues permanentes, escritas pelo <code>.agents/caixa/caixa.py</code> — e não trabalho fora do assunto de agora. Cada linha leva a etiqueta do seu tipo, e por isso as duas caixas podem apontar para a MESMA issue: um quadro só. Linha que acabou sai por <code>caixa.py podar --id &lt;identidade&gt;</code>, que tira a linha do quadro e deixa o registro do fechamento em comentário da caixa.</p>
+<p>O relatório de fim de rodada não é linha: <code>caixa.py relatar --corpo &lt;texto&gt;</code> abre um comentário NOVO na mesma caixa, um por rodada. Linha se reescreve por desenho, e por isso o quadro só guardaria a última — o comentário guarda todas.</p>
+<p>Para <strong>ler</strong> essas issues use <code>gh api ... -q .body</code>, nunca <code>gh issue view</code>. O <code>view</code> renderiza o markdown e come as marcas HTML que delimitam o bloco do instrumento. Quem reescreve o corpo a partir do que o <code>view</code> mostrou apaga as marcas, e a próxima escrita do <code>caixa.py</code> se perde.</p>
+<h3 id="o-que-a-camada-garante-em-cada-ferramenta">O que a camada garante em cada ferramenta</h3>
+<p>Medido em 31/08 rodando outra ferramenta de agente sobre esta árvore. A camada tem duas metades, e as duas atravessam — por caminhos diferentes.</p>
+<table><thead><tr><th>o que</th><th>como atravessa</th></tr></thead><tbody><tr><td>as regras, as skills, as nove barreiras, as páginas</td><td>sozinhas: é texto, e a outra ferramenta testada já lê <code>.agents/skills/</code> sem configuração nenhuma</td></tr><tr><td>as cercas que recusam e as que orientam</td><td>pela <strong>ponte</strong>, ligada com <code>python montar.py --devin</code></td></tr></tbody></table>
+<p>A ponte não é cerca nova. Ela lê a mesma lista de cercas que o Claude Code lê, traduz o nome da ferramenta que chegou — os parâmetros já são os mesmos — e devolve a recusa no dialeto de quem perguntou. Cerca que some daqui some de lá junto, e ninguém precisa lembrar de dois lugares.</p>
+<p>Ela carrega as duas respostas, não só a dura: cerca que <strong>orienta</strong> em vez de recusar atravessa igual. Essa metade some calada quando ninguém a espera, e some sem erro nenhum — foi o que aconteceu na primeira versão da ponte.</p>
+<pre><code>python3 .agents/travessia/travessia.py            # as cercas atravessam?
+python3 .agents/travessia/travessia.py --custa &quot;&lt;pedido&gt;&quot;   # e quanto custa</code></pre>
+<p>A primeira linha <strong>não abre sessão nenhuma</strong>: ela conversa com a ponte no dialeto da outra ferramenta e compara com o que a camada deveria responder. É de graça e se repete quando quiser. A segunda abre duas sessões, com e sem a camada, e diz a diferença — essa paga, e avisa que paga.</p>
+<p><strong>O que ainda não atravessa.</strong> A lista de caminhos negados da outra ferramenta só vale no arquivo de configuração do usuário, não no do repositório: foi medido, e é por isso que a ponte usa gancho, que vale no repositório. Quem quiser a negativa por caminho declara à mão na configuração de usuário.</p>
+<h3 id="o-que-nunca-entra-no-git">O que nunca entra no git</h3>
+<p>Fora do git ficam a configuração da sua máquina, o resultado das execuções e o rascunho. Duas linhas que valem por todas:</p>
+<ul><li><strong>Segredo não entra em git nenhum.</strong> Em texto rastreado vai <code>${VARIAVEL}</code>, nunca o valor. Vale para repositório privado também.</li><li><strong>O que nomeia você, sua empresa ou seus outros projetos não viaja.</strong> É o que separa a camada — genérica — do seu caso.</li></ul>
+<p>O que a sessão precisa e não está no git se declara por nome em <code>nucleo/ambiente.json</code> e se verifica por instrumento. O porquê e a receita de repor estão em <a href="#conhecimento-estado-que-nao-viaja-md">o estado que não viaja</a>.</p>
+</section>
+<section id="conhecimento-estado-que-nao-viaja-md">
+<h2>O estado que não viaja</h2>
+<p class="origem"><code>conhecimento/estado-que-nao-viaja.md</code></p>
+<p>Trocar de pasta, de disco ou de máquina apaga parte do que a sessão precisa — e a perda é <strong>silenciosa</strong>: nada quebra na hora, você só descobre quando um comando falha por um motivo que parece não ter relação.</p>
+<p>Esta página é o endereço que o aviso da abertura da sessão aponta quando falta alguma coisa. Se você chegou aqui por causa desse aviso, vá direto para a última seção.</p>
+<h3 id="por-que-a-perda-e-silenciosa">Por que a perda é silenciosa</h3>
+<p>O agente depende de estado em quatro lugares diferentes, e só o primeiro viaja junto com o repositório.</p>
+<table><thead><tr><th>Onde o estado mora</th><th>Exemplos</th><th>Sobrevive à mudança?</th></tr></thead><tbody><tr><td>Versionado no repositório</td><td>páginas, skills, ganchos, instrumentos</td><td><strong>sim</strong></td></tr><tr><td>Na pasta, mas fora do git</td><td>configuração local, notas, credenciais</td><td>só se a pasta for copiada inteira</td></tr><tr><td>Na ferramenta, endereçado pelo caminho absoluto</td><td>histórico, memória do agente, aprovações já dadas</td><td><strong>não</strong> — vira órfão</td></tr><tr><td>No perfil do sistema operacional</td><td>variáveis de ambiente, agendamentos, chaveiro</td><td><strong>não</strong> — fica na máquina velha</td></tr></tbody></table>
+<p>O terceiro caso é o que mais engana. A ferramenta guarda o estado usando o caminho da pasta como identidade: mover <code>~/trabalho/projeto</code> para <code>~/código/projeto</code> faz a ferramenta tratar a pasta como um projeto novo, sem histórico e sem as aprovações que você já tinha dado. Nada avisa.</p>
+<p>O quarto falha até sem trocar de máquina: um processo que nasce de um ícone, de um serviço ou de um agendador não herda as variáveis do seu terminal.</p>
+<h3 id="a-regra-de-bolso">A regra de bolso</h3>
+<ul><li><strong>O que vale amanhã vira arquivo no repositório.</strong> Memória de ferramenta é cache: reaprovar é barato, mas não construa nada que dependa de ela durar.</li><li><strong>O que a sessão precisa e não está no git se declara por nome.</strong> Nome de arquivo ou de variável não é segredo; valor é. Declarar é o que permite verificar.</li><li><strong>O resto se assume perdido</strong> a cada mudança, e se repõe pela receita.</li></ul>
+<h3 id="o-estado-que-a-ferramenta-apaga-sozinha">O estado que a ferramenta apaga sozinha</h3>
+<p>Parte do estado local também <strong>expira</strong> sem ninguém mandar: o Claude Code apaga as transcrições de sessão (<code>~/.claude/projects/</code>) mais velhas que o período de retenção — <code>cleanupPeriodDays</code>, padrão <strong>30 dias</strong> — em silêncio, a cada inicialização. Quem trata o disco como prova perde a prova sem aviso.</p>
+<p>A receita, em três passos:</p>
+<ol><li><strong>Declare a retenção</strong> no settings de usuário (<code>~/.claude/settings.json</code>): <code>&quot;cleanupPeriodDays&quot;: 3650</code>. Valor alto, em dias — e <strong>nunca 0</strong>: o zero tem defeito conhecido que desliga a persistência inteira (o apagamento silencioso (<code>https://github.com/anthropics/claude-code/issues/62476</code>), o defeito do zero (<code>https://github.com/anthropics/claude-code/issues/23710</code>)).</li><li><strong>Prove</strong>: crie um arquivo de teste com data antiga dentro de <code>~/.claude/projects/</code>, abra uma sessão nova, e confira que ele continua lá.</li><li><strong>Backup</strong>: a pasta <code>~/.claude/projects/</code> entra na rotina de cópia da máquina — a retenção segura o apagador, não o disco.</li></ol>
+<h3 id="a-declaracao-nucleo-ambiente-json">A declaração: <code>nucleo/ambiente.json</code></h3>
+<p>Este arquivo é <strong>seu</strong>: a atualização da camada nunca o reescreve. Ele lista por nome o que a máquina precisa ter. Uma lista por tipo:</p>
+<pre><code>{
+  &quot;receita&quot;: &quot;conhecimento/estado-que-nao-viaja.md&quot;,
+  &quot;comando&quot;: [&quot;git&quot;, &quot;gh&quot;, &quot;python3&quot;],
+  &quot;pasta&quot;: [&quot;~/.config/ferramenta-x&quot;],
+  &quot;arquivo&quot;: [&quot;scripts/preparar.sh&quot;],
+  &quot;variavel&quot;: [&quot;FERRAMENTA_X_TOKEN&quot;]
+}</code></pre>
+<ul><li><code>receita</code> — a página que ensina a repor. É o endereço que o aviso mostra.</li><li><code>comando</code> — tem de existir no PATH.</li><li><code>pasta</code> e <code>arquivo</code> — têm de existir no disco; <code>~</code> vale.</li><li><code>variavel</code> — tem de estar definida. <strong>Só o nome</strong>: o gancho nunca lê nem imprime valor, e nunca sai procurando segredo.</li></ul>
+<p>O gancho <code>.claude/hooks/verificar-ambiente.py</code> verifica isso na abertura de cada sessão. Ele <strong>avisa e deixa passar</strong> — nunca trava o trabalho. O que ele verifica também alcança o <code>.mcp.json</code>: variável exigida ali sem valor no ambiente vira aviso, porque um servidor MCP que sobe sem credencial falha adiante, longe da causa.</p>
+<h3 id="quando-o-aviso-aparecer">Quando o aviso aparecer</h3>
+<p>O aviso diz o que falta pelo nome e aponta a receita. Faça nesta ordem:</p>
+<ol><li><strong>Leia o que falta.</strong> Comando ausente costuma ser instalação; variável ausente costuma ser perfil do sistema que ficou na máquina velha.</li><li><strong>Reponha pela receita</strong> que o <code>ambiente.json</code> declara. Se a receita não existe mais, escrevê-la é o primeiro trabalho — sem ela o aviso vira ruído e ruído ensina gente a ignorar aviso.</li><li><strong>Confira que a lista ainda é verdade.</strong> Item que ninguém usa mais sai da declaração; ferramenta nova que virou obrigatória entra.</li></ol>
+<h3 id="o-comando-existe-e-mesmo-assim-falta">O comando existe e mesmo assim falta</h3>
+<p>Antes de instalar de novo, procure o comando no disco. O caso mais comum do aviso de <code>comando</code> <strong>não</strong> é instalação faltando: é instalação que o PATH da sessão não enxerga.</p>
+<p>Gerenciador de versão de runtime — o que deixa você trocar a versão da linguagem por projeto — instala o binário debaixo da sua pasta pessoal e põe o caminho no PATH por um trecho no arquivo de perfil do shell. Esse arquivo roda em shell <strong>interativo</strong>. O gancho, o executor de roteiros e a sessão de IA rodam em shell <strong>não interativo</strong>, que não lê aquele trecho — então o comando existe no disco, funciona no seu terminal, e some para quem verifica.</p>
+<p>Como separar os dois casos, sem instalar nada:</p>
+<pre><code>command -v &lt;comando&gt; || echo &#x27;não está no PATH desta sessão&#x27;
+find ~ -maxdepth 6 -name &#x27;&lt;comando&gt;&#x27; -type f 2&gt;/dev/null | head</code></pre>
+<p>Achou na segunda linha e não na primeira, repor é <strong>ajustar o PATH</strong>, não instalar: exporte a pasta do binário no ambiente que a sessão herda, ou declare o caminho absoluto onde o instrumento o chama. Reinstalar aqui não conserta nada — passa a haver duas cópias, e a que a sessão continua não enxergando é a mesma de antes.</p>
+<p>O que este repositório espera de máquina nova mora nessa receita, e não na memória de nenhuma sessão. Sobre onde cada coisa se escreve, veja <a href="#conhecimento-mapa-do-repositorio-md">onde escrever cada coisa</a>.</p>
+</section>
+<section id="conhecimento-guarda-mecanica-das-regras-md">
+<h2>A guarda mecânica de cada regra</h2>
+<p class="origem"><code>conhecimento/guarda-mecanica-das-regras.md</code></p>
+<p>Regra que só vive em prosa depende de alguém ler sob cansaço — e é sob cansaço que se lê errado. Esta página diz, regra a regra, <strong>o que a cobra na prática</strong>: o gancho que recusa na hora, a rotina que reprova no ritual, ou nada.</p>
+<p>A lista das regras é <code>regras-da-camada.md</code>. Aqui não se repete o que elas dizem; só quem as segura.</p>
+<h3 id="como-esta-pagina-se-refaz">Como esta página se refaz</h3>
+<p>Ela é medição, não opinião. Para verificar se ainda está certa:</p>
+<pre><code>for h in .claude/hooks/*.py; do
+  printf &#x27;%-34s &#x27; &quot;$(basename &quot;$h&quot; .py)&quot;
+  grep -oE &#x27;[Rr]egra [0-9]+&#x27; &quot;$h&quot; | sort -u | tr &#x27;\n&#x27; &#x27; &#x27;; echo
+done
+python3 .agents/camada/camada.py medir provar</code></pre>
+<p>O primeiro comando diz qual gancho cita qual regra; o segundo prova os ganchos e os instrumentos — e é o que viaja. No atlas, o catálogo inteiro das rotinas sai por <code>python3 verificacoes.py --lista</code>, que não viaja. Divergiu desta tabela, esta página é que está velha.</p>
+<h3 id="o-quadro">O quadro</h3>
+<table><thead><tr><th>Regra</th><th>Quem a cobra</th><th>Como</th></tr></thead><tbody><tr><td>1 — abra a sessão na raiz</td><td>nada</td><td>não mecanizável aqui: quem abre no lugar errado não tem a camada carregada para ser avisado</td></tr><tr><td>2 — só é pronto o que um instrumento provou</td><td>rotina <code>verificacao</code> do motor</td><td>acusa veredito <code>segue</code> com <code>provado</code> vazio, e re-executa cada prova declarada</td></tr><tr><td>3 — antes de criar, procure e cite</td><td>nada</td><td><strong>só prosa</strong></td></tr><tr><td>4 — a memória mora no disco</td><td>gancho <code>vetar-andamento-em-arquivo</code>; as dez recusas dos ganchos</td><td>o gancho recusa o arquivo de andamento nascendo com o corpo de uma issue, e nomeia a exceção: o <code>.md</code> do encerramento, em <code>conhecimento/</code>. Para o resto da regra nenhuma rotina reprova, mas <strong>toda recusa manda gravar</strong> o aprendizado em <code>conhecimento/</code>, com a linha concreta do que gravar — memória previne, gancho ensina</td></tr><tr><td>5 — ao dar por pronto, faça a análise de promoção</td><td>nada</td><td><strong>só prosa</strong></td></tr><tr><td>6 — trabalhe econômico</td><td>rotina <code>largada</code>; o instalador</td><td>cobra o teto de bytes que toda sessão paga, declarado em <code>nucleo/configuracao.json</code> — e, desde 01/09/2026, quem instala nasce com o teto medido na árvore recém-montada, escrito pelo <code>montar.py</code> na configuração com a data: o salto seguinte já é acusado, e subir o teto é decisão do dono</td></tr><tr><td>7 — rede com cortesia</td><td>nada</td><td><strong>só prosa</strong></td></tr><tr><td>8 — segredo não entra em git nenhum</td><td>gancho <code>orientar-credencial</code>; rotina <code>ensaio</code></td><td>o gancho intercepta leitura e shell: orienta quem lê credencial — <code>.env</code>, <code>.credenciais/</code> e, desde 01/09/2026, as gavetas e os nomes que o Agent Governance Toolkit da Microsoft já conhecia (<code>~/.ssh</code>, <code>~/.aws</code>, <code>.git-credentials</code>, <code>id_rsa</code>, <code>.netrc</code>…) —, veta quem a entrega ao git ou ao gh, e veta a chamada ao endpoint de metadata da nuvem (<code>169.254.169.254</code>, <code>metadata.google.internal</code>), que é a credencial da máquina; o ensaio varre texto, caminho e mensagem de commit antes de publicar</td></tr><tr><td>9 — destrutivo é do dono; commit e push</td><td>ganchos <code>vetar-branch-protegida</code>, <code>vetar-pergunta-ja-respondida</code>, <code>vetar-escrita-em-somente-leitura</code>, <code>vetar-comentario-explicativo</code> e <code>vetar-escrita-em-politica</code></td><td>os dois primeiros leem <code>autorizacoes</code> e, sem declaração, negam; o terceiro recusa escrita em território de outra pessoa; o quarto recusa o agente editar a lista de exceções da própria cerca; o quinto recusa, durante etapa do executor, escrita nos arquivos que decidem quais cercas existem — <code>settings.json</code>, as listas que os ganchos leem, <code>nucleo/regras.json</code> e o código dos próprios ganchos — e, na mesma etapa, <code>curl</code> ou <code>wget</code> despejados num shell e <code>bash &lt;(curl …)</code>: código baixado da rede executando sem leitura, que é o jeito de reescrever qualquer cerca por dentro</td></tr><tr><td>10 — texto na régua</td><td>rotina <code>camada</code></td><td>roda o validador de markdown sobre todo <code>.md</code> que o git rastreia</td></tr><tr><td>11 — não invente passo onde já existe receita</td><td>nada</td><td><strong>só prosa</strong></td></tr><tr><td>12 — branch de longa duração e integração contínua</td><td>ganchos <code>vetar-branch-protegida</code> e <code>vetar-automacao</code>; o executor de roteiros</td><td>recusam na hora, pelo nome da branch e pelo caminho da configuração; o executor, desde 01/09/2026, recusa o disparo quando a integração declarada não existe no remoto do alvo (<code>git ls-remote --heads origin &lt;integração&gt;</code> vazio), antes de gravar estado — sem remoto declarado não há o que medir, e ele segue calado — inclusive <code>.git/hooks/</code>, que não entra no git e roda a cada commit sem ninguém rever</td></tr><tr><td>13 — publicar exige revisão semântica</td><td>rotina <code>ensaio</code>, <strong>em parte</strong></td><td>a varredura acha nome e segredo; jeito de trabalhar e procedência não têm padrão e passam inteiros. A parte que falta <strong>não é mecanizável</strong></td></tr><tr><td>14 — conhecimento nasce na língua de quem vai lê-lo</td><td>rotina <code>vocabulario</code>; ganchos <code>vetar-conhecimento-em-codigo</code> e <code>vetar-comentario-explicativo</code></td><td>a rotina mede o fechamento de cada termo na árvore rastreada e acusa saldo; os ganchos recusam a página nascendo em pasta de código e o porquê nascendo em comentário</td></tr><tr><td>15 — editou a fonte, regenere a cópia</td><td>gancho <code>vetar-escrita-em-copia-gerada</code>; rotina <code>sincronia</code></td><td>o gancho recusa a escrita na cópia nomeando a fonte; a rotina regenera e compara o texto inteiro</td></tr><tr><td>16 — nada sem destino</td><td>ganchos <code>cobrar-destino-da-entrega</code> e <code>vetar-escrita-fora-da-execucao</code>; rotinas <code>entrega</code> e <code>higiene</code></td><td>o primeiro cobra na parada da sessão — desde 01/09/2026 busca o remoto antes de medir a integração contra a principal, para não acusar pedido já mesclado por ref local velha, e separa a sujeira herdada (arquivo mexido antes da abertura da sessão, lida do primeiro instante do transcript) da sujeira desta sessão: a herdada é nomeada e não trava; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina <code>entrega</code> lista as duas pontas — o que não saiu da branch e, desde 01/09/2026, o que já saiu e ficou: a branch contida na branch de incorporação e ainda de pé, local e remota, que se acumulava porque ninguém a via; guardar uma delas é declará-la em <code>.claude/branches-protegidas.txt</code>. A <code>higiene</code> varre o rastreador pelos termos do assunto — issue que fala do trabalho e não aponta para a que o consolidou, e texto que descreve como aberta uma issue já fechada. As três primeiras guardas olham para o disco e para o git; nenhuma via o rastreador, e era ali que a issue vizinha ficava para trás</td></tr><tr><td>17 — explique na altura de quem lê</td><td>nada</td><td><strong>não mecanizável</strong>: altura de explicação não se mede por padrão</td></tr></tbody></table>
+<h3 id="negar-ou-perguntar-o-verbo-de-cada-veto">Negar ou perguntar: o verbo de cada veto</h3>
+<p>Um gancho que veta responde com um de dois verbos. <code>deny</code> recusa na hora, sem consultar ninguém. <code>ask</code> manda a chamada para o prompt de permissão do Claude Code: o dono lê a razão do gancho e decide, e a sessão espera. Os dois são nativos do evento <code>PreToolUse</code> — o gancho escolhe um no campo <code>permissionDecision</code> e explica em <code>permissionDecisionReason</code>. O desenho é o mesmo do Agent Governance Toolkit da Microsoft, citado mais abaixo: lá, exigir aprovação é exatamente um <code>ask</code> em gancho <code>PreToolUse</code>.</p>
+<p><strong>Quem pergunta e quem nega — decisão do dono em 01/09/2026.</strong> Perguntam os quatro vetos de julgamento, em que a recusa é opinião sobre o trabalho e o dono presente pode discordar: <code>vetar-comentario-explicativo</code>, <code>vetar-andamento-em-arquivo</code>, <code>vetar-pergunta-ja-respondida</code> e <code>vetar-conhecimento-em-codigo</code>. Negam de vez os seis que protegem o que não se desfaz — branch de longa duração, política, território de outra pessoa, cópia gerada, automação e a fronteira da execução: <code>vetar-branch-protegida</code>, <code>vetar-escrita-em-politica</code>, <code>vetar-escrita-em-somente-leitura</code>, <code>vetar-escrita-em-copia-gerada</code>, <code>vetar-automacao</code> e <code>vetar-escrita-fora-da-execucao</code>. O julgamento de cada veto não mudou: o que barrava continua barrando. Mudou quem dá a última palavra em sessão interativa.</p>
+<p><strong>Sem cabeça, todos negam.</strong> Em execução sem ninguém no terminal — <code>claude -p</code> com <code>--dangerously-skip-permissions</code>, que é como o executor de roteiros roda cada etapa — um <code>ask</code> não teria quem o respondesse. Por isso os quatro vetos que perguntam leem o campo <code>permission_mode</code> da entrada que o Claude Code entrega a todo gancho e, quando ele vale <code>bypassPermissions</code>, respondem <code>deny</code>, com a mesma razão. A decisão que precisa do dono continua parando a execução pelo desenho de sempre — veredito de pergunta na evidência, execução em <code>aguardando-resposta</code>, resposta pela retomada. O verbo <code>ask</code> não muda esse desenho; ele só encurta o caminho quando há alguém na frente do terminal.</p>
+<p>Para saber quem pergunta, pergunte ao código, não a esta página:</p>
+<pre><code>grep -l DECISAO_DE_PERGUNTAR .claude/hooks/vetar-*.py</code></pre>
+<h3 id="o-que-este-quadro-ensina">O que este quadro ensina</h3>
+<p><strong>Seis regras não têm guarda nenhuma</strong> — 1, 3, 5, 7, 11 e 17. Duas delas (1 e 17) não são mecanizáveis pelo que são; as outras quatro são candidatas, e a candidata mais barata é sempre a que já tem instrumento e não tem quem o chame.</p>
+<p><strong>A regra 4 tem guarda de um lado só.</strong> O item do estado do trabalho ganhou gancho em 01/09/2026: o <code>vetar-andamento-em-arquivo</code> recusa o arquivo que nasce com o corpo de uma issue, porque a regra já vivia em três prosas — os dois prompts de abertura e a skill <code>trabalho-por-issue</code> — e uma instalação a atravessou assim mesmo. Guarda por prompt é mais fraca que guarda por rotina, e este é o caso que provou.</p>
+<p>Do outro lado, nada reprova a sessão que não grava o aprendizado. O que existe é toda recusa mandar gravar, com a linha pronta: memória previne, gancho ensina.</p>
+<p><strong>Guarda mecânica não é tudo.</strong> A classe de erro que nenhum gancho pega é outra: <strong>interpretar errado um texto lido corretamente</strong>. Foi o que aconteceu quando uma regra geral atropelou um procedimento específico e nada acusou o conflito — as duas frases estavam certas, e a leitura é que escolheu a errada. Para essa classe a trava é revisão adversarial, não gancho: alguém, ou alguma etapa, pergunta <em>por que não o contrário?</em> antes de a decisão virar ação.</p>
+<p><strong>Nada fica sem destino.</strong> A cobrança da regra 16 é sobre a branch de entrega <strong>e</strong> o passo seguinte: ou o trabalho vai para lá com o pedido de incorporação ABERTO, ou é descartado com a razão dita em uma linha. Trabalho parado antes disso não chegou a lugar nenhum, só parece pronto — mesmo que o commit já esteja na branch certa.</p>
+<p><strong>A cobrança pode nomear um PR que já fechou.</strong> O gancho lê o estado local sem <code>git fetch</code> antes — se o dono mesclou o pedido de incorporação segundos antes de a sessão encerrar, a lista de commits que ele imprime já está resolvida no GitHub. Confira com <code>gh pr view &lt;número&gt; --json state</code> e <code>git fetch origin &amp;&amp; git log --oneline origin/main..origin/homolog</code> antes de abrir um PR novo: <code>state: MERGED</code> e 0 commits de diferença fecham o caso sem nenhuma ação — não é um alarme falso do gancho, é uma corrida entre a mesclagem e a leitura.</p>
+<p><strong>Guarda nova se prova duas vezes: na suíte, e contra o repositório de verdade.</strong> Suíte verde não é prova de que a guarda funciona — o cenário de mentira só contém os casos que quem escreveu imaginou. Medido em 01/09/2026 numa rotina que acusa branch entregue e não podada: ela passou na própria suíte com três defeitos que só a população real mostrou.</p>
+<ul><li><strong>O erro virou acusação falsa.</strong> O <code>--format</code> do <code>git branch</code> leva parênteses, que o shell quebra; e como o auxiliar que roda comando devolve a saída padrão e a de erro <strong>juntas</strong>, o texto do erro entrou na lista como se fosse nome de branch. Engolir erro em volta de uma medição já transforma falha em número; em volta de uma <strong>acusação</strong>, é pior — inventa acusado. Falha vira &quot;não medido&quot;, nunca lista.</li><li><strong>O ponteiro do remoto virou branch.</strong> <code>origin/HEAD</code> encurta para o nome do remoto, sem barra, e entrou como mais uma — pondo um nome errado no comando que a rotina mandava rodar.</li><li><strong>O critério óbvio errava nas duas direções.</strong> &quot;Está contida na branch de incorporação&quot; deixava passar a branch cujo topo é um nó de mescla nunca mesclado adiante, embora todos os pais dele já estivessem lá, e acusava a branch recém-criada, que ainda não tem rastro nenhum. O critério que fecha é <strong>não acrescentar nada</strong> ao destino, mais a comparação de topo — e ele fecha até onde o git deixa: a branch recém-criada só é isenta quando nasce do topo da incorporação. Cortada de um ponto anterior, ela é acusada, porque o git não guarda em que branch um commit nasceu: a que foi entregue e a que acabou de sair de um ponto antigo apontam, as duas, para um commit que já está no destino. Contar commits próprios não separa uma da outra — medido: dá zero nos dois casos —, e por isso o limite fica declarado aqui e preso por um caso na suíte, em vez de ser &quot;consertado&quot; com um critério que deixaria a branch entregue passar.</li></ul>
+<p>A regra que sai daí: <strong>guarda que acusa precisa de população real antes de alguém dizer que ela funciona</strong> — e o caso de controle, aquele que ela NÃO pode acusar, entra na suíte junto com os que ela deve.</p>
+<p><strong>Regra madura de fora entra copiada, não instalada.</strong> Em 01/09/2026 os ganchos ganharam as regras de segurança do Agent Governance Toolkit da Microsoft (MIT, <code>agent-governance-claude-code/config/default-policy.json</code> em &lt;https://github.com/microsoft/agent-governance-toolkit&gt;) que ainda não tinham, cada uma no gancho que já cobria a regra da camada em que ela cai: os nomes e as gavetas de credencial e o endpoint de metadata da nuvem no <code>orientar-credencial</code> (regra 8); código baixado da rede executando sem leitura no <code>vetar-escrita-em-politica</code> (regra 9); e <code>.git/hooks/</code> no <code>vetar-automacao</code> (regra 12). O verbo é o de cada gancho, não o do plugin: ler credencial continua orientando, porque ler localmente é livre; código baixado da rede só é recusado durante etapa do executor, porque em sessão interativa o prompt de permissão é a revisão, e essa cerca só se levanta na etapa, onde não há quem responda um <code>ask</code>; e das escritas que lá só pedem revisão — rc de shell, <code>.git/hooks/</code>, <code>package.json</code> — entrou a única que revisão nenhuma alcança, <code>.git/hooks/</code>, que o git não mostra. Ficaram de fora, de propósito: o veto geral a <code>rm -rf</code>, porque a regra 9 já cerca o destrutivo por caminho e <code>tmp/</code> se apaga sem perder nada; e o veto a despejar o ambiente (<code>env</code>, <code>printenv</code>), porque é leitura local, sem caminho que ancore o veto de entrega. Instalar o plugin custaria Node, um processo por chamada e contexto em inglês em toda sessão — a licença existe para levar a regra e deixar o peso.</p>
+</section>
+<section id="conhecimento-investigacao-de-incidente-md">
+<h2>Investigação de incidente</h2>
+<p class="origem"><code>conhecimento/investigacao-de-incidente.md</code></p>
+<p>Algo quebrou e a pergunta é &quot;o que mudou?&quot;. A ordem abaixo estreita o campo a cada passo; as armadilhas de medição, no fim, são o que faz uma conclusão errada passar por prova.</p>
+<h3 id="a-ordem">A ordem</h3>
+<ol><li><strong>Reproduza o sintoma, com a chamada do cliente real.</strong> Opção a mais na sua chamada percorre outro caminho e fabrica defeito. Não reproduziu? O primeiro trabalho é descobrir para quem acontece.</li><li><strong>Ache no código a mensagem que a pessoa vê</strong> — o fio mais curto entre a tela e a linha.</li><li><strong>Extraia o identificador de rastreio.</strong> Sem ele você lê log por horário — e lê o log errado.</li><li><strong>Ache a requisição exata</strong>, inteira, com começo e fim.</li><li><strong>Ancore a linha do tempo</strong>: não &quot;está falhando?&quot; — <strong>&quot;desde quando?&quot;</strong>, com contagem por período. Sem nomear o instante do começo, você ainda não investigou o suficiente para acusar nada.</li><li><strong>Diferencie o que mudou</strong>, preferindo artefato imutável a memória: versão publicada, data de implantação, trilha de auditoria. Quatro suspeitos: código, configuração, infraestrutura, rede.</li><li><strong>Separe defeito seu de dependência externa</strong> — muda o que se faz a seguir.</li><li><strong>Rode o cético</strong> (skill <code>verificacao-adversarial</code>) antes de concluir.</li><li><strong>Conclua — e diga o que ficou sem prova.</strong></li></ol>
+<p>O raciocínio que fecha: código idêntico + infraestrutura idêntica + hora exata de uma mudança de configuração = a configuração é a variável.</p>
+<p>Os passos 3 a 7 mudam de forma conforme a ferramenta de observabilidade; os outros quatro não mudam. As armadilhas abaixo mordem principalmente nos passos 3 e 5.</p>
+<h3 id="o-pedido-que-se-leva-a-quem-pode-consertar">O pedido que se leva a quem pode consertar</h3>
+<p>Quando o defeito é do outro lado da fronteira, o que se manda vale mais que o quanto se manda:</p>
+<table><thead><tr><th>O que entra</th><th>Por quê</th></tr></thead><tbody><tr><td>o sintoma em uma frase, do ponto de vista de quem usa</td><td>quem recebe reconhece o problema como real</td></tr><tr><td>o escopo <strong>medido</strong> — quantos afetados sobre quantos tentaram</td><td>amostra pequena vira prioridade baixa, e quem não reclama some da conta</td></tr><tr><td>o instante exato em que começou</td><td>sem ele não se sabe onde procurar</td></tr><tr><td>identificadores que <strong>quem recebe</strong> consegue procurar</td><td>o seu identificador não serve na ferramenta de quem recebe</td></tr><tr><td>o que mudou do seu lado, com hora</td><td>antecipa a pergunta de volta</td></tr><tr><td><strong>o pedido acionável</strong>: o que verificar, e o que fazer em cada resultado</td><td>evidência sem pedido é meia entrega</td></tr><tr><td>como a correção será validada em tempo real</td><td>fecha sem segunda rodada</td></tr></tbody></table>
+<p>Sem acusação e sem adjetivo. O que não estiver medido entra como &quot;não medido&quot; — nunca estimado.</p>
+<h3 id="as-armadilhas-de-medicao">As armadilhas de medição</h3>
+<h3 id="retencao-e-parte-da-prova">Retenção é parte da prova</h3>
+<p>Todo log, toda métrica e todo rastro tem uma janela de retenção. Antes de concluir qualquer coisa a partir de uma busca, confira se o período pedido cabe dentro da janela — sem isso, a busca não prova nada sobre o que aconteceu antes dela.</p>
+<h3 id="nao-achei-fora-da-janela-nao-significa-nada">&quot;Não achei&quot; fora da janela não significa nada</h3>
+<p>Buscar um identificador e não encontrá-lo só é evidência de ausência quando a busca cobriu o período inteiro em que o evento poderia ter acontecido. Fora da janela de retenção, &quot;não achei&quot; quer dizer &quot;não sei&quot; — nunca &quot;não aconteceu&quot;.</p>
+<h3 id="ausencia-de-linha-nao-e-ausencia-de-falha">Ausência de linha não é ausência de falha</h3>
+<p>Sistema que não grava toda categoria de evento tem zero na tabela mesmo quando o evento aconteceu. Antes de tratar um zero como fato, confirme que o instrumento realmente registraria o que se procura — comparando com uma categoria vizinha de volume conhecido, por exemplo.</p>
+<h3 id="o-identificador-da-requisicao-costuma-dizer-a-hora-em-que-ela-comecou">O identificador da requisição costuma dizer a hora em que ela começou</h3>
+<p>Muitos formatos de identificador de rastreio (trace id, request id) embutem um carimbo de tempo. Antes de assumir que o evento é recente, ou de descartá-lo por estar fora de uma janela estimada, decodifique o identificador — ele pode apontar para um instante bem mais antigo do que a hora em que foi observado.</p>
+</section>
+<section id="conhecimento-navegador-por-projeto-md">
+<h2>Um navegador por projeto</h2>
+<p class="origem"><code>conhecimento/navegador-por-projeto.md</code></p>
+<p>Para a sessão ler uma tela que só existe depois do login. A camada <strong>manda usar</strong> navegador — a skill <code>documentar-processo</code> pede para ler a fonte junto, com a ferramenta de navegador disponível — e nunca ensinou a montar uma. Esta página é a receita que faltava.</p>
+<p>O que ela entrega: um servidor de navegador por projeto, com a sessão já autenticada, que o agente aciona como qualquer outra ferramenta.</p>
+<p><strong>O servidor em si não viaja.</strong> Ele é da sua máquina e do seu projeto, e a declaração dele fica fora do git. O que viaja é esta receita.</p>
+<h3 id="um-servidor-por-projeto-nao-um-so-para-tudo">Um servidor por projeto, não um só para tudo</h3>
+<p>Cada projeto tem seu endereço, seu login e sua sessão. Um servidor compartilhado entre projetos mistura os três: o agente entra com a sessão errada, lê a tela de outro sistema e conclui em cima dela — sem erro nenhum aparecer. Separar custa uma pasta a mais; descobrir isso depois custa a conclusão inteira.</p>
+<p>A separação é uma pasta de perfil por projeto, e um servidor declarado por projeto apontando para a sua.</p>
+<h3 id="o-perfil-persistente-num-cofre-local">O perfil persistente, num cofre local</h3>
+<p>O navegador guarda o que prova quem você é: cookie, armazenamento local e, às vezes, o banco de dados do navegador. Servidor sem perfil persistente começa cada execução do zero — e do zero quer dizer deslogado.</p>
+<p>A receita, uma vez por projeto:</p>
+<ol><li><strong>Escolha a pasta do cofre local</strong> — fora da árvore rastreada, ignorada pelo <code>.gitignore</code>. Ali dentro vai estado de sessão, que é credencial.</li><li><strong>Declare a pasta como perfil do servidor</strong>, na configuração de servidores do seu agente.</li><li><strong>Suba com janela visível e faça o login à mão.</strong> É a única vez que alguém digita senha.</li><li><strong>Feche.</strong> O perfil ficou gravado na pasta, e a próxima execução já entra logada.</li></ol>
+<p>Segredo não entra em texto rastreado: onde a configuração pedir senha ou token, vai <code>${VARIAVEL}</code>, nunca o valor. O caminho da pasta é da sua máquina — declare-o por nome em <code>nucleo/ambiente.json</code> e verifique por instrumento. O porquê e a receita de repor estão em <a href="#conhecimento-estado-que-nao-viaja-md">o estado que não viaja</a>.</p>
+<h3 id="quando-o-perfil-nao-serve-o-estado-de-armazenamento">Quando o perfil não serve: o estado de armazenamento</h3>
+<p>São duas formas de guardar a sessão, as duas dentro do cofre local, e a escolha muda o que você tem de levar junto:</p>
+<ul><li><strong>perfil persistente</strong> é a pasta inteira do navegador. É o padrão, e é o mais simples.</li><li><strong>estado de armazenamento</strong> é um arquivo com os cookies e o armazenamento da página, gravado depois do login e recarregado antes de cada uso. Use quando o navegador precisa nascer limpo a cada execução, ou quando a mesma sessão vale em mais de uma máquina: arquivo se copia, pasta de perfil quase nunca.</li></ul>
+<p><strong>O que o estado de armazenamento tem de incluir.</strong> Cookie e armazenamento local costumam bastar. Não bastam quando a autenticação guarda o token no <strong>banco de dados do navegador</strong> — aí o estado que só leva cookie devolve uma sessão que parece gravada e volta deslogada. O sinal é este: o login sobrevive a recarregar a página e não sobrevive ao estado gravado. Inclua o banco do navegador no estado de armazenamento.</p>
+<h3 id="janela-visivel-quando-ha-plateia">Janela visível quando há plateia</h3>
+<p>Sem janela é o padrão: mais rápido, mais barato, e é assim que a rotina roda. Ligue a janela visível em três situações:</p>
+<ul><li><strong>no login à mão da primeira vez</strong> — não se digita senha em janela que não existe;</li><li><strong>quando alguém lê junto.</strong> Documentar processo é a dois: quem tem o acesso vê a mesma tela que o agente e corrige na hora, em vez de descobrir o engano na revisão;</li><li><strong>quando a leitura não bate com o esperado</strong> e você precisa ver o que o agente está vendo.</li></ul>
+<h3 id="a-armadilha-sessao-gravada-expira-calada">A armadilha: sessão gravada expira calada</h3>
+<p>A sessão que você gravou vai expirar. Quando expirar, <strong>nada quebra</strong>: o servidor pede a página, uma resposta chega, o agente lê — e o que ele leu é a tela de login. A leitura sai limpa, sem erro nenhum, e a conclusão sai errada. Não há aviso porque, do ponto de vista do navegador, nada falhou.</p>
+<p>O que fazer, nesta ordem:</p>
+<ul><li><strong>Verifique uma marca que só existe depois do login</strong> antes de confiar em qualquer leitura: um elemento da tela interna, o nome da conta no canto, uma rota que só responde autenticada. Sem essa verificação, a receita inteira é aposta.</li><li><strong>Trate &quot;voltou a tela de login&quot; como falha</strong>, nunca como conteúdo. É a disciplina do resultado negativo: sem contraprova, escreva &quot;não medido&quot;.</li><li><strong>Regrave a sessão</strong> quando ela expirar — é o login à mão de novo, com a janela visível. Não dá para automatizar sem pôr a senha em algum lugar, e esse lugar nunca é texto rastreado (regra 8).</li></ul>
+<h3 id="quando-da-errado">Quando dá errado</h3>
+<table><thead><tr><th>O sinal</th><th>O que costuma ser</th></tr></thead><tbody><tr><td>toda leitura devolve a tela de login</td><td>sessão expirada — regrave à mão</td></tr><tr><td>a sessão some a cada execução</td><td>perfil não persistente, ou pasta errada</td></tr><tr><td>loga na tela, mas o estado gravado volta deslogado</td><td>falta o banco do navegador no estado de armazenamento</td></tr><tr><td>o agente lê o sistema errado</td><td>um servidor só servindo vários projetos</td></tr><tr><td>o servidor nem sobe</td><td>variável declarada sem valor no ambiente</td></tr></tbody></table>
+</section>
+<section id="conhecimento-regras-da-camada-md">
+<h2>As regras da camada</h2>
+<p class="origem"><code>conhecimento/regras-da-camada.md</code></p>
+<p class="selo">Gerada de <code>nucleo/regras.json</code> — não edite esta página, edite a fonte.</p>
+<p>A lista numerada do que não muda sem decisão do dono. <strong>Proponha; não aplique</strong>: o protocolo de proposta está no fim da página.</p>
+<p>Cada regra é a ordem, direta. A procedência mora nas páginas linkadas — leitura de consulta, não de sessão.</p>
+<ol><li>**Abra a sessão na raiz — a pasta que tem o <code>AGENTS.md</code>.**</li><ul><li>O que decide é onde você abre, não onde o arquivo mora: numa subpasta, a sessão roda sem as skills da raiz, e nada avisa.</li><li>Procedência: <a href="#conhecimento-mapa-do-repositorio-md">mapa do repositório</a>.</li></ul></ol>
+<ol><li><strong>Só é pronto o que um instrumento provou.</strong></li><ul><li>Prova é build, teste ou listagem — &quot;o modelo disse&quot; não é prova, e saída colada de outra sessão é citação, não prova.</li><li>A saída de prova se cola do terminal, nunca se redige — saída montada à mão é opinião vestida de medida, e a verificação a pega tarde, depois de a sessão já ter dito pronto.</li><li>Fluxo que ninguém executou nem tem fonte citada é hipótese — grava-se marcado como hipótese, nunca como instrução.</li><li>Resultado negativo pede contraprova: zero, vazio e &quot;sem permissão&quot; viram prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa. Sem isso, escreva &quot;não medido&quot;, nunca &quot;não existe&quot;.</li><li>Prova só vale se re-executa: <code>grep</code> e <code>diff</code> respondem exit 1 para &quot;não achei&quot;, e a verificação acusa exit diferente de zero — quando a saída já é a prova, encerre com <code>|| true</code>. Âncora de git é SHA; <code>HEAD</code> e <code>origin/&lt;branch&gt;</code> envelhecem entre a prova e a verificação.</li><li>Saída cortada se declara com <code>(...)</code> em linha própria: a re-execução compara BLOCO de linhas seguidas, e o pedaço que você resumiu no meio de uma saída composta vira acusação sem essa marca.</li><li>Prova lenta declara o teto dela — <code>&quot;tempo-limite&quot;: &lt;segundos&gt;</code> no item do provado —, porque a re-execução corta em 60 s por padrão: tempo esgotado não é divergência, e lenta não é errada.</li><li>A prova morre com a escrita seguinte: o número do relatório final se mede depois do último comando que altera disco. Sincronização, formatador ou regeneração que rode depois do teste desfaz o que ele mediu — re-rode a prova como último ato, ou o relatório afirma um instante que não sobreviveu.</li><li>Antes de agir sobre uma conclusão importante, rode a skill <code>verificacao- adversarial</code>: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição.</li><li>Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova.</li><li>Estado que se relata se lê na hora: antes de dizer a alguém o que falta numa issue, num pedido de incorporação ou num arquivo, abra e leia. Resumo de memória envelhece calado, e o que sai dele é dedução vestida de fato.</li><li>Prova feita aqui não vale lá. Proposta que depende de ferramenta — instalar pacote, subir container, baixar modelo, registrar servidor MCP — vem com o comando de UMA linha que a pessoa roda no ambiente dela ANTES de tentar, e com o contorno quando ele já é conhecido. Ambiente corporativo trancado é a regra em empresa grande, não a exceção: proxy que reassina TLS com autoridade interna, política que barra comando de linha, registro de pacote bloqueado por categoria, proxy autenticado que derruba download de binário nativo. Quem propõe sem o teste do ambiente empurra a descoberta para quem instala, e ela custa o dobro lá.</li></ul></ol>
+<ol><li><strong>Antes de criar, procure e cite.</strong></li><ul><li>O que o conjunto já oferece não se reimplementa; aplicação nova imita o repositório vizinho mais parecido.</li><li>Procurar não é só no repositório: antes de escrever o próprio, meça o que a plataforma já entrega de fábrica — o que ela já publica não se reimplementa.</li></ul></ol>
+<ol><li><strong>A memória mora no disco, não no contexto.</strong></li><ul><li>O que vale amanhã se escreve — wiki, nota, decisão — nas subpastas de <code>conhecimento/</code>.</li><li>A memória carrega a prova re-executável do que afirma. Afirmação com número envelhece calada — uma nota de poucos dias atrás já discorda do disco, e ninguém percebe porque ela parece um fato. A nota que traz junto o comando que a derruba é a única que não mente.</li><li>O estado do TRABALHO é a exceção: ele mora na issue, não num arquivo. Arquivo de andamento vira uma segunda verdade, ninguém o atualiza junto, e é ele que mente para a próxima sessão. O <code>.md</code> só entra no encerramento, para extrair o que vale adiante — e aí nasce em <code>conhecimento/</code>. Quem cobra é o gancho <code>vetar-andamento-em-arquivo</code>.</li></ul></ol>
+<ol><li><strong>Ao dar por pronto, faça a análise de promoção.</strong></li><ul><li>Três pilhas: genérico, do workspace, descartável. Na dúvida se é genérico: é pessoal, e fica.</li></ul></ol>
+<ol><li><strong>Trabalhe econômico.</strong></li><ul><li>Repositório grande não se varre inteiro: índice, wiki e busca dirigida primeiro.</li><li>Identifique a linguagem pelo manifesto e leia LEIAME e pontos de entrada antes do resto.</li><li>Consulta de código a repositório satélite se faz na branch principal, buscada na hora: sem buscar antes de ler, você lê a branch em que o clone local parou.</li><li>A varredura da sessão honra o <code>.gitignore</code> e responde menos do que existe: o zero que sai não é zero, é falso negativo. Quem varre para decidir confirma com <code>command grep -r</code>.</li><li>Workflow e subagente custam caro e drenam limite rápido: use-os só quando a tarefa é grande demais para uma conversa (reconhecimento amplo, dezenas de itens em paralelo) — nunca por padrão. Conserto de um item, com vermelho e prova, faz-se direto na sessão.</li><li>Verificação de ponta a ponta (<code>--verificar</code>, <code>verificacoes.py ritual</code>) roda uma vez, detalhada, antes da entrega final — não a cada arquivo mexido. Repetir a mesma verificação sem mudança nova desde a última vez é releitura, não prova.</li></ul></ol>
+<ol><li><strong>Rede com cortesia.</strong></li><ul><li>Chamada externa e MCP só quando a tarefa exigir, espaçadas.</li><li>No primeiro <code>403</code>/<code>429</code>, recue — não insista em rajada.</li><li>Recusa de conteúdo — a resposta do lado do cliente que nega o pedido — pede o mesmo recuo: não repita em rajada; mude o pedido ou pare e pergunte.</li></ul></ol>
+<ol><li>**Segredo não entra em git nenhum — em texto rastreado vai <code>${VARIAVEL}</code>, nunca o valor; ler credencial localmente é livre.**</li><ul><li>Ler é reversível; publicar não é. Em texto rastreado — arquivo, commit, issue — vai <code>${VARIAVEL}</code>, nunca o valor. Vale para git público E privado.</li><li>O exemplo canônico: ler credencial para montar um cliente MCP somente leitura de um banco remoto, pode; o valor num <code>.mcp.json</code> rastreado, não.</li><li>Depois de usar credencial para configurar algo, avise o dono para tirá-la de vista — o backup é dele.</li><li>O que aparece na tela entra na sessão: print e janela compartilhada carregam segredo sem passar por instrumento nenhum. Feche o que tem segredo antes de mandar imagem.</li><li>Nomear credencial para EXCLUIR ou PROTEGER não é ler: <code>--exclude</code>, <code>--glob &#x27;!...&#x27;</code>, <code>#pasta</code>, <code>du -sh</code>, pathspec <code>:(exclude)</code> e a linha que escreve só o NOME no <code>.gitignore</code> passam calados. Quem decide é o que o comando faz com o alvo, não o alvo aparecer no comando.</li></ul></ol>
+<ol><li><strong>Destrutivo é do dono; commit e push seguem o que o repositório autorizou.</strong></li><ul><li><strong>Arquivo que o git não rastreia não tem histórico.</strong> Onde o git guarda a versão anterior, apagar se desfaz; em arquivo ignorado, ou fora de git nenhum, apagar é definitivo e silencioso. Ali a ação é <strong>mover</strong>, nunca apagar — e o commit que registra a mudança diz o destino de cada coisa que saiu, senão a próxima sessão procura o que ninguém guardou. Apagar de verdade é do dono, e só depois de provado que a informação está inteira em outro lugar.</li><li>O que a automação pode fazer sozinha se declara em <code>nucleo/configuracao.json</code>, campo <code>autorizacoes</code> (<code>commit</code>, <code>push</code>, <code>publicar</code>) — é de cada repositório, e o gancho de veto lê dali. Sem declaração, nega: omissão não é permissão.</li><li>Em repositório vizinho a autorização é outra: vale o <code>autorizacoes</code> do cadastro do projeto, e só na falta dele o <code>configuracao.json</code> do alvo — nos dois lugares, omissão nega.</li><li>O que aciona automação — integração contínua, implantação, aviso a outras pessoas — é sempre do dono, mesmo onde o resto é liberado: sincronizar não é entregar.</li><li>Propor não é publicar: abrir o pedido de incorporação é da sessão, quando o repositório autorizar; publicar é o merge, e é do dono; sincronizar não é nem um nem outro.</li><li>Antes de empurrar para branch compartilhada, olhe os PRs abertos dela: push em branch com PR aberto entra na entrega em rota, e o corpo do PR precisa cobrir o que entrou — corpo que não cobre o diff é revisão aprovando sem ver.</li><li>Decisão do dono vira pergunta — uma por vez, com a recomendação primeiro; o agente prepara e executa o não-destrutivo.</li><li>Etapa que trava numa decisão do dono devolve veredito de pergunta em vez de escolher por ele: a execução para, a pergunta vai a quem decide, e a resposta volta pela retomada — o que já foi provado não roda de novo. Chutar para não parar é decidir no lugar do dono, calado.</li><li>Redesenho de experiência pede esboço e pergunta fechada antes do código; conserto de defeito não pede.</li></ul></ol>
+<ol><li><strong>Texto na régua.</strong></li><ul><li>Markdown validado, conclusão primeiro, frases curtas, pt-BR.</li></ul></ol>
+<ol><li><strong>Não invente passo onde já existe receita.</strong></li><ul><li>Antes de propor como se faz algo que o repositório já faz — subir uma peça de infraestrutura, publicar, abrir acesso —, procure o procedimento na documentação dele e cite de onde saiu cada passo.</li><li>Não achou? Peça o endereço, não improvise: integração contínua improvisada parece pronta, e quebra longe de onde nasceu.</li><li>Não invente peça onde há padrão de mercado: antes de escrever instrumento, gancho ou servidor caseiro, procure o produto aberto que já faz isso, cite-o e diga o que ele cobre. Peça própria só entra com gatilho declarado — o que o produto não faz, medido, ou o custo dele que este repositório não paga (peso, rede, licença, dependência) — e rodar o produto é decisão do dono.</li></ul></ol>
+<ol><li><strong>Branch de longa duração e configuração de integração contínua não se tocam.</strong></li><ul><li>As branches que o repositório mantém — integração, homologação, produção, quaisquer que sejam os nomes — não se apagam, não se renomeiam, não recebem push forçado e não têm a história reescrita; e a configuração da automação não se altera de passagem. As duas são infraestrutura de outras pessoas.</li><li>Os nomes estão em <code>.claude/branches-protegidas.txt</code> — e na dúvida se uma branch é dessas, ela é.</li></ul></ol>
+<ol><li><strong>Publicar exige revisão semântica, não só varredura.</strong></li><ul><li>Releia exemplo, fixture e caso de teste perguntando: um colega reconheceria o workspace nisto? E releia o texto perguntando: isto conta algo sobre quem escreveu?</li><li>Varredura por padrão acha nome e segredo; jeito de trabalhar e procedência não têm padrão — passam inteiros.</li><li>Publicação não se desfaz: reescrever a história tira das listagens, não do alcance de quem já copiou.</li></ul></ol>
+<ol><li><strong>Conhecimento nasce na língua de quem vai lê-lo.</strong></li><ul><li>O que a IA consome nasce em linguagem de máquina — dado estruturado, como <code>nucleo/regras.json</code>: campo com nome, valor sem prosa em volta, um fato por chave. Instrumento lê dado; prosa ele adivinha.</li><li>O que a pessoa lê nasce organizado para leitura e pesquisa: por assunto, denso, o máximo de informação útil por página. Página que obriga a abrir outras três para entender uma está mal cortada.</li><li>Todo arquivo tem um dos dois destinos, e o destino se declara. Texto que serve aos dois serve mal aos dois: vira dado, e a página que a pessoa lê é gerada dele.</li><li>Conhecimento não nasce em pasta de código — lá ninguém o procura, e ele viaja por engano no commit do repositório errado.</li></ul></ol>
+<ol><li><strong>Editou a fonte, regenere a cópia e prove — antes de entregar.</strong></li><ul><li>Onde existe cópia gerada — carga embutida do instalador, espelho de skills, página escrita a partir de dado —, editar a fonte e não regenerar entrega a cópia velha. Quem instala recebe a cópia, não a sua fonte.</li><li>Regenerar é consertar; provar é outra coisa. O que prova verifica sem escrever e sai diferente de zero quando divergiu — <code>python montar.py --verificar</code>. O <code>--sincronizar</code> escreve e não acusa: rodar só ele deixa a divergência invisível.</li><li>O gerado não se edita à mão — a edição se perde na próxima sincronização, sem aviso. Nem todo gerado se declara: alguns abrem com a marca na primeira linha, e a cópia em código não abre, porque este repositório recusa comentário em código rastreado. Onde não há marca, a relação é pelo caminho, e são estes: a cópia em <code>.claude/skills/X</code> tem fonte em <code>.agents/skills/X</code>; a cópia em <code>.agents/&lt;módulo&gt;/…</code> tem fonte em <code>modulos/&lt;módulo&gt;/.agents/&lt;módulo&gt;/…</code>; e o que o instalador carrega embutido é cópia de tudo isso, nunca a fonte de nada. Na dúvida, PERGUNTE AO GANCHO em vez de deduzir: a recusa dele nomeia a fonte. E o teste que engana: editar a cópia e ver a sincronização desfazer não prova que você achou a fonte — prova o contrário.</li><li><strong>Arquivo novo que precisa viajar se matricula, e a matrícula se prova instalando.</strong> O <code>--verificar</code> checa a carga dos arquivos que conhece e cala sobre o que ninguém matriculou: a regra pega quem edita fonte existente, e não pega quem cria. A prova não é ler o instalador — é montar árvore virgem, instalar, e ver o arquivo chegar.</li><li>Cópia gerada não se resolve à mão numa mescla: tome um lado qualquer e regenere. O conflito é do gerador, não do texto — e quem edita a cópia no meio do conflito entrega um arquivo que a próxima sincronização apaga.</li><li>Procedência: <a href="#conhecimento-mapa-do-repositorio-md">mapa do repositório</a>.</li></ul></ol>
+<ol><li><strong>Ao dar por entregue, prove que nada ficou sem destino — nem commit fora da branch, nem entrega sem o passo seguinte.</strong></li><ul><li>A prova é uma listagem, não memória: <code>git log &lt;branch-da-entrega&gt;..HEAD --oneline</code>. Vazio é a prova; qualquer linha é trabalho que fica para trás.</li><li>Commit em branch que ninguém vai incorporar não existe para o resto do mundo, e some no dia em que a branch for podada.</li><li>Este é o achado que depende de lembrar no fim da sessão mais longa do dia — que é exatamente quando ninguém lembra. Como etapa de código, custa zero.</li><li>Destino inclui o passo seguinte, não só a branch. Se a promoção do trabalho é por pedido de incorporação, ele fica <strong>aberto</strong>, não planejado para depois: trabalho parado antes disso não chegou a lugar nenhum, só parece pronto.</li><li>Ou vai, ou é descartado — não existe terceiro estado. O que não serve se apaga, com a razão dita em uma linha. O meio-termo é exatamente o que se perde quando a sessão fecha, e ninguém fica sabendo que existiu.</li><li>A sessão não fica calada com entrega pendente: se ninguém interrompeu e há trabalho sem destino, quem fala primeiro é a sessão, antes de atender o assunto seguinte. Assunto novo é justamente quando o pendente some da vista, então o esquecimento é sistemático, não azar.</li><li>Vale para arquivo que a sessão não criou, quando ele é do universo da camada — código, texto, configuração. Árvore suja não pergunta de quem foi a mudança: quem fecha com ela ali é quem dá o destino, mesmo que o achado seja de uma sessão anterior. A exceção é o arquivo que a camada não sabe julgar — imagem, binário, despejo de dados solto na árvore. Esse se NOMEIA no relatório e não impede a entrega: commitá-lo é adotar o que não é seu, e apagá-lo é destrutivo, que é do dono. O item de cima existe contra preguiça; esta exceção existe contra impotência.</li></ul></ol>
+<ol><li><strong>Explique na altura de quem lê, começando por júnior.</strong></li><ul><li>Um conceito por vez, conclusão primeiro, exemplo concreto antes do termo técnico — e nada de despejar todas as opções.</li><li>A altura é por assunto, não por pessoa: quem é sênior em rede pode ser júnior em banco de dados. O sinal vem do que a pessoa pede, não do cargo dela.</li><li>Suba de altura quando o domínio aparecer, e então pare de explicar o básico daquele assunto: repetir o que a pessoa já sabe também é sobrecarga.</li><li>Vale para tudo que a sessão escreve para gente ler — resposta, issue, relatório de entrega e proposta de melhoria.</li></ul></ol>
+<h3 id="como-propor-mudanca-e-como-consultar-por-codigo">Como propor mudança — e como consultar por código</h3>
+<p>No fechamento da sessão (o prompt de esfriamento pede): <em>&quot;regra N atrapalhou neste caso porque X; proponho trocar por Y&quot;</em> — ou <em>&quot;faltou uma regra para Z&quot;</em>. A proposta fica no relatório; o dono aceita, adapta ou recusa.</p>
+<p>Regra nova ou mudada se edita em <code>nucleo/regras.json</code> — esta página é gerada dali e qualquer edição aqui se perde na sincronização.</p>
+<p>Sessão ou script que precise das regras como dado lê a fonte direto: <code>nucleo/regras.json</code>, campo <code>regras</code> — cada item tem <code>id</code>, <code>regra</code> (a frase imperativa) e <code>faca</code> (os itens). É o que o encadeador injeta em toda etapa de sessão; não há servidor nem API — o arquivo é o contrato.</p>
+</section>
+<section id="conhecimento-rotina-de-erros-novos-md">
+<h2>A rotina que abre issue só para erro novo</h2>
+<p class="origem"><code>conhecimento/rotina-de-erros-novos.md</code></p>
+<p>Uma rotina que varre o log, agrupa o que é o mesmo erro e abre issue <strong>só para o que ainda não tem issue</strong>. Ela não conserta nada sozinha: propõe, e quem aprova é gente.</p>
+<p><strong>O log não viaja; o mecanismo, sim.</strong> Onde o seu log mora, como se busca nele e quais são as assinaturas do seu sistema é do seu workspace. O que está escrito aqui é a ordem dos passos, que vale em qualquer lugar.</p>
+<h3 id="o-mecanismo-em-ordem">O mecanismo, em ordem</h3>
+<h4 id="1-varra-a-janela-de-retencao">1. Varra a janela de retenção</h4>
+<p>Toda ferramenta de log tem uma janela: passado dela, o dado não existe mais. Antes de varrer, saiba qual é a sua, e peça um período que caiba dentro dela.</p>
+<p>A retenção é <strong>parte da prova</strong>, não detalhe de configuração: fora da janela, &quot;não achei&quot; quer dizer &quot;não sei&quot; — nunca &quot;não aconteceu&quot;. Quem ensina isso é <a href="#conhecimento-investigacao-de-incidente-md">investigação de incidente</a>, na seção das armadilhas de medição. Está escrito lá, e esta página não repete.</p>
+<h4 id="2-agrupe-por-assinatura">2. Agrupe por assinatura</h4>
+<p>Assinatura é o que faz duas ocorrências serem o mesmo erro. Monta-se com as partes estáveis — o tipo da falha e o ponto do código onde ela nasceu — e sem as que mudam a cada ocorrência: identificador, horário, valor de campo, quem chamou.</p>
+<p>O ajuste da assinatura é o trabalho todo:</p>
+<ul><li><strong>larga demais</strong> junta erros diferentes numa issue só, e a correção de um deixa o outro vivo, agora escondido atrás de uma issue fechada;</li><li><strong>estreita demais</strong> abre uma issue por ocorrência, e o quadro vira ruído em uma semana.</li></ul>
+<p>O sinal de que está boa: a mesma falha, em dias diferentes, cai no mesmo grupo.</p>
+<h4 id="3-compare-com-as-assinaturas-ja-conhecidas">3. Compare com as assinaturas já conhecidas</h4>
+<p>A lista do que já se conhece mora em arquivo, não na memória da rodada — rotina que roda sozinha não lembra de ontem (regra 4).</p>
+<p>Conhecida é a assinatura que já tem issue, <strong>aberta ou fechada</strong>. As duas contam, por motivos diferentes:</p>
+<ul><li>com issue <strong>aberta</strong>, não se abre nada: no máximo um comentário com a contagem nova;</li><li>com issue <strong>fechada</strong> e voltando a aparecer, é regressão — reabre-se a issue antiga, com o número na mão. Abrir uma nova joga fora tudo que já se descobriu ali.</li></ul>
+<h4 id="4-abra-issue-so-para-o-que-e-novo">4. Abra issue só para o que é novo</h4>
+<p>Vira issue só o que sobrou dos dois filtros. Cada uma leva o que quem for consertar precisa ter na mão:</p>
+<ul><li>a assinatura, e uma ocorrência inteira como exemplo;</li><li><strong>a janela varrida e a contagem dentro dela</strong> — escopo medido é o que separa o erro de uma pessoa do erro de todo mundo;</li><li>o instante da primeira ocorrência vista, com o aviso de que a janela pode ter cortado o começo.</li></ul>
+<h4 id="5-proponha-a-correcao-em-branch">5. Proponha a correção em branch</h4>
+<p>Uma branch por issue, com a correção e o teste que falha sem ela. A rotina que só abre issue já paga por si; a que também propõe a correção encurta o caminho — desde que pare no lugar certo, que é o passo seguinte.</p>
+<h4 id="6-nunca-mescle-sozinha">6. Nunca mescle sozinha</h4>
+<p><strong>Isto é parte da receita, não nota de rodapé.</strong> A rotina roda sem ninguém olhando, sobre um agrupamento que ela mesma inventou, propondo uma correção que ninguém leu. Mesclar nessas três condições é publicar sem revisão.</p>
+<p>O limite: ela abre a issue, empurra a branch e — onde o repositório autorizar — abre o pedido de incorporação. E para. Quem aprova e mescla é gente. É a regra 9, e ela não muda porque a rotina acertou nas dez vezes anteriores.</p>
+<h3 id="como-saber-se-ela-esta-funcionando">Como saber se ela está funcionando</h3>
+<p>Os dois modos de falhar são silenciosos:</p>
+<ul><li><strong>abriu issue demais</strong> — a assinatura está estreita, ou a lista do que já se conhece não está sendo lida. O sintoma é issue repetida no quadro.</li><li><strong>não abriu nenhuma</strong> — pode ser que não houve erro novo, e pode ser que a varredura quebrou. Zero só vira prova com contraprova: na mesma rodada, a mesma busca tem de achar alguma coisa — o total de erros do período, por exemplo. Sem isso, o que se registra é &quot;não medido&quot;, nunca &quot;nenhum erro novo&quot;.</li></ul>
+<h3 id="o-que-fica-no-seu-workspace">O que fica no seu workspace</h3>
+<p>Aqui está a receita; a montagem é sua, e não viaja:</p>
+<ul><li>onde o log mora e como se busca nele;</li><li>as regras de assinatura do seu sistema;</li><li>onde a lista das assinaturas conhecidas fica gravada;</li><li>em que repositório as issues nascem, e com que etiqueta;</li><li>de quanto em quanto tempo a rotina roda.</li></ul>
+</section>
+<section id="conhecimento-skill-que-dispara-md">
+<h2>A skill que dispara</h2>
+<p class="origem"><code>conhecimento/skill-que-dispara.md</code></p>
+<p>Skill que o agente não chama não existe. Esta página é a receita de escrever uma que ele chame — e cada número aqui saiu do <code>.agents/gatilho/gatilho.py</code>, que abre uma sessão de verdade por pedido de exemplo e registra qual skill ela escolheu.</p>
+<h3 id="a-regua-antes-de-tudo">A régua, antes de tudo</h3>
+<pre><code>python3 .agents/gatilho/gatilho.py &lt;nome-da-skill&gt;</code></pre>
+<p><strong>Uma rodada não vale.</strong> O ruído medido é de cerca de um acerto por skill: a mesma skill, sem nenhuma mudança, oscila entre 1 e 2 de 3 em rodadas seguidas. Compare medianas de cinco rodadas, e desconfie de qualquer diferença menor que isso.</p>
+<h3 id="o-que-faz-uma-skill-disparar">O que faz uma skill disparar</h3>
+<p><strong>1. As palavras que a pessoa realmente digita.</strong> É o campo que mais pesa. As três skills que acertam 3 de 3 têm, todas, frases literais na descrição — <code>&quot;abre uma issue disso&quot;</code>, <code>&quot;vou encerrar por hoje&quot;</code>. Descrição reescrita em linguagem técnica, sem as frases, derrubou uma skill de 2 para 0. Escreva o bloco:</p>
+<pre><code>Palavras que a acordam — &quot;&lt;o que ele digita&gt;&quot;, &quot;&lt;outra&gt;&quot;.</code></pre>
+<p><strong>2. Um nome curto e incomum.</strong> Com a descrição idêntica, palavra por palavra, um nome de uma palavra acertou 1 de 3 e um nome composto de palavras genéricas acertou 0 de 3, em cinco rodadas. Nome longo feito de termos que aparecem em todo lugar (<code>controle</code>, <code>mudanca</code>, <code>camada</code>) compete com o resto do catálogo. O nome ainda tem de declarar a responsabilidade — mas entre dois que declaram, o curto ganha.</p>
+<p><strong>3. Pedido em forma de ordem, não de pergunta.</strong> Pedido que pede parecer — <em>&quot;pode?&quot;</em>, <em>&quot;me diz se passa ou não&quot;</em> — o modelo responde direto, sem chamar peça nenhuma. Isso acontece mesmo com a skill sozinha no catálogo, então é teto, não defeito: se os seus pedidos de exemplo são perguntas, 3 de 3 é inalcançável.</p>
+<h3 id="o-que-nao-faz-diferenca">O que NÃO faz diferença</h3>
+<ul><li><strong>Gancho de abertura apontando para a skill.</strong> Medido com os cinco ganchos de abertura desligados: o placar não mudou. Instrução injetada não empurra a escolha.</li><li><strong>Descrição mais técnica.</strong> Sozinha, não move o número. O que move é a frase literal.</li></ul>
+<h3 id="o-preco-da-vizinhanca">O preço da vizinhança</h3>
+<p>A mesma skill acerta <strong>2 de 3 sozinha</strong> e <strong>1 de 3 com as outras oito no catálogo</strong>. Cada skill nova cobra das que já existem, além dos bytes que toda sessão paga na largada. Antes de criar mais uma, pergunte se ela não é uma seção de uma que já existe.</p>
+<h3 id="duas-armadilhas-que-falham-caladas">Duas armadilhas que falham caladas</h3>
+<p>**Dois-pontos seguido de espaço na <code>description</code> quebra o YAML** do frontmatter e invalida a skill inteira — e nada avisa na sessão, que continua listando ela. Use travessão.</p>
+<p>**Pasta e campo <code>name</code> divergentes** também invalidam, com o mesmo silêncio. O gatilho recusa medir nesse caso, porque zero por skill quebrada e zero por descrição ruim são o mesmo número — e é assim que se conclui a causa errada.</p>
+<h3 id="conteudo-duplicado-por-gancho-nao-precisa-de-skill">Conteúdo duplicado por gancho não precisa de skill</h3>
+<p>Onde um gancho de abertura já injeta o texto em toda sessão, o agente não chama a skill — e está certo em não chamar. O zero dela não é defeito: é a medição perguntando a coisa errada. O que sobra é o custo da linha no catálogo, paga por toda sessão para nada.</p>
+<h3 id="o-molde">O molde</h3>
+<pre><code>---
+name: &lt;curto, e diz a responsabilidade&gt;
+description: &lt;o que faz&gt; — &lt;quando usar&gt;. Escopo — &lt;uma palavra&gt;.
+  &lt;a vizinha que pega o resto&gt;. Palavras que a acordam — &quot;&lt;frase&gt;&quot;, &quot;&lt;frase&gt;&quot;.
+metadata:
+  categoria: essencial | workflow | governanca | especialista
+  resumo: &quot;&lt;uma linha, para o catálogo&gt;&quot;
+  pedidos-de-exemplo:
+    - &quot;&lt;pedido em forma de ordem, do jeito que sai da boca&gt;&quot;
+---</code></pre>
+<p>Os campos de <code>metadata</code> não custam largada: o catálogo que toda sessão paga conta apenas <code>name</code> e <code>description</code>. Os <code>pedidos-de-exemplo</code> são o que a régua mede — sem eles, a skill sai como NÃO MEDIDA, que é honesto e inútil.</p>
+</section>
+<section id="execucoes-leiame-md">
+<h2>Roteiros que viajam com a camada</h2>
+<p class="origem"><code>execucoes/LEIAME.md</code></p>
+<p class="selo">Cópia gerada de <code>modulos/encadeador/execucoes/LEIAME.md</code> — não edite esta página, edite a fonte.</p>
+<p>Os roteiros desta pasta são <strong>da camada e entram no git</strong>: o <code>.gitignore</code> ao lado ignora tudo e libera por nome. O que a liberação não nomeia é pessoal e fica fora — vale aqui no módulo e na <code>execucoes/</code> de quem instala.</p>
+<p>Roteiro que mora aqui é <strong>da camada</strong>: não sabe nada de ninguém, tira todo endereço da configuração, e serve a qualquer repositório que instale o módulo. Troque a configuração e o mesmo roteiro serve outro lugar — é esse o teste de que ele é mecanismo, e não o processo de alguém.</p>
+<table><thead><tr><th>Roteiro</th><th>O que faz</th><th>A página</th></tr></thead><tbody><tr><td><code>catalogador.json</code></td><td>reorganiza a camada de conhecimento e as anotações</td><td><code>catalogador.md</code></td></tr><tr><td><code>entrega.json</code></td><td>exemplo de trabalho que termina em pedido de revisão</td><td><code>entrega.md</code></td></tr><tr><td><code>revisar-a-camada.json</code></td><td>revisão periódica da camada, pela execução</td><td><code>revisar-a-camada.md</code></td></tr><tr><td><code>mexida-em-vizinho.json</code></td><td>trabalha uma issue dentro de outro repositório do workspace</td><td><code>mexida-em-vizinho.md</code></td></tr></tbody></table>
+<p>O <code>.gitignore</code> ao lado ignora tudo e <strong>libera por nome</strong>, um roteiro por linha — nunca <code>!*.json</code>, que reabriria a pasta e deixaria roteiro local vazar sem ninguém ver.</p>
+<h3 id="a-receita-do-disparo-em-linhas-copiaveis">A receita do disparo, em linhas copiáveis</h3>
+<p>Cada rodada nova re-pagava os mesmos pedágios por seguir prosa em vez de linha. Aqui estão as linhas, na ordem. Troque <code>&lt;n&gt;</code> pelo número da issue e <code>&lt;assunto&gt;</code> pelo assunto em kebab.</p>
+<p><strong>1. O roteiro local.</strong> Copie o roteiro nomeado; não edite o original. A chave <code>bloco</code> é opcional e recorta o ESCOPO: com ela, a verificação cobra só os <code>- [ ]</code> da seção <code>## Bloco N</code> do corpo; sem ela, cobra a issue inteira. Bloco que o corpo não tem mata a execução com erro de uso — silêncio seria pior. A chave <code>tempo-limite-da-prova</code> também é opcional e vale para a rodada inteira: é o teto, em segundos, de cada prova re-executada na verificação. Sem ela o teto é o de sempre, 60 s. Declare-a quando a rodada tem prova reconhecidamente demorada — suíte grande, auditor sobre uma execução inteira. Prova avulsa que é lenta sozinha declara o teto dela no próprio item do provado, com <code>&quot;tempo-limite&quot;</code>, e não precisa da chave do roteiro.</p>
+<pre><code>python3 -c &quot;
+import json
+r = json.load(open(&#x27;execucoes/entrega.json&#x27;))
+json.dump({&#x27;auditoria&#x27;: True, &#x27;issue&#x27;: &lt;n&gt;, **r},
+          open(&#x27;execucoes/roteiro-issue-&lt;n&gt;.json&#x27;, &#x27;w&#x27;),
+          ensure_ascii=False, indent=2)&quot;</code></pre>
+<p><strong>Issue que pede medição repetida declara o teto da etapa.</strong> Etapa de sessão morre em 3600 s, e medição que a própria issue exige — mediana de cinco rodadas antes e cinco depois, ~550 s por conjunto — não cabe nisso: a etapa <code>trabalhar</code> morreu com o trabalho feito e sem commit, e a retomada gastou um ciclo refazendo o pronto. A cópia local declara <code>tempo-limite</code> na etapa que mede, em segundos, e o ensaio mostra o teto de cada sessão antes de gastar:</p>
+<pre><code>python3 -c &quot;
+import json
+r = json.load(open(&#x27;execucoes/roteiro-issue-&lt;n&gt;.json&#x27;))
+for etapa in r[&#x27;etapas&#x27;]:
+    if etapa[&#x27;nome&#x27;] == &#x27;trabalhar&#x27;:
+        etapa[&#x27;tempo-limite&#x27;] = &lt;segundos&gt;
+json.dump(r, open(&#x27;execucoes/roteiro-issue-&lt;n&gt;.json&#x27;, &#x27;w&#x27;),
+          ensure_ascii=False, indent=2)&quot;</code></pre>
+<p><strong>2. A árvore descartável.</strong> Clone local, nunca worktree: o clone nasce com <code>origin</code> apontando para o repositório daqui, e é isso que salva a entrega quando o remoto de verdade não está disponível.</p>
+<pre><code>git clone --no-hardlinks . /tmp/issue-&lt;n&gt;
+mkdir -p /tmp/issue-&lt;n&gt;/nucleo
+cp nucleo/executor.json /tmp/issue-&lt;n&gt;/nucleo/
+cp .mcp.json /tmp/issue-&lt;n&gt;/ 2&gt;/dev/null || true
+cp .git/info/exclude /tmp/issue-&lt;n&gt;/.git/info/exclude</code></pre>
+<p>A configuração vai para <code>nucleo/</code> DA ÁRVORE — é lá que o executor a lê. Copiada para a raiz dela, o disparo recusa e a rodada perde o turno.</p>
+<p>O <code>.git/info/exclude</code> <strong>não viaja no clone</strong> — o git o deixa para trás, e por isso o arquivo que só ele esconde reaparece solto na árvore da execução. Solto, ele é varrido para dentro do commit pelo <code>git add -A</code> e conta como sujeira para a cerca da regra 16. A linha do <code>cp</code> fecha os dois de uma vez: o que a origem escondia continua escondido na árvore descartável.</p>
+<p><strong>3. O ensaio, antes de gastar sessão.</strong> Mesmo comando, troca a palavra.</p>
+<pre><code>ISSUE=&lt;n&gt; ASSUNTO=&lt;assunto&gt; \
+python3 .agents/encadeador/encadeador.py ensaio \
+  --roteiro execucoes/roteiro-issue-&lt;n&gt;.json \
+  --trabalho issue-&lt;n&gt; \
+  --dir execucoes/evidencias \
+  --cwd /tmp/issue-&lt;n&gt;</code></pre>
+<p><strong>4. O disparo, desacoplado do terminal.</strong></p>
+<pre><code>ISSUE=&lt;n&gt; ASSUNTO=&lt;assunto&gt; \
+nohup python3 .agents/encadeador/encadeador.py executar \
+  --roteiro execucoes/roteiro-issue-&lt;n&gt;.json \
+  --trabalho issue-&lt;n&gt; \
+  --dir execucoes/evidencias \
+  --cwd /tmp/issue-&lt;n&gt; \
+  &gt; execucoes/evidencias/issue-&lt;n&gt;.log 2&gt;&amp;1 &amp;</code></pre>
+<p><strong>5. A retomada, também desacoplada.</strong> Mesma linha, com <code>--retomar</code> no fim.</p>
+<p><strong>6. A auditoria à mão, antes de aprovar.</strong> O auditor é OUTRO módulo — instale-o com <code>--modulo auditor</code> se ainda não tiver. Sem ele, pule para o <code>touch</code>: a aprovação é sua, com ou sem auditor.</p>
+<pre><code>python3 .agents/auditor/auditor.py execucoes/evidencias/issue-&lt;n&gt; \
+  --cwd /tmp/issue-&lt;n&gt;
+touch /tmp/issue-&lt;n&gt;/aprovacoes/entrega.ok</code></pre>
+<h4 id="os-quatro-pedagios-ja-pagos">Os quatro pedágios já pagos</h4>
+<ul><li>**O disparo sai da árvore intocada, e só o <code>--cwd</code> é editado.** Execução que mexe nos instrumentos e roda de dentro da árvore que muda derruba o próprio motor no meio.</li><li>**<code>ISSUE</code> e <code>ASSUNTO</code> vão no ambiente do disparo.** Sem eles a branch de trabalho nasce com o nome errado, e a etapa seguinte para.</li><li>**<code>--dir</code> resolve contra a árvore de onde o motor roda**, não contra o <code>--cwd</code>, e por isso vai explícito: sem ele quem for reler as evidências procura numa pasta vazia.</li><li>**<code>aguardando-resposta</code> quer dizer processo MORTO.** Tocar o arquivo de aprovação sozinho não continua nada — quem continua é <code>--retomar</code>.</li></ul>
+<h3 id="onde-mora-o-seu-roteiro">Onde mora o SEU roteiro</h3>
+<p>Na <code>execucoes/</code> da raiz do seu repositório. Lá o conteúdo não entra no git, de propósito: roteiro de trabalho cita o caminho da sua máquina, o nome dos seus outros repositórios, o seu caso. Nada disso viaja.</p>
+<p>Quando um roteiro seu deixar de citar o seu caso e passar a servir qualquer repositório, ele é candidato a mudar para cá — e aí precisa da linha no <code>.gitignore</code> e da página ao lado.</p>
+</section>
+</main>
+</div>
+</body>
+</html>

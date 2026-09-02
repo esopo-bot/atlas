@@ -90,7 +90,7 @@ integração): pare e avise.
 
 ## Ao fechar o dia
 
-Esfriamento pela skill `esfriamento`; relatório do que a rodada provou e
+Esfriamento pela skill `encerramento-de-sessao`; relatório do que a rodada provou e
 acusou como comentário na issue fixa do quadro; varredura final ZERADA —
 nenhum motor vivo, nenhuma aprovação pendente, nenhuma issue sem próximo
 passo escrito, nenhuma branch entregue por apagar.

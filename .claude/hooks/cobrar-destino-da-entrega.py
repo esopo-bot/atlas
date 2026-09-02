@@ -1,7 +1,9 @@
+import re
 import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +18,8 @@ BANDEIRA_DA_ENTREGA = "--entrega"
 COMANDO_DA_SUJEIRA = ["git", "status", "--porcelain"]
 COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM = [
     "git", "log", "--oneline", "--no-decorate", "{}..{}"]
+COMANDO_DO_QUE_ESTA_SESSAO_ACRESCENTOU = [
+    "git", "log", "--oneline", "--no-decorate", "--since=@{2}", "{0}..{1}"]
 COMANDO_DO_PEDIDO_ABERTO = [
     "gh", "pr", "list", "--base", "{0}", "--head", "{1}", "--state", "open",
     "--json", "number", "--jq", "length"]
@@ -42,6 +46,18 @@ COMANDO_DA_BRANCH_NO_DURAVEL = [
     "git", "ls-remote", "--heads", "origin", "{}"]
 COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{}", "{}"]
 CHAVE_DO_TRANSCRITO = "transcript_path"
+CHAVE_DA_SESSAO = "session_id"
+PASTA_DOS_TRANSCRITOS = ".claude/projects"
+EXTENSAO_DO_TRANSCRITO = ".jsonl"
+JANELA_DE_VIDA_EM_SEGUNDOS = 600
+QUANTAS_SESSOES_NOMEADAS = 3
+FERRAMENTAS_QUE_ESCREVEM = ("Write", "Edit", "NotebookEdit")
+FERRAMENTAS_DE_SHELL = ("Bash", "PowerShell")
+CAMPO_DO_COMANDO = "command"
+VERBOS_QUE_MEXEM_EM_ARQUIVO = (
+    "git mv", "git rm", "git checkout", "git restore", "sed -i", "mv ", "cp ",
+    "rm ", "tee ", "touch ", "mkdir ", "rmdir ", ">>", ">")
+CAMINHO_NO_COMANDO = re.compile(r"[\w./-]*[\w-]+\.[A-Za-z0-9]{1,6}")
 CHAVE_DO_INSTANTE = "timestamp"
 LINHAS_LIDAS_DO_TRANSCRITO = 200
 MARCA_DE_UTC = "Z"
@@ -102,6 +118,14 @@ COBRA_PEDIDO_NAO_MEDIDO = (
     "medir se existe pedido de incorporação aberto entre elas — o `gh` não "
     "respondeu. Sem a medição isto é 'não medido', nunca 'não existe': "
     "confira à mão antes de encerrar."
+)
+RELATA_HERDADO = (
+    "Para saber, não para resolver: a integração {!r} já estava {} commit(s) "
+    "à frente de {!r} quando esta sessão abriu, e não há pedido de "
+    "incorporação aberto entre elas:\n{}\n"
+    "Nada disso é obra desta sessão, então ela não é cobrada — quem encerra "
+    "uma dívida é quem a fez. Fica dito porque estado sem destino não passa "
+    "calado."
 )
 ABERTURA_DA_COBRANCA = (
     "A regra 16 cobra destino antes de encerrar, e alguma coisa ficou sem:"
@@ -226,11 +250,90 @@ def modificado_antes_da_abertura(raiz: Path, linha: str, abertura) -> bool:
         return False
 
 
-def sujeira_desta_sessao_e_herdada(raiz: Path, abertura) -> tuple:
+def sessoes_vivas_ao_lado(pasta: Path, minha: str, agora: float) -> list:
+    if not pasta.is_dir():
+        return []
+    vivas = []
+    for transcrito in pasta.glob(f"*{EXTENSAO_DO_TRANSCRITO}"):
+        if transcrito.stem == minha:
+            continue
+        try:
+            idade = agora - transcrito.stat().st_mtime
+        except OSError:
+            continue
+        if 0 <= idade <= JANELA_DE_VIDA_EM_SEGUNDOS:
+            vivas.append((idade, transcrito.stem))
+    return sorted(vivas)[:QUANTAS_SESSOES_NOMEADAS]
+
+
+def arquivos_que_esta_sessao_escreveu(caminho, raiz: Path) -> set:
+    escritos = set()
+    if not caminho:
+        return escritos
+    try:
+        with open(caminho, encoding="utf-8") as transcrito:
+            for linha in transcrito:
+                try:
+                    dado = json.loads(linha)
+                except ValueError:
+                    continue
+                corpo = (dado.get("message") or {}).get("content")
+                for bloco in corpo if isinstance(corpo, list) else []:
+                    if not isinstance(bloco, dict):
+                        continue
+                    if bloco.get("name") in FERRAMENTAS_QUE_ESCREVEM:
+                        alvo = (bloco.get("input") or {}).get("file_path")
+                        if alvo:
+                            escritos.add(str(alvo))
+                    elif bloco.get("name") in FERRAMENTAS_DE_SHELL:
+                        escritos |= caminhos_que_o_shell_mexeu(
+                            (bloco.get("input") or {}).get(CAMPO_DO_COMANDO),
+                            raiz)
+    except OSError:
+        return escritos
+    return escritos
+
+
+def caminhos_que_o_shell_mexeu(comando, raiz: Path) -> set:
+    if not isinstance(comando, str) or not comando:
+        return set()
+    if not any(v in comando for v in VERBOS_QUE_MEXEM_EM_ARQUIVO):
+        return set()
+    achados = set()
+    for pedaco in CAMINHO_NO_COMANDO.findall(comando):
+        limpo = pedaco.strip("'\"")
+        if not limpo or limpo.startswith("-"):
+            continue
+        achados.add(str((raiz / limpo).resolve()))
+        achados.add(str(raiz / limpo))
+    return achados
+
+
+def _o_caminho_da_linha(raiz: Path, linha: str) -> str:
+    return str(raiz / linha[3:].strip().strip('"'))
+
+
+def sujeira_desta_sessao_e_herdada(raiz: Path, abertura, entrada=None,
+                                   agora=None, lar=None) -> tuple:
     suja = linhas_da_arvore_suja(raiz)
     herdada = [l for l in suja
                if modificado_antes_da_abertura(raiz, l, abertura)]
-    return [l for l in suja if l not in herdada], herdada
+    minha = [l for l in suja if l not in herdada]
+    if entrada is None:
+        return minha, herdada
+    lar = Path.home() if lar is None else lar
+    pasta = lar / PASTA_DOS_TRANSCRITOS / str(raiz).replace(os.sep, "-")
+    agora = time.time() if agora is None else agora
+    vizinha = sessoes_vivas_ao_lado(
+        pasta, str(entrada.get(CHAVE_DA_SESSAO) or ""), agora)
+    if not vizinha:
+        return minha, herdada
+    escritos = arquivos_que_esta_sessao_escreveu(
+        entrada.get(CHAVE_DO_TRANSCRITO), raiz)
+    if not escritos:
+        return minha, herdada
+    alheia = [l for l in minha if _o_caminho_da_linha(raiz, l) not in escritos]
+    return [l for l in minha if l not in alheia], herdada + alheia
 
 
 def pedido_mesclado_que_ja_contem(raiz: Path, principal: str,
@@ -276,6 +379,20 @@ def commits_da_integracao_fora_da_principal(raiz: Path, principal: str,
     resposta = responde(comando, raiz, TEMPO_DO_GIT)
     if resposta is NAO_MEDIDO or resposta[0] != 0:
         return NAO_MEDIDO
+    return [l for l in resposta[1].split("\n") if l.strip()]
+
+
+def commits_desta_sessao(raiz: Path, principal: str, integracao: str,
+                         abertura, adiante: list) -> list:
+    if abertura is None or not adiante:
+        return list(adiante)
+    comando = [parte.format(ESPELHO_NO_REMOTO.format(principal),
+                            ESPELHO_NO_REMOTO.format(integracao),
+                            int(abertura))
+               for parte in COMANDO_DO_QUE_ESTA_SESSAO_ACRESCENTOU]
+    resposta = responde(comando, raiz, TEMPO_DO_GIT)
+    if resposta is NAO_MEDIDO or resposta[0] != 0:
+        return list(adiante)
     return [l for l in resposta[1].split("\n") if l.strip()]
 
 
@@ -325,8 +442,8 @@ def _ha_destino_declarado(raiz: Path, principal: str, integracao: str,
     return aberto
 
 
-def medir(raiz: Path, abertura=None) -> dict:
-    suja, herdada = sujeira_desta_sessao_e_herdada(raiz, abertura)
+def medir(raiz: Path, abertura=None, entrada=None) -> dict:
+    suja, herdada = sujeira_desta_sessao_e_herdada(raiz, abertura, entrada)
     nao_julgada = linhas_que_a_camada_nao_julga(raiz)
     etapa = etapa_em_curso()
     if etapa:
@@ -342,8 +459,18 @@ def medir(raiz: Path, abertura=None) -> dict:
     principal = sorted(branches_por_incorporacao(raiz))
     principal = principal[0] if principal else ""
     integracao = branch_de_integracao(raiz)
-    adiante = commits_da_integracao_fora_da_principal(
+    tudo = commits_da_integracao_fora_da_principal(
         raiz, principal, integracao)
+    if tudo is NAO_MEDIDO:
+        return {
+            "etapa": "", "suja": suja, "herdada": herdada,
+            "nao_julgada": nao_julgada,
+            "sobra": sobra_fora_da_branch_de_entrega(raiz),
+            "principal": principal, "integracao": integracao,
+            "adiante": NAO_MEDIDO, "herdados": [], "pedido": NAO_MEDIDO,
+        }
+    desta = (commits_desta_sessao(raiz, principal, integracao, abertura, tudo)
+             if tudo else [])
     return {
         "etapa": "",
         "suja": suja,
@@ -352,10 +479,10 @@ def medir(raiz: Path, abertura=None) -> dict:
         "sobra": sobra_fora_da_branch_de_entrega(raiz),
         "principal": principal,
         "integracao": integracao,
-        "adiante": adiante,
-        "pedido": (_ha_destino_declarado(raiz, principal, integracao,
-                                        adiante)
-                   if adiante else NAO_MEDIDO),
+        "adiante": desta,
+        "herdados": [l for l in tudo if l not in desta],
+        "pedido": (_ha_destino_declarado(raiz, principal, integracao, tudo)
+                   if tudo else NAO_MEDIDO),
     }
 
 
@@ -399,14 +526,24 @@ def cobrancas(estado: dict) -> list:
     return cobradas
 
 
-def decisao(entrada: dict, raiz: Path) -> str:
+def relato(estado: dict) -> list:
+    herdados = estado.get("herdados")
+    if not herdados or estado.get("pedido") is True:
+        return []
+    return [RELATA_HERDADO.format(estado.get("integracao"), len(herdados),
+                                  estado.get("principal"),
+                                  primeiras_linhas(herdados))]
+
+
+def decisao(entrada: dict, raiz: Path):
     if entrada.get("stop_hook_active"):
-        return ""
-    cobradas = cobrancas(medir(raiz, abertura_da_sessao(entrada)))
+        return "", ""
+    estado = medir(raiz, abertura_da_sessao(entrada), entrada)
+    cobradas = cobrancas(estado)
     if not cobradas:
-        return ""
+        return "", "\n\n".join(relato(estado))
     return "\n\n".join(
-        [ABERTURA_DA_COBRANCA, *cobradas, FECHAMENTO_DA_COBRANCA])
+        [ABERTURA_DA_COBRANCA, *cobradas, FECHAMENTO_DA_COBRANCA]), ""
 
 
 def main() -> int:
@@ -414,8 +551,11 @@ def main() -> int:
         entrada = json.load(sys.stdin)
         if not isinstance(entrada, dict):
             return SILENCIO
-        motivo = decisao(entrada, raiz_do_projeto_nunca_o_cwd())
+        motivo, dito = decisao(entrada, raiz_do_projeto_nunca_o_cwd())
         if not motivo:
+            if dito:
+                print(json.dumps({"systemMessage": dito},
+                                 ensure_ascii=False))
             return SILENCIO
     except Exception:
         return FALHA_ABERTA
@@ -428,7 +568,7 @@ def main() -> int:
 
 
 ARVORE_LIMPA = {"etapa": "", "suja": [], "sobra": "", "principal": "main",
-                "integracao": "homolog", "adiante": [],
+                "integracao": "homolog", "adiante": [], "herdados": [],
                 "pedido": NAO_MEDIDO}
 DENTRO_DA_ETAPA = {"etapa": "trabalhar", "suja": [],
                    "branch": "issue/1-algo", "duravel": True}
@@ -564,6 +704,92 @@ def testar() -> int:
     def caso(rotulo, condicao):
         comportamento.append((rotulo, bool(condicao)))
 
+    raiz_de_prova = Path("/tmp/atlas-prova")
+    caso("renomear por `git mv` conta como escrita DESTA sessao — antes o "
+         "gancho so via Write e Edit, chamava o proprio trabalho de herdado "
+         "e mandava a sessao abandona-lo",
+         str(raiz_de_prova / "b.md") in caminhos_que_o_shell_mexeu(
+             "git mv a.md b.md", raiz_de_prova))
+    caso("editar por `sed -i` tambem conta",
+         str(raiz_de_prova / "x.py") in caminhos_que_o_shell_mexeu(
+             "sed -i 's/a/b/' x.py", raiz_de_prova))
+    caso("redirecionar para arquivo tambem conta",
+         str(raiz_de_prova / "saida.json") in caminhos_que_o_shell_mexeu(
+             "echo oi > saida.json", raiz_de_prova))
+    caso("comando que so LE nao vira escrita — senao toda varredura marcaria "
+         "o repositorio inteiro como escrito por esta sessao",
+         caminhos_que_o_shell_mexeu("grep -rn coisa arquivo.py",
+                                    raiz_de_prova) == set())
+    caso("comando vazio ou que nao e texto nao estoura",
+         caminhos_que_o_shell_mexeu(None, raiz_de_prova) == set()
+         and caminhos_que_o_shell_mexeu("", raiz_de_prova) == set())
+
+    caso("commit que a sessão NAO fez nao vira cobranca dela: sessao de "
+         "estudo encontra a integracao a frente e nao e dona disso",
+         not cobrancas(com(adiante=[], herdados=["abc1234 de ontem"],
+                           pedido=False)))
+    caso("e o que ela encontrou continua dito, sem mandar resolver",
+         any("ontem" in linha for linha in
+             relato(com(adiante=[], herdados=["abc1234 de ontem"],
+                        pedido=False))))
+    caso("commit desta sessao continua cobrado",
+         cobrancas(com(adiante=["abc1234 agora"], pedido=False)))
+    caso("comparacao nao medida nao derruba o gancho inteiro: sem origin, "
+         "sem rede ou em clone novo ele ainda cobra a arvore suja",
+         cobrancas(com(adiante=NAO_MEDIDO, suja=["?? novo.py"])))
+    with tempfile.TemporaryDirectory(prefix="cobra-vizinha-") as pasta:
+        base = Path(pasta)
+        raiz_falsa = base / "repo"
+        (raiz_falsa / "sub").mkdir(parents=True)
+        (raiz_falsa / "meu.py").write_text("x", encoding="utf-8")
+        (raiz_falsa / "alheio.py").write_text("y", encoding="utf-8")
+        lar = base / "lar"
+        transcritos = lar / PASTA_DOS_TRANSCRITOS / str(raiz_falsa).replace(os.sep, "-")
+        transcritos.mkdir(parents=True)
+        agora = 1000.0
+        meu_transcrito = transcritos / "minha.jsonl"
+        meu_transcrito.write_text(json.dumps({"message": {"content": [
+            {"type": "tool_use", "name": "Write",
+             "input": {"file_path": str(raiz_falsa / "meu.py")}}]}}) + "\n",
+            encoding="utf-8")
+        os.utime(meu_transcrito, (agora, agora))
+        entrada_falsa = {CHAVE_DA_SESSAO: "minha",
+                         CHAVE_DO_TRANSCRITO: str(meu_transcrito)}
+        sujas = [" M meu.py", " M alheio.py"]
+
+        def _com(vizinha_viva):
+            if vizinha_viva:
+                outra = transcritos / "outra.jsonl"
+                outra.write_text("x", encoding="utf-8")
+                os.utime(outra, (agora - 60, agora - 60))
+            else:
+                alvo = transcritos / "outra.jsonl"
+                if alvo.exists():
+                    alvo.unlink()
+            global linhas_da_arvore_suja
+            guardada = linhas_da_arvore_suja
+            linhas_da_arvore_suja = lambda _: list(sujas)
+            try:
+                return sujeira_desta_sessao_e_herdada(
+                    raiz_falsa, None, entrada_falsa, agora, lar)
+            finally:
+                linhas_da_arvore_suja = guardada
+
+        minha, herdada = _com(vizinha_viva=False)
+        caso("sozinho na pasta, a cobranca segue como sempre: a sujeira "
+             "toda e desta sessao",
+             len(minha) == 2 and herdada == [])
+
+        minha, herdada = _com(vizinha_viva=True)
+        caso("com outra sessao viva, so e cobrado o arquivo que ESTA sessao "
+             "escreveu — o que ela nunca tocou vira herdado",
+             minha == [" M meu.py"] and herdada == [" M alheio.py"])
+
+    with tempfile.TemporaryDirectory(prefix="cobra-sem-git-") as sozinho:
+        caso("e medir() sobrevive a pasta sem git nenhum, em vez de estourar "
+             "e calar o gancho por dentro do except",
+             isinstance(medir(Path(sozinho), None), dict))
+
     da_sobra = "".join(cobrancas(COBRA_FORA_DA_ETAPA[1][1]))
     caso("a cobrança da segunda condição nomeia o instrumento que já existe",
          INSTRUMENTO_DA_ENTREGA in da_sobra and BANDEIRA_DA_ENTREGA in da_sobra)
@@ -589,7 +815,7 @@ def testar() -> int:
          bool(sobra_fora_da_branch_de_entrega(daqui))
          == (direto.returncode != 0))
     caso("parada que já é laço de gancho cala",
-         decisao({"stop_hook_active": True}, daqui) == "")
+         decisao({"stop_hook_active": True}, daqui) == ("", ""))
     montado = [parte.format("principal-x", "integracao-y")
                for parte in COMANDO_DO_PEDIDO_ABERTO]
     caso("a consulta do pedido pergunta pela integração, não pela principal "

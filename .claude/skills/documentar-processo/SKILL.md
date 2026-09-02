@@ -1,6 +1,6 @@
 ---
 name: documentar-processo
-description: Use quando o pedido for escrever, atualizar ou corrigir DOCUMENTAÇÃO de processo — passo a passo, procedimento, manual, guia, fluxo de "como se faz" —, inclusive quando o documento ainda não existe e vai nascer agora. Palavras que a acordam — documenta, documentação, passo a passo, procedimento, fluxo, manual, guia, "não bate mais com a realidade". Documento não é peça de código, então não procure se "já existe" — procurar código é da antes-de-criar; abrir issue sobre o documento é da trabalho-por-issue. Esta escreve o documento.
+description: Use quando o pedido for escrever, atualizar ou corrigir DOCUMENTAÇÃO de processo — passo a passo, procedimento, manual, guia, fluxo de "como se faz" —, inclusive quando o documento ainda não existe e vai nascer agora. Palavras que a acordam — documenta, documentação, passo a passo, procedimento, fluxo, manual, guia, "não bate mais com a realidade". Documento não é peça de código, então não procure se "já existe" — procurar código é da busca-de-codigo-existente; abrir issue sobre o documento é da trabalho-por-issue. Esta escreve o documento.
 metadata:
   pedidos-de-exemplo:
     - "preciso escrever o passo a passo de como se pede acesso ao ambiente de homologação, pro time novo conseguir sozinho"
@@ -22,7 +22,7 @@ vezes começam daqui — reanalisar todo dia é desperdício.
 
 ## 2. Já existe página sobre isto?
 
-Procure antes de criar (skill `antes-de-criar`). Existe? **Edite a que
+Procure antes de criar (skill `busca-de-codigo-existente`). Existe? **Edite a que
 existe** — outra página divide a verdade em duas e uma delas envelhece
 mentindo. Só crie nova quando o assunto for outro de verdade.
 
@@ -63,7 +63,7 @@ fonte, não na lembrança de alguém:
 
 - Confira no repositório correspondente, com **busca dirigida e barata** —
   duas ou três âncoras, não varredura.
-- **Rode o cético** (skill `cetico`) antes de publicar — e diga na própria
+- **Rode o cético** (skill `verificacao-adversarial`) antes de publicar — e diga na própria
   página o que ficou sem verificar.
 
 ## 6. Documentação que não bate mais

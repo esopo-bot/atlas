@@ -1,6 +1,6 @@
 ---
 name: analise-de-promocao
-description: Use ao dar UM trabalho por pronto, quando pedirem a análise de promoção, ou quando perguntarem o que do trabalho atual pode virar genérico. O fechamento da sessão inteira é da skill esfriamento, que chama esta.
+description: Use ao dar UM trabalho por pronto, quando pedirem a análise de promoção, ou quando perguntarem o que do trabalho atual pode virar genérico. O fechamento da sessão inteira é da skill encerramento-de-sessao, que chama esta.
 metadata:
   pedidos-de-exemplo:
     - "acabei de fechar o ajuste do cache aqui, tem alguma coisa nele que serve pros outros repositórios?"
@@ -15,7 +15,7 @@ Esta análise decide, antes do resumo final, o destino do que a sessão criou.
 ## Antes das pilhas: a conclusão está auditada?
 
 Se o trabalho terminou numa conclusão — uma causa encontrada, um diagnóstico,
-uma regra deduzida —, passe o cético nela (skill `cetico`) antes de promover
+uma regra deduzida —, passe o cético nela (skill `verificacao-adversarial`) antes de promover
 o que quer que seja. Lição promovida sem auditoria vira regra que outras
 pessoas seguem: o erro sai de um repositório e entra em todos.
 

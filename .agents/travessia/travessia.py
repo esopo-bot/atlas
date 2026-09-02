@@ -33,7 +33,7 @@ ARQUIVO_EXECUTOR = "nucleo/executor.json"
 
 SONDAS = (
     ("regra 15 — escrever na cópia gerada", BARRA, "edit",
-     {"file_path": "{raiz}/.claude/skills/cetico/SKILL.md",
+     {"file_path": "{raiz}/.claude/skills/verificacao-adversarial/SKILL.md",
       "old_string": "a", "new_string": "b"}),
     ("regra 12 — reescrever branch protegida", BARRA, "exec",
      {"command": "git push --force origin main"}),

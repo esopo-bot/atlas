@@ -10,5 +10,8 @@ montar.py linguist-generated=true
 # da fonte em modulos/ — o diff que interessa é o da fonte.
 .agents/encadeador/encadeador.py linguist-generated=true -diff
 .agents/encadeador/testes.py linguist-generated=true -diff
-.agents/painel/painel.py linguist-generated=true -diff
 .agents/auditor/auditor.py linguist-generated=true -diff
+
+# O manual em HTML e gerado das paginas de conhecimento/ pelo
+# .agents/manual/manual.py --escrever. Colapsa nos diffs do GitHub.
+manual.html linguist-generated=true

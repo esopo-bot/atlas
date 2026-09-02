@@ -115,8 +115,7 @@ que está fazendo enquanto faz.
 - **Não tagarela.** Marco, não narração contínua. Voz que fala o tempo todo
   vira ruído, e ruído se ignora — o mesmo motivo pelo qual aviso que ninguém
   atende sai do ritual.
-- **Não entra no painel de controle.** Ele é tela; voz é para quem não está olhando
-  a tela.
+- **Não vira tela.** Voz é para quem não está olhando a tela.
 - **Não roda da fonte.** O `falar.py` de `modulos/voz/` recusa falar: criar
   o venv ali faria o `montar.py` embutir o venv inteiro na carga do
   instalador. Instale primeiro, rode a cópia depois.

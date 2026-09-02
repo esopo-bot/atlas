@@ -13,7 +13,7 @@ máquina, fica fora do git.
 | Pasta | O que mora ali | Viaja para quem instala? |
 | --- | --- | --- |
 | `conhecimento/` | página que gente lê | sim |
-| `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `wiki-de-projetos` | não: é conteúdo do workspace, fora do git |
+| `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `perfil-de-repositorio` | não: é conteúdo do workspace, fora do git |
 | `.agents/` | instrumentos (Python), as skills (fonte) e os prompts de abertura em `.agents/prompts/` | os instrumentos e as skills, sim; dos prompts, o de verificação pós-atualização e o de abertura de projeto — o de abertura NA camada fica, porque só serve a quem melhora o atlas |
 | `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |

@@ -19,3 +19,9 @@ docker exec indice-embeddings-1 ollama pull nomic-embed-text
 **O banco é sempre derivado.** Nada nasce dentro dele: apagar os volumes e
 reindexar reconstrói tudo. A configuração da sessão (o `claude mcp add`) está
 na página `conhecimento/indice.md`, que viaja junto.
+
+**Ambiente corporativo trancado recusa as três linhas acima.** Proxy que
+reassina TLS, registro de pacote bloqueado por política e CLI barrado por
+regra de empresa têm contorno — os quatro estão na seção "Quando o ambiente
+é trancado" da mesma página. Não invente um quinto: o que travar fora da
+lista é achado para o dono, com a mensagem de erro exata.

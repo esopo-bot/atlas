@@ -9,7 +9,9 @@
     "conta_gh": "${CONTA_QUE_FALA_COM_O_REMOTO_GIT}"
   },
   "projeto": {
-    "url": "${URL_DO_QUADRO}"
+    "url": "${URL_DO_QUADRO}",
+    "conta_gh": "${CONTA_DO_QUADRO}",
+    "comentario_da_conta": "quem fala com o QUADRO. Escopo de projeto é permissão à parte da do repositório: a conta das issues pode comentar e etiquetar sem nunca conseguir mover o cartão, e a recusa aparece só no recado da execução. Omitida, cai na conta das issues. Confira com `gh auth status` — a linha precisa trazer `project`."
   },
   "branches": {
     "padrao_de_trabalho": "${PADRAO_DO_NOME_DA_BRANCH}",

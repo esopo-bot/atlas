@@ -36,10 +36,10 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
-# A pasta do editor é de cada máquina, e um rastreado manda escrever dentro
-# dela: a página do painel de controle manda editar o launch.json. A exceção
-# que a verificação de referências órfãs respeita não é esta linha — ela mora
-# em nucleo/configuracao.json, campo referencias_que_ficam_fora_do_git.
+# A pasta do editor é de cada máquina: o launch.json nasce no primeiro F5 e
+# não é o mesmo em duas. A exceção que a verificação de referências órfãs
+# respeita não é esta linha — ela mora em nucleo/configuracao.json, campo
+# referencias_que_ficam_fora_do_git.
 .vscode/
 
 # O que não é da camada mora em trabalho/, com git próprio. O git daqui não o
@@ -48,7 +48,7 @@ __pycache__/
 # manter certa.
 /trabalho/
 
-# A wiki dos repositórios do workspace, que a skill wiki-de-projetos escreve:
+# A wiki dos repositórios do workspace, que a skill perfil-de-repositorio escreve:
 # ela guarda o perfil de cada repositório vizinho — nome de quadro, etapas,
 # quem cuida —, e nada disso é da camada. Fica fora do git pelo mesmo motivo
 # de trabalho/. Quem a poupa da verificação de referências órfãs é a
@@ -70,6 +70,16 @@ __pycache__/
 # que sistemas se fala, e isso não passa por varredura de segredo. O modelo
 # genérico dele mora fora do git, junto do que não é da camada.
 /.mcp.json
+
+# O override do compose do indice guarda caminho de maquina (a autoridade
+# do proxy da rede local). Fica fora do git, como o .mcp.json acima.
+.agents/indice/docker-compose.override.yml
+
+# Os alvos do indexador sao caminhos DESTA maquina, e o servidor
+# mora fora do repositorio. O indice nunca viaja — so a receita.
+.agents/indice/alvos.json
+modulos/indice/.agents/indice/alvos.json
+modulos/indice/.agents/indice/docker-compose.override.yml
 
 .playwright-mcp/
 

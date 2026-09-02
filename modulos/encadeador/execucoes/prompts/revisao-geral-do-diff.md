@@ -24,7 +24,12 @@ a revisão confirmar defeito de correção no diff — cada achado nomeando
 arquivo e linha. `segue`, com os achados menores em `suposto`, quando nada
 justificar parar antes da entrega.
 
-A PROVA: cada afirmação sua tem comando e saída COLADA do terminal.
-`git diff --stat origin/<base>...HEAD` prova o que você leu; a lista de
-achados da revisão — ou a lista vazia — colada prova o que ela disse.
-Afirmação de revisor sem comando é opinião vestida de medida.
+A PROVA: cada afirmação sua tem comando e saída COLADA do terminal, e a
+prova se ancora em COMMIT, nunca em nome de branch. `git merge-base
+origin/<base> HEAD` dá o sha da base da mescla e `git rev-parse HEAD` o da
+cabeça; o que entra no provado é `git diff --stat <sha-da-base>
+<sha-da-cabeça>`. `origin/<base>` anda enquanto OUTRA execução mescla, e
+prova que o cita deixa de reproduzir com o trabalho estando certo — a
+verificação acusa e a retomada custa um ciclo. A lista de achados da
+revisão — ou a lista vazia — colada prova o que ela disse. Afirmação de
+revisor sem comando é opinião vestida de medida.

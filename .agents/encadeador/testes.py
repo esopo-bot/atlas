@@ -28,8 +28,12 @@ from encadeador import (
     ARQUIVO_ESTADO, ARQUIVO_EXECUTOR, AUDITOR,
     COMANDO_DA_BRANCH_ATUAL, ESTADO_SEM_DESTINO, ETAPA_QUE_ABRE_A_BRANCH,
     CLAUDE_QUE_PARA_NA_METADE,
-    CLI_FALSO_DA_SESSAO, CLI_FALSO_QUE_SEGUE_SEM_ENTREGAR,
+    CLI_FALSO_DA_SESSAO, CLI_FALSO_QUE_DEMORA,
+    CLI_FALSO_QUE_SEGUE_SEM_ENTREGAR,
     CLI_FALSO_QUE_MEDE_CUSTO, CLI_FALSO_QUE_ENTREGA_SEM_CUSTO,
+    CLI_FALSO_QUE_MORRE_CARO,
+    CUSTO_SEM_MEDICAO, MARCA_DE_QUEM_ESPERA_VOCE,
+    CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE,
     ESPERA_MAXIMA_S,
     ESTE_INSTRUMENTO, EXIT_COMPLETA,
     issue_do_roteiro_ou_do_ambiente, montar_ambiente,
@@ -46,12 +50,15 @@ from encadeador import (
     dono_do_projeto,
     FALHOU_QUANTOS, FANTOCHE_COM_FALTA, FANTOCHE_OK, FANTOCHE_QUE_PARA,
     FOLGA_DA_PROVA_DE_VIDA_S, _instante_legivel,
-    FOLGA_DO_TETO, FONTE_DO_DUBLE_DO_GH,
+    FOLGA_DO_TETO, FONTE_DO_DUBLE_DO_GH, FONTE_DO_DUBLE_DO_QUADRO,
+    RESPOSTA_SEM_ESCOPO, FONTE_DO_DUBLE_DA_FILA,
+    issues_paradas_em_voce, ETIQUETA_PARADO_EM_VOCE,
     LOG_AUDITORIA_AO_FIM,
     LIMITE_DO_STDERR_NA_FALHA, MARCA_DA_DEVOLUCAO, MARCA_DO_MOTOR,
     PEDIDO_DE_FECHO, Path,
     RETOMADAS, SITUACOES, SONO_DO_TESTE_DE_ORFAO, TEMPO_DO_DUBLE,
     TESTE_OK, TETO_CONFIGURACAO, TETO_CURTO_DO_TESTE, TETO_DO_DUBLE,
+    TEMPO_SESSAO,
     _EM_CURSO, CORPO_DA_ISSUE, _bateu_no_teto, _bloco_de_onde_esta, _cli,
     CHAVE_DOS_ENDERECOS, ONDE_ENDERECOS,
     _cli_evidencia,
@@ -250,6 +257,92 @@ def _com_o_gh_trocado(gh, tempo, medir):
         encadeador.GH, encadeador.TEMPO_DO_GH = guardado
 
 
+def _quadro_com_o_duble(pasta, resposta, configuracao):
+    caixa = Path(tempfile.mkdtemp(dir=str(pasta), prefix="quadro-"))
+    (caixa / "resposta.json").write_text(json.dumps(resposta),
+                                         encoding="utf-8")
+    duble = caixa / "quadro-duble.py"
+    duble.write_text(FONTE_DO_DUBLE_DO_QUADRO.format(caixa=repr(str(caixa))),
+                     encoding="utf-8")
+    gh = shlex.split(f"{sys.executable} {duble}")
+    resultado = _com_o_gh_trocado(
+        gh, TEMPO_DO_DUBLE,
+        lambda: mover_no_quadro(configuracao, 42, "parada"))
+    chamadas = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+    return resultado, chamadas
+
+
+def _sobre_o_quadro_que_recusa(b) -> None:
+    posto = {"projeto": {"url": "https://github.com/users/alguem/projects/7",
+                         "colunas": {"parada": "Esperando você"}},
+             "issues": {"repositorio": "alguem/atlas",
+                        "conta_gh": "conta-das-issues"}}
+    (moveu, recado), chamadas = _quadro_com_o_duble(
+        b.pasta, {"padrao": RESPOSTA_SEM_ESCOPO}, posto)
+    b.caso("quadro sem escopo não vira 'não achei a issue' — a recusa se diz "
+           "pelo nome, senão o cartão nunca move e ninguém sabe por quê",
+           moveu is False and "escopo de projeto" in recado)
+    b.caso("e a recusa por escopo ensina a saída, que é permissão à parte",
+           "projeto.conta_gh" in recado)
+    b.caso("sem `projeto.conta_gh` declarada, quem fala com o quadro é a "
+           "conta das issues",
+           "token-de-conta-das-issues" in chamadas)
+    (moveu, recado), chamadas = _quadro_com_o_duble(
+        b.pasta, {"padrao": RESPOSTA_SEM_ESCOPO},
+        dict(posto, projeto=dict(posto["projeto"],
+                                 conta_gh="conta-do-quadro")))
+    b.caso("declarada, `projeto.conta_gh` manda no quadro sem trocar a conta "
+           "das issues",
+           "token-de-conta-do-quadro" in chamadas
+           and "token-de-conta-das-issues" not in chamadas)
+    (moveu, recado), _ = _quadro_com_o_duble(
+        b.pasta, {"padrao": {"data": {"repository": {"issue": None}}}}, posto)
+    b.caso("issue que não existe no repositório declarado se diz assim",
+           moveu is False and "não existe" in recado)
+    coluna = {"id": "campo-1",
+              "options": [{"id": "opcao-1", "name": "Esperando você"}]}
+    achou = {"data": {"repository": {"issue": {"id": "issue-1",
+             "projectItems": {"nodes": [{"id": "item-1", "project": {
+                 "id": "quadro-1", "number": 7, "field": coluna}}]}}}}}
+    (moveu, recado), _ = _quadro_com_o_duble(
+        b.pasta, {"por_consulta": {"projectItems": achou},
+                  "padrao": {"data": {"updateProjectV2ItemFieldValue": {}}}},
+        posto)
+    b.caso("com escopo e cartão no quadro, a issue move de verdade",
+           moveu is True and "Esperando você" in recado)
+
+
+def _sobre_a_fila_que_le_as_issues(b) -> None:
+    posto = {"issues": {"repositorio": "dono/repo", "conta_gh": "conta-x"}}
+    caixa = Path(tempfile.mkdtemp(dir=str(b.pasta), prefix="fila-"))
+    duble = caixa / "fila-duble.py"
+    duble.write_text(FONTE_DO_DUBLE_DA_FILA.format(caixa=repr(str(caixa))),
+                     encoding="utf-8")
+    gh = shlex.split(f"{sys.executable} {duble}")
+    (caixa / "issues.json").write_text(json.dumps(
+        [{"number": 272, "title": "relato de entrega",
+          "url": "https://github.com/dono/repo/issues/272"}]),
+        encoding="utf-8")
+    paradas, berro = _com_o_gh_trocado(
+        gh, TEMPO_DO_DUBLE,
+        lambda: issues_paradas_em_voce(posto))
+    b.caso("a fila enxerga a issue parada no dono, não só a execução",
+           berro == "" and [u["number"] for u in paradas] == [272])
+    pedido = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+    b.caso("a fila pergunta pela ETIQUETA, que não custa escopo de projeto — "
+           "ler o quadro exigiria permissão que a conta das issues não tem",
+           ETIQUETA_PARADO_EM_VOCE in pedido and "--state open" in pedido)
+    (caixa / "recusa.txt").write_text("x", encoding="utf-8")
+    paradas, berro = _com_o_gh_trocado(
+        gh, TEMPO_DO_DUBLE, lambda: issues_paradas_em_voce(posto))
+    b.caso("gh que recusa não vira fila vazia — lista vazia mentiria dizendo "
+           "que nada espera por você",
+           paradas == [] and berro != "")
+    paradas, berro = issues_paradas_em_voce({})
+    b.caso("sem repositório declarado, a fila diz o campo que falta",
+           "issues.repositorio" in berro)
+
+
 def _sobre_a_conta_que_age(b) -> None:
     sem_remoto = Path(b.pasta) / "sem-remoto"
     sem_remoto.mkdir()
@@ -437,6 +530,19 @@ def _sobre_o_bloco_de_estado(b) -> None:
     (pasta_foto / "02-segunda-c1.json").write_text(
         json.dumps(_molde("pergunta", pergunta="Sigo com A?")),
         encoding="utf-8")
+    (pasta_foto / "03-cobradora-c1.json").write_text(
+        json.dumps(_molde(
+            "para",
+            faltas=["o manual em HTML nao foi entregue",
+                    "sobrou referencia orfa no AGENTS.md"],
+            proximo="Entregue o manual e limpe as duas referencias.")),
+        encoding="utf-8")
+    (pasta_foto / "04-morta-c1.json").write_text(
+        json.dumps(_molde(
+            "para", origem="encadeador", motivo="morta",
+            faltas=["a etapa morreu sem deixar evidencia"],
+            proximo="Leia o log e reexecute a partir dela.")),
+        encoding="utf-8")
     alvo_git = Path(b.pasta) / "alvo-com-branch"
     subprocess.run(["git", "init", "-q", "-b", "trabalho-7-mesa",
                     str(alvo_git)], check=True, capture_output=True)
@@ -456,6 +562,15 @@ def _sobre_o_bloco_de_estado(b) -> None:
          "a paginação devolve a segunda página" in onde)
     b.caso("corpo comprido entra cortado e o corte é confessado",
          "cortado" in cortado and len(cortado) < 9000)
+    b.caso("a acusação que reabriu a etapa viaja no bloco: a sessão vai "
+           "direto ao conserto em vez de redescobrir o que já fez",
+         "o manual em HTML nao foi entregue" in onde
+         and "sobrou referencia orfa" in onde)
+    b.caso("e o passo seguinte que a acusação pediu vem junto",
+         "Entregue o manual e limpe as duas referencias." in onde)
+    b.caso("morte do encadeador não entra como acusação: ninguém julgou "
+           "nada ali, e o texto dela só confundiria a sessão",
+         "a etapa morreu sem deixar evidencia" not in onde)
     b.caso("a branch atual do alvo entra nomeada — a etapa não trabalha às "
            "cegas sobre 'a branch que a anterior abriu'",
          "trabalho-7-mesa" in com_branch)
@@ -613,6 +728,8 @@ def _sobre_a_issue(b) -> None:
          and coluna_da_situacao({}, "completa") is None)
     b.caso("situação sem linha no mapa não move cartão por adivinhação",
          coluna_da_situacao(parado, "dormindo") is None)
+    _sobre_o_quadro_que_recusa(b)
+    _sobre_a_fila_que_le_as_issues(b)
     b.caso("o dono do quadro sai da url, quando é de pessoa",
          dono_do_projeto({"projeto": {"url":
              "https://github.com/users/alguem/projects/7"}}) == ("alguem", "users"))
@@ -1687,6 +1804,89 @@ def _sobre_a_ronda(b) -> None:
     for lixo in ("r-espera-velha", "r-viva", "r-morta", "r-completa"):
         shutil.rmtree(Path(b.evidencias) / lixo, ignore_errors=True)
 
+def _sobre_a_fila(b) -> None:
+    def trabalho(nome, estado=None, evidencias=()):
+        pasta = Path(b.evidencias) / nome
+        pasta.mkdir(parents=True, exist_ok=True)
+        if estado is not None:
+            (pasta / ARQUIVO_ESTADO).write_text(
+                json.dumps(estado, ensure_ascii=False), encoding="utf-8")
+        for arquivo, dado in evidencias:
+            (pasta / arquivo).write_text(
+                json.dumps({"trabalho": nome, "quando": "2026-09-02T09:00:00Z",
+                            "provado": [], "suposto": [], "faltas": [],
+                            **dado}, ensure_ascii=False), encoding="utf-8")
+
+    def instante(horas_atras):
+        return (datetime.now().astimezone()
+                - timedelta(hours=horas_atras)).isoformat()
+
+    def enfileirar():
+        resposta = _cli(["fila", "--dir", b.evidencias])
+        return resposta.returncode, resposta.stdout
+
+    def linha_de(saida, nome):
+        return next((l for l in saida.splitlines() if nome in l), "")
+
+    trabalho("f-completa", {"situacao": "completa", "desde": instante(5),
+                            "pid": 999999999, "issue": 301},
+             [("01-grava-c1.json", {"etapa": "grava", "veredito": "segue",
+                                    "ciclo": {"i": 1, "teto": 2},
+                                    "custo": {"usd": 0.5}})])
+    trabalho("f-parada", {"situacao": "parada", "desde": instante(3),
+                          "pid": 999999999, "issue": 302, "etapa": "verifica"},
+             [("01-grava-c1.json", {"etapa": "grava", "veredito": "segue",
+                                    "ciclo": {"i": 1, "teto": 2}}),
+              ("02-verifica-c2.json", {"etapa": "verifica", "veredito": "para",
+                                       "ciclo": {"i": 2, "teto": 2},
+                                       "proximo": "x"})])
+    trabalho("f-espera", {"situacao": "aguardando-resposta",
+                          "desde": instante(1), "pid": 999999999,
+                          "issue": 303, "etapa": "aprova"},
+             [("01-aprova-c1.json", {"etapa": "aprova", "veredito": "pergunta",
+                                     "ciclo": {"i": 1, "teto": 3},
+                                     "pergunta": "aprova?"})])
+    trabalho("f-viva", {"situacao": "rodando", "desde": instante(0),
+                        "pid": os.getpid(), "issue": 304})
+
+    codigo, saida = enfileirar()
+    nomes = ("f-completa", "f-parada", "f-espera", "f-viva")
+    b.caso("a fila mostra TODOS os trabalhos do diretório num comando só, "
+           "com etapa, ciclo e situação, e sai 0",
+           codigo == 0 and all(n in saida for n in nomes)
+           and "verifica" in linha_de(saida, "f-parada")
+           and "c2/2" in linha_de(saida, "f-parada")
+           and "parada" in linha_de(saida, "f-parada"))
+    posicao = {n: saida.find(n) for n in nomes}
+    b.caso("o que espera pessoa aparece destacado e primeiro; depois o "
+           "parado, depois o que anda; o completo vai por último",
+           MARCA_DE_QUEM_ESPERA_VOCE in linha_de(saida, "f-espera")
+           and MARCA_DE_QUEM_ESPERA_VOCE not in linha_de(saida, "f-parada")
+           and posicao["f-espera"] < posicao["f-parada"]
+           < posicao["f-viva"] < posicao["f-completa"])
+    b.caso("trabalho sem custo medido diz não medido, e não zero",
+           CUSTO_SEM_MEDICAO in linha_de(saida, "f-parada")
+           and "0.0000" not in linha_de(saida, "f-parada")
+           and "0.5000" in linha_de(saida, "f-completa"))
+    b.caso("a fila diz a issue e há quanto tempo cada trabalho está assim",
+           "303" in linha_de(saida, "f-espera")
+           and "h" in linha_de(saida, "f-espera"))
+
+    antes = sorted((q.name, q.read_bytes()) for q
+                   in Path(b.evidencias).glob("*/*.json"))
+    enfileirar()
+    depois = sorted((q.name, q.read_bytes()) for q
+                    in Path(b.evidencias).glob("*/*.json"))
+    b.caso("a fila lê e NÃO escreve: nenhum json muda", antes == depois)
+
+    for lixo in nomes:
+        shutil.rmtree(Path(b.evidencias) / lixo, ignore_errors=True)
+    vazio = Path(b.pasta) / "fila-vazia"
+    vazio.mkdir(exist_ok=True)
+    resposta = _cli(["fila", "--dir", str(vazio)])
+    b.caso("diretório sem trabalho: a fila diz que está vazia, exit 0",
+           resposta.returncode == 0 and "vazia" in resposta.stdout)
+
 
 def _sobre_o_andamento(b) -> None:
     def foto(trabalho, extra=()):
@@ -1775,6 +1975,45 @@ def _sobre_o_andamento(b) -> None:
          resposta.returncode == 2)
 
 
+def _sobre_o_teto_declarado_na_sessao(b) -> None:
+    roteiro = _roteiro(b.pasta, "m-teto-declarado.json", {"etapas": [
+        {"nome": "medir", "tipo": "sessao", "prompt": "meça",
+         "tempo-limite": 7200},
+        {"nome": "trabalhar", "tipo": "sessao", "prompt": "faça",
+         "depende": ["medir"]}]})
+    resposta = _cli(["ensaio", "--roteiro", roteiro, "--trabalho",
+                     "t-teto-declarado", "--dir", b.evidencias,
+                     "--cwd", b.pasta])
+    b.caso("o ensaio mostra o teto declarado da etapa de medição, para o "
+           "dono ver ANTES de gastar sessão que ela cabe",
+           "01-medir" in resposta.stdout and "teto 7200 s" in resposta.stdout)
+    b.caso("e mostra o teto padrão de quem não declarou — 3600 s é onde a "
+           "medição repetida morre",
+           f"teto {TEMPO_SESSAO} s" in resposta.stdout)
+
+    lento = Path(b.pasta) / "cli-lento.sh"
+    lento.write_text(CLI_FALSO_QUE_DEMORA.format(
+        segundos=TETO_CURTO_DO_TESTE + 1), encoding="utf-8")
+    lento.chmod(0o755)
+    roteiro = _roteiro(b.pasta, "m-medicao-longa.json", {"etapas": [
+        {"nome": "medir", "tipo": "sessao", "prompt": "meça",
+         "tempo-limite": TETO_CURTO_DO_TESTE * FOLGA_DO_TETO}]})
+    resposta = subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-medicao-longa",
+         "--dir", b.evidencias, "--cwd", b.pasta],
+        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+        env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
+                 ENCADEADOR_SESSAO=str(lento)))
+    evidencia = json.loads(
+        (Path(b.evidencias) / "t-medicao-longa" / "01-medir-c1.json")
+        .read_text(encoding="utf-8"))
+    b.caso("sessão que passa do teto curto não morre quando o roteiro "
+           "declara teto maior — a medição longa cabe no tempo declarado",
+           evidencia.get("motivo") != "morta"
+           and "tempo-limite" not in " ".join(evidencia.get("faltas", [])))
+
+
 def _sobre_a_troca_do_cli_da_sessao(b) -> None:
     marca = Path(b.pasta) / "o-cli-falso-rodou"
     falso = Path(b.pasta) / "cli-falso.sh"
@@ -1833,6 +2072,27 @@ def _sobre_o_custo_da_sessao(b) -> None:
          evidencia.get("veredito") == "segue" and "custo" not in evidencia)
     b.caso("e o relatório do fechamento confessa o não medido",
          "não medido" in feito.stdout)
+
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-custo-medido",
+                                    "mede")
+    b.caso("toda etapa executada grava a duração de relógio",
+         isinstance(evidencia.get("duracao"), (int, float))
+         and evidencia["duracao"] >= 0)
+
+    feito = _executar("t-morte-cara", CLI_FALSO_QUE_MORRE_CARO)
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-morte-cara",
+                                    "mede")
+    b.caso("sessão que morre grava o que gastou — retrabalho tem preço, e "
+           "sem isso a reabertura sai de graça na conta",
+         evidencia.get("custo") == {"usd": 3.5, "tokens": {
+             "entrada": 7, "saida": 3,
+             "cache-lido": 11, "cache-criado": 13}}
+         and evidencia.get("turnos") == 9)
+    b.caso("e a morte também é cronometrada",
+         isinstance(evidencia.get("duracao"), (int, float)))
+    b.caso("e continua sendo evidência sintética de parada",
+         evidencia.get("veredito") == "para"
+         and evidencia.get("motivo") == "morta")
 
 def _evidencia_da_etapa(pasta, nome):
     for arquivo in sorted(Path(pasta).glob(f"*-{nome}-c*.json")):
@@ -2589,6 +2849,25 @@ def _sobre_a_sessao_que_a_acusacao_reabre(b) -> None:
            _evidencia_do_ciclo(
                "t-reabre", "03-trabalho-commitado-c2.json").is_file())
 
+    morta, marca_morta = _sessao_falsa("morta")
+    roteiro_morto = _roteiro(b.pasta, "m-morre-depois.json", {"etapas": [
+        {"nome": "abrir-branch", "tipo": "codigo", "comando": FANTOCHE_OK},
+        {"nome": "trabalhar", "tipo": "sessao", "prompt": "trabalhe",
+         "depende": ["abrir-branch"], "tempo-limite": TETO_DO_DUBLE},
+        {"nome": "revisar", "tipo": "sessao", "prompt": "revise",
+         "depende": ["trabalhar"], "tempo-limite": TETO_DO_DUBLE}]})
+    caiu = Path(b.pasta) / "cli-que-morre-por-limite.sh"
+    caiu.write_text(
+        CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE.format(marca=marca_morta),
+        encoding="utf-8")
+    caiu.chmod(0o755)
+    _executar(roteiro_morto, "t-morte", caiu)
+    _executar(roteiro_morto, "t-morte", caiu, "--retomar")
+    b.caso("morte nao e acusacao: a etapa que morreu se refaz sozinha e nao "
+           "arrasta a de trabalho para um ciclo novo",
+           not _evidencia_do_ciclo("t-morte",
+                                   "02-trabalhar-c2.json").exists())
+
     sozinha, marca_sozinha = _sessao_falsa("sozinha")
     roteiro_sozinho = _roteiro(b.pasta, "m-so-a-sessao.json", {"etapas": [
         {"nome": "trabalhar", "tipo": "sessao", "prompt": "trabalhe",
@@ -2931,6 +3210,7 @@ TEMAS = (
     _sobre_a_prova_e_o_ambiente,
     _sobre_a_sessao,
     _sobre_o_tempo_limite,
+    _sobre_o_teto_declarado_na_sessao,
     _sobre_a_troca_do_cli_da_sessao,
     _sobre_o_custo_da_sessao,
     _sobre_os_ciclos_e_o_disco,
@@ -2940,6 +3220,7 @@ TEMAS = (
     _sobre_o_prompt_por_arquivo,
     _sobre_o_modelo_por_etapa,
     _sobre_a_ronda,
+    _sobre_a_fila,
     _sobre_o_destino_do_trabalho,
     _sobre_as_faltas_declaradas,
     _sobre_os_criterios_da_issue_na_verificacao,

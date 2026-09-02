@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections import namedtuple
 from datetime import datetime
 from pathlib import Path
 
@@ -58,6 +59,10 @@ ARQUIVO_DAS_REGRAS = "nucleo/regras.json"
 REGRAS_QUE_FALHARAM_EM_EXECUCAO = (2, 9, 15, 16)
 BANDEIRA_DOS_TURNOS = "--turnos"
 BANDEIRA_DO_CUSTO = "--custo"
+BANDEIRA_DA_DURACAO = "--duracao"
+ORIGEM_DO_ENCADEADOR = "encadeador"
+Retrato = namedtuple("Retrato", "ciclo veredito origem")
+SEM_RETRATO = Retrato(0, None, None)
 TOKENS_DO_CUSTO = (("entrada", "input_tokens"), ("saida", "output_tokens"),
                    ("cache-lido", "cache_read_input_tokens"),
                    ("cache-criado", "cache_creation_input_tokens"))
@@ -112,6 +117,7 @@ PADRAO_NOME_EVIDENCIA = re.compile(r"^([0-9]+)-(.+)-c([0-9]+)\.json$")
 ARQUIVO_CITADO = re.compile(r"[\w./-]+\.(?:py|json|md|js|txt)")
 CAMPO_DA_CONTA_DAS_ISSUES = "issues.conta_gh"
 CAMPO_DA_CONTA_DO_REMOTO = "remoto.conta_gh"
+CAMPO_DA_CONTA_DO_PROJETO = "projeto.conta_gh"
 REPOSITORIO_NO_ENDERECO_DO_REMOTO = re.compile(
     r"github\.com[:/]([^/:]+/[^/:]+?)(?:\.git)?/?$")
 REMOTO_GIT_PADRAO = "origin"
@@ -215,6 +221,48 @@ elif argv[:1] == ["api"] and len(argv) > 1:
         sys.exit(1)
 sys.exit(0)
 '''
+FONTE_DO_DUBLE_DO_QUADRO = '''#!/usr/bin/env python3
+import json, os, pathlib, sys
+caixa = pathlib.Path({caixa})
+argv = sys.argv[1:]
+(caixa / "chamadas.txt").open("a").write(
+    " ".join(argv[:2]) + "\\t" + os.environ.get("GH_TOKEN", "sem-token")
+    + "\\n")
+if argv[:2] == ["auth", "token"]:
+    print("token-de-" + argv[-1])
+    sys.exit(0)
+roteiro = caixa / "resposta.json"
+if not roteiro.exists():
+    sys.exit(0)
+dito = json.loads(roteiro.read_text())
+consulta = " ".join(argv)
+for gatilho, resposta in dito.get("por_consulta", {{}}).items():
+    if gatilho in consulta:
+        print(json.dumps(resposta))
+        sys.exit(1 if resposta.get("errors") else 0)
+print(json.dumps(dito.get("padrao", {{"data": {{}}}})))
+sys.exit(1 if dito.get("padrao", {{}}).get("errors") else 0)
+'''
+RESPOSTA_SEM_ESCOPO = {"errors": [{"type": "INSUFFICIENT_SCOPES",
+                                   "message": "requires read:project"}]}
+
+
+FONTE_DO_DUBLE_DA_FILA = '''#!/usr/bin/env python3
+import os, pathlib, sys
+caixa = pathlib.Path({caixa})
+argv = sys.argv[1:]
+(caixa / "chamadas.txt").open("a").write(" ".join(argv) + "\\n")
+if argv[:2] == ["auth", "token"]:
+    print("token-de-" + argv[-1])
+    sys.exit(0)
+if (caixa / "recusa.txt").exists():
+    sys.stderr.write("sem acesso\\n")
+    sys.exit(1)
+print((caixa / "issues.json").read_text())
+sys.exit(0)
+'''
+
+
 FONTE_DO_DUBLE_QUE_TRAVA = '''#!/usr/bin/env python3
 import sys, time
 if sys.argv[1:3] == ["auth", "token"]:
@@ -231,6 +279,12 @@ TETO_DO_DUBLE = 30
 CLAUDE_QUE_PARA_NA_METADE = ('#!/bin/sh\n'
                             'printf \'{"type":"system","subtype":"init"\'\n'
                             'sleep 600\n')
+CLI_FALSO_QUE_DEMORA = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'sleep {segundos}\n'
+    'printf \'{{"type":"result","subtype":"success","num_turns":1,'
+    '"session_id":"s-lenta","result":"pronto"}}\\n\'\n')
 CLI_FALSO_DA_SESSAO = (
     '#!/bin/sh\n'
     'touch {marca}\n'
@@ -254,6 +308,32 @@ CLI_FALSO_QUE_MEDE_CUSTO = (
     '"cache_read_input_tokens":100,"cache_creation_input_tokens":50},'
     '"structured_output":{"veredito":"segue","provado":[],"suposto":[],'
     '"faltas":[]}}\\n\'\n')
+CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE = (
+    '#!/bin/sh\n'
+    'pedido=$(cat)\n'
+    'case "$pedido" in\n'
+    '  *revise*)\n'
+    '    printf \'{{"type":"result","subtype":"error_during_execution",'
+    '"num_turns":9,"session_id":"s-morreu","result":'
+    '"You have hit your session limit"}}\\n\'\n'
+    '    exit 1\n'
+    '    ;;\n'
+    'esac\n'
+    'echo rodou >> {marca}\n'
+    'printf \'{{"type":"result","subtype":"success","num_turns":2,'
+    '"session_id":"s-entregou","result":"pronto",'
+    '"structured_output":{{"veredito":"segue","provado":[],"suposto":[],'
+    '"faltas":[]}}}}\\n\'\n')
+CLI_FALSO_QUE_MORRE_CARO = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'printf \'{"type":"result","subtype":"error_during_execution",'
+    '"num_turns":9,"session_id":"s-morte-cara","result":'
+    '"You have hit your session limit",'
+    '"total_cost_usd":3.5,'
+    '"usage":{"input_tokens":7,"output_tokens":3,'
+    '"cache_read_input_tokens":11,"cache_creation_input_tokens":13}}\\n\'\n'
+    'exit 1\n')
 CLI_FALSO_QUE_ENTREGA_SEM_CUSTO = (
     '#!/bin/sh\n'
     'cat > /dev/null\n'
@@ -455,9 +535,9 @@ MARCA_FORK = "[fork de {}]"
 MARCA_UMA = "[uma]"
 ROTULO_DESLIGADA = "[desligada — evidência de skip]"
 ROTULO_CODIGO = "[codigo: {}]"
-ROTULO_SESSAO = "[sessao: {comando} --max-turns {turnos}]"
+ROTULO_SESSAO = "[sessao: {comando} --max-turns {turnos} — teto {teto} s]"
 ROTULO_SESSAO_COM_MODELO = ("[sessao: {comando} --model {modelo} "
-                            "--max-turns {turnos}]")
+                            "--max-turns {turnos} — teto {teto} s]")
 ROTULO_APROVACAO = "[aprovacao-manual: aprovação em {}]"
 ROTULO_VERIFICACAO = "[verificacao]"
 ROTULO_NOME_DA_ETAPA = "etapa {} (nome)"
@@ -481,6 +561,33 @@ AJUDA_DISPARAR = ("retoma a execução do ponto exato quando houver resposta "
 AJUDA_ANDAMENTO = "fotografa as evidências do trabalho em JSON"
 AJUDA_RONDA = ("varre as evidências e acusa execução presa — sem --trabalho: \n"
                "não se pede a ronda pelo nome de quem se esqueceu")
+AJUDA_FILA = ("mostra a fila inteira de --dir: todo trabalho com etapa, ciclo, "
+              "situação, tempo e custo — quem espera você vem primeiro")
+FILA_VAZIA = "a fila está vazia: nenhum trabalho em {dir}"
+FILA_CABECA = ("A FILA — {quantos} trabalhos em {dir}\n"
+               "({marca} = espera uma pessoa; custo somado das evidências)")
+FILA_LINHA = ("{marca:<{largura}} {trabalho:<{nome}} {issue:<6} {etapa:<22} "
+              "{ciclo:<6} {situacao:<20} {horas:>7} {custo}")
+MARCA_DE_QUEM_ESPERA_VOCE = "VOCÊ"
+TETO_DA_FILA = 50
+FILA_CABECA_DAS_ISSUES = ("\nESPERANDO VOCÊ — {quantas} issues paradas em "
+                          "você, do executor e das sessões")
+FILA_LINHA_DA_ISSUE = "  #{numero} {titulo}\n     {url}"
+FILA_SEM_ISSUE_PARADA = ("\nESPERANDO VOCÊ — nenhuma issue com a etiqueta "
+                         "`{etiqueta}`")
+FILA_SEM_AS_ISSUES = ("\nESPERANDO VOCÊ — não consegui perguntar ao "
+                      "repositório: {motivo}")
+BERRO_DA_FILA_SEM_REPOSITORIO = ("falta `issues.repositorio` na configuração "
+                                 "do executor")
+BERRO_DA_FILA_ILEGIVEL = "o gh respondeu o que não é JSON"
+SEM_ISSUE = "—"
+SEM_ETAPA = "—"
+SEM_CICLO = "—"
+CICLO_NA_FILA = "c{i}/{teto}"
+HORAS_NA_FILA = "{:.1f}h"
+SEM_HORAS = "?"
+ORDEM_NA_FILA = {"aguardando-resposta": 0, "parada": 1, SEM_ESTADO: 1,
+                 "dormindo": 2, "rodando": 2, "completa": 3}
 RONDA_LIMPA = "a ronda não achou execução presa em {dir}"
 RONDA_CABECA = ("A RONDA — execução presa, que espera e ninguém cobra\n"
                 "(teto da espera: {teto}h)")
@@ -536,6 +643,11 @@ ONDE_UM_ENDERECO = ">   {}"
 TEMPO_DO_GIT_LOCAL = 10
 ONDE_JA_RODARAM = "> já rodaram:"
 ONDE_UMA_ETAPA = ">   {nome}: {veredito} (ciclo {ciclo})"
+ONDE_A_ACUSACAO = (
+    "> o que reabriu esta etapa — conserte ISTO, e só isto. O resto do "
+    "trabalho já está provado no disco e não se refaz:")
+ONDE_UMA_FALTA = ">   {etapa} acusou: {falta}"
+ONDE_O_PASSO_PEDIDO = ">   {etapa} pediu: {proximo}"
 ONDE_SEM_EVIDENCIA = "> ainda sem evidência: {}"
 ONDE_O_DONO_RESPONDEU = "> o dono respondeu à pergunta desta etapa:"
 ONDE_LINHA_DA_RESPOSTA = ">   {}"
@@ -591,9 +703,17 @@ APROVACAO_POR_COMENTARIO_REGISTRADA = (
 COMANDO_QUE_LE_A_APROVACAO_POR_COMENTARIO = (
     "gh issue view {issue} --repo {repositorio} --json comments "
     "--jq '.comments[-1].author.login'")
-PERGUNTA_DA_APROVACAO = ("Recomendo aprovar depois de ler as evidências do "
-                         "trabalho {trabalho}. Aprova a etapa {etapa}? Para "
-                         "aprovar, crie o arquivo {arquivo} no alvo.")
+PERGUNTA_DA_APROVACAO = ("Aprova a etapa {etapa} do trabalho {trabalho}?\n\n"
+                         "**Para aprovar, responda a este comentário com uma "
+                         "linha sua** — do celular serve. Qualquer resposta "
+                         "sua depois desta pergunta destrava a execução, e "
+                         "ela continua do ponto exato.\n\n"
+                         "Para recusar, diga o que falta: a resposta chega à "
+                         "sessão e vira o próximo passo.\n\n"
+                         "(Quem estiver no terminal também pode destravar "
+                         "criando o arquivo {arquivo} na árvore da execução — "
+                         "mas isso é atalho de quem está na máquina, não o "
+                         "caminho do dono.)")
 
 MARCA_DO_NUMERO_NO_PADRAO = "<numero>"
 MARCA_DO_ASSUNTO_NO_PADRAO = "<assunto-em-kebab>"
@@ -624,11 +744,21 @@ RECADO_ETIQUETA_TIRADA = "etiqueta `{etiqueta}` tirada: a execução voltou a an
 RECADO_ETIQUETA_FALHOU = "não consegui mexer na etiqueta `{etiqueta}`: {motivo}"
 RECADO_GH_MUDO = "o gh não respondeu"
 RECADO_QUADRO_SEM_COLUNA = ""
-RECADO_QUADRO_NAO_ACHOU = ("não achei a issue no quadro, ou o quadro não tem "
-                           "a coluna `{coluna}` — a etiqueta já avisou")
-RECADO_QUADRO_NAO_MOVEU = ("não consegui mover para `{coluna}` — a conta do "
-                           "executor precisa de escrita no quadro, que é "
-                           "permissão à parte da do repositório")
+RECADO_QUADRO_NAO_ACHOU = ("não cheguei ao cartão da coluna `{coluna}`: "
+                           "{motivo} — a etiqueta já avisou")
+RECADO_QUADRO_NAO_MOVEU = "não consegui mover para `{coluna}`: {motivo}"
+BERRO_DE_ESCOPO = ("a conta que fala com o quadro não tem o escopo de "
+                   "projeto, que é permissão à parte da do repositório; "
+                   "declare `projeto.conta_gh` numa conta que o tenha, ou "
+                   "rode `gh auth refresh -s project`")
+BERRO_DO_GH_MUDO = "o gh não respondeu"
+BERRO_DO_QUADRO_ILEGIVEL = "o gh respondeu o que não é JSON"
+BERRO_DO_QUADRO_SEM_TEXTO = "o gh recusou sem dizer por quê"
+BERRO_DO_QUADRO_NAO_DECLARADO = ("falta `issues.repositorio` ou "
+                                 "`projeto.url` na configuração")
+BERRO_DO_QUADRO_SEM_A_COLUNA = "o quadro não tem essa coluna"
+BERRO_DA_ISSUE_QUE_NAO_EXISTE = "a issue não existe no repositório declarado"
+TIPO_DE_ESCOPO_INSUFICIENTE = "INSUFFICIENT_SCOPES"
 RECADO_QUADRO_MOVEU = "movida no quadro para `{coluna}`"
 RECADO_SEM_REPOSITORIO = ("sem repositório de issues na configuração — "
                           "não postei")
@@ -1265,11 +1395,12 @@ def _cli_evidencia(argumentos, entrada=None):
                           timeout=TEMPO_DO_CLI_DE_EVIDENCIA)
 
 
-def _evidencia_sintetica(base: list, motivo: str, detalhe=None) -> str:
+def _evidencia_sintetica(base: list, motivo: str, detalhe=None,
+                        medidas=()) -> str:
     argumentos = ["sintetico"] + base + ["--motivo", motivo]
     if detalhe is not None:
         argumentos += ["--detalhe", detalhe]
-    return _cli_evidencia(argumentos).stdout.strip()
+    return _cli_evidencia(argumentos + list(medidas)).stdout.strip()
 
 
 def _materializar_envelope(base: list, envelope: dict) -> str:
@@ -1520,6 +1651,37 @@ def _linhas_dos_enderecos(cwd) -> list:
                                for caminho in achados]
 
 
+def _linhas_da_acusacao_que_reabriu(pasta, foto) -> list:
+    quem = sorted(nome for nome, retrato in foto.items() if acusou(retrato))
+    if not quem:
+        return []
+    linhas = [ONDE_A_ACUSACAO]
+    for nome in quem:
+        dado = _ultima_evidencia_da_etapa(pasta, nome)
+        for falta in (dado.get("faltas") or [])[:LIMITE_DAS_ACUSACOES]:
+            linhas.append(ONDE_UMA_FALTA.format(etapa=nome, falta=falta))
+        if (pedido := dado.get("proximo")):
+            linhas.append(ONDE_O_PASSO_PEDIDO.format(etapa=nome,
+                                                     proximo=pedido))
+    return linhas
+
+
+def _ultima_evidencia_da_etapa(pasta, nome) -> dict:
+    melhor, achado = -1, {}
+    for arquivo in Path(pasta).glob("*.json"):
+        casado = PADRAO_NOME_EVIDENCIA.match(arquivo.name)
+        if not casado or casado.group(2) != nome:
+            continue
+        ciclo = int(casado.group(3))
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(dado, dict) and ciclo > melhor:
+            melhor, achado = ciclo, dado
+    return achado
+
+
 def _bloco_de_onde_esta(cwd=None) -> str:
     if not _EM_CURSO.get("trabalho"):
         return ""
@@ -1543,11 +1705,12 @@ def _bloco_de_onde_esta(cwd=None) -> str:
     if foto:
         linhas.append(ONDE_JA_RODARAM)
         for nome in sorted(foto):
-            ciclo, veredito = foto[nome]
+            ciclo, veredito = foto[nome].ciclo, foto[nome].veredito
             linhas.append(ONDE_UMA_ETAPA.format(nome=nome, veredito=veredito,
                                                 ciclo=ciclo))
     if (faltam := [n for n in _EM_CURSO.get("etapas", []) if n not in foto]):
         linhas.append(ONDE_SEM_EVIDENCIA.format(", ".join(faltam)))
+    linhas += _linhas_da_acusacao_que_reabriu(pasta, foto)
     if (resposta := _EM_CURSO.get("resposta")):
         linhas.append(ONDE_O_DONO_RESPONDEU)
         linhas += [ONDE_LINHA_DA_RESPOSTA.format(linha)
@@ -1621,6 +1784,7 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
 
     log = _log_da_etapa(dir_base, trabalho, ordem, etapa["nome"])
     marcas = {}
+    comecou = time.monotonic()
     try:
         if etapa["tipo"] == "codigo":
             codigo_saida, saida, erro = _rodar_processo(
@@ -1634,7 +1798,8 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
         log.write_text(f"{estouro}\n", encoding="utf-8")
         return _evidencia_sintetica(base, "morta",
                                     DETALHE_TEMPO_ESTOURADO.format(
-                                        estouro=estouro, log=log))
+                                        estouro=estouro, log=log),
+                                    _bandeira_de_duracao(comecou))
 
     _guardar_no_log(log, etapa["tipo"], saida, erro)
     if codigo_saida != 0:
@@ -1644,11 +1809,21 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                 " ⏎ ".join(dito[:LIMITE_DO_DITO]
                            for dito in marcas["ditos"][-DITOS_NA_EVIDENCIA:]))
         return _evidencia_sintetica(base, "morta",
-                                    detalhe[:LIMITE_DO_DETALHE])
+                                    detalhe[:LIMITE_DO_DETALHE],
+                                    _o_que_a_sessao_gastou(saida, comecou))
     feito = _cli_evidencia(["materializar"] + base
-                           + _bandeira_de_turnos(saida)
-                           + _bandeira_de_custo(saida), entrada=saida)
+                           + _o_que_a_sessao_gastou(saida, comecou),
+                           entrada=saida)
     return feito.stdout.strip()
+
+
+def _bandeira_de_duracao(comecou: float) -> list:
+    return [BANDEIRA_DA_DURACAO, f"{time.monotonic() - comecou:.3f}"]
+
+
+def _o_que_a_sessao_gastou(saida: str, comecou: float) -> list:
+    return (_bandeira_de_turnos(saida) + _bandeira_de_custo(saida)
+            + _bandeira_de_duracao(comecou))
 
 
 def _bandeira_de_turnos(saida: str) -> list:
@@ -1845,9 +2020,9 @@ def _verificacao_gravada(alvo):
 
 
 def _ciclo_que_acusou(dir_base, trabalho, nome):
-    ciclo, veredito = foto_das_etapas(
-        Path(dir_base) / trabalho).get(nome, (0, None))
-    return ciclo if veredito == "para" else None
+    retrato = foto_das_etapas(Path(dir_base) / trabalho).get(nome,
+                                                            SEM_RETRATO)
+    return retrato.ciclo if retrato.veredito == "para" else None
 
 
 def _evidencias_que_a_retomada_pulou(dir_base, trabalho, nome) -> list:
@@ -1980,7 +2155,8 @@ def _rotulo(etapa, ordem, cwd="."):
         rotulo = ROTULO_SESSAO_COM_MODELO if modelo else ROTULO_SESSAO
         texto = f"{inicio} " + rotulo.format(
             comando=" ".join(SESSAO), modelo=modelo,
-            turnos=etapa.get("max-turnos", MAX_TURNOS_PADRAO))
+            turnos=etapa.get("max-turnos", MAX_TURNOS_PADRAO),
+            teto=etapa.get("tempo-limite", TEMPO_SESSAO))
     elif etapa["tipo"] == "aprovacao-manual":
         texto = f"{inicio} " + ROTULO_APROVACAO.format(etapa["aprovacao"])
     else:
@@ -2141,6 +2317,12 @@ def _conta_das_issues(configuracao):
 def _conta_do_remoto(configuracao):
     dado = configuracao or {}
     return (_campo(dado, CAMPO_DA_CONTA_DO_REMOTO)
+            or _campo(dado, CAMPO_DA_CONTA_DAS_ISSUES))
+
+
+def _conta_do_projeto(configuracao):
+    dado = configuracao or {}
+    return (_campo(dado, CAMPO_DA_CONTA_DO_PROJETO)
             or _campo(dado, CAMPO_DA_CONTA_DAS_ISSUES))
 
 
@@ -2317,16 +2499,34 @@ def numero_do_projeto(configuracao) -> int | None:
     return int(achado.group(1)) if achado else None
 
 
+def _berro_do_graphql(respondido):
+    erros = respondido.get("errors") or []
+    primeiro = erros[0] if isinstance(erros, list) and erros else {}
+    if not isinstance(primeiro, dict):
+        return BERRO_DO_QUADRO_SEM_TEXTO
+    tipo = primeiro.get("type") or ""
+    recado = (primeiro.get("message") or "").strip()
+    if tipo == TIPO_DE_ESCOPO_INSUFICIENTE:
+        return BERRO_DE_ESCOPO
+    return recado[:LIMITE_DO_ERRO_DO_GH] or BERRO_DO_QUADRO_SEM_TEXTO
+
+
 def _perguntar_ao_gh_em_json(configuracao, consulta):
-    feito = _gh_na_conta_das_issues(configuracao,
-                                    ["api", "graphql", "-f",
-                                     f"query={consulta}"])
-    if feito is None or feito.returncode != 0:
-        return None
-    with contextlib.suppress(json.JSONDecodeError):
+    feito = _gh_da_conta(_conta_do_projeto(configuracao),
+                         ["api", "graphql", "-f", f"query={consulta}"])
+    if feito is None:
+        return None, BERRO_DO_GH_MUDO
+    respondido = None
+    with contextlib.suppress(json.JSONDecodeError, AttributeError):
         respondido = json.loads(feito.stdout)
-        return None if respondido.get("errors") else respondido.get("data")
-    return None
+    if isinstance(respondido, dict) and respondido.get("errors"):
+        return None, _berro_do_graphql(respondido)
+    if feito.returncode != 0:
+        return None, ((feito.stderr or feito.stdout).strip()
+                      [:LIMITE_DO_ERRO_DO_GH] or BERRO_DO_QUADRO_SEM_TEXTO)
+    if not isinstance(respondido, dict):
+        return None, BERRO_DO_QUADRO_ILEGIVEL
+    return respondido.get("data"), ""
 
 
 def dono_do_projeto(configuracao) -> tuple:
@@ -2342,21 +2542,23 @@ def _quadro_declarado(configuracao):
         return None
     molde = (CONSULTA_DO_QUADRO_DE_ORGANIZACAO if tipo == "orgs"
              else CONSULTA_DO_QUADRO_DE_PESSOA)
-    dado = _perguntar_ao_gh_em_json(
+    dado, berro = _perguntar_ao_gh_em_json(
         configuracao, molde.format(dono=dono, numero=numero))
     if not dado:
-        return None
+        return None, berro
     dono_do_dado = dado.get("organization") or dado.get("user") or {}
-    return dono_do_dado.get("projectV2")
+    return dono_do_dado.get("projectV2"), ""
 
 
 def _entrar_no_quadro(configuracao, conteudo, projeto):
-    dado = _perguntar_ao_gh_em_json(
+    dado, berro = _perguntar_ao_gh_em_json(
         configuracao, MUTACAO_DE_ENTRADA_NO_QUADRO.format(
             projeto=projeto, conteudo=conteudo))
     if not dado:
-        return None
-    return ((dado.get("addProjectV2ItemById") or {}).get("item") or {}).get("id")
+        return None, berro
+    item = ((dado.get("addProjectV2ItemById") or {}).get("item")
+            or {}).get("id")
+    return item, ""
 
 
 def _coluna_do_campo(campo, coluna):
@@ -2370,31 +2572,38 @@ def item_do_quadro_e_coluna(configuracao, issue, coluna: str):
     repositorio = _campo(configuracao or {}, "issues.repositorio") or ""
     numero = numero_do_projeto(configuracao)
     if "/" not in repositorio or numero is None:
-        return None
+        return None, BERRO_DO_QUADRO_NAO_DECLARADO
     dono, _, nome = repositorio.partition("/")
-    dado = _perguntar_ao_gh_em_json(configuracao, CONSULTA_DO_ITEM.format(
-        dono=dono, nome=nome, issue=issue))
+    dado, berro = _perguntar_ao_gh_em_json(
+        configuracao, CONSULTA_DO_ITEM.format(
+            dono=dono, nome=nome, issue=issue))
     if not dado:
-        return None
+        return None, berro
     caminho = ((dado.get("repository") or {}).get("issue") or {})
     for item in (caminho.get("projectItems") or {}).get("nodes") or []:
         projeto = item.get("project") or {}
         if projeto.get("number") != numero:
             continue
         if (achado := _coluna_do_campo(projeto.get("field"), coluna)):
-            return (item["id"], projeto["id"], *achado)
-        return None
+            return (item["id"], projeto["id"], *achado), ""
+        return None, BERRO_DO_QUADRO_SEM_A_COLUNA
     return _achado_de_quem_acabou_de_entrar(
         configuracao, caminho.get("id"), coluna)
 
 
 def _achado_de_quem_acabou_de_entrar(configuracao, conteudo, coluna):
-    quadro = _quadro_declarado(configuracao) if conteudo else None
+    if not conteudo:
+        return None, BERRO_DA_ISSUE_QUE_NAO_EXISTE
+    quadro, berro = _quadro_declarado(configuracao)
     if not quadro:
-        return None
+        return None, berro
     achado = _coluna_do_campo(quadro.get("field"), coluna)
-    item = _entrar_no_quadro(configuracao, conteudo, quadro["id"])
-    return (item, quadro["id"], *achado) if item and achado else None
+    if not achado:
+        return None, BERRO_DO_QUADRO_SEM_A_COLUNA
+    item, berro = _entrar_no_quadro(configuracao, conteudo, quadro["id"])
+    if not item:
+        return None, berro
+    return (item, quadro["id"], *achado), ""
 
 
 def coluna_da_situacao(configuracao, situacao):
@@ -2408,14 +2617,17 @@ def mover_no_quadro(configuracao, issue, situacao):
     coluna = coluna_da_situacao(configuracao, situacao)
     if not coluna:
         return False, RECADO_QUADRO_SEM_COLUNA
-    achado = item_do_quadro_e_coluna(configuracao, issue, coluna)
+    achado, berro = item_do_quadro_e_coluna(configuracao, issue, coluna)
     if not achado:
-        return False, RECADO_QUADRO_NAO_ACHOU.format(coluna=coluna)
+        return False, RECADO_QUADRO_NAO_ACHOU.format(coluna=coluna,
+                                                     motivo=berro)
     item, projeto, campo, opcao = achado
-    feito = _perguntar_ao_gh_em_json(configuracao, MUTACAO_DA_COLUNA.format(
-        projeto=projeto, item=item, campo=campo, opcao=opcao))
+    feito, berro = _perguntar_ao_gh_em_json(
+        configuracao, MUTACAO_DA_COLUNA.format(
+            projeto=projeto, item=item, campo=campo, opcao=opcao))
     if not feito:
-        return False, RECADO_QUADRO_NAO_MOVEU.format(coluna=coluna)
+        return False, RECADO_QUADRO_NAO_MOVEU.format(coluna=coluna,
+                                                     motivo=berro)
     return True, RECADO_QUADRO_MOVEU.format(coluna=coluna)
 
 
@@ -2605,7 +2817,7 @@ def _avisos_da_pausa_estrategica(roteiro) -> list:
             for d in etapa.get("depende", []) or []).lower()
         if "commit" not in antes:
             avisos.append(AVISO_APROVACAO_SEM_COMMIT.format(etapa["nome"]))
-        if "cetico" not in antes and "cético" not in antes:
+        if "verificacao-adversarial" not in antes and "cético" not in antes:
             avisos.append(AVISO_APROVACAO_SEM_CETICO.format(etapa["nome"]))
     return avisos
 
@@ -2715,12 +2927,17 @@ def ler_respostas(trabalho, dir_base, cwd, caminho_configuracao=None,
                     resposta=texto, caminho_roteiro=caminho_roteiro)
 
 
+def acusou(retrato) -> bool:
+    retrato = retrato or SEM_RETRATO
+    return (retrato.veredito == "para"
+            and retrato.origem != ORIGEM_DO_ENCADEADOR)
+
+
 def sessoes_que_a_acusacao_reabre(etapas, foto) -> set:
     tipo_de = {etapa["nome"]: etapa["tipo"] for etapa in etapas}
     depende_de = {etapa["nome"]: list(etapa.get("depende") or [])
                   for etapa in etapas}
-    fila = [nome for nome in depende_de
-            if foto.get(nome, (0, None))[1] == "para"]
+    fila = [nome for nome in depende_de if acusou(foto.get(nome))]
     vistos, reabertas = set(fila), set()
     while fila:
         cobradas = depende_de.get(fila.pop(0), [])
@@ -2747,7 +2964,8 @@ def foto_das_etapas(pasta) -> dict:
             continue
         if isinstance(dado, dict) and (nome not in foto
                                        or ciclo > foto[nome][0]):
-            foto[nome] = (ciclo, dado.get("veredito"))
+            foto[nome] = Retrato(ciclo, dado.get("veredito"),
+                                 dado.get("origem"))
     return foto
 
 
@@ -2813,8 +3031,8 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
     provadas = set()
     if retomar:
         foto = foto_das_etapas(pasta)
-        provadas = {nome for nome, (_, veredito) in foto.items()
-                    if veredito == "segue"}
+        provadas = {nome for nome, retrato in foto.items()
+                    if retrato.veredito == "segue"}
         reabertas = sessoes_que_a_acusacao_reabre(etapas, foto)
         voltam = sorted(provadas & reabertas)
         provadas -= reabertas
@@ -3249,6 +3467,119 @@ def ronda(dir_base) -> int:
     return EXIT_PAROU_NUM_PARA
 
 
+def _ultima_evidencia(atuais: dict) -> dict:
+    if not atuais:
+        return {}
+    return atuais[max(atuais)][1]
+
+
+def _ciclo_legivel(dado: dict) -> str:
+    ciclo = dado.get("ciclo")
+    if not isinstance(ciclo, dict) or not _inteiro_sao(ciclo.get("i", 0)) \
+            or not _inteiro_sao(ciclo.get("teto", 0)):
+        return SEM_CICLO
+    return CICLO_NA_FILA.format(i=ciclo["i"], teto=ciclo["teto"])
+
+
+def _espera_uma_pessoa(situacao: str, ultima: dict) -> bool:
+    return (situacao == "aguardando-resposta"
+            or ultima.get("veredito") == "pergunta")
+
+
+def _lugar_na_fila(dir_base, trabalho) -> dict:
+    pasta = Path(dir_base) / trabalho
+    atuais, _, _, _ = _ler_evidencias(pasta)
+    ultima = _ultima_evidencia(atuais)
+    gravado = ler_estado(dir_base, trabalho) or {}
+    situacao = gravado.get("situacao") or SEM_ESTADO
+    return {"trabalho": trabalho,
+            "issue": gravado.get("issue"),
+            "etapa": gravado.get("etapa") or ultima.get("etapa"),
+            "ciclo": _ciclo_legivel(ultima),
+            "situacao": situacao,
+            "espera_voce": _espera_uma_pessoa(situacao, ultima),
+            "desde": gravado.get("desde"),
+            "custo": _custo_da_execucao(pasta)}
+
+
+def _e_trabalho(pasta: Path) -> bool:
+    return pasta.is_dir() and (
+        (pasta / ARQUIVO_ESTADO).is_file()
+        or any(PADRAO_NOME_EVIDENCIA.match(q.name) for q in pasta.iterdir()))
+
+
+def _trabalhos_da_fila(dir_base) -> list:
+    raiz = Path(dir_base)
+    if not raiz.is_dir():
+        return []
+    return [_lugar_na_fila(dir_base, pasta.name)
+            for pasta in sorted(raiz.iterdir()) if _e_trabalho(pasta)]
+
+
+def _chave_da_fila(lugar: dict):
+    return (0 if lugar["espera_voce"]
+            else ORDEM_NA_FILA.get(lugar["situacao"], 1),
+            lugar["trabalho"])
+
+
+def _linha_da_fila(lugar: dict, nome: int) -> str:
+    horas = (HORAS_NA_FILA.format(_horas_desde(lugar["desde"]))
+             if lugar["desde"] else SEM_HORAS)
+    return FILA_LINHA.format(
+        marca=MARCA_DE_QUEM_ESPERA_VOCE if lugar["espera_voce"] else "",
+        largura=len(MARCA_DE_QUEM_ESPERA_VOCE),
+        trabalho=lugar["trabalho"], nome=nome,
+        issue=lugar["issue"] if lugar["issue"] is not None else SEM_ISSUE,
+        etapa=lugar["etapa"] or SEM_ETAPA, ciclo=lugar["ciclo"],
+        situacao=lugar["situacao"], horas=horas, custo=lugar["custo"])
+
+
+def issues_paradas_em_voce(configuracao) -> tuple:
+    repositorio = _campo(configuracao or {}, "issues.repositorio")
+    if not repositorio:
+        return [], BERRO_DA_FILA_SEM_REPOSITORIO
+    feito = _gh_na_conta_das_issues(
+        configuracao, ["issue", "list", "--repo", repositorio, "--state",
+                       "open", "--label", ETIQUETA_PARADO_EM_VOCE, "--json",
+                       "number,title,url", "--limit", str(TETO_DA_FILA)])
+    if feito is None or feito.returncode != 0:
+        berro = ((feito.stderr or feito.stdout).strip()[:LIMITE_DO_ERRO_DO_GH]
+                 if feito else RECADO_GH_MUDO)
+        return [], berro
+    with contextlib.suppress(json.JSONDecodeError):
+        return json.loads(feito.stdout), ""
+    return [], BERRO_DA_FILA_ILEGIVEL
+
+
+def _bloco_das_issues_paradas(configuracao) -> None:
+    paradas, berro = issues_paradas_em_voce(configuracao)
+    if berro:
+        print(FILA_SEM_AS_ISSUES.format(motivo=berro))
+        return
+    if not paradas:
+        print(FILA_SEM_ISSUE_PARADA.format(etiqueta=ETIQUETA_PARADO_EM_VOCE))
+        return
+    print(FILA_CABECA_DAS_ISSUES.format(quantas=len(paradas)))
+    for uma in paradas:
+        print(FILA_LINHA_DA_ISSUE.format(
+            numero=uma.get("number"), titulo=uma.get("title", ""),
+            url=uma.get("url", "")))
+
+
+def fila(dir_base, configuracao=None) -> int:
+    lugares = sorted(_trabalhos_da_fila(dir_base), key=_chave_da_fila)
+    if lugares:
+        print(FILA_CABECA.format(quantos=len(lugares), dir=dir_base,
+                                 marca=MARCA_DE_QUEM_ESPERA_VOCE))
+        nome = max(len(lugar["trabalho"]) for lugar in lugares)
+        for lugar in lugares:
+            print(_linha_da_fila(lugar, nome))
+    else:
+        print(FILA_VAZIA.format(dir=dir_base))
+    _bloco_das_issues_paradas(configuracao)
+    return EXIT_COMPLETA
+
+
 def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=PROG)
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -3276,6 +3607,10 @@ def montar_parser() -> argparse.ArgumentParser:
     p.add_argument("--roteiro", help=AJUDA_ROTEIRO_NO_ANDAMENTO)
     p = sub.add_parser("ronda", help=AJUDA_RONDA)
     p.add_argument("--dir", default="evidencias")
+    p = sub.add_parser("fila", help=AJUDA_FILA)
+    p.add_argument("--dir", default="evidencias")
+    p.add_argument("--cwd", default=".")
+    p.add_argument("--configuracao")
     p = sub.add_parser("terceiros", help=AJUDA_TERCEIROS)
     p.add_argument("--issue", required=True)
     p.add_argument("--por", action="store_true")
@@ -3326,6 +3661,11 @@ def main(argv) -> int:
 
     if args.comando == "ronda":
         return ronda(str(Path(args.dir).resolve()))
+
+    if args.comando == "fila":
+        lida, _ = carregar_executor(str(Path(args.cwd).resolve()),
+                                    args.configuracao)
+        return fila(str(Path(args.dir).resolve()), lida)
 
     if args.comando == "terceiros":
         if args.por == args.tirar:

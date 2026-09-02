@@ -82,6 +82,7 @@ COMANDO_DAS_REMOTAS = "git branch -r --format='%(refname:short)'"
 COMANDO_DO_QUE_ACRESCENTA = "git diff --quiet {}...{}"
 COMANDO_DO_TOPO = "git rev-parse {}"
 NAO_ACRESCENTA_NADA = 0
+PALAVRA_DE_CASO = "caso"
 ACRESCENTA_ALGUMA_COISA = 1
 PODA_SEM_INCORPORACAO = ("Branch entregue por podar: não medido — {} não "
                          "declara {}, e sem a branch de incorporação não dá "
@@ -117,6 +118,16 @@ INSTRUMENTOS_QUE_FICAM = {
     ".agents/saude/saude.py": (
         "mede este repositório contra o instalador dele; quem instala não "
         "tem montar.py para o instrumento medir"),
+    ".agents/manual/manual.py": (
+        "escreve o manual desta árvore: as pastas que ele descreve — "
+        "modulos/, execucoes/, os instrumentos da raiz — não existem em "
+        "quem instala, e o manual gerado lá descreveria o que não está no "
+        "disco"),
+    ".agents/auditor/promover.py": (
+        "põe no quadro o achado que o auditor nomeou: é a colheita de "
+        "melhoria deste repositório. Quem instala recebe o auditor que "
+        "verifica e acusa, sem bandeira para ligar a promoção — bandeira "
+        "que existe alguém liga"),
 }
 INSTRUMENTO_DE_MODULO_DE_MENTIRA = ".agents/mod/mod.py"
 INSTALADOR_DE_MENTIRA = (
@@ -266,9 +277,9 @@ TETO_DE_DIAS_NO_RASCUNHO = 7
 SEGUNDOS_DO_DIA = 86400
 PASTAS_DE_INSTRUMENTO_NO_RASCUNHO = {
     "evidencias": ("as evidências das execuções, que o executor de roteiros "
-                   "escreve e o painel de controle lê — a rodada as reabre"),
-    "esfriamento-lembrado": ("a marca de uma vez por sessão do gancho que "
-                             "lembra o esfriamento"),
+                   "escreve — a rodada as reabre"),
+    "encerramento-lembrado": ("a marca de uma vez por sessão do gancho que "
+                             "lembra o encerramento"),
 }
 COMANDO_DOS_RASCUNHOS_RASTREADOS = "git ls-files tmp/"
 TITULO_RASCUNHO = "O RASCUNHO — o que envelhece em tmp/"
@@ -798,48 +809,134 @@ def rascunho(raiz: Path) -> int:
 
 PASTA_DAS_EVIDENCIAS = "execucoes/evidencias"
 CAMPO_DO_CUSTO = re.compile(r'"total_cost_usd":([0-9.]+)')
-CAMPO_DOS_TURNOS = re.compile(r'"num_turns":(\d+)')
 TITULO_DA_CONTA = "A CONTA — o que cada execução custou, do que já está gravado"
 SEM_EVIDENCIAS = ("sem evidência gravada em {} — a conta não tem o que ler, "
                   "e isso não é achado")
-LINHA_DA_EXECUCAO = "  {:<22} US$ {:>7.2f}   {:>4} turno(s)"
-CONTA_DA_RODADA = ("Somam US$ {:.2f} em {} execução(ões), {} turno(s). Não há "
+LINHA_DA_EXECUCAO = "  {:<22} US$ {:>7.2f}   atribuído US$ {:>7.2f}"
+CONTA_DA_RODADA = ("Somam US$ {:.2f} cobrados em {} execução(ões). Não há "
                    "teto declarado: esta rotina MEDE e não reprova, por "
                    "decisão do dono em 30/08 — número sem procedência não "
                    "vira cobrança, e a procedência se junta rodando.")
+TITULO_POR_ETAPA = "POR ETAPA — onde o dinheiro foi parar, somando os ciclos"
+LINHA_DA_ETAPA = ("  {:<22} US$ {:>7.2f}   {:>3} execução(ões)   {:>10}")
+DURACAO_EM_MINUTOS = "{:.1f} min"
+DURACAO_NAO_MEDIDA = "sem relógio"
+SEM_ETAPA_MEDIDA = ("nenhuma evidência traz custo: a régua por etapa só vale "
+                    "para execução gravada depois de 01/09 — o que veio "
+                    "antes some aqui de propósito, e não vira zero")
+FORA_DA_REGUA = (
+    "US$ {:.2f} em {} execução(ões) ficam fora desta tabela: a evidência "
+    "delas não atribuiu NADA a etapa nenhuma. Ou são anteriores à régua da "
+    "etapa, ou toda sessão delas morreu sem registrar o que gastou — daqui "
+    "não dá para separar as duas, e chamar tudo de história seria inventar. "
+    "O log é a única fonte que resta para elas.")
+BURACO_DA_ATRIBUICAO = (
+    "Dentro da régua, US$ {:.2f} de US$ {:.2f} cobrados não caíram em etapa "
+    "nenhuma ({:.0f}%). Esse buraco é sessão que morreu sem deixar "
+    "evidência: o "
+    "log cobra, a evidência não registra. Ele é a medida do retrabalho "
+    "invisível, não erro de soma.")
+ATRIBUICAO_FECHADA = ("Dentro da régua, tudo que o log cobrou caiu em etapa: "
+                      "a medição por etapa fecha com a cobrança.")
+SOBRA_NA_ATRIBUICAO = (
+    "As etapas somam US$ {:.2f} A MAIS do que os US$ {:.2f} que o log cobrou. "
+    "As duas fontes discordam, e para cima: log truncado ou rodado, ou "
+    "evidência sem a linha correspondente no log. Não é conta fechada — é "
+    "discordância, e ela se diz nos dois sentidos.")
 
 
-def custo_por_execucao(raiz: Path) -> list:
+def _evidencias(pasta: Path):
+    for arquivo in sorted(pasta.glob("*/*.json")):
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(dado, dict) and isinstance(dado.get("etapa"), str):
+            yield arquivo.parent.name, dado
+
+
+def _usd_da_evidencia(dado: dict):
+    custo = dado.get("custo")
+    usd = custo.get("usd") if isinstance(custo, dict) else None
+    return usd if isinstance(usd, (int, float)) \
+        and not isinstance(usd, bool) else None
+
+
+def custo_por_etapa(raiz: Path) -> list:
     pasta = raiz / PASTA_DAS_EVIDENCIAS
     if not pasta.is_dir():
         return []
     contas = {}
+    for _, dado in _evidencias(pasta):
+        usd = _usd_da_evidencia(dado)
+        if usd is None:
+            continue
+        dolar, quantas, segundos = contas.get(dado["etapa"], (0.0, 0, 0.0))
+        duracao = dado.get("duracao")
+        contas[dado["etapa"]] = (
+            dolar + usd, quantas + 1,
+            segundos + (duracao if isinstance(duracao, (int, float))
+                        and not isinstance(duracao, bool) else 0.0))
+    return sorted(((n, d, q, s) for n, (d, q, s) in contas.items()),
+                  key=lambda linha: -linha[1])
+
+
+def custo_das_execucoes(raiz: Path) -> list:
+    pasta = raiz / PASTA_DAS_EVIDENCIAS
+    if not pasta.is_dir():
+        return []
+    cobrado = {}
     for log in sorted(pasta.glob("*/*.log")):
-        trabalho = log.parent.name
-        dolar, turnos = contas.get(trabalho, (0.0, 0))
         try:
             texto = log.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for achado in CAMPO_DO_CUSTO.finditer(texto):
-            dolar += float(achado.group(1))
-        for achado in CAMPO_DOS_TURNOS.finditer(texto):
-            turnos += int(achado.group(1))
-        contas[trabalho] = (dolar, turnos)
-    return sorted(((n, d, t) for n, (d, t) in contas.items() if d),
+        cobrado[log.parent.name] = cobrado.get(log.parent.name, 0.0) + sum(
+            float(achado.group(1)) for achado in CAMPO_DO_CUSTO.finditer(texto))
+    atribuido = {}
+    for trabalho, dado in _evidencias(pasta):
+        usd = _usd_da_evidencia(dado)
+        if usd is not None:
+            atribuido[trabalho] = atribuido.get(trabalho, 0.0) + usd
+    return sorted(((nome, dolar, atribuido.get(nome, 0.0))
+                   for nome, dolar in cobrado.items() if dolar),
                   key=lambda linha: -linha[1])
 
 
 def conta(raiz: Path) -> int:
     print(f"\n{TITULO_DA_CONTA}")
-    linhas = custo_por_execucao(raiz)
+    linhas = custo_das_execucoes(raiz)
     if not linhas:
         print(SEM_EVIDENCIAS.format(PASTA_DAS_EVIDENCIAS))
         return 0
-    for nome, dolar, turnos in linhas:
-        print(LINHA_DA_EXECUCAO.format(nome, dolar, turnos))
-    print(CONTA_DA_RODADA.format(sum(l[1] for l in linhas), len(linhas),
-                                 sum(l[2] for l in linhas)))
+    for nome, dolar, posto in linhas:
+        print(LINHA_DA_EXECUCAO.format(nome, dolar, posto))
+    total = sum(l[1] for l in linhas)
+    print(CONTA_DA_RODADA.format(total, len(linhas)))
+
+    print(f"\n{TITULO_POR_ETAPA}")
+    etapas = custo_por_etapa(raiz)
+    if not etapas:
+        print(SEM_ETAPA_MEDIDA)
+        return 0
+    for nome, dolar, quantas, segundos in etapas:
+        print(LINHA_DA_ETAPA.format(
+            nome, dolar, quantas,
+            DURACAO_EM_MINUTOS.format(segundos / 60) if segundos
+            else DURACAO_NAO_MEDIDA))
+    na_regua = [linha for linha in linhas if linha[2]]
+    cru = [linha for linha in linhas if not linha[2]]
+    if cru:
+        print(FORA_DA_REGUA.format(sum(l[1] for l in cru), len(cru)))
+    cobrado = sum(l[1] for l in na_regua)
+    buraco = cobrado - sum(l[2] for l in na_regua)
+    if round(buraco, 2) > 0:
+        print(BURACO_DA_ATRIBUICAO.format(buraco, cobrado,
+                                          100 * buraco / cobrado))
+    elif round(buraco, 2) < 0:
+        print(SOBRA_NA_ATRIBUICAO.format(-buraco, cobrado))
+    else:
+        print(ATRIBUICAO_FECHADA)
     return 0
 
 
@@ -1331,8 +1428,11 @@ def instrumentos_com_teste(raiz: Path) -> list:
 
 
 def casos_da_suite(saida: str) -> int:
-    numeros = [int(p) for p in saida.replace(":", " ").split() if p.isdigit()]
-    return numeros[0] if saida.strip().startswith("OK") and numeros else 0
+    limpo = saida.strip()
+    if PALAVRA_DE_CASO not in limpo.lower():
+        return 0
+    numeros = [int(p) for p in limpo.replace(":", " ").split() if p.isdigit()]
+    return numeros[0] if numeros else 0
 
 
 def provar(raiz: Path) -> tuple:
@@ -1943,6 +2043,83 @@ def testar() -> int:
         caso("termo não medido não vira folga inventada",
              folga_do_termo(None, 7) == 0)
 
+        evid = raiz / PASTA_DAS_EVIDENCIAS / "issue-9"
+        evid.mkdir(parents=True)
+
+        def _evidencia(nome, etapa, usd=None, duracao=None, turnos=None):
+            corpo = {"etapa": etapa, "trabalho": "issue-9",
+                     "quando": "2026-09-02T10:00:00-03:00",
+                     "veredito": "segue", "provado": [], "suposto": [],
+                     "faltas": [], "ciclo": {"i": 1, "teto": 2}}
+            if usd is not None:
+                corpo["custo"] = {"usd": usd, "tokens": {
+                    "entrada": 1, "saida": 1,
+                    "cache-lido": 1, "cache-criado": 1}}
+            if duracao is not None:
+                corpo["duracao"] = duracao
+            if turnos is not None:
+                corpo["turnos"] = turnos
+            (evid / nome).write_text(json.dumps(corpo), encoding="utf-8")
+
+        _evidencia("01-trabalhar-c1.json", "trabalhar", 2.0, 100.0, 3)
+        _evidencia("01-trabalhar-c2.json", "trabalhar", 3.0, 200.0, 4)
+        _evidencia("02-revisar-c1.json", "revisar", 1.0, 50.0, 1)
+        _evidencia("03-entregar-c1.json", "entregar")
+        _evidencia("04-medir-c1.json", "medir", 0.25)
+        (evid / "issue-9.log").write_text(
+            '"total_cost_usd":6.5 "num_turns":8', encoding="utf-8")
+
+        por_etapa = dict((e[0], e[1:]) for e in custo_por_etapa(raiz))
+        caso("a conta soma por etapa, e o ciclo repetido aparece somado",
+             por_etapa["trabalhar"][:2] == (5.0, 2))
+        caso("e a duração de cada etapa soma junto",
+             por_etapa["trabalhar"][2] == 300.0)
+        caso("etapa sem custo medido não vira zero na tabela",
+             "entregar" not in por_etapa)
+
+        linhas = dict((l[0], l[1:]) for l in custo_das_execucoes(raiz))
+        caso("a execução mostra o cobrado no log e o atribuído à etapa",
+             linhas["issue-9"][:2] == (6.5, 6.25))
+        caso("a diferença é confessada, não escondida: o que a evidência "
+             "perdeu foi sessão que morreu sem evidência",
+             round(linhas["issue-9"][0] - linhas["issue-9"][1], 2) == 0.25)
+
+        antiga = raiz / PASTA_DAS_EVIDENCIAS / "issue-1"
+        antiga.mkdir(parents=True)
+        (antiga / "issue-1.log").write_text('"total_cost_usd":40.0',
+                                            encoding="utf-8")
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            conta(raiz)
+        dito = saida.getvalue()
+        caso("execução sem atribuição nenhuma não entra no buraco, e a "
+             "rotina não afirma qual das duas causas é: ela não sabe",
+             "US$ 40.00 em 1 execução(ões) ficam fora" in dito
+             and "US$ 0.25 de US$ 6.50" in dito
+             and "não dá para separar as duas" in dito)
+        sobrando = raiz / PASTA_DAS_EVIDENCIAS / "issue-8"
+        sobrando.mkdir(parents=True)
+        (sobrando / "issue-8.log").write_text('"total_cost_usd":0.10',
+                                              encoding="utf-8")
+        corpo = {"etapa": "trabalhar", "trabalho": "issue-8",
+                 "quando": "2026-09-02T10:00:00-03:00", "veredito": "segue",
+                 "provado": [], "suposto": [], "faltas": [],
+                 "ciclo": {"i": 1, "teto": 2},
+                 "custo": {"usd": 9.0, "tokens": {
+                     "entrada": 1, "saida": 1,
+                     "cache-lido": 1, "cache-criado": 1}}}
+        (sobrando / "01-trabalhar-c1.json").write_text(json.dumps(corpo),
+                                                       encoding="utf-8")
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            conta(raiz)
+        caso("etapa que soma MAIS que o log não vira conta fechada: "
+             "discordância se diz nos dois sentidos",
+             "A MAIS do que" in saida.getvalue())
+        caso("etapa sem duração medida diz que não mediu, em vez de "
+             "imprimir zero minuto",
+             "sem relógio" in dito)
+
 
         bom = raiz / "bom.py"
         bom.write_text("def somar(n):\n    return sum(n)\n"
@@ -2483,6 +2660,17 @@ def testar() -> int:
              rastreados_por_git(raiz, COMANDO_DOS_GANCHOS_RASTREADOS) is None
              and matricula(raiz) == 1
              and chaves(raiz) == 1)
+
+    caso("resumo de teste conta os casos qualquer que seja o prefixo — "
+         "exigir 'OK' fazia tres instrumentos SADIOS serem acusados de "
+         "caidos, e acusacao falsa e pior que nao acusar",
+         casos_da_suite("OK: 45 casos") == 45
+         and casos_da_suite("higiene: 10 de 10 casos") == 10)
+    caso("saida que nao fala de caso nenhum nao vira contagem — senao "
+         "'Pronto. 3 arquivos escritos' passaria por tres casos provados",
+         casos_da_suite("Pronto. 3 arquivos escritos") == 0)
+    caso("saida vazia nao conta nada",
+         casos_da_suite("") == 0 and casos_da_suite("   ") == 0)
 
     total = len(casos)
     if falhas:

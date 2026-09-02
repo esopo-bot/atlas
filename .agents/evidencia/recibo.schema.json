@@ -129,6 +129,11 @@
       },
       "$comment": "Informativo. O contador canônico é a contagem de recibos no diretório, feita pelo encadeador."
     },
+    "duracao": {
+      "type": "number",
+      "minimum": 0,
+      "$comment": "opcional; segundos de relógio que a etapa levou, do disparo ao fim — escrito só pelo encadeador, nunca pelo modelo. Mede a etapa inteira, incluindo a retomada por teto de turnos, porque é o tempo que o dono espera. Ausente = não medido: etapa que morreu antes do cronômetro fechar não vira zero, pelo mesmo motivo do custo. Serve para comparar o antes e o depois de um conserto no motor — sem ele, 'a reabertura custa caro' fica sempre não provado."
+    },
     "turnos": {
       "type": "integer",
       "minimum": 1,

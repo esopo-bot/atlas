@@ -35,9 +35,24 @@ todos.
 python .agents/insights/insights.py \
   --grupo "${GRUPO_DE_LOG}" --regiao "${REGIAO}" \
   --consulta 'fields @timestamp, @message | filter @message like /erro/ | limit 20' \
-  --desde 2026-09-01T00:00:00Z --ate 2026-09-01T23:59:59Z
+  --desde 2h
 ```
 
-A janela aceita ISO 8601 ou epoch em segundos. `--json` troca as colunas por
-JSON. `--teto` sobe o tempo de espera quando a janela é larga. A credencial é
-a que o `aws` já usa nesta máquina — o instrumento não a toca.
+A janela nunca se escreve em epoch à mão: `--ate` vale `agora` quando
+omitido, e `--desde` aceita uma duração para trás (`30m`, `2h`, `1d`), além
+de ISO 8601 e epoch em segundos. `--json` troca as colunas por JSON. `--teto`
+sobe o tempo de espera quando a janela é larga. A credencial é a que o `aws`
+já usa nesta máquina — o instrumento não a toca.
+
+## As três idas que ele economiza
+
+Cada uma custou uma volta ao terminal antes de virar código:
+
+- **`--cli-read-timeout` em toda chamada** (`--tempo-de-leitura`, 120 s por
+  padrão): sem ele o `aws` desiste de ler a resposta antes de o Insights
+  responder, e a consulta parece muda quando só está lenta.
+- **O epoch calculado, não digitado**: `--desde 2h` é a conta que se fazia
+  com `date` toda vez, e errava.
+- **Aviso da colisão de alias do `parse`**: alias que repete outro `parse`,
+  ou que tem o mesmo nome de um campo do `fields`, cala o original sem erro
+  nenhum. O instrumento avisa em stderr antes de disparar; a consulta segue.

@@ -5,7 +5,7 @@ mesa do que guardar, e só então escrever.
 
 ## 1. Ataque a conclusão antes de guardá-la
 
-Rode a skill `cetico` na conclusão. Aqui ela é obrigatória e não decorativa:
+Rode a skill `verificacao-adversarial` na conclusão. Aqui ela é obrigatória e não decorativa:
 o que você guardar agora vai ser lido daqui a seis meses como se fosse fato,
 por alguém que não viu esta investigação. Conclusão errada guardada é pior que
 conclusão errada esquecida.

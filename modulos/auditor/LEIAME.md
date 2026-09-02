@@ -24,3 +24,8 @@ precisa valer sempre mora no ritual e nos ganchos, onde não dá para pular.
 
 Exige a camada no destino: usa o verificador que já existe, e não reimplementa
 re-execução de prova.
+
+**O que viaja verifica e acusa; promover fica na origem.** O auditor não tem
+bandeira de promoção: rodá-lo com `--promover` é erro de uso. Pôr o achado
+nomeado no quadro é colheita de melhoria do repositório de origem, e mora
+lá, em `.agents/auditor/promover.py`, que não viaja.
