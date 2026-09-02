@@ -23,6 +23,9 @@ NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 
 EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
+DECISAO_DE_PERGUNTAR = "ask"
+CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
+MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
 BANDEIRA_DE_TESTE = "--testar"
 PASSA = ""
 SILENCIO = 0
@@ -153,6 +156,21 @@ def recusa_por_nao_entender(falha) -> int:
     return SILENCIO
 
 
+def verbo_do_veto(entrada: dict) -> str:
+    sem_quem_responda = (entrada or {}).get(
+        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_SEM_QUEM_RESPONDA
+    return DECISAO_DE_NEGAR if sem_quem_responda else DECISAO_DE_PERGUNTAR
+
+
+def vetar(entrada: dict, razao: str) -> int:
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+        "permissionDecision": verbo_do_veto(entrada),
+        "permissionDecisionReason": razao,
+    }}, ensure_ascii=False))
+    return SILENCIO
+
+
 def decidir() -> int:
     try:
         entrada = json.load(sys.stdin)
@@ -165,14 +183,8 @@ def decidir() -> int:
     for caminho in caminhos_que_o_pedido_criaria(entrada):
         motivo = motivo_da_recusa(caminho, texto, raiz)
         if motivo:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
-                "permissionDecision": DECISAO_DE_NEGAR,
-                "permissionDecisionReason": (
-                    RECUSA.format(motivo, PASTA_DO_ENCERRAMENTO)
-                    + MANDA_GRAVAR.format(APRENDIZADO)),
-            }}, ensure_ascii=False))
-            return SILENCIO
+            return vetar(entrada, RECUSA.format(motivo, PASTA_DO_ENCERRAMENTO)
+                         + MANDA_GRAVAR.format(APRENDIZADO))
     return SILENCIO
 
 
@@ -213,6 +225,13 @@ DEIXA_PASSAR = [
      CORPO_DE_ISSUE),
     ("arquivo de andamento sem texto nenhum", "andamento.md", ""),
 ]
+
+
+RAZAO_DO_TESTE = "a razão que o veto explicaria"
+MODO_DA_SESSAO_INTERATIVA = "default"
+SESSAO_INTERATIVA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_DA_SESSAO_INTERATIVA}
+SEM_CABECA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_SEM_QUEM_RESPONDA}
+PEDIDO_SEM_MODO_DECLARADO = {}
 
 
 def testar() -> int:
@@ -286,6 +305,24 @@ def testar() -> int:
              isinstance(caminhos_que_o_pedido_criaria({
                  "tool_name": "Bash", "tool_input": {
                      "command": "echo 'sem fechar > andamento.md"}}), list))
+        caso("em sessão interativa a resposta do gancho traz `ask`: o veto "
+             "pergunta antes, em vez de negar de vez",
+             resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+             .get("permissionDecision") == DECISAO_DE_PERGUNTAR)
+        caso("em execução sem cabeça (`--dangerously-skip-permissions`) não "
+             "há quem responda: a resposta continua `deny`",
+             resposta_do_veto(SEM_CABECA, RAZAO_DO_TESTE)
+             .get("permissionDecision") == DECISAO_DE_NEGAR)
+        caso("pedido que não declara o modo de permissão recebe `ask` — só "
+             "o modo sem cabeça nega",
+             resposta_do_veto(PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE)
+             .get("permissionDecision") == DECISAO_DE_PERGUNTAR)
+        caso("a razão do veto viaja na resposta, com `ask` e com `deny`: é "
+             "ela que o prompt de permissão mostra ao dono",
+             resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+             .get("permissionDecisionReason") == RAZAO_DO_TESTE
+             and resposta_do_veto(SEM_CABECA, RAZAO_DO_TESTE)
+             .get("permissionDecisionReason") == RAZAO_DO_TESTE)
         falhas += [FALHA_COMPORTAMENTO.format(rotulo)
                    for rotulo, passou in comportamento if not passou]
 
@@ -313,6 +350,18 @@ def recusou_sem_entender(falha) -> bool:
     return (dado.get("permissionDecision") == DECISAO_DE_NEGAR
             and type(falha).__name__
             in dado.get("permissionDecisionReason", ""))
+
+
+def resposta_do_veto(entrada: dict, razao: str) -> dict:
+    import contextlib
+    import io
+    saida = io.StringIO()
+    with contextlib.redirect_stdout(saida):
+        vetar(entrada, razao)
+    try:
+        return json.loads(saida.getvalue())["hookSpecificOutput"]
+    except (ValueError, KeyError):
+        return {}
 
 
 def main() -> int:

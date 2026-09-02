@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ARQUIVO_CONFIGURACAO = "nucleo/configuracao.json"
@@ -39,6 +40,12 @@ COMANDO_DA_BRANCH_DA_ARVORE = ["git", "branch", "--show-current"]
 COMANDO_DO_COMMIT_DA_ARVORE = ["git", "rev-parse", "HEAD"]
 COMANDO_DA_BRANCH_NO_DURAVEL = [
     "git", "ls-remote", "--heads", "origin", "{}"]
+COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{}", "{}"]
+CHAVE_DO_TRANSCRITO = "transcript_path"
+CHAVE_DO_INSTANTE = "timestamp"
+LINHAS_LIDAS_DO_TRANSCRITO = 200
+MARCA_DE_UTC = "Z"
+FUSO_UTC = "+00:00"
 ESPELHO_NO_REMOTO = "origin/{}"
 TEMPO_DO_GIT = 15
 TEMPO_DA_REDE = 25
@@ -56,6 +63,11 @@ FALHA_ABERTA = 0
 COBRANCA_ENTREGUE = 0
 TETO_DE_LINHAS = 5
 
+COBRA_SUJEIRA_HERDADA = (
+    "Na árvore há {} arquivo(s) sujo(s) desde ANTES desta sessão abrir — "
+    "sujeira herdada, de outra sessão ou do dono, e ela NÃO trava esta "
+    "parada:\n{}\n"
+    "Não commite nem apague o que não é seu: diga ao dono, e siga.")
 COBRA_ARVORE_SUJA = (
     "A árvore está suja — {} arquivo(s) fora de commit nenhum:\n{}\n"
     "Trabalho que não entra em commit some com a pasta que o guardou, e "
@@ -174,6 +186,53 @@ def _toda_a_sujeira(raiz: Path) -> list:
     return [l for l in resposta[1].split("\n") if l.strip()]
 
 
+def abertura_da_sessao(entrada: dict):
+    caminho = entrada.get(CHAVE_DO_TRANSCRITO) if isinstance(entrada, dict) else None
+    if not caminho:
+        return None
+    try:
+        with open(caminho, encoding="utf-8") as transcrito:
+            for _, linha in zip(range(LINHAS_LIDAS_DO_TRANSCRITO), transcrito):
+                instante = _instante_da_linha(linha)
+                if instante is not None:
+                    return instante
+    except OSError:
+        return None
+    return None
+
+
+def _instante_da_linha(linha: str):
+    try:
+        dado = json.loads(linha)
+    except ValueError:
+        return None
+    marcado = dado.get(CHAVE_DO_INSTANTE) if isinstance(dado, dict) else None
+    if not isinstance(marcado, str):
+        return None
+    try:
+        return datetime.fromisoformat(
+            marcado.replace(MARCA_DE_UTC, FUSO_UTC)).timestamp()
+    except ValueError:
+        return None
+
+
+def modificado_antes_da_abertura(raiz: Path, linha: str, abertura) -> bool:
+    if abertura is None:
+        return False
+    caminho = raiz / linha[3:].strip().strip('"')
+    try:
+        return caminho.stat().st_mtime < abertura
+    except OSError:
+        return False
+
+
+def sujeira_desta_sessao_e_herdada(raiz: Path, abertura) -> tuple:
+    suja = linhas_da_arvore_suja(raiz)
+    herdada = [l for l in suja
+               if modificado_antes_da_abertura(raiz, l, abertura)]
+    return [l for l in suja if l not in herdada], herdada
+
+
 def pedido_mesclado_que_ja_contem(raiz: Path, principal: str,
                                   integracao: str, adiante: list) -> bool:
     montado = [parte.format(principal, integracao)
@@ -209,6 +268,8 @@ def commits_da_integracao_fora_da_principal(raiz: Path, principal: str,
                                             integracao: str):
     if not principal or not integracao:
         return NAO_MEDIDO
+    responde([parte.format(principal, integracao)
+              for parte in COMANDO_DE_BUSCA_NO_REMOTO], raiz, TEMPO_DA_REDE)
     comando = [parte.format(ESPELHO_NO_REMOTO.format(principal),
                             ESPELHO_NO_REMOTO.format(integracao))
                for parte in COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM]
@@ -264,8 +325,8 @@ def _ha_destino_declarado(raiz: Path, principal: str, integracao: str,
     return aberto
 
 
-def medir(raiz: Path) -> dict:
-    suja = linhas_da_arvore_suja(raiz)
+def medir(raiz: Path, abertura=None) -> dict:
+    suja, herdada = sujeira_desta_sessao_e_herdada(raiz, abertura)
     nao_julgada = linhas_que_a_camada_nao_julga(raiz)
     etapa = etapa_em_curso()
     if etapa:
@@ -273,6 +334,7 @@ def medir(raiz: Path) -> dict:
         return {
             "etapa": etapa,
             "suja": suja,
+            "herdada": herdada,
             "nao_julgada": nao_julgada,
             "branch": branch,
             "duravel": chegou_ao_repositorio_duravel(raiz, branch),
@@ -285,6 +347,7 @@ def medir(raiz: Path) -> dict:
     return {
         "etapa": "",
         "suja": suja,
+        "herdada": herdada,
         "nao_julgada": nao_julgada,
         "sobra": sobra_fora_da_branch_de_entrega(raiz),
         "principal": principal,
@@ -305,6 +368,9 @@ def cobrancas(estado: dict) -> list:
     if estado.get("suja"):
         cobradas.append(COBRA_ARVORE_SUJA.format(
             len(estado["suja"]), primeiras_linhas(estado["suja"])))
+    if estado.get("herdada"):
+        cobradas.append(COBRA_SUJEIRA_HERDADA.format(
+            len(estado["herdada"]), primeiras_linhas(estado["herdada"])))
     if estado.get("nao_julgada"):
         cobradas.append(COBRA_SUJEIRA_QUE_A_CAMADA_NAO_JULGA.format(
             len(estado["nao_julgada"]),
@@ -336,7 +402,7 @@ def cobrancas(estado: dict) -> list:
 def decisao(entrada: dict, raiz: Path) -> str:
     if entrada.get("stop_hook_active"):
         return ""
-    cobradas = cobrancas(medir(raiz))
+    cobradas = cobrancas(medir(raiz, abertura_da_sessao(entrada)))
     if not cobradas:
         return ""
     return "\n\n".join(
@@ -570,6 +636,58 @@ def testar() -> int:
              "nunca chegou",
              chegou_ao_repositorio_duravel(arvore, BRANCH_DE_MENTIRA)
              is NAO_MEDIDO)
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-regua-") as tmp:
+        base = Path(tmp).resolve()
+        origem, quieta, outra = base / "origem", base / "quieta", base / "outra"
+        origem.mkdir()
+        git_de_mentira(origem, "init", "-q", "--bare", "-b", "main")
+        git_de_mentira(base, "clone", "-q", str(origem), str(outra))
+        git_de_mentira(outra, "config", "user.email", "prova@exemplo")
+        git_de_mentira(outra, "config", "user.name", "Prova")
+        git_de_mentira(outra, "commit", "-q", "--allow-empty", "-m", "raiz")
+        git_de_mentira(outra, "push", "-q", "-u", "origin", "main")
+        git_de_mentira(outra, "checkout", "-q", "-b", "homolog")
+        git_de_mentira(outra, "push", "-q", "-u", "origin", "homolog")
+        git_de_mentira(base, "clone", "-q", str(origem), str(quieta))
+        git_de_mentira(outra, "commit", "-q", "--allow-empty", "-m", "trabalho")
+        git_de_mentira(outra, "push", "-q", "origin", "homolog")
+        git_de_mentira(quieta, "fetch", "-q", "origin", "homolog")
+        git_de_mentira(outra, "checkout", "-q", "main")
+        git_de_mentira(outra, "merge", "-q", "homolog")
+        git_de_mentira(outra, "push", "-q", "origin", "main")
+        caso("a régua busca o remoto antes de medir: integração já mesclada na "
+             "principal lá fora não vira acusação por ref local velha",
+             commits_da_integracao_fora_da_principal(quieta, "main", "homolog")
+             == [])
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-herdada-") as tmp:
+        import time
+        from datetime import timezone
+        arvore = Path(tmp).resolve()
+        git_de_mentira(arvore, "init", "-q")
+        velho, novo = arvore / "velho.txt", arvore / "novo.txt"
+        velho.write_text("de antes", encoding="utf-8")
+        os.utime(velho, (1000, 1000))
+        novo.write_text("de agora", encoding="utf-8")
+        suja, herdada = sujeira_desta_sessao_e_herdada(arvore, time.time() - 60)
+        caso("sujeira anterior à abertura da sessão é herdada, e só a desta "
+             "sessão trava",
+             suja == ["?? novo.txt"] and herdada == ["?? velho.txt"])
+        caso("sem abertura medida, toda sujeira é desta sessão",
+             sujeira_desta_sessao_e_herdada(arvore, None)[1] == [])
+        transcrito = arvore / "transcrito.jsonl"
+        transcrito.write_text(
+            '{"type": "sem-instante"}\n'
+            '{"type": "com", "timestamp": "2026-09-01T20:28:57.754Z"}\n',
+            encoding="utf-8")
+        caso("a abertura da sessão sai do primeiro timestamp do transcript",
+             abertura_da_sessao({"transcript_path": str(transcrito)})
+             == datetime(2026, 9, 1, 20, 28, 57, 754000,
+                         tzinfo=timezone.utc).timestamp())
+        caso("a cobrança da herdada nomeia o arquivo e diz que não trava",
+             "NÃO trava" in "".join(cobrancas(
+                 {**ARVORE_LIMPA, "herdada": ["?? velho.txt"]})))
 
     caso("arquivo que a camada JULGA continua barrando: código solto trava",
          any("árvore está suja" in c

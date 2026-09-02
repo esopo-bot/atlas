@@ -17,6 +17,7 @@ CAMINHOS_EMBUTIDOS = (
     "azure-pipelines.yml",
     "bitbucket-pipelines.yml",
     ".travis.yml",
+    ".git/hooks/",
 )
 
 FERRAMENTAS_DE_ESCRITA = ("Write", "Edit", "NotebookEdit")
@@ -218,9 +219,16 @@ BARRA = [
      "../vizinho/.github/workflows/entrega.yml"),
     ("barra invertida do Windows não esconde a pasta",
      ".github\\workflows\\entrega.yml"),
+    ("gancho do git, que não entra no git e roda a cada commit",
+     ".git/hooks/pre-commit"),
+    ("gancho do git por caminho absoluto",
+     "/home/alguem/repo/.git/hooks/pre-push"),
 ]
 
 DEIXA_PASSAR = [
+    ("pasta de ganchos rastreada, que entra em revisão",
+     ".githooks/pre-commit"),
+    ("página que explica os ganchos do git", "docs/git-hooks.md"),
     ("código comum", "src/app.py"),
     ("página de conhecimento", "conhecimento/nota.md"),
     ("nome que só parece", ".github/ISSUE_TEMPLATE/bug.md"),

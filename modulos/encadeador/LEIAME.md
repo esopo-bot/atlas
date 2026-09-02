@@ -48,3 +48,11 @@ Como a pergunta some, é o gancho que fica no lugar dela. O
 `vetar-escrita-em-politica` recusa, durante a etapa, escrita nos arquivos que
 decidem quais cercas existem — e só durante a etapa, porque quem levanta essa
 cerca é a marca `ENCADEADOR_ETAPA` no ambiente, posta por este motor.
+
+O mesmo vale para o gancho que PERGUNTA em vez de negar. Quatro vetos de
+julgamento respondem `ask` em sessão interativa, mas leem o `permission_mode`
+que o Claude Code entrega a todo gancho e, em `bypassPermissions`, negam de
+vez: numa etapa não haveria quem respondesse. Quais são e por quê está em
+`conhecimento/guarda-mecanica-das-regras.md`, na seção sobre o verbo de cada
+veto. A decisão que precisa do dono continua parando a execução em
+`aguardando-resposta`, e a resposta volta pela retomada.

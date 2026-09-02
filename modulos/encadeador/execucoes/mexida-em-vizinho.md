@@ -90,13 +90,18 @@ com um erro que não ensina nada.
 
 | No roteiro | De onde vem |
 | --- | --- |
-| a base da branch de trabalho | `branches.base`, na raiz |
-| o nome da branch | `branches.padrao_de_trabalho`, na raiz |
+| a base da branch de trabalho | `projetos.<etiqueta>.branches.base`; sem ela, `branches.base` da raiz |
+| o nome da branch | `projetos.<etiqueta>.branches.padrao_de_trabalho`; sem ela, `branches.padrao_de_trabalho` da raiz |
 | quais repositórios são somente leitura | `projetos.<etiqueta>.somente_leitura` |
 | se a automação pode empurrar no alvo | `projetos.<etiqueta>.autorizacoes.push` |
 | a quem sugerir o pedido de incorporação | `projetos.<etiqueta>.revisor` |
 | o repositório alvo | a variável `PROJETO` |
 | o número da issue e o assunto | as variáveis `ISSUE` e `ASSUNTO` |
+
+Cada projeto pode declarar o seu bloco `branches` dentro do cadastro, e só
+o que ele declarar vale para ele: o bloco da raiz é o padrão de quem não
+declara. Assim um vizinho cuja integração é `develop` convive com uma raiz
+cuja integração é `homolog`, sem mudar nada no repositório do vizinho.
 
 Troque a configuração e o mesmo roteiro serve outro workspace — é esse o
 teste de que ele é mecanismo, e não o processo de alguém.

@@ -13,6 +13,7 @@ máquina, fica fora do git.
 | Pasta | O que mora ali | Viaja para quem instala? |
 | --- | --- | --- |
 | `conhecimento/` | página que gente lê | sim |
+| `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `wiki-de-projetos` | não: é conteúdo do workspace, fora do git |
 | `.agents/` | instrumentos (Python), as skills (fonte) e os prompts de abertura em `.agents/prompts/` | os instrumentos e as skills, sim; dos prompts, o de verificação pós-atualização e o de abertura de projeto — o de abertura NA camada fica, porque só serve a quem melhora o atlas |
 | `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |
@@ -70,6 +71,12 @@ sincronização apaga.
 
 A cópia das skills **entra no git de propósito**: sessão que roda na nuvem
 só enxerga o que está commitado.
+
+O depósito embutido no `montar.py` é a terceira cópia, e pesa pouco no git.
+Medido em 01/09/2026 (#245): a história inteira dele são 5 MB de um clone de
+7 MB, 13 KB por revisão, porque o diff é por linha e o pacote faz delta.
+`.git` local muito acima disso é objeto solto sem `git gc`, não o instalador:
+`git count-objects -vH` separa, `size` é o solto e `size-pack` o empacotado.
 
 A metade que falta: **skill pessoal não entra aqui.** Skill que só serve a
 você vai para as skills de usuário, em `~/.claude/skills/` — fora do

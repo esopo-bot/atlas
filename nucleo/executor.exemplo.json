@@ -29,7 +29,7 @@
     "modo: em `completo` o executor roda a execução inteira; em `so-issues` ele SÓ abre issue — executar fica desligado, e o disparo recusa com recado.",
     "conta_gh nomeia a conta, nunca a credencial: o token mora no gh da máquina. Segredo não entra em arquivo, nem neste.",
     "remoto.conta_gh nomeia a conta que fala com o remoto GIT do repositório onde a execução roda, e é dela que o executor tira o token que injeta como GH_TOKEN em cada estágio. É chave separada de issues.conta_gh de propósito: a fila de issues pode morar em outro repositório, de outra conta. Sem esta chave vale a das issues — e quando as duas contas são diferentes, o fetch e o push saem com a credencial errada e o estágio para dizendo que o remoto não respondeu. Aqui vai o NOME da conta; o token mora no gh da máquina.",
-    "branches.base e branches.integracao dizem para onde o trabalho APONTA. O que não se toca está em .claude/branches-protegidas.txt — outro arquivo, outro assunto. A validação avisa quando as duas não constam de lá.",
+    "branches.base e branches.integracao dizem para onde o trabalho APONTA. O que não se toca está em .claude/branches-protegidas.txt — outro arquivo, outro assunto. A validação avisa quando as duas não constam de lá. O bloco `branches` da raiz é o PADRÃO: um projeto cujo fluxo é outro declara o seu próprio `branches` dentro do cadastro (`projetos.<etiqueta>.branches`), com só as chaves que diferem — base, integracao ou padrao_de_trabalho —, e o roteiro de mexida em vizinho e a trava de branch do executor leem o do projeto antes do da raiz. Nada muda no repositório do vizinho.",
     "projetos é a UNICA lista de projetos: cada chave é a etiqueta da issue E o `<projeto>` que abre o título (a primeira parte do `padrao_de_nome` da configuração), `repositorio` nomeia a PASTA — sem dono e sem caminho —, `somente_leitura` diz se dele só se lê, `stack` nomeia a régua que o estágio revisor do diff aplica — sem ela ele passa com recado, porque a camada não adivinha stack de ninguém —, `autorizacoes` diz o que a automação faz sozinha NESTE vizinho, e `revisor` nomeia quem cuida dele. O gancho .claude/hooks/vetar-escrita-em-somente-leitura.py lê daqui e recusa escrita em projeto somente leitura por qualquer caminho: Write, Edit, NotebookEdit, git que muda o repositório, gh que cria, redirecionamento, rm, mv e sed -i. Ler continua livre, e a recusa ensina o caminho: pedido de incorporação como SUGESTÃO, com o revisor declarado. Campo ausente, comportamento de antes: a camada não inventa projeto de ninguém. E é por ele carregar nome de repositório que a lista mora AQUI, no arquivo local — nunca em texto rastreado.",
     "diretorios_so_codigo e arquivo_limpeza são lidos por quem veta conhecimento em pasta de código e pela rotina de limpeza.",
     "caixas nomeia as DUAS issues permanentes que não fecham — a de defeitos e a de melhorias da camada — onde achado de sessão e de auditoria vira linha. Quem escreve nelas é .agents/caixa/caixa.py, e ele só escreve entre as marcas do bloco: texto posto à mão fora dele sobrevive. Cada linha leva a etiqueta do seu tipo, e por isso as duas chaves podem apontar para a MESMA issue — um quadro só, defeito e melhoria lado a lado. Linha que acabou sai por `podar --id <identidade>`, que deixa o registro do fechamento em comentário da caixa. Sem esta chave o instrumento RECUSA e sai diferente de zero — não inventa issue. O número mora AQUI, no arquivo local, porque número de issue não entra em texto rastreado.",
@@ -42,6 +42,10 @@
       "repositorio": "${NOME_DA_PASTA_DO_REPOSITORIO}",
       "somente_leitura": false,
       "stack": "${STACK_DO_PROJETO_EX_DOTNET_REACT_PYTHON}",
+      "branches": {
+        "base": "${BRANCH_BASE_DESTE_PROJETO}",
+        "integracao": "${BRANCH_DE_INTEGRACAO_DESTE_PROJETO}"
+      },
       "autorizacoes": {
         "commit": false,
         "push": false,

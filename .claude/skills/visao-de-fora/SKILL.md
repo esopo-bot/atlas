@@ -68,12 +68,43 @@ Transforme o endereço em lat/lon (Nominatim/OSM resolve de graça; um
 ponto contra a ficha do Google Maps — endereço de site e de ficha divergem
 com frequência, e a divergência já é achado.
 
+**Quando o geocodificador não fecha, a coordenada sai do Plus Code da
+ficha.** O OSM pode conhecer a via com outro tipo e outro bairro, e não
+ter nó nenhum com o número da porta; a ficha do Google publica um Plus
+Code, e ele decodifica sem chave nenhuma:
+
+```bash
+python3 scripts/plus_code.py --decodificar '<codigo curto da ficha>' \
+  --referencia <lat> <lon>
+```
+
+O código curto da ficha (`XXXX+XX Cidade`) recompõe o inteiro a partir de
+uma referência a menos de 50 km — o centro do município que o Nominatim
+devolveu serve. A saída traz o centro da célula e o raio dela em metros,
+que é a precisão declarada no relatório. O `--testar` é a ida-e-volta —
+codifica, decodifica e cobra erro abaixo de 5 m — mais os vetores públicos
+do padrão, porque ida-e-volta fecha em qualquer orientação da grade e só o
+vetor de fora acusa a grade invertida.
+
+**O ViaCEP é a terceira via da confirmação do endereço e a origem do
+código IBGE do município.** Uma chamada devolve logradouro, bairro e o
+campo `ibge` — a Fase 3 precisa desse código, e quando site, ficha e OSM
+discordam sobre o tipo da via ou o bairro, é o ViaCEP que arbitra:
+
+```bash
+curl -s https://viacep.com.br/ws/<cep>/json/
+```
+
 ## Fase 3 — o terreno em números oficiais
 
-Três instrumentos prontos em `scripts/`, todos com `--testar`:
+Três instrumentos de território em `scripts/`, todos com `--testar`. As
+entradas dos três são base pública genérica: baixe **uma vez, fora das
+pastas de caso**, e aponte cada caso para lá por link — o porquê e o como
+estão em `references/estrutura-do-projeto.md`.
 
 - `raio_demografico.py` — população, domicílios, densidade e faixas
-  etárias por raio, do Censo 2022 (agregados por setor censitário).
+  etárias por raio, e a razão de cada faixa sobre a mesma faixa do
+  município, do Censo 2022 (agregados por setor censitário).
   Entradas, baixadas uma vez por UF de `ftp.ibge.gov.br`, caminho base
   `Censos/Censo_Demografico_2022/Agregados_por_Setores_Censitarios/`:
   malha em `malha_com_atributos/setores/gpkg/UF/<UF>/<UF>_setores_CD2022.gpkg`
@@ -98,6 +129,15 @@ Três instrumentos prontos em `scripts/`, todos com `--testar`:
 
 Some setores pelo centro (envelope/bbox): para setor urbano o erro é
 muito menor que a banda do raio — e declare o método no relatório.
+
+**O raio sozinho não é achado — o achado é o raio CONTRA a cidade.** Esta
+fase exige a comparação, não só a contagem: a fatia de uma faixa etária
+no raio não diz nada ao dono até encostar na fatia da mesma faixa no
+município inteiro, e é essa razão que muda a leitura do relatório (um
+bairro de avós não é um bairro de festa infantil). O `raio_demografico.py`
+imprime, ao lado de cada raio, `razao_sobre_municipio` por faixa — soma
+os setores do município pelo mesmo método, da mesma base, sem download
+novo. Contagem sem a razão não entra no relatório.
 
 ## Fase 4 — a vizinhança
 
@@ -133,9 +173,28 @@ Na ordem, porque uma alimenta a outra:
    — a briga do boutique é com boutique, e a régua é o maior volume da
    cidade, não a média.
 
-Tudo vira o retrato datado (JSON) da regra de ouro. E **HTTP 200 não
-prova página viva em rede social** — o código vem da casca; abra a
-página no navegador e leia o que ela diz.
+Tudo vira o retrato datado (JSON) da regra de ouro, e **o caminho padrão
+do retrato é o instrumento** `scripts/retrato.py`:
+
+```bash
+python3 scripts/retrato.py --alvos alvos.json --caso <caso>
+```
+
+Ele lê site, ficha do Google, Instagram, Facebook, domínios (RDAP e
+Wayback, com contraprova positiva na mesma rodada) e agregadores por HTTP,
+sem sessão de navegador, e grava `dados/retrato-<caso>-<data>.json`. O
+`alvos.json` (negócio, site, google, instagram, instagram_homonimos,
+facebook, dominios, agregadores) é dado de cliente e mora na pasta do
+caso. O instrumento obedece à regra 7 — uma requisição por alvo,
+`User-Agent` declarado, espera entre chamadas, nada de repetir em cima de
+429 — e **confessa `nao-medido`** onde não leu: CAPTCHA, casca com HTTP
+200, página que pediu login. `nao-medido` é a senha da reserva: ali, e
+só ali, a coleta manual no navegador de perfil persistente completa o
+retrato, lida da página renderizada — e o campo `leitura` diz de onde
+cada número veio. `--forma` imprime só as chaves de um retrato, para
+comparar com a rodada anterior sem expor valor. E **HTTP 200 não prova
+página viva em rede social** — o código vem da casca; abra a página no
+navegador e leia o que ela diz.
 
 ### O mergulho no Instagram — três páginas, três datasets
 
@@ -219,6 +278,16 @@ Busque o número de penetração/benchmark do setor em fonte nomeável
 (associação setorial, Sebrae, relatório anual) e aplique à população do
 raio. Premissa nacional em território acima da média é piso — diga isso.
 
+**A régua do setor mede a lacuna do mapa antes de medir a lacuna do
+mercado.** Quando a régua projeta N estabelecimentos do ramo no raio e o
+OpenStreetMap acha uma fração disso, a leitura tentadora é "faltam
+concorrentes, mercado aberto"; a leitura certa é "o OSM cadastra uma
+fração do que existe". OSM é piso (Fase 4): a distância entre a projeção
+e a contagem é primeiro o tamanho da lacuna do mapa, e só o que sobrar
+depois de contar em fonte melhor — Maps, cadastro oficial — fala de
+mercado. O relatório escreve a leitura certa, com as duas contas lado a
+lado, porque o leitor faz a errada sozinho.
+
 **A régua do município sai de graça, e é oficial.** A API de agregados do
 IBGE (a mesma que alimenta o SIDRA) responde sem chave nenhuma e devolve
 o número já com nome de tabela e unidade — dá para comparar o município
@@ -266,6 +335,31 @@ aprovada pelo validador. O relatório é UM PDF com tudo dentro — prints
 inclusive. Gere com navegador headless e confira com `pdfinfo`. A entrega
 datada fica em `pecas/entregas/`, ao lado das anteriores.
 
+**Transbordo se mede antes de olhar**: o número de seções do HTML tem de
+ser igual ao número de páginas do PDF (`pdfinfo` ou `pdftoppm` contando
+as imagens). Seção que virou duas páginas é texto que vazou da folha, e a
+contagem acha isso em segundos; a inspeção visual fica para depois, só
+onde a conta bater.
+
+**A rodada seguinte compara com a anterior por instrumento**, nunca de
+memória: `scripts/comparar_retratos.py` lê dois retratos datados do mesmo
+caso e devolve o delta folha a folha — seguidores, avaliações, razões de
+renda, links vivos ou mortos — em JSON
+(`dados/delta-<caso>-<de>-<ate>.json`) e em tabela Markdown, pronta para
+a seção de evolução do relatório:
+
+```bash
+python3 scripts/comparar_retratos.py --antes dados/retrato-<caso>-<data-anterior>.json \
+  --depois dados/retrato-<caso>-<data>.json --caso <caso>
+```
+
+Vale para qualquer par de JSONs datados de `dados/` com a mesma forma —
+o `renda-bairros-<data>.json` inclusive. Campo ausente ou `nao-medido`
+num dos lados sai `nao-comparavel`, nunca zero; código HTTP e RDAP mudam,
+não somam; lista de concorrentes ou de bairros se alinha pelo nome, então
+a ordem entre rodadas não importa. Só número entra na conta: número contra
+texto é `nao-comparavel`, porque a leitura mudou, não o valor.
+
 ## Fase 10 — o cético, obrigatório
 
 Antes de dar por pronto, rode o cético (a skill `cetico` é o rito):
@@ -307,6 +401,10 @@ Medidas em uso real — não são hipóteses:
   vazamento.
 - **Silêncio de dado não é fato**: campo de bairro vazio no IBGE, OSM
   incompleto — confesse a lacuna em vez de imprimir zero.
+- **Cinza de contexto reprova no validador como categoria**: o dado de
+  fundo (a cidade inteira, a média do setor) não é uma série a colorir. A
+  leitura certa é des-ênfase com rótulo direto no gráfico — o neutro não
+  ganha cor, ganha nome.
 - **Cor de marca crua reprova no validador**: contraste e croma de site
   raramente servem para gráfico. Valide antes de desenhar, não depois.
 - **`curl` 200 em rede social não é instrumento**: a casca responde 200
@@ -349,3 +447,7 @@ Medidas em uso real — não são hipóteses:
   handle apagado. Verifique cada botão no navegador — e o que ainda
   estiver VIVO ali (um formulário, um número) é achado tanto quanto o
   que morreu.
+- **Contar na tela não é contar**: "sete lojas de uma rede" lidas da
+  listagem impressa eram seis no arquivo gravado. Toda contagem que entra
+  no relatório se produz com código sobre o arquivo gravado (`jq`, um
+  `len()` em Python), nunca com o olho sobre a saída.

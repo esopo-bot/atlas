@@ -30,6 +30,9 @@ APRENDIZADO = (
 
 EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
+DECISAO_DE_PERGUNTAR = "ask"
+CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
+MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
 
 ACOES = {
     "push": (r"\bpush(?:es|ar|ei)?\b", r"\bempurr\w+"),
@@ -59,6 +62,7 @@ AJUDA_SEM_PERGUNTA = "sem pergunta no tool_input"
 TESTE_DEVIA_BARRAR = "  DEVIA BARRAR e passou — {}"
 TESTE_DEVIA_PASSAR = "  DEVIA PASSAR e barrou — {}"
 RESUMO_FALHOU = "FALHOU: {} de {} casos"
+TESTE_COMPORTAMENTO = "  COMPORTAMENTO — {}"
 RESUMO_OK = "OK: {} casos — {} barrados, {} liberados"
 
 
@@ -130,6 +134,21 @@ def recusa_por_nao_entender(falha) -> int:
     return SILENCIO
 
 
+def verbo_do_veto(entrada: dict) -> str:
+    sem_quem_responda = (entrada or {}).get(
+        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_SEM_QUEM_RESPONDA
+    return DECISAO_DE_NEGAR if sem_quem_responda else DECISAO_DE_PERGUNTAR
+
+
+def vetar(entrada: dict, razao: str) -> int:
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+        "permissionDecision": verbo_do_veto(entrada),
+        "permissionDecisionReason": razao,
+    }}, ensure_ascii=False))
+    return SILENCIO
+
+
 def decidir() -> int:
     try:
         entrada = json.load(sys.stdin)
@@ -142,14 +161,8 @@ def decidir() -> int:
     if not acao:
         return SILENCIO
 
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
-        "permissionDecision": DECISAO_DE_NEGAR,
-        "permissionDecisionReason": (
-            RECUSA.format(acao=acao, arquivo=ARQUIVO_CONFIGURACAO)
-            + MANDA_GRAVAR.format(APRENDIZADO)),
-    }}, ensure_ascii=False))
-    return SILENCIO
+    return vetar(entrada, RECUSA.format(acao=acao, arquivo=ARQUIVO_CONFIGURACAO)
+                 + MANDA_GRAVAR.format(APRENDIZADO))
 
 
 TUDO_LIGADO = {"commit": True, "push": True, "publicar": True}
@@ -174,6 +187,13 @@ DEIXA_PASSAR = [
     ("qual das duas abordagens você quer?", TUDO_LIGADO),
     ("", TUDO_LIGADO),
 ]
+
+
+RAZAO_DO_TESTE = "a razão que o veto explicaria"
+MODO_DA_SESSAO_INTERATIVA = "default"
+SESSAO_INTERATIVA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_DA_SESSAO_INTERATIVA}
+SEM_CABECA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_SEM_QUEM_RESPONDA}
+PEDIDO_SEM_MODO_DECLARADO = {}
 
 
 def testar() -> int:
@@ -201,13 +221,46 @@ def testar() -> int:
         falhas.append(TESTE_DEVIA_BARRAR.format(
             "a recusa manda gravar o aprendizado em conhecimento/"))
 
-    total = len(BARRA) + len(DEIXA_PASSAR) + 4
+    interativa = resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+    sem_cabeca = resposta_do_veto(SEM_CABECA, RAZAO_DO_TESTE)
+    sem_modo = resposta_do_veto(PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE)
+    if interativa.get("permissionDecision") != DECISAO_DE_PERGUNTAR:
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "em sessão interativa a resposta do gancho traz `ask`: o veto "
+            "pergunta antes, em vez de negar de vez"))
+    if sem_cabeca.get("permissionDecision") != DECISAO_DE_NEGAR:
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "em execução sem cabeça (`--dangerously-skip-permissions`) não "
+            "há quem responda: a resposta continua `deny`"))
+    if sem_modo.get("permissionDecision") != DECISAO_DE_PERGUNTAR:
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "pedido que não declara o modo de permissão recebe `ask` — só "
+            "o modo sem cabeça nega"))
+    if not (interativa.get("permissionDecisionReason") == RAZAO_DO_TESTE
+            and sem_cabeca.get("permissionDecisionReason") == RAZAO_DO_TESTE):
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "a razão do veto viaja na resposta, com `ask` e com `deny`: é "
+            "ela que o prompt de permissão mostra ao dono"))
+
+    total = len(BARRA) + len(DEIXA_PASSAR) + 8
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))
         print("\n".join(falhas))
         return 1
     print(RESUMO_OK.format(total, len(BARRA), len(DEIXA_PASSAR)))
     return 0
+
+
+def resposta_do_veto(entrada: dict, razao: str) -> dict:
+    import contextlib
+    import io
+    saida = io.StringIO()
+    with contextlib.redirect_stdout(saida):
+        vetar(entrada, razao)
+    try:
+        return json.loads(saida.getvalue())["hookSpecificOutput"]
+    except (ValueError, KeyError):
+        return {}
 
 
 def main() -> int:

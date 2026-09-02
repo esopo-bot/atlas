@@ -33,18 +33,58 @@ rotinas sai por `python3 verificacoes.py --lista`, que não viaja. Divergiu dest
 | 3 — antes de criar, procure e cite | nada | **só prosa** |
 | 4 — a memória mora no disco | gancho `vetar-andamento-em-arquivo`; as dez recusas dos ganchos | o gancho recusa o arquivo de andamento nascendo com o corpo de uma issue, e nomeia a exceção: o `.md` do encerramento, em `conhecimento/`. Para o resto da regra nenhuma rotina reprova, mas **toda recusa manda gravar** o aprendizado em `conhecimento/`, com a linha concreta do que gravar — memória previne, gancho ensina |
 | 5 — ao dar por pronto, faça a análise de promoção | nada | **só prosa** |
-| 6 — trabalhe econômico | rotina `largada` | cobra o teto de bytes que toda sessão paga, declarado em `nucleo/configuracao.json` |
+| 6 — trabalhe econômico | rotina `largada`; o instalador | cobra o teto de bytes que toda sessão paga, declarado em `nucleo/configuracao.json` — e, desde 01/09/2026, quem instala nasce com o teto medido na árvore recém-montada, escrito pelo `montar.py` na configuração com a data: o salto seguinte já é acusado, e subir o teto é decisão do dono |
 | 7 — rede com cortesia | nada | **só prosa** |
-| 8 — segredo não entra em git nenhum | gancho `orientar-credencial`; rotina `ensaio` | o gancho intercepta leitura e shell; o ensaio varre texto, caminho e mensagem de commit antes de publicar |
-| 9 — destrutivo é do dono; commit e push | ganchos `vetar-branch-protegida`, `vetar-pergunta-ja-respondida`, `vetar-escrita-em-somente-leitura`, `vetar-comentario-explicativo` e `vetar-escrita-em-politica` | os dois primeiros leem `autorizacoes` e, sem declaração, negam; o terceiro recusa escrita em território de outra pessoa; o quarto recusa o agente editar a lista de exceções da própria cerca; o quinto recusa, durante etapa do executor, escrita nos arquivos que decidem quais cercas existem — `settings.json`, as listas que os ganchos leem, `nucleo/regras.json` e o código dos próprios ganchos |
+| 8 — segredo não entra em git nenhum | gancho `orientar-credencial`; rotina `ensaio` | o gancho intercepta leitura e shell: orienta quem lê credencial — `.env`, `.credenciais/` e, desde 01/09/2026, as gavetas e os nomes que o Agent Governance Toolkit da Microsoft já conhecia (`~/.ssh`, `~/.aws`, `.git-credentials`, `id_rsa`, `.netrc`…) —, veta quem a entrega ao git ou ao gh, e veta a chamada ao endpoint de metadata da nuvem (`169.254.169.254`, `metadata.google.internal`), que é a credencial da máquina; o ensaio varre texto, caminho e mensagem de commit antes de publicar |
+| 9 — destrutivo é do dono; commit e push | ganchos `vetar-branch-protegida`, `vetar-pergunta-ja-respondida`, `vetar-escrita-em-somente-leitura`, `vetar-comentario-explicativo` e `vetar-escrita-em-politica` | os dois primeiros leem `autorizacoes` e, sem declaração, negam; o terceiro recusa escrita em território de outra pessoa; o quarto recusa o agente editar a lista de exceções da própria cerca; o quinto recusa, durante etapa do executor, escrita nos arquivos que decidem quais cercas existem — `settings.json`, as listas que os ganchos leem, `nucleo/regras.json` e o código dos próprios ganchos — e, na mesma etapa, `curl` ou `wget` despejados num shell e `bash <(curl …)`: código baixado da rede executando sem leitura, que é o jeito de reescrever qualquer cerca por dentro |
 | 10 — texto na régua | rotina `camada` | roda o validador de markdown sobre todo `.md` que o git rastreia |
 | 11 — não invente passo onde já existe receita | nada | **só prosa** |
-| 12 — branch de longa duração e integração contínua | ganchos `vetar-branch-protegida` e `vetar-automacao` | recusam na hora, pelo nome da branch e pelo caminho da configuração |
+| 12 — branch de longa duração e integração contínua | ganchos `vetar-branch-protegida` e `vetar-automacao`; o executor de roteiros | recusam na hora, pelo nome da branch e pelo caminho da configuração; o executor, desde 01/09/2026, recusa o disparo quando a integração declarada não existe no remoto do alvo (`git ls-remote --heads origin <integração>` vazio), antes de gravar estado — sem remoto declarado não há o que medir, e ele segue calado — inclusive `.git/hooks/`, que não entra no git e roda a cada commit sem ninguém rever |
 | 13 — publicar exige revisão semântica | rotina `ensaio`, **em parte** | a varredura acha nome e segredo; jeito de trabalhar e procedência não têm padrão e passam inteiros. A parte que falta **não é mecanizável** |
 | 14 — conhecimento nasce na língua de quem vai lê-lo | rotina `vocabulario`; ganchos `vetar-conhecimento-em-codigo` e `vetar-comentario-explicativo` | a rotina mede o fechamento de cada termo na árvore rastreada e acusa saldo; os ganchos recusam a página nascendo em pasta de código e o porquê nascendo em comentário |
 | 15 — editou a fonte, regenere a cópia | gancho `vetar-escrita-em-copia-gerada`; rotina `sincronia` | o gancho recusa a escrita na cópia nomeando a fonte; a rotina regenera e compara o texto inteiro |
-| 16 — nada sem destino | ganchos `cobrar-destino-da-entrega` e `vetar-escrita-fora-da-execucao`; rotinas `entrega` e `higiene` | o primeiro cobra na parada da sessão; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina `entrega` lista as duas pontas — o que não saiu da branch e, desde 01/09/2026, o que já saiu e ficou: a branch contida na branch de incorporação e ainda de pé, local e remota, que se acumulava porque ninguém a via; guardar uma delas é declará-la em `.claude/branches-protegidas.txt`. A `higiene` varre o rastreador pelos termos do assunto — issue que fala do trabalho e não aponta para a que o consolidou, e texto que descreve como aberta uma issue já fechada. As três primeiras guardas olham para o disco e para o git; nenhuma via o rastreador, e era ali que a issue vizinha ficava para trás |
+| 16 — nada sem destino | ganchos `cobrar-destino-da-entrega` e `vetar-escrita-fora-da-execucao`; rotinas `entrega` e `higiene` | o primeiro cobra na parada da sessão — desde 01/09/2026 busca o remoto antes de medir a integração contra a principal, para não acusar pedido já mesclado por ref local velha, e separa a sujeira herdada (arquivo mexido antes da abertura da sessão, lida do primeiro instante do transcript) da sujeira desta sessão: a herdada é nomeada e não trava; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina `entrega` lista as duas pontas — o que não saiu da branch e, desde 01/09/2026, o que já saiu e ficou: a branch contida na branch de incorporação e ainda de pé, local e remota, que se acumulava porque ninguém a via; guardar uma delas é declará-la em `.claude/branches-protegidas.txt`. A `higiene` varre o rastreador pelos termos do assunto — issue que fala do trabalho e não aponta para a que o consolidou, e texto que descreve como aberta uma issue já fechada. As três primeiras guardas olham para o disco e para o git; nenhuma via o rastreador, e era ali que a issue vizinha ficava para trás |
 | 17 — explique na altura de quem lê | nada | **não mecanizável**: altura de explicação não se mede por padrão |
+
+## Negar ou perguntar: o verbo de cada veto
+
+Um gancho que veta responde com um de dois verbos. `deny` recusa na hora,
+sem consultar ninguém. `ask` manda a chamada para o prompt de permissão do
+Claude Code: o dono lê a razão do gancho e decide, e a sessão espera. Os
+dois são nativos do evento `PreToolUse` — o gancho escolhe um no campo
+`permissionDecision` e explica em `permissionDecisionReason`. O desenho é o
+mesmo do Agent Governance Toolkit da Microsoft, citado mais abaixo: lá,
+exigir aprovação é exatamente um `ask` em gancho `PreToolUse`.
+
+**Quem pergunta e quem nega — decisão do dono em 01/09/2026.** Perguntam
+os quatro vetos de julgamento, em que a recusa é opinião sobre o trabalho
+e o dono presente pode discordar: `vetar-comentario-explicativo`,
+`vetar-andamento-em-arquivo`, `vetar-pergunta-ja-respondida` e
+`vetar-conhecimento-em-codigo`. Negam de vez os seis que protegem o que
+não se desfaz — branch de longa duração, política, território de outra
+pessoa, cópia gerada, automação e a fronteira da execução:
+`vetar-branch-protegida`, `vetar-escrita-em-politica`,
+`vetar-escrita-em-somente-leitura`, `vetar-escrita-em-copia-gerada`,
+`vetar-automacao` e `vetar-escrita-fora-da-execucao`. O julgamento de cada
+veto não mudou: o que barrava continua barrando. Mudou quem dá a última
+palavra em sessão interativa.
+
+**Sem cabeça, todos negam.** Em execução sem ninguém no terminal —
+`claude -p` com `--dangerously-skip-permissions`, que é como o executor de
+roteiros roda cada etapa — um `ask` não teria quem o respondesse. Por isso
+os quatro vetos que perguntam leem o campo `permission_mode` da entrada
+que o Claude Code entrega a todo gancho e, quando ele vale
+`bypassPermissions`, respondem `deny`, com a mesma razão. A decisão que
+precisa do dono continua parando a execução pelo desenho de sempre —
+veredito de pergunta na evidência, execução em `aguardando-resposta`,
+resposta pela retomada. O verbo `ask` não muda esse desenho; ele só
+encurta o caminho quando há alguém na frente do terminal.
+
+Para saber quem pergunta, pergunte ao código, não a esta página:
+
+```bash
+grep -l DECISAO_DE_PERGUNTAR .claude/hooks/vetar-*.py
+```
 
 ## O que este quadro ensina
 
@@ -110,3 +150,25 @@ suíte com três defeitos que só a população real mostrou.
 A regra que sai daí: **guarda que acusa precisa de população real antes de
 alguém dizer que ela funciona** — e o caso de controle, aquele que ela NÃO
 pode acusar, entra na suíte junto com os que ela deve.
+
+**Regra madura de fora entra copiada, não instalada.** Em 01/09/2026 os
+ganchos ganharam as regras de segurança do Agent Governance Toolkit da
+Microsoft (MIT, `agent-governance-claude-code/config/default-policy.json`
+em <https://github.com/microsoft/agent-governance-toolkit>) que ainda não
+tinham, cada uma no gancho que já cobria a regra da camada em que ela cai:
+os nomes e as gavetas de credencial e o endpoint de metadata da nuvem no
+`orientar-credencial` (regra 8); código baixado da rede executando sem
+leitura no `vetar-escrita-em-politica` (regra 9); e `.git/hooks/` no
+`vetar-automacao` (regra 12). O verbo é o de cada gancho, não o do
+plugin: ler credencial continua orientando, porque ler localmente é livre;
+código baixado da rede só é recusado durante etapa do executor, porque em
+sessão interativa o prompt de permissão é a revisão, e essa cerca só se
+levanta na etapa, onde não há quem responda um `ask`; e das escritas que
+lá só pedem revisão — rc de shell, `.git/hooks/`, `package.json` — entrou
+a única que revisão nenhuma alcança, `.git/hooks/`, que o git não mostra.
+Ficaram de fora, de propósito: o veto geral a `rm -rf`, porque a regra 9
+já cerca o destrutivo por caminho e `tmp/` se apaga sem perder nada; e o
+veto a despejar o ambiente (`env`, `printenv`), porque é leitura local,
+sem caminho que ancore o veto de entrega. Instalar o plugin custaria Node,
+um processo por chamada e contexto em inglês em toda sessão — a licença
+existe para levar a regra e deixar o peso.

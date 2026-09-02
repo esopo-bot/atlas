@@ -17,3 +17,4 @@ Jenkinsfile
 azure-pipelines.yml
 bitbucket-pipelines.yml
 .travis.yml
+.git/hooks/

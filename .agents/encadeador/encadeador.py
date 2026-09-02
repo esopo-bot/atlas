@@ -405,6 +405,17 @@ LOG_ONDE_AS_EVIDENCIAS_IRIAM = "evidências iriam para: {}/"
 LOG_TETO_ESGOTADO = ("teto de {} ciclos esgotado — nada rodou; a decisão "
                      "é do dono.")
 LOG_AVISO = "aviso: {}"
+COMANDO_DA_INTEGRACAO_NO_REMOTO = ["git", "-C", "{alvo}", "ls-remote", "--heads", "origin", "{integracao}"]
+COMANDO_DO_REMOTO_DECLARADO = ["git", "-C", "{alvo}", "remote", "get-url", "origin"]
+TEMPO_DA_REDE_NO_DISPARO_S = 25
+ERRO_INTEGRACAO_INEXISTENTE_NO_REMOTO = (
+    "a branch de integração {integracao!r} não existe no remoto de {alvo}: "
+    "`git -C {alvo} ls-remote --heads origin {integracao}` voltou vazio. Nada "
+    "rodou e nada foi gravado — declare branches.integracao (na raiz, ou em "
+    "projetos.<etiqueta>.branches para o vizinho) com uma branch que exista "
+    "no remoto do alvo")
+AVISO_INTEGRACAO_NAO_MEDIDA = ("não medi se a integração {integracao!r} existe "
+                               "no remoto de {alvo}: {erro}")
 LOG_RETOMANDO_PROVADAS = ("retomando: {quantas} etapas já provadas não "
                           "rodam de novo ({nomes})")
 LOG_JA_PROVADA = "  {}: já provada — não roda de novo"
@@ -1386,6 +1397,60 @@ def branch_fora_do_lugar(esperada: str, atual: str) -> bool:
     molde = ".+".join(re.escape(pedaco)
                       for pedaco in MARCA_LIVRE_NO_PADRAO.split(esperada))
     return re.fullmatch(molde, atual) is None
+
+
+def cadastro_do_alvo(configuracao, ambiente) -> dict:
+    declarado = (ambiente or {}).get(VARIAVEL_DO_ALVO, "").strip()
+    if not declarado:
+        return {}
+    nome = Path(os.path.realpath(
+        Path(declarado).expanduser())).name.strip().lower()
+    projetos = (configuracao or {}).get("projetos") or {}
+    return next((p for p in projetos.values() if isinstance(p, dict)
+                 and (p.get("repositorio") or "").strip().lower() == nome),
+                {})
+
+
+def branches_do_alvo(configuracao, ambiente) -> dict:
+    gerais = (configuracao or {}).get("branches")
+    proprias = cadastro_do_alvo(configuracao, ambiente).get("branches")
+    return {**(gerais if isinstance(gerais, dict) else {}),
+            **(proprias if isinstance(proprias, dict) else {})}
+
+
+def integracao_no_remoto_do_alvo(configuracao, cwd, ambiente) -> tuple:
+    integracao = branches_do_alvo(configuracao, ambiente).get("integracao")
+    if not integracao or _PENDENTE.search(str(integracao)):
+        return None, None
+    alvo, _ = onde_a_branch_se_mede(cwd, ambiente)
+    if not _tem_remoto_declarado(alvo):
+        return None, None
+    comando = [parte.format(alvo=alvo, integracao=integracao)
+               for parte in COMANDO_DA_INTEGRACAO_NO_REMOTO]
+    try:
+        feito = subprocess.run(comando, capture_output=True, text=True,
+                               timeout=TEMPO_DA_REDE_NO_DISPARO_S)
+    except (OSError, subprocess.SubprocessError) as erro:
+        return None, AVISO_INTEGRACAO_NAO_MEDIDA.format(
+            integracao=integracao, alvo=alvo, erro=erro)
+    if feito.returncode != 0:
+        return None, AVISO_INTEGRACAO_NAO_MEDIDA.format(
+            integracao=integracao, alvo=alvo,
+            erro=(feito.stderr.strip() or GIT_MUDO)[:200])
+    if not feito.stdout.strip():
+        return ERRO_INTEGRACAO_INEXISTENTE_NO_REMOTO.format(
+            integracao=integracao, alvo=alvo), None
+    return None, None
+
+
+def _tem_remoto_declarado(alvo) -> bool:
+    try:
+        feito = subprocess.run(
+            [parte.format(alvo=alvo) for parte in COMANDO_DO_REMOTO_DECLARADO],
+            capture_output=True, text=True, timeout=TEMPO_DA_REDE_NO_DISPARO_S)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return feito.returncode == 0 and bool(feito.stdout.strip())
 
 
 def onde_a_branch_se_mede(cwd, ambiente) -> tuple:
@@ -2735,6 +2800,13 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
         print(ERRO_NADA_RODOU_SEM_A_CONTA.format(ARQUIVO_EXECUTOR),
               file=sys.stderr)
         return EXIT_ERRO_DE_USO_OU_AMBIENTE
+    inexistente, nao_medida = integracao_no_remoto_do_alvo(
+        configuracao, cwd, os.environ)
+    if nao_medida:
+        print(LOG_AVISO.format(nao_medida), file=sys.stderr)
+    if inexistente:
+        print(ERRO_DE_CONFIGURACAO.format(inexistente), file=sys.stderr)
+        return EXIT_ERRO_DE_USO_OU_AMBIENTE
 
     issue = issue_do_roteiro_ou_do_ambiente(roteiro)
     bloco = bloco_do_roteiro_ou_do_ambiente(roteiro)
@@ -2760,8 +2832,8 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
                           roteiro.get(CAMPO_DO_TEMPO_DA_PROVA),
                       "etapas": [e["nome"] for e in etapas],
                       "branch_esperada": branch_que_a_issue_pede(
-                          _campo(configuracao,
-                                 "branches.padrao_de_trabalho"), issue)})
+                          branches_do_alvo(configuracao, os.environ)
+                          .get("padrao_de_trabalho"), issue)})
     gravar_estado(dir_base, trabalho, "rodando", issue=issue,
                   roteiro=str(caminho_roteiro) if caminho_roteiro else None)
 

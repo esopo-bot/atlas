@@ -29,7 +29,8 @@
         "Saída cortada se declara com `(...)` em linha própria: a re-execução compara BLOCO de linhas seguidas, e o pedaço que você resumiu no meio de uma saída composta vira acusação sem essa marca.",
         "Prova lenta declara o teto dela — `\"tempo-limite\": <segundos>` no item do provado —, porque a re-execução corta em 60 s por padrão: tempo esgotado não é divergência, e lenta não é errada.",
         "A prova morre com a escrita seguinte: o número do relatório final se mede depois do último comando que altera disco. Sincronização, formatador ou regeneração que rode depois do teste desfaz o que ele mediu — re-rode a prova como último ato, ou o relatório afirma um instante que não sobreviveu.",
-        "Antes de agir sobre uma conclusão importante, rode a skill `cetico`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição."
+        "Antes de agir sobre uma conclusão importante, rode a skill `cetico`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição.",
+        "Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova."
       ]
     },
     {
@@ -92,6 +93,7 @@
       "id": 9,
       "regra": "Destrutivo é do dono; commit e push seguem o que o repositório autorizou.",
       "faca": [
+        "**Arquivo que o git não rastreia não tem histórico.** Onde o git guarda a versão anterior, apagar se desfaz; em arquivo ignorado, ou fora de git nenhum, apagar é definitivo e silencioso. Ali a ação é **mover**, nunca apagar — e o commit que registra a mudança diz o destino de cada coisa que saiu, senão a próxima sessão procura o que ninguém guardou. Apagar de verdade é do dono, e só depois de provado que a informação está inteira em outro lugar.",
         "O que a automação pode fazer sozinha se declara em `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`, `publicar`) — é de cada repositório, e o gancho de veto lê dali. Sem declaração, nega: omissão não é permissão.",
         "Em repositório vizinho a autorização é outra: vale o `autorizacoes` do cadastro do projeto, e só na falta dele o `configuracao.json` do alvo — nos dois lugares, omissão nega.",
         "O que aciona automação — integração contínua, implantação, aviso a outras pessoas — é sempre do dono, mesmo onde o resto é liberado: sincronizar não é entregar.",
@@ -114,7 +116,8 @@
       "regra": "Não invente passo onde já existe receita.",
       "faca": [
         "Antes de propor como se faz algo que o repositório já faz — subir uma peça de infraestrutura, publicar, abrir acesso —, procure o procedimento na documentação dele e cite de onde saiu cada passo.",
-        "Não achou? Peça o endereço, não improvise: integração contínua improvisada parece pronta, e quebra longe de onde nasceu."
+        "Não achou? Peça o endereço, não improvise: integração contínua improvisada parece pronta, e quebra longe de onde nasceu.",
+        "Não invente peça onde há padrão de mercado: antes de escrever instrumento, gancho ou servidor caseiro, procure o produto aberto que já faz isso, cite-o e diga o que ele cobre. Peça própria só entra com gatilho declarado — o que o produto não faz, medido, ou o custo dele que este repositório não paga (peso, rede, licença, dependência) — e rodar o produto é decisão do dono."
       ]
     },
     {

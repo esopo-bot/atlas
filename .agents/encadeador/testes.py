@@ -1975,6 +1975,138 @@ def _sobre_a_branch_do_alvo_vizinho(b) -> None:
              for prova in parada.get("provado") or []))
 
 
+def _sobre_as_branches_proprias_do_alvo(b) -> None:
+    marca = Path(b.pasta) / "a-sessao-do-alvo-com-branches-rodou"
+    falso = Path(b.pasta) / "cli-do-alvo-com-branches.sh"
+    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=marca),
+                     encoding="utf-8")
+    falso.chmod(0o755)
+    raiz = Path(b.pasta) / "raiz-com-branches-por-projeto"
+    alvo = Path(b.pasta) / "vizinho-com-branches-proprias"
+    for onde in (raiz, alvo):
+        subprocess.run(["git", "init", "-q", "-b", "main", str(onde)],
+                       check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(alvo), "checkout", "-q", "-b",
+                    "mexida/41-no-padrao-do-projeto"], check=True,
+                   capture_output=True)
+    b.configurar(raiz, branches={"padrao_de_trabalho": PADRAO_DA_BRANCH_DA_ISSUE,
+                                 "base": "base", "integracao": "integracao"},
+                 projetos={"proprio": {
+                     "repositorio": alvo.name,
+                     "branches": {"padrao_de_trabalho":
+                                  "mexida/<numero>-<assunto-em-kebab>"}}})
+    roteiro = _roteiro(b.pasta, "m-branches-proprias.json", {
+        "issue": 41, "etapas": [
+            {"nome": "trabalha", "tipo": "sessao", "prompt": "trabalhe",
+             "tempo-limite": TETO_DO_DUBLE}]})
+    subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-branches-proprias",
+         "--dir", b.evidencias, "--cwd", str(raiz)],
+        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+        env=dict(b.ambiente, ENCADEADOR_SESSAO=str(falso),
+                 **{VARIAVEL_DO_ALVO: str(alvo)}))
+    evidencia = _evidencia_da_etapa(
+        Path(b.evidencias) / "t-branches-proprias", "trabalha")
+    b.caso("o cadastro do alvo declara branches próprias, e a trava mede o "
+           "padrão DO ALVO: alvo na branch do padrão dele roda a sessão",
+         marca.exists()
+         and not any("branch" in falta
+                     for falta in evidencia.get("faltas") or []))
+
+    from encadeador import RAIZ_DO_ATLAS
+    caminho = RAIZ_DO_ATLAS / "execucoes" / "mexida-em-vizinho.json"
+    if not caminho.is_file():
+        return
+    abertura = next(e["comando"] for e in json.loads(
+        caminho.read_text(encoding="utf-8"))["etapas"]
+        if e["nome"] == "abrir-branch-no-vizinho")
+    remoto = Path(b.pasta) / "remoto-do-vizinho-com-develop.git"
+    semente = Path(b.pasta) / "semente-do-vizinho-com-develop"
+    subprocess.run(["git", "init", "-q", "--bare", str(remoto)],
+                   check=True, capture_output=True)
+    subprocess.run(["git", "init", "-q", "-b", "develop", str(semente)],
+                   check=True, capture_output=True)
+    (semente / "leiame").write_text("semente\n", encoding="utf-8")
+    for argumentos in (["add", "leiame"],
+                       ["-c", "user.name=t", "-c", "user.email=t@t",
+                        "commit", "-q", "-m", "semente"],
+                       ["push", "-q", str(remoto), "develop"]):
+        subprocess.run(["git", "-C", str(semente), *argumentos],
+                       check=True, capture_output=True)
+    vizinho = Path(b.pasta) / "vizinho-clonado-do-develop"
+    subprocess.run(["git", "clone", "-q", str(remoto), str(vizinho)],
+                   check=True, capture_output=True)
+    b.configurar(raiz, branches={"padrao_de_trabalho": PADRAO_DA_BRANCH_DA_ISSUE,
+                                 "base": "base-que-nao-existe",
+                                 "integracao": "base-que-nao-existe"},
+                 projetos={"clonado": {
+                     "repositorio": vizinho.name,
+                     "branches": {"base": "develop",
+                                  "integracao": "develop"}}})
+    feito = subprocess.run(
+        ["bash", "-c", abertura], capture_output=True, text=True,
+        cwd=str(raiz), timeout=TETO_DO_DUBLE,
+        env=dict(b.ambiente, ISSUE="41", ASSUNTO="base-do-projeto",
+                 **{VARIAVEL_DO_ALVO: str(vizinho)}))
+    try:
+        veredito = json.loads(feito.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        veredito = {}
+    atual = subprocess.run(["git", "-C", str(vizinho), "branch",
+                            "--show-current"], capture_output=True,
+                           text=True).stdout.strip()
+    b.caso("o roteiro de vizinho abre a branch a partir da base DO PROJETO "
+           "quando o cadastro a declara — a base da raiz é só o padrão de "
+           "quem não declara",
+         veredito.get("veredito") == "segue"
+         and atual == "issue/41-base-do-projeto")
+
+
+def _sobre_o_veto_de_integracao_inexistente(b) -> None:
+    from encadeador import ERRO_INTEGRACAO_INEXISTENTE_NO_REMOTO
+    alvo = _repositorio_de_trabalho(b.pasta, "veto-integracao", "issue/7-x")
+    b.configurar(alvo, branches={"padrao_de_trabalho": PADRAO_DA_BRANCH_DA_ISSUE,
+                                 "base": BRANCH_DE_INTEGRACAO,
+                                 "integracao": "homolog-que-nao-existe"})
+    roteiro = _roteiro(b.pasta, "m-veto-integracao.json", {"etapas": [
+        {"nome": "abre", "tipo": "codigo", "comando": FANTOCHE_OK}]})
+    recusa = subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-veto-integracao",
+         "--dir", b.evidencias, "--cwd", str(alvo)],
+        capture_output=True, text=True, timeout=TETO_DO_DUBLE, env=b.ambiente)
+    b.caso("integração declarada que não existe no remoto do alvo: o disparo "
+           "recusa com erro de uso ANTES de gravar estado, e nomeia a branch",
+         recusa.returncode == EXIT_ERRO_DE_USO_OU_AMBIENTE
+         and "homolog-que-nao-existe" in recusa.stderr
+         and not (Path(b.evidencias) / "t-veto-integracao").exists())
+    b.configurar(alvo, branches={"padrao_de_trabalho": PADRAO_DA_BRANCH_DA_ISSUE,
+                                 "base": BRANCH_DE_INTEGRACAO,
+                                 "integracao": BRANCH_DE_INTEGRACAO})
+    roda = subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-veto-integracao-ok",
+         "--dir", b.evidencias, "--cwd", str(alvo)],
+        capture_output=True, text=True, timeout=TETO_DO_DUBLE, env=b.ambiente)
+    b.caso("integração que existe no remoto: o disparo roda como sempre",
+         roda.returncode == EXIT_COMPLETA
+         and ERRO_INTEGRACAO_INEXISTENTE_NO_REMOTO.split("{")[0] not in roda.stderr)
+    sem_remoto = Path(b.pasta) / "veto-sem-remoto"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(sem_remoto)],
+                   check=True, capture_output=True)
+    b.configurar(sem_remoto, branches={"padrao_de_trabalho": PADRAO_DA_BRANCH_DA_ISSUE,
+                                       "base": "main", "integracao": "main"})
+    avisa = subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-veto-sem-remoto",
+         "--dir", b.evidencias, "--cwd", str(sem_remoto)],
+        capture_output=True, text=True, timeout=TETO_DO_DUBLE, env=b.ambiente)
+    b.caso("sem remoto declarado não há o que medir: o disparo roda calado, "
+           "sem recusa e sem aviso de integração",
+         avisa.returncode == EXIT_COMPLETA and "integração" not in avisa.stderr)
+
+
 def _sobre_o_ambiente_gravado_da_execucao(b) -> None:
     alvo = Path(b.pasta) / "alvo-do-ambiente-gravado"
     raiz = Path(b.pasta) / "raiz-do-ambiente-gravado"
@@ -2789,6 +2921,8 @@ TEMAS = (
     _sobre_a_issue,
     _sobre_a_branch_que_a_issue_pede,
     _sobre_a_branch_do_alvo_vizinho,
+    _sobre_as_branches_proprias_do_alvo,
+    _sobre_o_veto_de_integracao_inexistente,
     _sobre_o_ambiente_gravado_da_execucao,
     _sobre_a_issue_do_ambiente,
     _sobre_a_janela_e_o_ensaio,

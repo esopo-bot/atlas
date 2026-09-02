@@ -12,7 +12,8 @@ Para qualquer agente de IA neste repositório.
   `.agents/skills/`.
 - Fonte que instrumento lê: `nucleo/`. `modulos/` não viaja — chega por
   `--modulo <nome>`.
-- Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`.
+- Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`; a wiki dos
+  vizinhos, `conhecimento/projetos/`.
 - Rode `python montar.py --sincronizar` depois de editar página, skill, módulo
   ou `nucleo/`.
 

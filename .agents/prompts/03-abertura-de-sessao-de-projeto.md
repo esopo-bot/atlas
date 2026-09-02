@@ -16,6 +16,24 @@ Conhecimento de projeto é LOCAL: nasce no espaço do workspace, nunca nas
 páginas da camada. Nome de empresa, conta e caminho de máquina não entram
 em nada que a camada rastreie.
 
+## Sessões paralelas — uma por território
+
+Várias sessões podem trabalhar ao mesmo tempo, e o que separa uma da outra
+é o território, não o assunto:
+
+- **Cada sessão escreve só no seu alvo** — o repositório declarado em
+  `PROJETO`. Pasta de outro projeto é de outra sessão, mesmo que o pedido
+  pareça o mesmo: duas sessões receberam a mesma tarefa em 01/09 e só não
+  colidiram porque uma olhou a pasta antes de escrever.
+- **A camada é intocável para todas.** Achado vai ao quadro pelo
+  instrumento; edição do atlas é de sessão própria, pelo prompt 01.
+- **O estado de cada sessão mora na issue dela.** Nada de arquivo
+  compartilhado de andamento: a issue é o único lugar que a outra sessão e
+  a próxima leem.
+- **Antes de escrever numa pasta, olhe quem a tocou.** `ls -lt` da pasta
+  alvo e `git -C <alvo> status --short`: mudança recente que você não fez é
+  outra sessão viva — não commite nem apague o que não é seu.
+
 ## As cinco leis (valem aqui também)
 
 1. Só é pronto o que um instrumento provou — saída COLADA do terminal.

@@ -42,6 +42,10 @@ de consulta, não de sessão.
     - Antes de agir sobre uma conclusão importante, rode a skill `cetico`: ela
       separa o provado do suposto e desenha a medição mais barata que
       derrubaria cada suposição.
+    - Critério de aceitação se testa quando nasce: rode o comando do critério
+      na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha.
+      Critério que já falha por motivo que o trabalho nunca remove nasce
+      mentindo, e treina a sessão a marcar a caixa sem prova.
 
 3. **Antes de criar, procure e cite.**
     - O que o conjunto já oferece não se reimplementa; aplicação nova imita o
@@ -113,6 +117,13 @@ de consulta, não de sessão.
 
 9. **Destrutivo é do dono; commit e push seguem o que o repositório
    autorizou.**
+    - **Arquivo que o git não rastreia não tem histórico.** Onde o git guarda a
+      versão anterior, apagar se desfaz; em arquivo ignorado, ou fora de git
+      nenhum, apagar é definitivo e silencioso. Ali a ação é **mover**, nunca
+      apagar — e o commit que registra a mudança diz o destino de cada coisa
+      que saiu, senão a próxima sessão procura o que ninguém guardou. Apagar de
+      verdade é do dono, e só depois de provado que a informação está inteira
+      em outro lugar.
     - O que a automação pode fazer sozinha se declara em
       `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`,
       `publicar`) — é de cada repositório, e o gancho de veto lê dali. Sem
@@ -148,6 +159,12 @@ de consulta, não de sessão.
       na documentação dele e cite de onde saiu cada passo.
     - Não achou? Peça o endereço, não improvise: integração contínua
       improvisada parece pronta, e quebra longe de onde nasceu.
+    - Não invente peça onde há padrão de mercado: antes de escrever
+      instrumento, gancho ou servidor caseiro, procure o produto aberto que já
+      faz isso, cite-o e diga o que ele cobre. Peça própria só entra com
+      gatilho declarado — o que o produto não faz, medido, ou o custo dele que
+      este repositório não paga (peso, rede, licença, dependência) — e rodar o
+      produto é decisão do dono.
 
 12. **Branch de longa duração e configuração de integração contínua não se
     tocam.**

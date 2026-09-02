@@ -91,13 +91,31 @@ def anexar_faixas_etarias(csv_demografia, setores):
             alvo["mulheres_40_mais"] = sum(valor(c) for c in MULHERES_40_MAIS)
 
 
+def soma_das_faixas(setores):
+    return {nome: sum(s.get("faixas", {}).get(nome, 0) for s in setores)
+            for nome in FAIXAS}
+
+
+def participacao_por_faixa(faixas):
+    total = sum(faixas.values())
+    return {nome: (valor / total if total else None) for nome, valor in faixas.items()}
+
+
+def razao_sobre_o_municipio(faixas_do_raio, faixas_do_municipio):
+    do_raio = participacao_por_faixa(faixas_do_raio)
+    do_municipio = participacao_por_faixa(faixas_do_municipio)
+    return {nome: (round(do_raio[nome] / do_municipio[nome], 2)
+                   if do_raio[nome] is not None and do_municipio[nome] else None)
+            for nome in faixas_do_raio}
+
+
 def resumo_por_raio(setores, lat, lon, raios):
+    faixas_do_municipio = soma_das_faixas(setores.values())
     resultado = []
     for raio in sorted(raios):
         dentro = [s for s in setores.values()
                   if haversine_km(lat, lon, s["lat"], s["lon"]) <= raio]
-        faixas = {nome: sum(s.get("faixas", {}).get(nome, 0) for s in dentro)
-                  for nome in FAIXAS}
+        faixas = soma_das_faixas(dentro)
         area = sum(s["area_km2"] for s in dentro)
         pop = sum(s["pop"] for s in dentro)
         bairros = {}
@@ -111,10 +129,21 @@ def resumo_por_raio(setores, lat, lon, raios):
             "area_km2": round(area, 2),
             "densidade_hab_km2": round(pop / area) if area else 0,
             "faixas": faixas,
+            "razao_sobre_municipio": razao_sobre_o_municipio(faixas, faixas_do_municipio),
             "mulheres_40_mais": sum(s.get("mulheres_40_mais", 0) for s in dentro),
             "bairros_top": sorted(bairros.items(), key=lambda kv: -kv[1])[:8],
         })
     return resultado
+
+
+def setores_de_ensaio():
+    perto = {"bairro": "A", "area_km2": 1.0, "pop": 100, "dom": 40,
+             "lat": -23.0, "lon": -47.0, "mulheres_40_mais": 30,
+             "faixas": {"0-14": 10, "15-29": 10, "30-59": 20, "60+": 60}}
+    longe = {"bairro": "B", "area_km2": 1.0, "pop": 100, "dom": 40,
+             "lat": -23.5, "lon": -47.0, "mulheres_40_mais": 20,
+             "faixas": {"0-14": 40, "15-29": 30, "30-59": 20, "60+": 10}}
+    return {"350000000000001": perto, "350000000000002": longe}
 
 
 def testar():
@@ -126,7 +155,13 @@ def testar():
     lat, lon = centro_do_envelope_gpb(blob)
     assert abs(lat - (-23.45)) < 1e-9 and abs(lon - (-47.45)) < 1e-9
     assert centro_do_envelope_gpb(b"XX") is None
-    print("testes: 4/4 passaram")
+    so_o_setor_perto = resumo_por_raio(setores_de_ensaio(), -23.0, -47.0, [1.0])[0]
+    assert so_o_setor_perto["setores"] == 1
+    assert so_o_setor_perto["razao_sobre_municipio"] == {
+        "0-14": 0.4, "15-29": 0.5, "30-59": 1.0, "60+": 1.71}
+    raio_vazio = resumo_por_raio(setores_de_ensaio(), 0.0, 0.0, [1.0])[0]
+    assert raio_vazio["razao_sobre_municipio"] == {nome: None for nome in FAIXAS}
+    print("testes: 7/7 passaram")
 
 
 def principal():
@@ -153,18 +188,22 @@ def principal():
         sys.exit("nenhum setor carregado — confira --gpkg e --municipio")
     anexar_faixas_etarias(args.demografia, setores)
     resultado = resumo_por_raio(setores, args.lat, args.lon, raios)
+    faixas_do_municipio = soma_das_faixas(setores.values())
 
     with open(args.saida, "w", encoding="utf-8") as arq:
         json.dump({"ancora": {"lat": args.lat, "lon": args.lon},
                    "municipio": args.municipio,
+                   "faixas_do_municipio": faixas_do_municipio,
                    "fonte": "IBGE, Censo Demográfico 2022 — agregados por setor censitário",
                    "raios": resultado}, arq, ensure_ascii=False, indent=1)
 
+    print(f"município {args.municipio} — {len(setores)} setores | faixas: {faixas_do_municipio}")
     for r in resultado:
         print(f"\n== raio {r['raio_km']} km — {r['setores']} setores ==")
         print(f"população: {r['populacao']:,} | domicílios: {r['domicilios']:,}"
               f" | densidade: {r['densidade_hab_km2']:,} hab/km²")
         print(f"faixas: {r['faixas']} | mulheres 40+: {r['mulheres_40_mais']:,}")
+        print(f"razão sobre o município, por faixa: {r['razao_sobre_municipio']}")
         print("bairros:", ", ".join(f"{b} ({p:,})" for b, p in r["bairros_top"][:5]))
 
 

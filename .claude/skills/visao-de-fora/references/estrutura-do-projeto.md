@@ -9,7 +9,8 @@ encontra a pasta assim, ou a converge para isto na primeira visita.
 consultoria-<nome>/
 ├── LEIAME.md        o mapa da pasta e as regras de trabalho do caso
 ├── perfil.md        o que toda rodada precisa saber sem redescobrir
-├── dados/           brutos baixados e retratos datados (JSON com data no nome)
+├── dados/           retratos datados (JSON com data no nome) — o recorte do caso
+│   └── brutos      LINK para a base pública compartilhada, nunca uma cópia
 ├── ferramentas/     cópias dos scripts da skill usadas nesta rodada
 ├── pecas/
 │   ├── entregas/    HTML + PDF datados, lado a lado — comparar períodos
@@ -22,6 +23,32 @@ A fonte das ferramentas é a skill: copie de `scripts/` para
 `ferramentas/` (o caso fica reproduzível sozinho) e, se a rodada melhorar
 uma ferramenta, a melhoria volta para a skill — pelas barreiras de
 entrada da camada, em issue de camada — e nunca fica só no caso.
+
+## A base pública não mora na pasta do caso
+
+Censo, malha territorial, tabela nacional: é a mesma base para todo caso e
+pesa centenas de megabytes. Copiada para dentro de cada pasta, ela multiplica
+o peso — e, pior, faz a pasta de **um** cliente virar dependência dos outros,
+que passam a ler de lá.
+
+A regra tem duas metades:
+
+- **Base pública mora uma vez, fora das pastas de caso**, em lugar que não é
+  de cliente nenhum. Cada caso chega nela por link em `dados/brutos`, e o link
+  fica fora do git do caso, como o diretório ficava.
+- **O recorte fica dentro do caso.** Extrato feito em volta do endereço do
+  cliente — raio, bairro, concorrência — é dado do cliente, não base pública,
+  e nunca vai para o lugar compartilhado. De lá se compartilha a **receita**
+  da consulta, com a coordenada em branco.
+
+O lugar compartilhado carrega um mapa: o que cada base é, o comando que a
+re-baixa e quem a consome. Base sem proveniência é arquivo órfão que ninguém
+vai citar como prova daqui a um ano. Os arquivos pesados ficam fora do git; o
+mapa entra.
+
+Mudar base que já está em uso é mover, nunca copiar: reaponte os links antes
+de fechar e prove rodando os instrumentos do caso — saída idêntica à que já
+estava guardada, ou a mudança quebrou alguma coisa.
 
 ## O `perfil.md`
 

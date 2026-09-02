@@ -57,6 +57,13 @@ prompt 03, vizinho deste.
   auditar NA HORA. `aguardando-resposta` significa processo MORTO
   esperando decisão: tocar o arquivo de aprovação sozinho não retoma —
   relance com `--retomar`.
+- A pergunta do motor tem dois caminhos, e os dois valem: o executor a
+  posta na issue sozinho (é o registro, e é por onde o dono responde
+  quando não está no computador). Com o dono na conversa, encurte: leia
+  a pergunta na evidência da etapa, faça-a aqui como pergunta de uma
+  escolha com recomendação, e devolva a resposta ao motor com
+  `--retomar --resposta "..."`. O que é mecânica, não decisão — aplicar
+  um patch que a cerca impediu, por exemplo —, resolva você e só relate.
 - Ao parar: rode o auditor à mão
   (`python3 .agents/auditor/auditor.py execucoes/evidencias/issue-<n> --cwd /tmp/issue-<n>`),
   sem `PROJETO` na frente — a execução gravou o ambiente em `ambiente.json`,
