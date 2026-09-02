@@ -46,6 +46,10 @@ de consulta, não de sessão.
       na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha.
       Critério que já falha por motivo que o trabalho nunca remove nasce
       mentindo, e treina a sessão a marcar a caixa sem prova.
+    - Estado que se relata se lê na hora: antes de dizer a alguém o que falta
+      numa issue, num pedido de incorporação ou num arquivo, abra e leia.
+      Resumo de memória envelhece calado, e o que sai dele é dedução vestida de
+      fato.
 
 3. **Antes de criar, procure e cite.**
     - O que o conjunto já oferece não se reimplementa; aplicação nova imita o

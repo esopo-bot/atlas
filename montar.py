@@ -1,4 +1,4 @@
-VERSAO = "0.612"
+VERSAO = "0.613"
 
 import functools
 import datetime
@@ -3213,6 +3213,10 @@ PAGINAS = {
         '      na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha.\n'
         '      Critério que já falha por motivo que o trabalho nunca remove nasce\n'
         '      mentindo, e treina a sessão a marcar a caixa sem prova.\n'
+        '    - Estado que se relata se lê na hora: antes de dizer a alguém o que falta\n'
+        '      numa issue, num pedido de incorporação ou num arquivo, abra e leia.\n'
+        '      Resumo de memória envelhece calado, e o que sai dele é dedução vestida de\n'
+        '      fato.\n'
         '\n'
         '3. **Antes de criar, procure e cite.**\n'
         '    - O que o conjunto já oferece não se reimplementa; aplicação nova imita o\n'
@@ -3588,7 +3592,8 @@ PAGINAS = {
         '        "Prova lenta declara o teto dela — `\\"tempo-limite\\": <segundos>` no item do provado —, porque a re-execução corta em 60 s por padrão: tempo esgotado não é divergência, e lenta não é errada.",\n'
         '        "A prova morre com a escrita seguinte: o número do relatório final se mede depois do último comando que altera disco. Sincronização, formatador ou regeneração que rode depois do teste desfaz o que ele mediu — re-rode a prova como último ato, ou o relatório afirma um instante que não sobreviveu.",\n'
         '        "Antes de agir sobre uma conclusão importante, rode a skill `cetico`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição.",\n'
-        '        "Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova."\n'
+        '        "Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova.",\n'
+        '        "Estado que se relata se lê na hora: antes de dizer a alguém o que falta numa issue, num pedido de incorporação ou num arquivo, abra e leia. Resumo de memória envelhece calado, e o que sai dele é dedução vestida de fato."\n'
         '      ]\n'
         '    },\n'
         '    {\n'
