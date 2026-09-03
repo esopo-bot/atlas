@@ -1,11 +1,6 @@
 ---
 name: analise-de-promocao
 description: Use ao dar UM trabalho por pronto, quando pedirem a análise de promoção, ou quando perguntarem o que do trabalho atual pode virar genérico. O fechamento da sessão inteira é da skill encerramento-de-sessao, que chama esta.
-metadata:
-  pedidos-de-exemplo:
-    - "acabei de fechar o ajuste do cache aqui, tem alguma coisa nele que serve pros outros repositórios?"
-    - "roda a análise de promoção nesse trabalho que eu acabei de terminar"
-    - "terminei a correção do parser de datas. o que dela vale a pena virar genérico?"
 ---
 
 # Análise de promoção
@@ -58,3 +53,9 @@ reprova página órfã.
 Vale a regra 5 de `conhecimento/regras-da-camada.md`: na dúvida, é pessoal, e
 fica no workspace. Deixar de promover se corrige amanhã; vazar não se
 despublica.
+
+## Pedidos de exemplo
+
+- "acabei de fechar o ajuste do cache aqui, tem alguma coisa nele que serve pros outros repositórios?"
+- "roda a análise de promoção nesse trabalho que eu acabei de terminar"
+- "terminei a correção do parser de datas. o que dela vale a pena virar genérico?"

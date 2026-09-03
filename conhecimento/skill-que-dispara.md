@@ -83,11 +83,18 @@ description: <o que faz> — <quando usar>. Escopo — <uma palavra>.
 metadata:
   categoria: essencial | workflow | governanca | especialista
   resumo: "<uma linha, para o catálogo>"
-  pedidos-de-exemplo:
-    - "<pedido em forma de ordem, do jeito que sai da boca>"
 ---
+
+...o corpo da skill...
+
+## Pedidos de exemplo
+
+- "<pedido em forma de ordem, do jeito que sai da boca>"
 ```
 
-Os campos de `metadata` não custam largada: o catálogo que toda sessão paga
-conta apenas `name` e `description`. Os `pedidos-de-exemplo` são o que a
-régua mede — sem eles, a skill sai como NÃO MEDIDA, que é honesto e inútil.
+O `metadata` segue a especificação Agent Skills: só texto, nunca lista — agente
+estrito descarta a skill calado. Por isso os pedidos de exemplo moram no
+**corpo**, numa seção com esse nome exato, no fim. Eles não custam largada: o
+catálogo que toda sessão paga conta apenas `name` e `description`, e o corpo só
+carrega quando a skill dispara. Sem a seção, a skill sai da régua como NÃO
+MEDIDA, que é honesto e inútil.

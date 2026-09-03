@@ -1,11 +1,6 @@
 ---
 name: encerramento-de-sessao
 description: Encerramento da sessão de trabalho — colhe o que a sessão ensinou, roda a verificação adversarial sobre as conclusões, propõe mudança de regra e grava o que fica. Use SÓ no fim da sessão, ao encerrar ou fechar o dia. Escopo — A SESSÃO INTEIRA. Um trabalho dado por pronto no meio da sessão é da analise-de-promocao; sessão que continua depois fecha pela trabalho-por-issue. Palavras que a acordam — "vou encerrar por hoje", "fecha o dia".
-metadata:
-  pedidos-de-exemplo:
-    - "vou encerrar por hoje, faz o esfriamento da sessão"
-    - "é isso por hoje, fecha o dia e recolhe o que a gente aprendeu"
-    - "acabou meu expediente, pode fazer o fechamento"
 ---
 
 # Esfriamento
@@ -37,3 +32,9 @@ diga que não há e siga.
 O perfil na wiki você atualiza; o resto — camada, regras, automação — você
 **propõe, não aplica**: a decisão é do dono. O relatório do esfriamento é
 a última coisa da sessão: depois dele, só o resumo final.
+
+## Pedidos de exemplo
+
+- "vou encerrar por hoje, faz o esfriamento da sessão"
+- "é isso por hoje, fecha o dia e recolhe o que a gente aprendeu"
+- "acabou meu expediente, pode fazer o fechamento"

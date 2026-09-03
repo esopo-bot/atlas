@@ -1,11 +1,6 @@
 ---
 name: verificacao-adversarial
 description: Verificação adversarial de uma conclusão antes de agir sobre ela — separa provado de suposto, desenha a medição mais barata que derrubaria cada suposição, executa o que dá, e reemite o veredito em provado/provável/não provado. Use ao fechar conclusão ou investigação, antes de escalar, antes de aplicar correção baseada em hipótese, ou quando pedirem para desafiar ou refutar. Escopo — UMA conclusão. Fim de sessão é da encerramento-de-sessao. Palavras que a acordam — "roda o cético nisso", "desafia essa conclusão", "isso está mesmo provado?", "e se estiver errado?".
-metadata:
-  pedidos-de-exemplo:
-    - "concluí que o gargalo é o banco, porque a página só demora quando tem muita linha. antes de eu refatorar em cima disso, ataca essa conclusão"
-    - "acho que o teste tá quebrando por causa de fuso horário. me desafia nisso antes de eu sair mexendo"
-    - "roda o cético nisto: o erro só acontece em produção, então é problema de configuração"
 ---
 
 # Cético
@@ -71,3 +66,9 @@ Três travas a mais:
 Não é revisão de código nem verificação de implementação — para isso, use
 as rotinas de revisão da sua ferramenta. Aqui o alvo é o **raciocínio**: a
 ponte entre o que foi medido e o que foi concluído.
+
+## Pedidos de exemplo
+
+- "concluí que o gargalo é o banco, porque a página só demora quando tem muita linha. antes de eu refatorar em cima disso, ataca essa conclusão"
+- "acho que o teste tá quebrando por causa de fuso horário. me desafia nisso antes de eu sair mexendo"
+- "roda o cético nisto: o erro só acontece em produção, então é problema de configuração"

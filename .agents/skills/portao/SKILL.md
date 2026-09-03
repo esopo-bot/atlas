@@ -1,11 +1,6 @@
 ---
 name: portao
 description: Use antes de escrever, mudar ou apagar QUALQUER coisa da camada genérica — regra nova, página de conhecimento, skill, instrumento, gancho, módulo — e antes de publicar. É o portão que decide se o candidato entra — as nove barreiras na ordem, e quando dizer não. Palavras que a acordam — "regra nova na camada", "apagar uma página", "skill nova", "isso pode entrar?", "pode publicar?".
-metadata:
-  pedidos-de-exemplo:
-    - "quero acrescentar uma regra nova na camada genérica. o que ela precisa atravessar antes de entrar?"
-    - "vou apagar uma página do conhecimento que ninguém usa mais, pode?"
-    - "pensei numa skill nova pra camada. me diz se ela passa ou não"
 ---
 
 # Portão
@@ -103,3 +98,9 @@ instalada, quem prova é `python3 .agents/camada/camada.py medir provar`, que
 viaja junto. Se um instrumento
 reprova, o trabalho não está pronto, por mais bonito que o texto esteja. Quem
 commita, empurra e publica está escrito no `AGENTS.md`, e só lá.
+
+## Pedidos de exemplo
+
+- "quero acrescentar uma regra nova na camada genérica. o que ela precisa atravessar antes de entrar?"
+- "vou apagar uma página do conhecimento que ninguém usa mais, pode?"
+- "pensei numa skill nova pra camada. me diz se ela passa ou não"

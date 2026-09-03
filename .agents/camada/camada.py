@@ -51,6 +51,22 @@ FORA_DA_CONTA_DO_VOCABULARIO = ("nucleo/vocabulario.json", "montar.py")
 TITULO_VOCABULARIO = "O VOCABULÁRIO, TERMO A TERMO"
 TITULO_ENTREGA = "A ENTREGA — o que ainda não saiu da máquina"
 TITULO_LARGADA = "A LARGADA — o que toda sessão paga antes de trabalhar"
+TITULO_DAS_MEDIDAS = ("AS MEDIDAS DA VERSÃO — três; a versão nova é melhor "
+                 "quando nenhuma piora além do ruído e uma melhora")
+VERSAO_NO_INSTALADOR = re.compile(r'^VERSAO\s*=\s*"([^"]+)"', re.M)
+LINHA_DA_MEDIDA = "  {:<18} {}"
+MEDIDA_VERSAO = "versão"
+MEDIDA_LARGADA = "largada"
+MEDIDA_CUSTO = "custo por entrega"
+MEDIDA_ROTA = "acerto de rota"
+MEDIDA_LARGADA_COM_TETO = "{} bytes, teto {}"
+MEDIDA_LARGADA_SEM_TETO = "{} bytes, sem teto declarado"
+MEDIDA_CUSTO_MEDIDO = ("mediana US$ {:.2f} por execução, {} execução(ões), "
+                       "{:.0f}% do gasto sem etapa atribuída")
+MEDIDA_CUSTO_SEM_EXECUCAO = "não medido: nenhuma execução gravada"
+MEDIDA_ROTA_NAO_MEDIDA = ("não medido nesta linha — rode `{} verificacoes.py "
+                          "gatilho` cinco vezes e tome a mediana; a escolha "
+                          "de skill varia ~1 acerto por rodada")
 ARQUIVO_DE_CONFIGURACAO = "nucleo/configuracao.json"
 CHAVE_DO_TETO = "teto_da_largada_em_bytes"
 LARGADA_SEM_TETO = ("Largada: {} bytes. Sem teto declarado em {} ({}) — "
@@ -949,6 +965,48 @@ def conta(raiz: Path) -> int:
     return 0
 
 
+def versao_do_instalador(raiz: Path) -> str:
+    try:
+        texto = (raiz / INSTALADOR).read_text(encoding="utf-8")
+    except OSError:
+        return NUMERO_NAO_MEDIDO
+    achado = VERSAO_NO_INSTALADOR.search(texto)
+    return achado.group(1) if achado else NUMERO_NAO_MEDIDO
+
+
+def custo_por_entrega(execucoes: list) -> str:
+    if not execucoes:
+        return MEDIDA_CUSTO_SEM_EXECUCAO
+    cobrados = sorted(dolar for _, dolar, _ in execucoes)
+    meio = len(cobrados) // 2
+    mediana = cobrados[meio] if len(cobrados) % 2 else \
+        (cobrados[meio - 1] + cobrados[meio]) / 2
+    cobrado = sum(cobrados)
+    atribuido = sum(a for _, _, a in execucoes)
+    return MEDIDA_CUSTO_MEDIDO.format(
+        mediana, len(cobrados), 100 * max(cobrado - atribuido, 0) / cobrado)
+
+
+def medidas_da_versao(raiz: Path) -> list:
+    paga = medir(raiz)[1]["largada"]
+    teto = teto_da_largada(raiz)
+    return [
+        (MEDIDA_VERSAO, versao_do_instalador(raiz)),
+        (MEDIDA_LARGADA, MEDIDA_LARGADA_COM_TETO.format(paga, teto)
+         if teto is not None else MEDIDA_LARGADA_SEM_TETO.format(paga)),
+        (MEDIDA_CUSTO, custo_por_entrega(custo_das_execucoes(raiz))),
+        (MEDIDA_ROTA, MEDIDA_ROTA_NAO_MEDIDA.format(
+            interpretador_com_nome_portatil())),
+    ]
+
+
+def versao(raiz: Path) -> int:
+    print(f"\n{TITULO_DAS_MEDIDAS}")
+    for medida, valor in medidas_da_versao(raiz):
+        print(LINHA_DA_MEDIDA.format(medida, valor))
+    return 0
+
+
 def teto_da_largada(raiz: Path):
     try:
         dado = json.loads(
@@ -1767,6 +1825,9 @@ def main() -> int:
                     help="acusa arquivo não rastreado envelhecido em tmp/")
     ap.add_argument("--conta", action="store_true",
                     help="mostra o que cada execução gravada custou")
+    ap.add_argument("--versao", action="store_true",
+                    help="as medidas da versão: versão, largada, custo por "
+                         "entrega e acerto de rota, para comparar versões")
     ap.add_argument("--resumo", action="store_true",
                     help="só o JSON, para comparar entre rodadas")
     ap.add_argument(BANDEIRA_DE_TESTE, action="store_true",
@@ -1808,6 +1869,9 @@ def main() -> int:
 
     if a.conta:
         return conta(raiz)
+
+    if a.versao:
+        return versao(raiz)
 
     if a.numero:
         return um_numero(raiz, a.numero)

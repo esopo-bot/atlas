@@ -354,6 +354,9 @@ o ensaio diz qual.
 
 ## Buscar — a porta normal
 
+A skill `buscar-no-acervo` ensina este comando a qualquer agente que leia
+`.agents/skills/` — é assim que os agentes sem MCP chegam ao acervo.
+
 ```bash
 python3 .agents/indice/buscar.py "o que fazer quando a cópia diverge da fonte"
 python3 .agents/indice/buscar.py "vetar-andamento-em-arquivo" --alvo skills --quantos 3

@@ -1,11 +1,6 @@
 ---
 name: trabalho-por-issue
 description: Use quando o pedido for pela ISSUE em si — "abre uma issue disso", "registra isso", "deixa anotado onde eu parei" —, ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao retomar trabalho que já tem issue, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela REGISTRA o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da encerramento-de-sessao; procurar o que já existe antes de criar é da busca-de-codigo-existente; escrever ou atualizar documentação é da documentar-processo.
-metadata:
-  pedidos-de-exemplo:
-    - "abre uma issue disso: o relatório de fechamento sai com o total errado quando tem estorno"
-    - "quero retomar aquele trabalho da issue 142, por onde eu continuo?"
-    - "preciso parar agora mas volto amanhã no mesmo assunto, deixa registrado onde eu parei"
 ---
 
 # Trabalho por issue
@@ -332,3 +327,9 @@ escolhida. Chamada de rede em rajada é o que derruba limite de taxa.
 Feche com motivo explícito (resolvido ou descartado) e pode o corpo — o
 obsoleto continua vivo no comentário. A lição que vale adiante sai para
 `conhecimento/`.
+
+## Pedidos de exemplo
+
+- "abre uma issue disso: o relatório de fechamento sai com o total errado quando tem estorno"
+- "quero retomar aquele trabalho da issue 142, por onde eu continuo?"
+- "preciso parar agora mas volto amanhã no mesmo assunto, deixa registrado onde eu parei"

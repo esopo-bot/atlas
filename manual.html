@@ -437,10 +437,14 @@ description: &lt;o que faz&gt; — &lt;quando usar&gt;. Escopo — &lt;uma palav
 metadata:
   categoria: essencial | workflow | governanca | especialista
   resumo: &quot;&lt;uma linha, para o catálogo&gt;&quot;
-  pedidos-de-exemplo:
-    - &quot;&lt;pedido em forma de ordem, do jeito que sai da boca&gt;&quot;
----</code></pre>
-<p>Os campos de <code>metadata</code> não custam largada: o catálogo que toda sessão paga conta apenas <code>name</code> e <code>description</code>. Os <code>pedidos-de-exemplo</code> são o que a régua mede — sem eles, a skill sai como NÃO MEDIDA, que é honesto e inútil.</p>
+---
+
+...o corpo da skill...
+
+## Pedidos de exemplo
+
+- &quot;&lt;pedido em forma de ordem, do jeito que sai da boca&gt;&quot;</code></pre>
+<p>O <code>metadata</code> segue a especificação Agent Skills: só texto, nunca lista — agente estrito descarta a skill calado. Por isso os pedidos de exemplo moram no <strong>corpo</strong>, numa seção com esse nome exato, no fim. Eles não custam largada: o catálogo que toda sessão paga conta apenas <code>name</code> e <code>description</code>, e o corpo só carrega quando a skill dispara. Sem a seção, a skill sai da régua como NÃO MEDIDA, que é honesto e inútil.</p>
 </section>
 <section id="execucoes-leiame-md">
 <h2>Roteiros que viajam com a camada</h2>

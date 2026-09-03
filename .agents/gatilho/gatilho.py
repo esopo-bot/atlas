@@ -19,9 +19,9 @@ GLOB_SKILL = "*/SKILL.md"
 
 FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
 CAMPO_NOME = re.compile(r"^name:\s*(.+)$", re.M)
-BLOCO_DOS_PEDIDOS = re.compile(
-    r"^ *pedidos-de-exemplo: *\n((?: +- +.+\n)+)", re.M)
-UMA_LINHA_DE_PEDIDO = re.compile(r"^ +- +(.+?) *$", re.M)
+SECAO_DOS_PEDIDOS = re.compile(
+    r"^## Pedidos de exemplo *\n+((?:- +.+\n?)+)", re.M)
+UMA_LINHA_DE_PEDIDO = re.compile(r"^- +(.+?) *$", re.M)
 
 MODELO = "claude-haiku-4-5-20251001"
 AJUDA_DO_MODELO = ("modelo que a sessão medida usa (padrão: {}); a escolha "
@@ -42,8 +42,8 @@ NOME_DIVERGE = ("  {}: a pasta e o campo `name` divergem (`{}`) — a skill não
 POR_QUE_RECUSO = ("Conserte antes de medir. Zero por skill quebrada e zero "
                   "por descrição ruim são o MESMO número, e é assim que se "
                   "conclui a causa errada.")
-LINHA_SEM_PEDIDO = ("  {:<22} NÃO MEDIDA — sem pedidos-de-exemplo no "
-                    "frontmatter")
+LINHA_SEM_PEDIDO = ("  {:<22} NÃO MEDIDA — sem a seção `## Pedidos de "
+                    "exemplo` no corpo")
 LINHA_NAO_MEDIDO = "      NÃO MEDIDO             {}"
 LINHA_DAS_COLISOES = "  colisões: {}"
 SEM_COLISAO = "  colisões: nenhuma"
@@ -75,10 +75,9 @@ def nome_e_pedidos(texto: str) -> tuple:
     frente = FRONTMATTER.match(texto)
     if not frente:
         return "", []
-    corpo = frente.group(1) + "\n"
-    achado = CAMPO_NOME.search(corpo)
+    achado = CAMPO_NOME.search(frente.group(1) + "\n")
     nome = achado.group(1).strip() if achado else ""
-    bloco = BLOCO_DOS_PEDIDOS.search(corpo)
+    bloco = SECAO_DOS_PEDIDOS.search(texto[frente.end():] + "\n")
     if not bloco:
         return nome, []
     return nome, [texto_do_pedido(l)
@@ -249,13 +248,14 @@ def relatorio(raiz: Path, escolhidas: set, modelo: str = MODELO) -> int:
 COM_PEDIDOS = """---
 name: exemplo
 description: uma skill qualquer.
-metadata:
-  pedidos-de-exemplo:
-    - "primeiro pedido"
-    - "segundo: com dois pontos"
 ---
 
 # Exemplo
+
+## Pedidos de exemplo
+
+- "primeiro pedido"
+- "segundo: com dois pontos"
 """
 SEM_PEDIDOS = """---
 name: pelada
@@ -315,7 +315,8 @@ def testar() -> int:
 
     nome, pedidos = nome_e_pedidos(COM_PEDIDOS)
     caso("o nome da skill sai do frontmatter", nome == "exemplo")
-    caso("os pedidos saem do metadata, na ordem",
+    caso("os pedidos saem da seção do corpo, na ordem — o metadata da spec "
+         "Agent Skills só aceita texto, não lista",
          pedidos == ["primeiro pedido", "segundo: com dois pontos"])
     caso("skill sem pedidos devolve lista vazia, não erro",
          nome_e_pedidos(SEM_PEDIDOS) == ("pelada", []))

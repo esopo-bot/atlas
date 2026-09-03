@@ -60,8 +60,16 @@ SUBVERBOS_DO_GH_QUE_CONVERSAM = {
 
 COMANDOS_QUE_ESCREVEM_NOS_ARGUMENTOS = ("rm", "rmdir", "mv", "tee", "touch",
                                         "mkdir", "truncate", "chmod", "chown")
-COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install")
-COMANDO_QUE_ESCREVE_NO_LUGAR = "sed"
+COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install", "rsync")
+COMANDOS_QUE_ESCREVEM_NO_LUGAR = ("sed", "perl")
+COMANDOS_QUE_ESCREVEM_NA_OPCAO = {"curl": ("-o", "--output"),
+                                  "wget": ("-O", "--output-document")}
+LETRA_DE_ESCRITA_NO_LUGAR = "i"
+PREFIXO_DE_OPCAO = "-"
+BANDEIRA_LONGA = "--"
+IGUAL = "="
+COMANDO_DD = "dd"
+PREFIXO_DA_SAIDA_DO_DD = "of="
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
 
@@ -342,12 +350,39 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
         escritos += posicionais
     elif programa in COMANDOS_QUE_ESCREVEM_NO_ULTIMO and posicionais:
         escritos.append(posicionais[-1])
-    elif programa == COMANDO_QUE_ESCREVE_NO_LUGAR and any(
-            t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
-            or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
-            for t in tokens[1:] if t.startswith("-")):
+    elif programa in COMANDOS_QUE_ESCREVEM_NO_LUGAR and escreve_no_lugar(tokens):
         escritos += posicionais
+    escritos += caminhos_escritos_na_opcao(programa, tokens)
+    escritos += saida_do_dd(programa, tokens)
     return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
+
+
+def escreve_no_lugar(tokens: list) -> bool:
+    return any(t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
+               or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
+               or (not t.startswith(BANDEIRA_LONGA)
+                   and LETRA_DE_ESCRITA_NO_LUGAR in t[1:])
+               for t in tokens[1:] if t.startswith(PREFIXO_DE_OPCAO))
+
+
+def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
+    bandeiras = COMANDOS_QUE_ESCREVEM_NA_OPCAO.get(programa)
+    if not bandeiras:
+        return []
+    achados = []
+    for i, t in enumerate(tokens[1:], start=1):
+        if t in bandeiras and i + 1 < len(tokens):
+            achados.append(tokens[i + 1])
+        achados += [t.split(IGUAL, 1)[1] for b in bandeiras
+                    if t.startswith(b + IGUAL)]
+    return achados
+
+
+def saida_do_dd(programa: str, tokens: list) -> list:
+    if programa != COMANDO_DD:
+        return []
+    return [t[len(PREFIXO_DA_SAIDA_DO_DD):] for t in tokens[1:]
+            if t.startswith(PREFIXO_DA_SAIDA_DO_DD)]
 
 
 def acoes_do_comando(comando: str, onde: str) -> list:
@@ -502,6 +537,16 @@ BARRA = [
     ("redirecionamento para dentro", pedido_de_shell(
         "echo oi > projetos/so-leitura/x.txt")),
     ("apagar lá dentro", pedido_de_shell("rm -rf projetos/so-leitura/src")),
+    ("curl -o lá dentro", pedido_de_shell(
+        "curl -s -o projetos/so-leitura/x.txt https://x/y")),
+    ("wget -O lá dentro", pedido_de_shell(
+        "wget -O projetos/so-leitura/x.txt https://x/y")),
+    ("rsync para lá dentro", pedido_de_shell(
+        "rsync -a src/ projetos/so-leitura/src/")),
+    ("perl -i lá dentro", pedido_de_shell(
+        "perl -i -pe s/a/b/ projetos/so-leitura/x.py")),
+    ("dd gravando lá dentro", pedido_de_shell(
+        "dd if=/dev/zero of=projetos/so-leitura/x.bin count=1")),
     ("mover lá dentro", pedido_de_shell(
         "mv projetos/so-leitura/x.py projetos/so-leitura/y.py")),
     ("sed no lugar", pedido_de_shell(

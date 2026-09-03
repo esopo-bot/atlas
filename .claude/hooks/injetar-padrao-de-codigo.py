@@ -7,6 +7,7 @@ CAMINHO_DA_SKILL_DE_QUALIDADE = "skills/padrao-de-codigo/SKILL.md"
 NIVEIS_DO_GANCHO_ATE_A_PASTA_CLAUDE = 1
 ABERTURA_DO_FRONTMATTER = "---"
 FECHAMENTO_DO_FRONTMATTER = "\n---\n"
+SECAO_DOS_PEDIDOS_DE_EXEMPLO = "\n## Pedidos de exemplo\n"
 EVENTO_DE_INICIO_DE_SESSAO = "SessionStart"
 BANDEIRA_DE_TESTE = "--testar"
 FALHA_ABERTO = 0
@@ -30,6 +31,11 @@ def corpo_sem_o_frontmatter(texto: str) -> str:
     return depois_do_frontmatter.lstrip() or texto
 
 
+def sem_os_pedidos_de_exemplo(corpo: str) -> str:
+    antes, marca, _ = corpo.partition(SECAO_DOS_PEDIDOS_DE_EXEMPLO)
+    return antes.rstrip() + "\n" if marca else corpo
+
+
 def ler_a_skill(caminho: Path):
     try:
         return caminho.read_text(encoding="utf-8")
@@ -48,7 +54,7 @@ def main() -> int:
     skill = ler_a_skill(caminho_da_skill())
     if skill is None:
         return FALHA_ABERTO
-    print(recado(corpo_sem_o_frontmatter(skill)))
+    print(recado(sem_os_pedidos_de_exemplo(corpo_sem_o_frontmatter(skill))))
     return FIM_NORMAL
 
 
@@ -70,6 +76,12 @@ def testar() -> int:
     for rotulo, entrada, esperado in CORPO:
         if corpo_sem_o_frontmatter(entrada) != esperado:
             falhas.append(rotulo)
+    if sem_os_pedidos_de_exemplo(
+            "# T\n\ntexto\n\n## Pedidos de exemplo\n\n- a\n- b\n") != "# T\n\ntexto\n":
+        falhas.append("a seção dos pedidos de exemplo é da régua do gatilho, "
+                      "não da sessão: ela não entra na largada")
+    if sem_os_pedidos_de_exemplo("# T\n\ntexto\n") != "# T\n\ntexto\n":
+        falhas.append("corpo sem a seção passa inteiro")
 
     with tempfile.TemporaryDirectory() as pasta:
         ausente = Path(pasta) / "nao-existe.md"
@@ -90,8 +102,8 @@ def testar() -> int:
     if saida["additionalContext"] != "corpo":
         falhas.append("o recado tem de levar o corpo")
 
-    DE_LEITURA, DE_RECADO = 3, 2
-    total = len(CORPO) + DE_LEITURA + DE_RECADO
+    DE_LEITURA, DE_RECADO, DOS_PEDIDOS = 3, 2, 2
+    total = len(CORPO) + DE_LEITURA + DE_RECADO + DOS_PEDIDOS
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))
         for falha in falhas:

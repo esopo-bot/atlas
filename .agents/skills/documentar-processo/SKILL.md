@@ -1,11 +1,6 @@
 ---
 name: documentar-processo
 description: Use quando o pedido for escrever, atualizar ou corrigir DOCUMENTAÇÃO de processo — passo a passo, procedimento, manual, guia, fluxo de "como se faz" —, inclusive quando o documento ainda não existe e vai nascer agora. Palavras que a acordam — documenta, documentação, passo a passo, procedimento, fluxo, manual, guia, "não bate mais com a realidade". Documento não é peça de código, então não procure se "já existe" — procurar código é da busca-de-codigo-existente; abrir issue sobre o documento é da trabalho-por-issue. Esta escreve o documento.
-metadata:
-  pedidos-de-exemplo:
-    - "preciso escrever o passo a passo de como se pede acesso ao ambiente de homologação, pro time novo conseguir sozinho"
-    - "essa documentação do fechamento mensal não bate mais com o que a gente faz hoje, atualiza"
-    - "o pessoal do suporte vive perguntando como abrir chamado pro fornecedor. documenta esse fluxo"
 ---
 
 # Documentar um processo
@@ -79,3 +74,9 @@ mudou — e é a mudança que as pessoas precisam saber.
 O conteúdo do processo é do workspace que o executa: fica no repositório de
 documentação dele, nunca numa camada compartilhável. O que se promove é a
 técnica — o formato que funcionou, a armadilha que vale para qualquer um.
+
+## Pedidos de exemplo
+
+- "preciso escrever o passo a passo de como se pede acesso ao ambiente de homologação, pro time novo conseguir sozinho"
+- "essa documentação do fechamento mensal não bate mais com o que a gente faz hoje, atualiza"
+- "o pessoal do suporte vive perguntando como abrir chamado pro fornecedor. documenta esse fluxo"

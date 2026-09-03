@@ -1,11 +1,6 @@
 ---
 name: perfil-de-repositorio
 description: Indexação dos repositórios do workspace e escrita do perfil destilado de cada um em conhecimento/projetos/. Use para indexar projetos, gerar ou atualizar o índice local, criar ou atualizar o perfil de um repositório, ou depois de mudança grande num projeto. Escopo — ESCREVER o perfil. Buscar código que já existe é da busca-de-codigo-existente. Palavras que a acordam — "indexa os projetos", "monta a wiki", "cria o perfil do repositório", "esse projeto mudou, atualiza".
-metadata:
-  pedidos-de-exemplo:
-    - "indexa os projetos do workspace e monta a wiki local"
-    - "cria o perfil do repositório de faturamento na wiki"
-    - "o projeto de cobrança mudou bastante, atualiza a wiki dele"
 ---
 
 # Wiki de projetos
@@ -89,3 +84,9 @@ normais, o que se lê é o `indice.json` real do disco.
 
 Confira se o `AGENTS.md` da raiz aponta a wiki e o mapa. Sem o ponteiro, a
 wiki existe e ninguém a lê.
+
+## Pedidos de exemplo
+
+- "indexa os projetos do workspace e monta a wiki local"
+- "cria o perfil do repositório de faturamento na wiki"
+- "o projeto de cobrança mudou bastante, atualiza a wiki dele"

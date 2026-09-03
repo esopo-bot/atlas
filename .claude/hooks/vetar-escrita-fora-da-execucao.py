@@ -43,8 +43,14 @@ VERBOS_DO_GIT_QUE_SO_ESCREVEM_COM_ARGUMENTO = {
 
 COMANDOS_QUE_ESCREVEM_NOS_ARGUMENTOS = ("rm", "rmdir", "mv", "tee", "touch",
                                         "mkdir", "truncate", "chmod", "chown")
-COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install")
-COMANDO_QUE_ESCREVE_NO_LUGAR = "sed"
+COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install", "rsync")
+COMANDOS_QUE_ESCREVEM_NO_LUGAR = ("sed", "perl")
+COMANDOS_QUE_ESCREVEM_NA_OPCAO = {"curl": ("-o", "--output"),
+                                  "wget": ("-O", "--output-document")}
+LETRA_DE_ESCRITA_NO_LUGAR = "i"
+PREFIXO_DE_OPCAO = "-"
+BANDEIRA_LONGA = "--"
+IGUAL = "="
 PROGRAMAS_COM_REDIRECIONAMENTO_PROPRIO = ("awk", "gawk", "mawk", "nawk")
 REDIRECIONAMENTO_DE_DENTRO = re.compile(
     r">>?\s*[\"']([^\"']+)[\"']")
@@ -322,6 +328,28 @@ def caminhos_que_o_programa_redireciona(programa: str, tokens: list) -> list:
             for m in REDIRECIONAMENTO_DE_DENTRO.finditer(corpo)]
 
 
+def escreve_no_lugar(tokens: list) -> bool:
+    return any(t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
+               or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
+               or (not t.startswith(BANDEIRA_LONGA)
+                   and LETRA_DE_ESCRITA_NO_LUGAR in t[1:])
+               for t in tokens[1:] if t.startswith(PREFIXO_DE_OPCAO))
+
+
+def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
+    bandeiras = COMANDOS_QUE_ESCREVEM_NA_OPCAO.get(programa)
+    if not bandeiras:
+        return []
+    achados = []
+    for i, t in enumerate(tokens[1:], start=1):
+        if t in bandeiras and i + 1 < len(tokens):
+            achados.append(tokens[i + 1])
+        achados += [t.split(IGUAL, 1)[1] for b in bandeiras
+                    if t.startswith(b + IGUAL)]
+    return achados
+
+
+
 def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
     escritos = [m.group(1)
                 for m in REDIRECIONAMENTO_DE_SHELL.finditer(segmento)]
@@ -336,12 +364,11 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
         elif programa in COMANDOS_QUE_ESCREVEM_NO_ULTIMO and posicionais \
                 and not destino:
             escritos.append(posicionais[-1])
-        elif programa == COMANDO_QUE_ESCREVE_NO_LUGAR and any(
-                t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
-                or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
-                for t in tokens[1:] if t.startswith("-")):
+        elif programa in COMANDOS_QUE_ESCREVEM_NO_LUGAR \
+                and escreve_no_lugar(tokens):
             escritos += posicionais
         escritos += caminhos_escritos_por_bandeira(programa, tokens)
+        escritos += caminhos_escritos_na_opcao(programa, tokens)
     return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
 
 
@@ -484,6 +511,12 @@ def casos_que_barram(fora: str, vizinha: str) -> list:
         ("criar pasta fora", pedido_de_shell(f"mkdir -p {fora}/nova")),
         ("sed no lugar fora", pedido_de_shell(f"sed -i 's/a/b/' {fora}/x.py")),
         ("tee fora", pedido_de_shell(f"echo oi | tee {fora}/x.txt")),
+        ("curl -o fora", pedido_de_shell(
+            f"curl -s -o {fora}/baixado.txt https://x/y")),
+        ("wget -O fora", pedido_de_shell(
+            f"wget -O {fora}/baixado.txt https://x/y")),
+        ("rsync para fora", pedido_de_shell(f"rsync -a raiz/ {fora}/copia/")),
+        ("perl -i fora", pedido_de_shell(f"perl -pi -e s/a/b/ {fora}/x.py")),
         ("touch fora", pedido_de_shell(f"touch {fora}/x.txt")),
         ("cd para fora e depois escrever por caminho relativo",
          pedido_de_shell(f"cd {fora} && echo oi > anotacao.txt")),

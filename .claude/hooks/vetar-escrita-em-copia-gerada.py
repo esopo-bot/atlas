@@ -32,7 +32,16 @@ ASPAS = "\"'"
 COMANDO_CD = "cd"
 COMANDOS_QUE_ESCREVEM_NOS_ARGUMENTOS = ("rm", "rmdir", "mv", "tee", "touch",
                                         "mkdir", "truncate", "chmod", "chown")
-COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install")
+COMANDOS_QUE_ESCREVEM_NO_ULTIMO = ("cp", "ln", "install", "rsync")
+COMANDOS_QUE_ESCREVEM_NO_LUGAR = ("sed", "perl")
+COMANDOS_QUE_ESCREVEM_NA_OPCAO = {"curl": ("-o", "--output"),
+                                  "wget": ("-O", "--output-document")}
+LETRA_DE_ESCRITA_NO_LUGAR = "i"
+PREFIXO_DE_OPCAO = "-"
+BANDEIRA_LONGA = "--"
+IGUAL = "="
+COMANDO_DD = "dd"
+PREFIXO_DA_SAIDA_DO_DD = "of="
 SUFIXOS_DE_ARQUIVO = (".py", ".md", ".json", ".yml", ".yaml", ".ts",
                       ".js", ".txt", ".jsonc")
 INTERPRETADORES = ("python", "python3", "node", "nodejs", "ruby",
@@ -41,7 +50,6 @@ MARCA_DE_ESCRITA_DENTRO_DO_SCRIPT = re.compile(
     r"""write|truncate|unlink|remove|rename|\bmkdir\b|['"]w[+bt]*['"]""")
 ENTRE_ASPAS_SIMPLES = re.compile(r"'([^'\n]{3,300})'")
 ENTRE_ASPAS_DUPLAS = re.compile(r'"([^"\n]{3,300})"')
-COMANDO_QUE_ESCREVE_NO_LUGAR = "sed"
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
 
@@ -264,12 +272,40 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
             escritos += posicionais
         elif programa in COMANDOS_QUE_ESCREVEM_NO_ULTIMO and posicionais:
             escritos.append(posicionais[-1])
-        elif programa == COMANDO_QUE_ESCREVE_NO_LUGAR and any(
-                t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
-                or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
-                for t in tokens[1:] if t.startswith("-")):
+        elif programa in COMANDOS_QUE_ESCREVEM_NO_LUGAR \
+                and escreve_no_lugar(tokens):
             escritos += posicionais
+        escritos += caminhos_escritos_na_opcao(programa, tokens)
+        escritos += saida_do_dd(programa, tokens)
     return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
+
+
+def escreve_no_lugar(tokens: list) -> bool:
+    return any(t == BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO
+               or t.startswith(BANDEIRA_DE_ESCRITA_NO_LUGAR)
+               or (not t.startswith(BANDEIRA_LONGA)
+                   and LETRA_DE_ESCRITA_NO_LUGAR in t[1:])
+               for t in tokens[1:] if t.startswith(PREFIXO_DE_OPCAO))
+
+
+def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
+    bandeiras = COMANDOS_QUE_ESCREVEM_NA_OPCAO.get(programa)
+    if not bandeiras:
+        return []
+    achados = []
+    for i, t in enumerate(tokens[1:], start=1):
+        if t in bandeiras and i + 1 < len(tokens):
+            achados.append(tokens[i + 1])
+        achados += [t.split(IGUAL, 1)[1] for b in bandeiras
+                    if t.startswith(b + IGUAL)]
+    return achados
+
+
+def saida_do_dd(programa: str, tokens: list) -> list:
+    if programa != COMANDO_DD:
+        return []
+    return [t[len(PREFIXO_DA_SAIDA_DO_DD):] for t in tokens[1:]
+            if t.startswith(PREFIXO_DA_SAIDA_DO_DD)]
 
 
 def resolver(caminho: str, onde: str):
@@ -475,6 +511,16 @@ BARRA = [
      pedido_de_shell(f"sed -i s/a/b/ {INSTRUMENTO_DE_MODULO}")),
     ("cp por cima da cópia de módulo",
      pedido_de_shell(f"cp outro.md {CARTAO_DE_EXECUCOES}")),
+    ("curl -o por cima da cópia de módulo",
+     pedido_de_shell(f"curl -s -o {INSTRUMENTO_DE_MODULO} https://x/y")),
+    ("wget -O por cima do cartão",
+     pedido_de_shell(f"wget -O {CARTAO_DE_EXECUCOES} https://x/y")),
+    ("rsync por cima da cópia de módulo",
+     pedido_de_shell(f"rsync -a outro.py {INSTRUMENTO_DE_MODULO}")),
+    ("perl -i na cópia de módulo",
+     pedido_de_shell(f"perl -pi -e s/a/b/ {INSTRUMENTO_DE_MODULO}")),
+    ("dd gravando no cartão",
+     pedido_de_shell(f"dd if=/dev/zero of={CARTAO_DE_EXECUCOES} count=1")),
     ("cd antes da escrita, com o caminho relativo à pasta nova",
      pedido_de_shell(f"cd .agents && echo x > mod/mod.py")),
     ("Write em skill órfã, que só existe na cópia — o --sincronizar a apaga",

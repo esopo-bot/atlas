@@ -8,6 +8,9 @@ import time
 from pathlib import Path
 
 from camada import (
+    medidas_da_versao, custo_por_entrega,
+    MEDIDA_VERSAO, MEDIDA_LARGADA, MEDIDA_CUSTO, MEDIDA_ROTA,
+    MEDIDA_CUSTO_SEM_EXECUCAO, MEDIDA_CUSTO_MEDIDO,
     MARCA_DE_BANCADA_AUSENTE,
     FORA_DA_PROVA,
     ARQUIVO_DE_CONFIGURACAO,
@@ -148,6 +151,22 @@ def testar() -> int:
         (skill / "SKILL.md").write_text(
             "---\nname: s\ndescription: faz algo\n---\n\ncorpo longo aqui\n",
             encoding="utf-8")
+
+        (raiz / INSTALADOR).write_text('VERSAO = "1.2"\n', encoding="utf-8")
+        medidas_medidas = dict(medidas_da_versao(raiz))
+        caso("as medidas da versão leem a versão do instalador, mede a largada e confessa "
+             "o que não mediu — custo sem execução e rota sem rodada",
+             medidas_medidas[MEDIDA_VERSAO] == "1.2"
+             and medidas_medidas[MEDIDA_LARGADA].endswith("sem teto declarado")
+             and medidas_medidas[MEDIDA_CUSTO] == MEDIDA_CUSTO_SEM_EXECUCAO
+             and medidas_medidas[MEDIDA_ROTA].startswith("não medido"))
+        caso("o custo por entrega é a mediana do cobrado por execução, com o "
+             "buraco de atribuição em porcentagem — nunca a soma, que cresce "
+             "com o número de execuções",
+             custo_por_entrega([("a", 1.0, 1.0), ("b", 3.0, 0.0),
+                                ("c", 10.0, 10.0)])
+             == MEDIDA_CUSTO_MEDIDO.format(3.0, 3, 100 * 3.0 / 14.0))
+        (raiz / INSTALADOR).unlink()
 
         _, dados = medir(raiz)
         caso("a largada soma instruções mais catálogo, nunca o corpo",
