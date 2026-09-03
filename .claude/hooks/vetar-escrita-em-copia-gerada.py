@@ -7,6 +7,9 @@ from pathlib import Path
 PASTA_MODULOS = "modulos"
 ORIGEM_SKILLS = ".agents/skills"
 COPIA_SKILLS = ".claude/skills"
+REGRA_DE_CODIGO = ".claude/rules/padrao-de-codigo.md"
+SKILL_DO_PADRAO_DE_CODIGO = ".agents/skills/padrao-de-codigo/SKILL.md"
+PASTA_MODULOS_NO_DISCO = "modulos"
 PASTA_DO_CONHECIMENTO = "conhecimento"
 CARTAO_DO_MODULO = "LEIAME.md"
 ARQUIVO_DE_PASTA_VAZIA = ".gitkeep"
@@ -139,6 +142,9 @@ def copias_de_espelho(raiz: Path) -> dict:
         fonte = origem / caminho.relative_to(copia)
         achadas[caminho.relative_to(raiz).as_posix()] = \
             fonte.relative_to(raiz).as_posix()
+    if (raiz / REGRA_DE_CODIGO).is_file() \
+            and (raiz / SKILL_DO_PADRAO_DE_CODIGO).is_file():
+        achadas[REGRA_DE_CODIGO] = SKILL_DO_PADRAO_DE_CODIGO
     return achadas
 
 
@@ -657,13 +663,17 @@ def testar() -> int:
                  and "--atualizar" in mensagem_fresca)
 
     daqui = raiz_do_projeto_nunca_o_cwd()
+    no_repositorio_da_camada = (daqui / PASTA_MODULOS_NO_DISCO).is_dir()
     for copia, fonte in DESTE_REPOSITORIO_BARRA:
+        esperada = fonte if no_repositorio_da_camada or not fonte.startswith(
+            PASTA_MODULOS_NO_DISCO + "/") \
+            else MARCA_DE_MODULO_INSTALADO + fonte.split("/")[1]
         recusa = recusa_do_pedido(
             pedido_de_escrita("Write", copia), daqui, str(daqui))
         if not recusa:
             falhas.append(FALHA_DESTE_REPOSITORIO.format(copia))
-        elif recusa[1] != fonte:
-            falhas.append(FALHA_FONTE_ERRADA.format(copia, recusa[1], fonte))
+        elif recusa[1] != esperada:
+            falhas.append(FALHA_FONTE_ERRADA.format(copia, recusa[1], esperada))
         if recusa_do_pedido(pedido_de_leitura(copia), daqui, str(daqui)):
             falhas.append(FALHA_LEITURA_DESTE_REPOSITORIO.format(copia))
     for fonte in DESTE_REPOSITORIO_PASSA:
@@ -671,10 +681,14 @@ def testar() -> int:
                 pedido_de_escrita("Write", fonte), daqui, str(daqui)):
             falhas.append(FALHA_DEIXA_PASSAR.format(fonte, recusa[1]))
 
-    esperadas = gabarito_do_instalador(daqui)
+    esperadas = gabarito_do_instalador(daqui) if no_repositorio_da_camada else set()
     if esperadas is None:
         comportamento.append(
             (SEM_INSTALADOR.format(INSTALADOR, INSTALADOR), False))
+    elif not no_repositorio_da_camada:
+        comportamento.append((
+            "fora do repositório da camada o instalador não regenera módulo: a "
+            "comparação com ele não se aplica aqui", True))
     else:
         derivadas = set(copias_geradas(daqui))
         comportamento.append((

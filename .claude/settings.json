@@ -9,14 +9,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/injetar-padrao-de-codigo.py\""
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
             "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
           }
         ]

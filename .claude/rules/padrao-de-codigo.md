@@ -1,6 +1,19 @@
 ---
-name: padrao-de-codigo
-description: O padrão de código deste repositório — KISS, YAGNI, Tidy First, teste em três atos, erro na fronteira, nome no lugar de comentário. Uma regra por caminho carrega este texto quando você toca código; cite-a pelo nome só fora disso. Palavras que a acordam — "o padrão de código daqui", "revisa pelo padrão".
+paths:
+  - "**/*.py"
+  - "**/*.js"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.jsx"
+  - "**/*.cs"
+  - "**/*.java"
+  - "**/*.go"
+  - "**/*.rb"
+  - "**/*.php"
+  - "**/*.kt"
+  - "**/*.rs"
+  - "**/*.sh"
+  - "**/*.sql"
 ---
 
 # Qualidade de código — a base
@@ -26,9 +39,3 @@ description: O padrão de código deste repositório — KISS, YAGNI, Tidy First
 - **Nome diz o que é.** Se precisou de comentário para explicar, o nome está
   errado.
 - **Menor diff coerente:** mudança se fatia em entregas que passam sozinhas.
-
-## Pedidos de exemplo
-
-- "vou escrever esse módulo agora, me lembra o padrão de código que vale aqui"
-- "esse arquivo tá cheio de comentário explicando o que o código faz. revisa ele pelo padrão daqui"
-- "posso deixar essa abstração pronta pra um caso que ainda não existe?"

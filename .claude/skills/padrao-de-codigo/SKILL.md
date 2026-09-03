@@ -1,6 +1,6 @@
 ---
 name: padrao-de-codigo
-description: O padrão de código deste repositório — KISS, YAGNI, Tidy First, teste em três atos, erro na fronteira, nome no lugar de comentário. Um gancho de abertura já injeta este texto onde está instalado; cite-a pelo nome só onde ele não estiver. Palavras que a acordam — "o padrão de código daqui", "revisa pelo padrão".
+description: O padrão de código deste repositório — KISS, YAGNI, Tidy First, teste em três atos, erro na fronteira, nome no lugar de comentário. Uma regra por caminho carrega este texto quando você toca código; cite-a pelo nome só fora disso. Palavras que a acordam — "o padrão de código daqui", "revisa pelo padrão".
 ---
 
 # Qualidade de código — a base

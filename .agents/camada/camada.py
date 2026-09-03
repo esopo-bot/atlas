@@ -35,6 +35,8 @@ TEMPO_DE_UM_GANCHO = 30
 PASTA_DAS_SKILLS = ".claude/skills"
 PASTA_DAS_SKILLS_FONTE = ".agents/skills"
 PASTA_DOS_GANCHOS = ".claude/hooks"
+PASTA_DE_REGRAS = ".claude/rules"
+MARCA_DE_REGRA_POR_CAMINHO = re.compile(r"^paths:", re.M)
 PASTA_DOS_SUBAGENTES = ".claude/agents"
 PASTA_DOS_INSTRUMENTOS = ".agents"
 PASTA_DO_CONHECIMENTO = "conhecimento"
@@ -1406,9 +1408,23 @@ def _recado_da_listagem(dados: dict) -> str:
                                   round(total / ORCAMENTO_DA_LISTAGEM, 1))
 
 
+def regras_da_pasta(raiz: Path) -> tuple:
+    sempre = por_caminho = 0
+    for regra in sorted((raiz / PASTA_DE_REGRAS).rglob(GLOB_PAGINA)):
+        texto = regra.read_text(encoding="utf-8", errors="replace")
+        frente = FRONTMATTER.match(texto)
+        if frente and MARCA_DE_REGRA_POR_CAMINHO.search(frente.group(1)):
+            por_caminho += len(texto.encode()) - len(frente.group(1).encode())
+        else:
+            sempre += len(texto.encode())
+    return sempre, por_caminho
+
+
 def medir(raiz: Path) -> tuple:
     instrucoes = sum(len((raiz / n).read_bytes())
                      for n in CARREGADOS_EM_TODA_SESSAO if (raiz / n).is_file())
+    regras_sempre, regras_por_caminho = regras_da_pasta(raiz)
+    instrucoes += regras_sempre
     catalogo = adiado = 0
     skills = sorted(pasta_das_skills(raiz).glob(GLOB_SKILL))
     acima_do_teto = []
@@ -1427,6 +1443,8 @@ def medir(raiz: Path) -> tuple:
     dados = {
         "largada": instrucoes + catalogo + injetado_por_gancho,
         "instrucoes": instrucoes,
+        "regras_sempre": regras_sempre,
+        "regras_por_caminho": regras_por_caminho,
         "catalogo": catalogo,
         "injetado_por_gancho": injetado_por_gancho,
         "ganchos_nao_medidos": ganchos_cegos,
@@ -1453,8 +1471,10 @@ def medir(raiz: Path) -> tuple:
     linhas = [
         LINHA.format("largada — o que TODA sessão paga",
                      f"{dados['largada']} bytes"),
-        LINHA.format("  instruções (AGENTS.md, CLAUDE.md)",
+        LINHA.format("  instruções (AGENTS.md, CLAUDE.md, regras sempre)",
                      f"{dados['instrucoes']} bytes"),
+        LINHA.format("  regras por caminho — só quando o arquivo tocado bate",
+                     f"{dados['regras_por_caminho']} bytes, fora da largada"),
         LINHA.format(f"  catálogo de {dados['skills']} skills",
                      f"{dados['catalogo']} bytes"),
         LINHA.format("  injetado por gancho de abertura",

@@ -30,13 +30,37 @@ PALAVRA_QUE_RECUSA_NA_OUTRA = "block"
 SAIDA_QUE_BARRA = 2
 RECUSADO_SEM_MOTIVO_DITO = "recusado sem motivo dito"
 
+COMO_O_ASSISTENTE_DO_EDITOR_CHAMA_A_MESMA_COISA = {
+    "bash": "Bash", "powershell": "PowerShell", "edit": "Edit",
+    "create": "Write", "write": "Write", "view": "Read", "read": "Read"}
+CHAVE_DA_FERRAMENTA_NO_EDITOR = "toolName"
+CHAVE_DOS_ARGUMENTOS_NO_EDITOR = "toolArgs"
+CHAVE_DO_CWD_NO_EDITOR = "cwd"
 RAIZ_QUE_A_OUTRA_FERRAMENTA_DA = "DEVIN_PROJECT_DIR"
 RAIZ_QUE_AS_CERCAS_LEEM = "CLAUDE_PROJECT_DIR"
 EVENTO_PADRAO = "PreToolUse"
 
 
-def raiz_do_repositorio():
-    return Path(os.environ.get(RAIZ_QUE_A_OUTRA_FERRAMENTA_DA) or Path.cwd())
+def raiz_do_repositorio(pedido=None):
+    dito = (pedido or {}).get(CHAVE_DO_CWD_NO_EDITOR)
+    return Path(os.environ.get(RAIZ_QUE_A_OUTRA_FERRAMENTA_DA) or dito
+                or Path.cwd())
+
+
+def veio_do_assistente_do_editor(pedido) -> bool:
+    return CHAVE_DA_FERRAMENTA_NO_EDITOR in pedido
+
+
+def no_dialeto_das_cercas(pedido):
+    if not veio_do_assistente_do_editor(pedido):
+        return pedido
+    chegou = str(pedido.get(CHAVE_DA_FERRAMENTA_NO_EDITOR, ""))
+    argumentos = pedido.get(CHAVE_DOS_ARGUMENTOS_NO_EDITOR) or {}
+    return {"hook_event_name": EVENTO_PADRAO,
+            "tool_name": COMO_O_ASSISTENTE_DO_EDITOR_CHAMA_A_MESMA_COISA.get(
+                chegou.lower(), chegou),
+            "tool_input": argumentos if isinstance(argumentos, dict) else {},
+            CHAVE_DO_CWD_NO_EDITOR: pedido.get(CHAVE_DO_CWD_NO_EDITOR, "")}
 
 
 def cercas_que_a_ferramenta_de_origem_rodaria(raiz, evento, ferramenta):
@@ -75,7 +99,8 @@ def a_recusa_e_o_ensino_de_uma_cerca(saida, codigo):
 
 
 def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):
-    raiz = raiz_do_repositorio()
+    raiz = raiz_do_repositorio(pedido_da_outra_ferramenta)
+    pedido_da_outra_ferramenta = no_dialeto_das_cercas(pedido_da_outra_ferramenta)
     chegou = pedido_da_outra_ferramenta.get("tool_name", "")
     evento = pedido_da_outra_ferramenta.get("hook_event_name", EVENTO_PADRAO)
     ferramenta = COMO_A_OUTRA_FERRAMENTA_CHAMA_A_MESMA_COISA.get(chegou, chegou)
@@ -132,6 +157,17 @@ CASOS_DO_NOME = (("write", "Write"), ("edit", "Edit"), ("exec", "Bash"),
                  ("ask_user_question", "AskUserQuestion"),
                  ("glob", "glob"))
 
+CASOS_DO_EDITOR = (
+    ({"toolName": "bash", "toolArgs": {"command": "rm x"}, "cwd": "/r"},
+     {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+      "tool_input": {"command": "rm x"}, "cwd": "/r"}),
+    ({"toolName": "create", "toolArgs": {"file_path": "a.py"}},
+     {"hook_event_name": "PreToolUse", "tool_name": "Write",
+      "tool_input": {"file_path": "a.py"}, "cwd": ""}),
+    ({"tool_name": "exec", "tool_input": {"command": "ls"}},
+     {"tool_name": "exec", "tool_input": {"command": "ls"}}),
+)
+
 CASOS_DO_CASADOR = (("Write", ["cerca-da-escrita", "cerca-de-tudo"]),
                     ("Bash", ["cerca-do-shell", "cerca-de-tudo"]),
                     ("Read", ["cerca-de-tudo"]))
@@ -168,11 +204,33 @@ def testar():
         if vazio != []:
             quebrou += 1
             print(FALHA.format("sem settings", [], vazio))
+    for pedido, esperado in CASOS_DO_EDITOR:
+        veio = no_dialeto_das_cercas(pedido)
+        if veio != esperado:
+            quebrou += 1
+            print(FALHA.format("dialeto do editor", esperado, veio))
+    saida_do_editor = resposta_para_quem_perguntou(
+        {"toolName": "bash"}, "porque sim")
+    if saida_do_editor != {"permissionDecision": "deny",
+                           "permissionDecisionReason": "porque sim"}:
+        quebrou += 1
+        print(FALHA.format("resposta ao editor", "deny", saida_do_editor))
+    saida_da_outra = resposta_para_quem_perguntou({"tool_name": "exec"}, "x")
+    if saida_da_outra != {"decision": "block", "reason": "x"}:
+        quebrou += 1
+        print(FALHA.format("resposta a outra ferramenta", "block", saida_da_outra))
     total = (len(CASOS_DA_RESPOSTA) + len(CASOS_DO_NOME)
-             + len(CASOS_DO_CASADOR) + 1)
+             + len(CASOS_DO_CASADOR) + 1 + len(CASOS_DO_EDITOR) + 2)
     print(PLACAR.format(total - quebrou, total))
     return 1 if quebrou else 0
 
+
+
+def resposta_para_quem_perguntou(pedido, recusa):
+    if veio_do_assistente_do_editor(pedido):
+        return {CHAVE_DA_DECISAO_LONGA: "deny", CHAVE_DO_MOTIVO_LONGO: recusa}
+    return {CHAVE_DA_DECISAO_CURTA: PALAVRA_QUE_RECUSA_NA_OUTRA,
+            CHAVE_DO_MOTIVO_CURTO: recusa}
 
 
 def main():
@@ -184,13 +242,13 @@ def main():
         return 0
     recusa, ensino = a_recusa_e_o_ensino_da_camada(pedido)
     if recusa is None:
-        if ensino:
+        if ensino and not veio_do_assistente_do_editor(pedido):
             print(json.dumps({CHAVE_DA_RESPOSTA_LONGA: {CHAVE_DO_ENSINO: ensino}},
                              ensure_ascii=False))
         return 0
-    print(json.dumps({CHAVE_DA_DECISAO_CURTA: PALAVRA_QUE_RECUSA_NA_OUTRA,
-                      CHAVE_DO_MOTIVO_CURTO: recusa}, ensure_ascii=False))
-    return SAIDA_QUE_BARRA
+    print(json.dumps(resposta_para_quem_perguntou(pedido, recusa),
+                     ensure_ascii=False))
+    return 0 if veio_do_assistente_do_editor(pedido) else SAIDA_QUE_BARRA
 
 
 if __name__ == "__main__":

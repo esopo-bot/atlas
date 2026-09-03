@@ -66,12 +66,15 @@ listando ela. Use travessão.
 O gatilho recusa medir nesse caso, porque zero por skill quebrada e zero por
 descrição ruim são o mesmo número — e é assim que se conclui a causa errada.
 
-## Conteúdo duplicado por gancho não precisa de skill
+## Conteúdo que uma regra por caminho já carrega não precisa de skill
 
-Onde um gancho de abertura já injeta o texto em toda sessão, o agente não
-chama a skill — e está certo em não chamar. O zero dela não é defeito: é a
-medição perguntando a coisa errada. O que sobra é o custo da linha no
-catálogo, paga por toda sessão para nada.
+Onde uma regra em `.claude/rules/` com `paths` já carrega o texto quando o
+arquivo tocado bate com o padrão — é o caso do padrão de código, gerado da skill pelo
+`--sincronizar` —, o agente não chama a skill, e está certo em não chamar. O
+zero dela não é defeito: é a medição perguntando a coisa errada. O que sobra é
+o custo da linha no catálogo, paga por toda sessão. A regra por caminho, ao
+contrário do gancho de abertura que ela substituiu em 03/09/2026, não entra na
+largada: 1739 bytes deixaram de ser pagos em toda sessão.
 
 ## O molde
 

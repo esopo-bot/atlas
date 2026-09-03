@@ -1,4 +1,4 @@
-VERSAO = "0.708"
+VERSAO = "0.711"
 
 import functools
 import datetime
@@ -309,13 +309,24 @@ BANDEIRA_SINCRONIZAR = "--sincronizar"
 BANDEIRA_ATUALIZAR = "--atualizar"
 BANDEIRA_ESQUELETO = "--esqueleto"
 BANDEIRA_DEVIN = "--devin"
+BANDEIRA_COPILOT = "--copilot"
 BANDEIRAS_CONHECIDAS = (BANDEIRA_TESTAR, BANDEIRA_VERSAO,
                         BANDEIRA_MODULOS, BANDEIRA_MODULO,
                         BANDEIRA_VERIFICAR, BANDEIRA_SINCRONIZAR,
                         BANDEIRA_ATUALIZAR, BANDEIRA_ESQUELETO,
-                        BANDEIRA_DEVIN)
+                        BANDEIRA_DEVIN, BANDEIRA_COPILOT)
 
 ARQUIVO_DOS_GANCHOS_DA_OUTRA = ".devin/hooks.v1.json"
+ARQUIVO_DOS_GANCHOS_DO_EDITOR = ".github/hooks/atlas.json"
+GANCHOS_DO_EDITOR = {
+    "version": 1,
+    "hooks": {"preToolUse": [{
+        "type": "command",
+        "bash": "python3 .agents/travessia/ponte.py",
+        "powershell": "python .agents/travessia/ponte.py",
+        "timeoutSec": 30}]}}
+LOG_PONTE_DO_EDITOR = ("  ponte para o assistente do editor declarada em {}: as "
+                       "mesmas cercas valem lá")
 COMANDO_DA_PONTE = ('python3 "$DEVIN_PROJECT_DIR/.agents/travessia/ponte.py"')
 EVENTO_DA_OUTRA = "PreToolUse"
 PREFIXO_DE_BANDEIRA = "--"
@@ -340,6 +351,19 @@ PASTA_MODULOS = "modulos"
 BANCADA_QUE_NAO_VIAJA = "testes.py"
 ORIGEM_SKILLS = ".agents/skills"
 COPIA_SKILLS = ".claude/skills"
+PASTA_DE_REGRAS = ".claude/rules"
+ARQUIVO_DA_REGRA_DE_CODIGO = ".claude/rules/padrao-de-codigo.md"
+SKILL_DO_PADRAO_DE_CODIGO = ".agents/skills/padrao-de-codigo/SKILL.md"
+CAMINHOS_QUE_ACORDAM_A_REGRA_DE_CODIGO = (
+    "**/*.py", "**/*.js", "**/*.ts", "**/*.tsx", "**/*.jsx", "**/*.cs",
+    "**/*.java", "**/*.go", "**/*.rb", "**/*.php", "**/*.kt", "**/*.rs",
+    "**/*.sh", "**/*.sql")
+SECAO_DOS_PEDIDOS_DE_EXEMPLO = "\n## Pedidos de exemplo\n"
+FECHAMENTO_DO_FRONTMATTER = "\n---\n"
+GANCHOS_APOSENTADOS = (".claude/hooks/injetar-padrao-de-codigo.py",)
+LOG_REGRA_POR_CAMINHO = "Regra por caminho gerada de {}: {}"
+LOG_GANCHO_APOSENTADO_REMOVIDO = ("  removido do settings.json: {} — aposentado, a "
+                                  "regra por caminho o substitui")
 CARTAO_DO_MODULO = "LEIAME.md"
 NOME_DO_BLOCO_DE_PAGINAS = "PAGINAS"
 NOME_DO_BLOCO_DE_MODULOS = "MODULOS"
@@ -362,7 +386,6 @@ TETO_DO_INTERPRETADOR_S = 10
 RAIZ_DO_PROJETO_NO_GANCHO = "${CLAUDE_PROJECT_DIR}"
 RAIZ_DO_PROJETO_NO_GANCHO_SEM_CHAVES = "$CLAUDE_PROJECT_DIR"
 
-ARQUIVO_DO_GANCHO_DE_PADRAO_DE_CODIGO = ".claude/hooks/injetar-padrao-de-codigo.py"
 ARQUIVO_DO_GANCHO_DE_BRANCH = ".claude/hooks/vetar-branch-protegida.py"
 ARQUIVO_DO_GANCHO_DE_CONHECIMENTO = ".claude/hooks/vetar-conhecimento-em-codigo.py"
 ARQUIVO_DO_GANCHO_DE_AUTOMACAO = ".claude/hooks/vetar-automacao.py"
@@ -385,8 +408,6 @@ ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA = (
 ARQUIVO_DO_GANCHO_DE_INDICE_FORA = ".claude/hooks/avisar-indice-fora.py"
 ARQUIVO_DO_GANCHO_DE_CD = ".claude/hooks/vetar-caminho-relativo-apos-cd.py"
 
-COMANDO_DA_QUALIDADE = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_PADRAO_DE_CODIGO}"')
 COMANDO_DO_VETO_DE_BRANCH = (
     f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_BRANCH}"')
 COMANDO_DO_VETO_DE_CONHECIMENTO = (
@@ -449,9 +470,6 @@ LIGA_MESMO_SEM_O_GANCHO_NO_DISCO = ""
 GanchoDeclarado = namedtuple(
     "GanchoDeclarado", "nome evento matcher comando arquivo_exigido")
 
-GANCHO_DA_QUALIDADE = GanchoDeclarado(
-    "gancho da qualidade", EVENTO_DE_ABERTURA, SEM_MATCHER,
-    COMANDO_DA_QUALIDADE, LIGA_MESMO_SEM_O_GANCHO_NO_DISCO)
 GANCHO_DO_VETO_DE_BRANCH = GanchoDeclarado(
     "veto de branch protegida", EVENTO_ANTES_DA_FERRAMENTA, MATCHER_DO_SHELL,
     COMANDO_DO_VETO_DE_BRANCH, ARQUIVO_DO_GANCHO_DE_BRANCH)
@@ -886,7 +904,6 @@ FONTES = (PAGINA_REGRAS,
           ".agents/travessia/travessia.py",
           ".agents/travessia/ponte.py",
           ".agents/higiene/higiene.py",
-          ARQUIVO_DO_GANCHO_DE_PADRAO_DE_CODIGO,
           ARQUIVO_DO_GANCHO_DE_BRANCH,
           ARQUIVO_DO_GANCHO_DE_CONHECIMENTO,
           ARQUIVO_DO_GANCHO_DE_AUTOMACAO,
@@ -1461,6 +1478,11 @@ def sincronizar(raiz: Path, escrevendo: bool = True) -> int:
     espelho = ACAO_ESPELHADAS_PARA if escrevendo else ACAO_VERIFICADAS_CONTRA
     print(LOG_SKILLS_ESPELHADAS.format(ORIGEM_SKILLS, espelho, COPIA_SKILLS))
     mexidos = espelhar_e_relatar(raiz, escrevendo)
+    regra = espelhar_regra_de_codigo(raiz, escrevendo)
+    for acao, caminho in regra:
+        print(LOG_REGRA_POR_CAMINHO.format(SKILL_DO_PADRAO_DE_CODIGO,
+                                           f"{acao}: {caminho}"))
+    mexidos += regra
 
     if escrevendo:
         return 0
@@ -1833,6 +1855,7 @@ def atualizar(raiz: Path) -> int:
 
     print(SECAO_DA_ATUALIZACAO_SKILLS.format(ORIGEM_SKILLS, COPIA_SKILLS))
     espelhar_e_relatar(raiz)
+    espelhar_regra_de_codigo(raiz)
 
     garantir_ajustes(raiz, NUMERO_DOS_AJUSTES_NA_ATUALIZACAO)
 
@@ -1842,7 +1865,7 @@ def atualizar(raiz: Path) -> int:
 
 def garantir_ajustes(raiz: Path, numero: int) -> None:
     print(SECAO_DOS_AJUSTES.format(numero))
-    garantir_gancho_declarado(raiz, GANCHO_DA_QUALIDADE)
+    remover_ganchos_aposentados(raiz)
     garantir_ponteiro_das_regras(raiz)
     garantir_lista_de_branches_protegidas(raiz)
     garantir_lista_de_caminhos_de_automacao(raiz)
@@ -1882,12 +1905,62 @@ def garantir_ajustes(raiz: Path, numero: int) -> None:
 
 def espelhos_com_fonte(raiz: Path) -> list:
     origem, copia = raiz / ORIGEM_SKILLS, raiz / COPIA_SKILLS
-    if not copia.exists():
+    espelhos = []
+    if copia.exists():
+        espelhos = [caminho.relative_to(raiz).as_posix()
+                    for caminho in copia.rglob("*")
+                    if caminho.is_file()
+                    and (origem / caminho.relative_to(copia)).exists()]
+    if (raiz / ARQUIVO_DA_REGRA_DE_CODIGO).is_file() \
+            and (raiz / SKILL_DO_PADRAO_DE_CODIGO).is_file():
+        espelhos.append(ARQUIVO_DA_REGRA_DE_CODIGO)
+    return espelhos
+
+
+def regra_de_codigo_gerada(raiz: Path):
+    skill = raiz / SKILL_DO_PADRAO_DE_CODIGO
+    if not skill.is_file():
+        return None
+    texto = skill.read_text(encoding="utf-8")
+    corpo = texto.partition(FECHAMENTO_DO_FRONTMATTER)[2] \
+        if texto.startswith("---") else texto
+    corpo = corpo.partition(SECAO_DOS_PEDIDOS_DE_EXEMPLO)[0].strip() + "\n"
+    frente = "---\npaths:\n" + "".join(
+        f'  - "{c}"\n' for c in CAMINHOS_QUE_ACORDAM_A_REGRA_DE_CODIGO) + "---\n\n"
+    return frente + corpo
+
+
+def espelhar_regra_de_codigo(raiz: Path, escrevendo: bool = True) -> list:
+    conteudo = regra_de_codigo_gerada(raiz)
+    if conteudo is None:
         return []
-    return [caminho.relative_to(raiz).as_posix()
-            for caminho in copia.rglob("*")
-            if caminho.is_file()
-            and (origem / caminho.relative_to(copia)).exists()]
+    destino = raiz / ARQUIVO_DA_REGRA_DE_CODIGO
+    if destino.exists() and destino.read_text(encoding="utf-8") == conteudo:
+        return []
+    if escrevendo:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        gravar_texto_com_quebras_unix(destino, conteudo)
+    return [(ACAO_COPIADO if escrevendo else ACAO_FORA_DE_DIA,
+             ARQUIVO_DA_REGRA_DE_CODIGO)]
+
+
+def remover_ganchos_aposentados(raiz: Path) -> None:
+    destino = raiz / ARQUIVO_SETTINGS
+    configuracao = ler_json_ou_vazio(destino)
+    ganchos = configuracao.get(CHAVE_DOS_GANCHOS) or {}
+    mexeu = False
+    for evento, blocos in list(ganchos.items()):
+        vivos = [bloco for bloco in blocos
+                 if not any(aposentado in comando
+                            for aposentado in GANCHOS_APOSENTADOS
+                            for comando in comandos_do_bloco(bloco))]
+        if len(vivos) != len(blocos):
+            ganchos[evento] = vivos
+            mexeu = True
+    if mexeu:
+        gravar_configuracao_json(destino, configuracao)
+        print(LOG_GANCHO_APOSENTADO_REMOVIDO.format(
+            ", ".join(GANCHOS_APOSENTADOS)))
 
 
 def caminhos_da_camada(raiz: Path) -> list:
@@ -2202,17 +2275,17 @@ def testar() -> int:
          versao.returncode == 0 and versao.stdout.strip() == VERSAO_QUE_SERVE)
     caso(CASO_MARCADOR_SAI_DO_COMANDO,
          MARCADOR_DO_INTERPRETADOR not in comando_com_o_interpretador(
-             COMANDO_DA_QUALIDADE))
-    de_outro_jeito = COMANDO_DA_QUALIDADE.replace(
+             COMANDO_DO_VETO_DE_BRANCH))
+    de_outro_jeito = COMANDO_DO_VETO_DE_BRANCH.replace(
         MARCADOR_DO_INTERPRETADOR, "py -3")
     caso(CASO_GANCHO_COM_OUTRO_INTERPRETADOR_JA_CONTA,
          tem_comando_declarado(
              [{CHAVE_DOS_GANCHOS: [{CHAVE_DO_COMANDO: de_outro_jeito}]}],
-             COMANDO_DA_QUALIDADE))
+             COMANDO_DO_VETO_DE_BRANCH))
     caso(CASO_GANCHO_DE_OUTRO_ARQUIVO_NAO_CONTA,
          not tem_comando_declarado(
              [{CHAVE_DOS_GANCHOS: [{CHAVE_DO_COMANDO: de_outro_jeito}]}],
-             COMANDO_DO_VETO_DE_BRANCH))
+             COMANDO_DO_VETO_DE_POLITICA))
 
     with tempfile.TemporaryDirectory() as pasta:
         paginas = Path(pasta)
@@ -2329,6 +2402,7 @@ def montar(raiz: Path) -> int:
 
     print(SECAO_DA_MONTAGEM_SKILLS.format(ORIGEM_SKILLS, COPIA_SKILLS))
     espelhar_e_relatar(raiz)
+    espelhar_regra_de_codigo(raiz)
 
     garantir_ajustes(raiz, NUMERO_DOS_AJUSTES_NA_MONTAGEM)
     declarar_teto_da_largada_medido(raiz)
@@ -2337,7 +2411,20 @@ def montar(raiz: Path) -> int:
     return 0
 
 
+def garantir_ponte_para_o_editor(raiz: Path) -> None:
+    if not pediram(BANDEIRA_COPILOT):
+        return
+    destino = raiz / ARQUIVO_DOS_GANCHOS_DO_EDITOR
+    if destino.exists() and json.loads(
+            destino.read_text(encoding="utf-8")) == GANCHOS_DO_EDITOR:
+        return
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    gravar_configuracao_json(destino, GANCHOS_DO_EDITOR)
+    print(LOG_PONTE_DO_EDITOR.format(ARQUIVO_DOS_GANCHOS_DO_EDITOR))
+
+
 def garantir_ponte_para_a_outra_ferramenta(raiz: Path) -> None:
+    garantir_ponte_para_o_editor(raiz)
     if not pediram(BANDEIRA_DEVIN):
         return
     arquivo = raiz / ARQUIVO_DOS_GANCHOS_DA_OUTRA
@@ -3636,7 +3723,7 @@ PAGINAS = {
     '.agents/skills/padrao-de-codigo/SKILL.md': (
         '---\n'
         'name: padrao-de-codigo\n'
-        'description: O padrão de código deste repositório — KISS, YAGNI, Tidy First, teste em três atos, erro na fronteira, nome no lugar de comentário. Um gancho de abertura já injeta este texto onde está instalado; cite-a pelo nome só onde ele não estiver. Palavras que a acordam — "o padrão de código daqui", "revisa pelo padrão".\n'
+        'description: O padrão de código deste repositório — KISS, YAGNI, Tidy First, teste em três atos, erro na fronteira, nome no lugar de comentário. Uma regra por caminho carrega este texto quando você toca código; cite-a pelo nome só fora disso. Palavras que a acordam — "o padrão de código daqui", "revisa pelo padrão".\n'
         '---\n'
         '\n'
         '# Qualidade de código — a base\n'
@@ -8234,6 +8321,8 @@ PAGINAS = {
         'PASTA_DAS_SKILLS = ".claude/skills"\n'
         'PASTA_DAS_SKILLS_FONTE = ".agents/skills"\n'
         'PASTA_DOS_GANCHOS = ".claude/hooks"\n'
+        'PASTA_DE_REGRAS = ".claude/rules"\n'
+        'MARCA_DE_REGRA_POR_CAMINHO = re.compile(r"^paths:", re.M)\n'
         'PASTA_DOS_SUBAGENTES = ".claude/agents"\n'
         'PASTA_DOS_INSTRUMENTOS = ".agents"\n'
         'PASTA_DO_CONHECIMENTO = "conhecimento"\n'
@@ -9605,9 +9694,23 @@ PAGINAS = {
         '                                  round(total / ORCAMENTO_DA_LISTAGEM, 1))\n'
         '\n'
         '\n'
+        'def regras_da_pasta(raiz: Path) -> tuple:\n'
+        '    sempre = por_caminho = 0\n'
+        '    for regra in sorted((raiz / PASTA_DE_REGRAS).rglob(GLOB_PAGINA)):\n'
+        '        texto = regra.read_text(encoding="utf-8", errors="replace")\n'
+        '        frente = FRONTMATTER.match(texto)\n'
+        '        if frente and MARCA_DE_REGRA_POR_CAMINHO.search(frente.group(1)):\n'
+        '            por_caminho += len(texto.encode()) - len(frente.group(1).encode())\n'
+        '        else:\n'
+        '            sempre += len(texto.encode())\n'
+        '    return sempre, por_caminho\n'
+        '\n'
+        '\n'
         'def medir(raiz: Path) -> tuple:\n'
         '    instrucoes = sum(len((raiz / n).read_bytes())\n'
         '                     for n in CARREGADOS_EM_TODA_SESSAO if (raiz / n).is_file())\n'
+        '    regras_sempre, regras_por_caminho = regras_da_pasta(raiz)\n'
+        '    instrucoes += regras_sempre\n'
         '    catalogo = adiado = 0\n'
         '    skills = sorted(pasta_das_skills(raiz).glob(GLOB_SKILL))\n'
         '    acima_do_teto = []\n'
@@ -9626,6 +9729,8 @@ PAGINAS = {
         '    dados = {\n'
         '        "largada": instrucoes + catalogo + injetado_por_gancho,\n'
         '        "instrucoes": instrucoes,\n'
+        '        "regras_sempre": regras_sempre,\n'
+        '        "regras_por_caminho": regras_por_caminho,\n'
         '        "catalogo": catalogo,\n'
         '        "injetado_por_gancho": injetado_por_gancho,\n'
         '        "ganchos_nao_medidos": ganchos_cegos,\n'
@@ -9652,8 +9757,10 @@ PAGINAS = {
         '    linhas = [\n'
         '        LINHA.format("largada — o que TODA sessão paga",\n'
         '                     f"{dados[\'largada\']} bytes"),\n'
-        '        LINHA.format("  instruções (AGENTS.md, CLAUDE.md)",\n'
+        '        LINHA.format("  instruções (AGENTS.md, CLAUDE.md, regras sempre)",\n'
         '                     f"{dados[\'instrucoes\']} bytes"),\n'
+        '        LINHA.format("  regras por caminho — só quando o arquivo tocado bate",\n'
+        '                     f"{dados[\'regras_por_caminho\']} bytes, fora da largada"),\n'
         '        LINHA.format(f"  catálogo de {dados[\'skills\']} skills",\n'
         '                     f"{dados[\'catalogo\']} bytes"),\n'
         '        LINHA.format("  injetado por gancho de abertura",\n'
@@ -12291,13 +12398,37 @@ PAGINAS = {
         'SAIDA_QUE_BARRA = 2\n'
         'RECUSADO_SEM_MOTIVO_DITO = "recusado sem motivo dito"\n'
         '\n'
+        'COMO_O_ASSISTENTE_DO_EDITOR_CHAMA_A_MESMA_COISA = {\n'
+        '    "bash": "Bash", "powershell": "PowerShell", "edit": "Edit",\n'
+        '    "create": "Write", "write": "Write", "view": "Read", "read": "Read"}\n'
+        'CHAVE_DA_FERRAMENTA_NO_EDITOR = "toolName"\n'
+        'CHAVE_DOS_ARGUMENTOS_NO_EDITOR = "toolArgs"\n'
+        'CHAVE_DO_CWD_NO_EDITOR = "cwd"\n'
         'RAIZ_QUE_A_OUTRA_FERRAMENTA_DA = "DEVIN_PROJECT_DIR"\n'
         'RAIZ_QUE_AS_CERCAS_LEEM = "CLAUDE_PROJECT_DIR"\n'
         'EVENTO_PADRAO = "PreToolUse"\n'
         '\n'
         '\n'
-        'def raiz_do_repositorio():\n'
-        '    return Path(os.environ.get(RAIZ_QUE_A_OUTRA_FERRAMENTA_DA) or Path.cwd())\n'
+        'def raiz_do_repositorio(pedido=None):\n'
+        '    dito = (pedido or {}).get(CHAVE_DO_CWD_NO_EDITOR)\n'
+        '    return Path(os.environ.get(RAIZ_QUE_A_OUTRA_FERRAMENTA_DA) or dito\n'
+        '                or Path.cwd())\n'
+        '\n'
+        '\n'
+        'def veio_do_assistente_do_editor(pedido) -> bool:\n'
+        '    return CHAVE_DA_FERRAMENTA_NO_EDITOR in pedido\n'
+        '\n'
+        '\n'
+        'def no_dialeto_das_cercas(pedido):\n'
+        '    if not veio_do_assistente_do_editor(pedido):\n'
+        '        return pedido\n'
+        '    chegou = str(pedido.get(CHAVE_DA_FERRAMENTA_NO_EDITOR, ""))\n'
+        '    argumentos = pedido.get(CHAVE_DOS_ARGUMENTOS_NO_EDITOR) or {}\n'
+        '    return {"hook_event_name": EVENTO_PADRAO,\n'
+        '            "tool_name": COMO_O_ASSISTENTE_DO_EDITOR_CHAMA_A_MESMA_COISA.get(\n'
+        '                chegou.lower(), chegou),\n'
+        '            "tool_input": argumentos if isinstance(argumentos, dict) else {},\n'
+        '            CHAVE_DO_CWD_NO_EDITOR: pedido.get(CHAVE_DO_CWD_NO_EDITOR, "")}\n'
         '\n'
         '\n'
         'def cercas_que_a_ferramenta_de_origem_rodaria(raiz, evento, ferramenta):\n'
@@ -12336,7 +12467,8 @@ PAGINAS = {
         '\n'
         '\n'
         'def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):\n'
-        '    raiz = raiz_do_repositorio()\n'
+        '    raiz = raiz_do_repositorio(pedido_da_outra_ferramenta)\n'
+        '    pedido_da_outra_ferramenta = no_dialeto_das_cercas(pedido_da_outra_ferramenta)\n'
         '    chegou = pedido_da_outra_ferramenta.get("tool_name", "")\n'
         '    evento = pedido_da_outra_ferramenta.get("hook_event_name", EVENTO_PADRAO)\n'
         '    ferramenta = COMO_A_OUTRA_FERRAMENTA_CHAMA_A_MESMA_COISA.get(chegou, chegou)\n'
@@ -12393,6 +12525,17 @@ PAGINAS = {
         '                 ("ask_user_question", "AskUserQuestion"),\n'
         '                 ("glob", "glob"))\n'
         '\n'
+        'CASOS_DO_EDITOR = (\n'
+        '    ({"toolName": "bash", "toolArgs": {"command": "rm x"}, "cwd": "/r"},\n'
+        '     {"hook_event_name": "PreToolUse", "tool_name": "Bash",\n'
+        '      "tool_input": {"command": "rm x"}, "cwd": "/r"}),\n'
+        '    ({"toolName": "create", "toolArgs": {"file_path": "a.py"}},\n'
+        '     {"hook_event_name": "PreToolUse", "tool_name": "Write",\n'
+        '      "tool_input": {"file_path": "a.py"}, "cwd": ""}),\n'
+        '    ({"tool_name": "exec", "tool_input": {"command": "ls"}},\n'
+        '     {"tool_name": "exec", "tool_input": {"command": "ls"}}),\n'
+        ')\n'
+        '\n'
         'CASOS_DO_CASADOR = (("Write", ["cerca-da-escrita", "cerca-de-tudo"]),\n'
         '                    ("Bash", ["cerca-do-shell", "cerca-de-tudo"]),\n'
         '                    ("Read", ["cerca-de-tudo"]))\n'
@@ -12429,11 +12572,33 @@ PAGINAS = {
         '        if vazio != []:\n'
         '            quebrou += 1\n'
         '            print(FALHA.format("sem settings", [], vazio))\n'
+        '    for pedido, esperado in CASOS_DO_EDITOR:\n'
+        '        veio = no_dialeto_das_cercas(pedido)\n'
+        '        if veio != esperado:\n'
+        '            quebrou += 1\n'
+        '            print(FALHA.format("dialeto do editor", esperado, veio))\n'
+        '    saida_do_editor = resposta_para_quem_perguntou(\n'
+        '        {"toolName": "bash"}, "porque sim")\n'
+        '    if saida_do_editor != {"permissionDecision": "deny",\n'
+        '                           "permissionDecisionReason": "porque sim"}:\n'
+        '        quebrou += 1\n'
+        '        print(FALHA.format("resposta ao editor", "deny", saida_do_editor))\n'
+        '    saida_da_outra = resposta_para_quem_perguntou({"tool_name": "exec"}, "x")\n'
+        '    if saida_da_outra != {"decision": "block", "reason": "x"}:\n'
+        '        quebrou += 1\n'
+        '        print(FALHA.format("resposta a outra ferramenta", "block", saida_da_outra))\n'
         '    total = (len(CASOS_DA_RESPOSTA) + len(CASOS_DO_NOME)\n'
-        '             + len(CASOS_DO_CASADOR) + 1)\n'
+        '             + len(CASOS_DO_CASADOR) + 1 + len(CASOS_DO_EDITOR) + 2)\n'
         '    print(PLACAR.format(total - quebrou, total))\n'
         '    return 1 if quebrou else 0\n'
         '\n'
+        '\n'
+        '\n'
+        'def resposta_para_quem_perguntou(pedido, recusa):\n'
+        '    if veio_do_assistente_do_editor(pedido):\n'
+        '        return {CHAVE_DA_DECISAO_LONGA: "deny", CHAVE_DO_MOTIVO_LONGO: recusa}\n'
+        '    return {CHAVE_DA_DECISAO_CURTA: PALAVRA_QUE_RECUSA_NA_OUTRA,\n'
+        '            CHAVE_DO_MOTIVO_CURTO: recusa}\n'
         '\n'
         '\n'
         'def main():\n'
@@ -12445,13 +12610,13 @@ PAGINAS = {
         '        return 0\n'
         '    recusa, ensino = a_recusa_e_o_ensino_da_camada(pedido)\n'
         '    if recusa is None:\n'
-        '        if ensino:\n'
+        '        if ensino and not veio_do_assistente_do_editor(pedido):\n'
         '            print(json.dumps({CHAVE_DA_RESPOSTA_LONGA: {CHAVE_DO_ENSINO: ensino}},\n'
         '                             ensure_ascii=False))\n'
         '        return 0\n'
-        '    print(json.dumps({CHAVE_DA_DECISAO_CURTA: PALAVRA_QUE_RECUSA_NA_OUTRA,\n'
-        '                      CHAVE_DO_MOTIVO_CURTO: recusa}, ensure_ascii=False))\n'
-        '    return SAIDA_QUE_BARRA\n'
+        '    print(json.dumps(resposta_para_quem_perguntou(pedido, recusa),\n'
+        '                     ensure_ascii=False))\n'
+        '    return 0 if veio_do_assistente_do_editor(pedido) else SAIDA_QUE_BARRA\n'
         '\n'
         '\n'
         'if __name__ == "__main__":\n'
@@ -12669,125 +12834,6 @@ PAGINAS = {
         '\n'
         'if __name__ == "__main__":\n'
         '    sys.exit(main())\n'
-    ),
-    '.claude/hooks/injetar-padrao-de-codigo.py': (
-        'import json\n'
-        'import sys\n'
-        'import tempfile\n'
-        'from pathlib import Path\n'
-        '\n'
-        'CAMINHO_DA_SKILL_DE_QUALIDADE = "skills/padrao-de-codigo/SKILL.md"\n'
-        'NIVEIS_DO_GANCHO_ATE_A_PASTA_CLAUDE = 1\n'
-        'ABERTURA_DO_FRONTMATTER = "---"\n'
-        'FECHAMENTO_DO_FRONTMATTER = "\\n---\\n"\n'
-        'SECAO_DOS_PEDIDOS_DE_EXEMPLO = "\\n## Pedidos de exemplo\\n"\n'
-        'EVENTO_DE_INICIO_DE_SESSAO = "SessionStart"\n'
-        'BANDEIRA_DE_TESTE = "--testar"\n'
-        'FALHA_ABERTO = 0\n'
-        'FIM_NORMAL = 0\n'
-        '\n'
-        'RESUMO_OK = "OK: {} casos — {} de corpo, {} de leitura, {} de recado"\n'
-        'RESUMO_FALHOU = "FALHOU: {} de {} casos"\n'
-        'FALHA = "  [{}]"\n'
-        '\n'
-        '\n'
-        'def caminho_da_skill() -> Path:\n'
-        '    pasta_claude = Path(__file__).resolve().parents[\n'
-        '        NIVEIS_DO_GANCHO_ATE_A_PASTA_CLAUDE]\n'
-        '    return pasta_claude / CAMINHO_DA_SKILL_DE_QUALIDADE\n'
-        '\n'
-        '\n'
-        'def corpo_sem_o_frontmatter(texto: str) -> str:\n'
-        '    if not texto.startswith(ABERTURA_DO_FRONTMATTER):\n'
-        '        return texto\n'
-        '    _, _, depois_do_frontmatter = texto.partition(FECHAMENTO_DO_FRONTMATTER)\n'
-        '    return depois_do_frontmatter.lstrip() or texto\n'
-        '\n'
-        '\n'
-        'def sem_os_pedidos_de_exemplo(corpo: str) -> str:\n'
-        '    antes, marca, _ = corpo.partition(SECAO_DOS_PEDIDOS_DE_EXEMPLO)\n'
-        '    return antes.rstrip() + "\\n" if marca else corpo\n'
-        '\n'
-        '\n'
-        'def ler_a_skill(caminho: Path):\n'
-        '    try:\n'
-        '        return caminho.read_text(encoding="utf-8")\n'
-        '    except OSError:\n'
-        '        return None\n'
-        '\n'
-        '\n'
-        'def recado(corpo: str) -> str:\n'
-        '    return json.dumps({"hookSpecificOutput": {\n'
-        '        "hookEventName": EVENTO_DE_INICIO_DE_SESSAO,\n'
-        '        "additionalContext": corpo,\n'
-        '    }})\n'
-        '\n'
-        '\n'
-        'def main() -> int:\n'
-        '    skill = ler_a_skill(caminho_da_skill())\n'
-        '    if skill is None:\n'
-        '        return FALHA_ABERTO\n'
-        '    print(recado(sem_os_pedidos_de_exemplo(corpo_sem_o_frontmatter(skill))))\n'
-        '    return FIM_NORMAL\n'
-        '\n'
-        '\n'
-        'def testar() -> int:\n'
-        '    CORPO = [\n'
-        '        ("frontmatter sai e o corpo fica",\n'
-        '         "---\\nname: q\\n---\\n\\n# Título\\n\\ntexto\\n", "# Título\\n\\ntexto\\n"),\n'
-        '        ("sem frontmatter, o texto passa inteiro",\n'
-        '         "# Título\\n\\ntexto\\n", "# Título\\n\\ntexto\\n"),\n'
-        '        ("frontmatter sem fechamento não come o arquivo",\n'
-        '         "---\\nname: q\\nsem fim\\n", "---\\nname: q\\nsem fim\\n"),\n'
-        '        ("frontmatter que fecha sem corpo devolve o original",\n'
-        '         "---\\nname: q\\n---\\n", "---\\nname: q\\n---\\n"),\n'
-        '        ("três traços no meio do texto não são frontmatter",\n'
-        '         "texto\\n\\n---\\n\\nmais\\n", "texto\\n\\n---\\n\\nmais\\n"),\n'
-        '    ]\n'
-        '\n'
-        '    falhas = []\n'
-        '    for rotulo, entrada, esperado in CORPO:\n'
-        '        if corpo_sem_o_frontmatter(entrada) != esperado:\n'
-        '            falhas.append(rotulo)\n'
-        '    if sem_os_pedidos_de_exemplo(\n'
-        '            "# T\\n\\ntexto\\n\\n## Pedidos de exemplo\\n\\n- a\\n- b\\n") != "# T\\n\\ntexto\\n":\n'
-        '        falhas.append("a seção dos pedidos de exemplo é da régua do gatilho, "\n'
-        '                      "não da sessão: ela não entra na largada")\n'
-        '    if sem_os_pedidos_de_exemplo("# T\\n\\ntexto\\n") != "# T\\n\\ntexto\\n":\n'
-        '        falhas.append("corpo sem a seção passa inteiro")\n'
-        '\n'
-        '    with tempfile.TemporaryDirectory() as pasta:\n'
-        '        ausente = Path(pasta) / "nao-existe.md"\n'
-        '        if ler_a_skill(ausente) is not None:\n'
-        '            falhas.append("skill ausente devia devolver None")\n'
-        '        presente = Path(pasta) / "existe.md"\n'
-        '        presente.write_text("---\\na: b\\n---\\n\\ncorpo\\n", encoding="utf-8")\n'
-        '        if ler_a_skill(presente) != "---\\na: b\\n---\\n\\ncorpo\\n":\n'
-        '            falhas.append("skill presente devia voltar inteira")\n'
-        '        pasta_no_lugar_do_arquivo = Path(pasta) / "pasta"\n'
-        '        pasta_no_lugar_do_arquivo.mkdir()\n'
-        '        if ler_a_skill(pasta_no_lugar_do_arquivo) is not None:\n'
-        '            falhas.append("pasta no lugar do arquivo devia falhar aberto")\n'
-        '\n'
-        '    saida = json.loads(recado("corpo"))["hookSpecificOutput"]\n'
-        '    if saida["hookEventName"] != EVENTO_DE_INICIO_DE_SESSAO:\n'
-        '        falhas.append("o recado tem de nomear o evento de início de sessão")\n'
-        '    if saida["additionalContext"] != "corpo":\n'
-        '        falhas.append("o recado tem de levar o corpo")\n'
-        '\n'
-        '    DE_LEITURA, DE_RECADO, DOS_PEDIDOS = 3, 2, 2\n'
-        '    total = len(CORPO) + DE_LEITURA + DE_RECADO + DOS_PEDIDOS\n'
-        '    if falhas:\n'
-        '        print(RESUMO_FALHOU.format(len(falhas), total))\n'
-        '        for falha in falhas:\n'
-        '            print(FALHA.format(falha))\n'
-        '        return 1\n'
-        '    print(RESUMO_OK.format(total, len(CORPO), DE_LEITURA, DE_RECADO))\n'
-        '    return 0\n'
-        '\n'
-        '\n'
-        'if __name__ == "__main__":\n'
-        '    sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())\n'
     ),
     '.claude/hooks/vetar-branch-protegida.py': (
         'import json\n'
@@ -18548,6 +18594,9 @@ PAGINAS = {
         'PASTA_MODULOS = "modulos"\n'
         'ORIGEM_SKILLS = ".agents/skills"\n'
         'COPIA_SKILLS = ".claude/skills"\n'
+        'REGRA_DE_CODIGO = ".claude/rules/padrao-de-codigo.md"\n'
+        'SKILL_DO_PADRAO_DE_CODIGO = ".agents/skills/padrao-de-codigo/SKILL.md"\n'
+        'PASTA_MODULOS_NO_DISCO = "modulos"\n'
         'PASTA_DO_CONHECIMENTO = "conhecimento"\n'
         'CARTAO_DO_MODULO = "LEIAME.md"\n'
         'ARQUIVO_DE_PASTA_VAZIA = ".gitkeep"\n'
@@ -18680,6 +18729,9 @@ PAGINAS = {
         '        fonte = origem / caminho.relative_to(copia)\n'
         '        achadas[caminho.relative_to(raiz).as_posix()] = \\\n'
         '            fonte.relative_to(raiz).as_posix()\n'
+        '    if (raiz / REGRA_DE_CODIGO).is_file() \\\n'
+        '            and (raiz / SKILL_DO_PADRAO_DE_CODIGO).is_file():\n'
+        '        achadas[REGRA_DE_CODIGO] = SKILL_DO_PADRAO_DE_CODIGO\n'
         '    return achadas\n'
         '\n'
         '\n'
@@ -19198,13 +19250,17 @@ PAGINAS = {
         '                 and "--atualizar" in mensagem_fresca)\n'
         '\n'
         '    daqui = raiz_do_projeto_nunca_o_cwd()\n'
+        '    no_repositorio_da_camada = (daqui / PASTA_MODULOS_NO_DISCO).is_dir()\n'
         '    for copia, fonte in DESTE_REPOSITORIO_BARRA:\n'
+        '        esperada = fonte if no_repositorio_da_camada or not fonte.startswith(\n'
+        '            PASTA_MODULOS_NO_DISCO + "/") \\\n'
+        '            else MARCA_DE_MODULO_INSTALADO + fonte.split("/")[1]\n'
         '        recusa = recusa_do_pedido(\n'
         '            pedido_de_escrita("Write", copia), daqui, str(daqui))\n'
         '        if not recusa:\n'
         '            falhas.append(FALHA_DESTE_REPOSITORIO.format(copia))\n'
-        '        elif recusa[1] != fonte:\n'
-        '            falhas.append(FALHA_FONTE_ERRADA.format(copia, recusa[1], fonte))\n'
+        '        elif recusa[1] != esperada:\n'
+        '            falhas.append(FALHA_FONTE_ERRADA.format(copia, recusa[1], esperada))\n'
         '        if recusa_do_pedido(pedido_de_leitura(copia), daqui, str(daqui)):\n'
         '            falhas.append(FALHA_LEITURA_DESTE_REPOSITORIO.format(copia))\n'
         '    for fonte in DESTE_REPOSITORIO_PASSA:\n'
@@ -19212,10 +19268,14 @@ PAGINAS = {
         '                pedido_de_escrita("Write", fonte), daqui, str(daqui)):\n'
         '            falhas.append(FALHA_DEIXA_PASSAR.format(fonte, recusa[1]))\n'
         '\n'
-        '    esperadas = gabarito_do_instalador(daqui)\n'
+        '    esperadas = gabarito_do_instalador(daqui) if no_repositorio_da_camada else set()\n'
         '    if esperadas is None:\n'
         '        comportamento.append(\n'
         '            (SEM_INSTALADOR.format(INSTALADOR, INSTALADOR), False))\n'
+        '    elif not no_repositorio_da_camada:\n'
+        '        comportamento.append((\n'
+        '            "fora do repositório da camada o instalador não regenera módulo: a "\n'
+        '            "comparação com ele não se aplica aqui", True))\n'
         '    else:\n'
         '        derivadas = set(copias_geradas(daqui))\n'
         '        comportamento.append((\n'

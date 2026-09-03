@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from camada import (
+    regras_da_pasta, PASTA_DE_REGRAS,
     medidas_da_versao, custo_por_entrega,
     MEDIDA_VERSAO, MEDIDA_LARGADA, MEDIDA_CUSTO, MEDIDA_ROTA,
     MEDIDA_CUSTO_SEM_EXECUCAO, MEDIDA_CUSTO_MEDIDO,
@@ -167,6 +168,21 @@ def testar() -> int:
                                 ("c", 10.0, 10.0)])
              == MEDIDA_CUSTO_MEDIDO.format(3.0, 3, 100 * 3.0 / 14.0))
         (raiz / INSTALADOR).unlink()
+
+        regras = raiz / PASTA_DE_REGRAS
+        regras.mkdir(parents=True)
+        (regras / "sempre.md").write_text("# sempre\n", encoding="utf-8")
+        (regras / "codigo.md").write_text(
+            '---\npaths:\n  - "**/*.py"\n---\n\n# só com código\n' + "x" * 100,
+            encoding="utf-8")
+        sempre, por_caminho = regras_da_pasta(raiz)
+        caso("regra sem paths entra na largada; regra por caminho fica fora, "
+             "porque só carrega quando o arquivo tocado bate com o padrão",
+             sempre == len("# sempre\n") and por_caminho > 100
+             and medir(raiz)[1]["regras_por_caminho"] == por_caminho
+             and medir(raiz)[1]["instrucoes"] >= sempre)
+        (regras / "sempre.md").unlink()
+        (regras / "codigo.md").unlink()
 
         _, dados = medir(raiz)
         caso("a largada soma instruções mais catálogo, nunca o corpo",
