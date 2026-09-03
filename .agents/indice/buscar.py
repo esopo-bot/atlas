@@ -56,8 +56,9 @@ RECUSA_ALVO_NAO_INDEXADO = ("alvo que não está indexado: {}. O que existe no "
                             "banco:\n{}")
 NADA_INDEXADO = ("nada indexado no banco em {}: rode `indexar.py` antes. "
                  "Zero aqui não quer dizer que a resposta não existe")
-VAZIA = "  {} — coleção existe mas está VAZIA: a indexação não gravou nada"
-SEM_RESPOSTA = "  {} — nenhum trecho parecido"
+VAZIA = ("  {} — o banco não devolveu trecho nenhum: a coleção existe, mas a "
+         "busca voltou vazia — coleção recém-gravada ou indexação que não "
+         "gravou nada")
 CABECA = "BUSCA {} — \"{}\" em {} alvo(s)"
 MODO_HIBRIDO = "híbrida (significado + termo exato)"
 MODO_DENSO = "densa (só significado)"
@@ -227,17 +228,14 @@ def buscar(pergunta: str, dado: dict, alvo: str = "",
     print(CABECA.format(MODO_HIBRIDO if hibrida else MODO_DENSO, pergunta,
                         len(alvos)))
     achou = 0
-    for caminho, colecao, trechos in alvos:
-        if not trechos:
-            print(VAZIA.format(caminho))
-            continue
+    for caminho, colecao, _ in alvos:
         try:
             achados = banco.buscar(pergunta, colecao, quantos, hibrida)
         except (urllib.error.URLError, OSError, ValueError) as erro:
             print(FALHOU_A_CHAMADA.format(caminho, erro), file=sys.stderr)
             continue
         if not achados:
-            print(SEM_RESPOSTA.format(caminho))
+            print(VAZIA.format(caminho))
             continue
         print(LINHA_DO_ALVO.format(caminho))
         for item in achados:
@@ -315,9 +313,7 @@ def hibrido_vence_ou_empata(placar: dict) -> list:
 
 def medir_o_placar(banco: Banco, alvos: list) -> tuple:
     total, por_alvo = placar_vazio(), []
-    for caminho, colecao, trechos in alvos:
-        if not trechos:
-            continue
+    for caminho, colecao, _ in alvos:
         perguntas = perguntas_da_amostra(banco.amostra(colecao),
                                          PERGUNTAS_POR_ALVO)
         placar = placar_vazio()
@@ -407,6 +403,12 @@ def testar() -> int:
         caso("--alvo que não está indexado não bate com nada — a recusa diz "
              "o que existe, em vez de devolver vazio calado",
              escolher_alvos(indexados, "fantasma") == [])
+        caso("a contagem de linhas do banco NÃO decide se a coleção é vazia: "
+             "o Milvus devolve rowCount 0 em coleção recém-gravada com cem "
+             "trechos (medido em 03/09), então a busca sempre roda e só a "
+             "resposta vazia diz vazia",
+             "rowCount" not in buscar.__code__.co_names
+             and "quantos_trechos" not in buscar.__code__.co_names)
 
         pedido = pedido_hibrido([0.1, 0.2], "termo raro", "c1", 5)
         caso("o pedido híbrido leva o vetor no campo denso e a pergunta em "

@@ -14,7 +14,7 @@ máquina, fica fora do git.
 | --- | --- | --- |
 | `conhecimento/` | página que gente lê | sim, só `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json`. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
 | `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `perfil-de-repositorio` | não: é conteúdo do workspace, fora do git |
-| `.agents/` | instrumentos (Python), as skills (fonte) e os prompts de abertura em `.agents/prompts/` | os instrumentos e as skills, sim; dos prompts, o de verificação pós-atualização, o de abertura de projeto e o que prova que o agente lê a camada — o de abertura NA camada e o da auditoria externa ficam, porque só servem a quem melhora o atlas |
+| `.agents/` | instrumentos (Python), as skills (fonte) e os prompts de abertura em `.agents/prompts/` | os instrumentos e as skills, sim; dos prompts, o de verificação pós-atualização, o de abertura de projeto, o que prova que o agente lê a camada e o que organiza `conhecimento/` e `projetos/` pelas regras — o de abertura NA camada e o da auditoria externa ficam, porque só servem a quem melhora o atlas |
 | `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills e a regra por caminho do padrão de código, gerada da skill | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |
 | `modulos/` | peça opcional, que só chega para quem pedir pelo nome | não |
