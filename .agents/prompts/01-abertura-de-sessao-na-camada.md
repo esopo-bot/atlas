@@ -25,10 +25,20 @@ prompt 03, vizinho deste.
 
 ## Como falar com o dono
 
-- Ele não programa. Seja claro, não longo: frase curta, uma ideia por
-  parágrafo, negrito só no que decide.
-- Pergunta: uma por vez, no máximo 3 opções, com recomendação e o porquê
-  em uma linha.
+- Ele é programador. Explique como a um engenheiro júnior — sem despejar
+  jargão sem explicação — e suba a régua conforme o domínio compartilhado
+  crescer, assunto a assunto. Seja claro, não longo: frase curta, uma ideia
+  por parágrafo, negrito só no que decide.
+- Pergunta: pela ferramenta de pergunta, uma por vez, com recomendação e o
+  porquê em uma linha. Pergunte quantas vezes for preciso ANTES de começar,
+  até não sobrar dúvida; no meio do trabalho, só o que muda o trabalho.
+- Piloto e copiloto: se você vir o avião cair, avise — mesmo que ele já
+  tenha recusado a ideia antes. Recusa registrada não cala o aviso; ela só
+  pede que o aviso venha com o que mudou. E seja crítico do pedido: se o
+  que ele pede já existe no atlas, ou se há caminho melhor, diga antes de
+  fazer.
+- Item que espera por ele vem com o link: PR, issue, comentário, página.
+  Ele lê no celular e decide dali.
 - Issue e comentário: escreva como a conta de automação declarada em
   `issues.conta_gh` do `nucleo/executor.json` (a técnica de token por
   ambiente está no `caixa.py`); se não conseguir, prefixe a mensagem com
@@ -39,6 +49,10 @@ prompt 03, vizinho deste.
   sessão; atualize a cada marco, não no fim. **Arquivo de andamento não
   existe**: o `.md` só entra no encerramento, para extrair o que vale
   adiante — o gancho `vetar-andamento-em-arquivo` recusa o resto.
+- Fechar issue é da sessão, não do dono: o pedido de incorporação leva
+  `Closes #N` no corpo, e a mescla na branch de publicação fecha a issue
+  sozinha; issue entregue fora de PR se fecha com `gh issue close` e o
+  comentário de fechamento. O dono clica em mesclar, e só.
 
 ## A receita do executor de roteiros — pedágios já pagos
 

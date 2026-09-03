@@ -231,6 +231,14 @@
             ".agents/skills/portao/SKILL.md",
             ".claude/skills/portao/SKILL.md"
           ]
+        },
+        {
+          "caso": "o prompt 05 cita a skill `portao` pelo nome e pelo caminho, e pede as barreiras do portão como prova de leitura",
+          "ocorrencias": 3,
+          "razao": "é o nome da skill e o título dela, não o tipo de etapa que espera decisão humana.",
+          "arquivos": [
+            ".agents/prompts/05-o-agente-le-a-camada.md"
+          ]
         }
       ],
       "nota": "No JSON o tipo vira `\"tipo\": \"aprovacao-manual\"`, NÃO `aprovacao`: o campo `aprovacao` já existe na mesma etapa, e tipo com o mesmo nome de campo é o oposto de declarar. O estado `aguardando-portao` vira `aguardando-aprovacao`.",

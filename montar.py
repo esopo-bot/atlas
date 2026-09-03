@@ -1,4 +1,4 @@
-VERSAO = "0.705"
+VERSAO = "0.708"
 
 import functools
 import datetime
@@ -873,6 +873,7 @@ FONTES = (PAGINA_REGRAS,
           ".agents/skills/**/*",
           ".agents/prompts/02-verificacao-pos-atualizacao.md",
           ".agents/prompts/03-abertura-de-sessao-de-projeto.md",
+          ".agents/prompts/05-o-agente-le-a-camada.md",
           ".agents/evidencia/evidencia.py",
           ".agents/evidencia/recibo.schema.json",
           ".agents/verificar/verificar.py",
@@ -957,14 +958,14 @@ SECOES_INSTRUCOES = [
     ("O repositório", [
         "Camada genérica de skills e conhecimento para sessões de "
         "IA; `montar.py` a instala em outros repositórios.",
-        "O que viaja para quem instala: as regras (`nucleo/` e "
-        "`conhecimento/regras-da-camada.md`), as skills de `.agents/skills/`, "
-        "os instrumentos e os ganchos. As outras páginas de `conhecimento/` "
-        "ficam neste repositório.",
-        "Fonte que instrumento lê: `nucleo/`. `modulos/` não viaja — chega "
-        "por `--modulo <nome>`.",
-        "Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`; a "
-        "wiki dos vizinhos, `conhecimento/projetos/`.",
+        "Viaja para quem instala: regras (`nucleo/`, "
+        "`conhecimento/regras-da-camada.md`), skills, instrumentos, ganchos e "
+        "módulos ligados; as outras páginas de `conhecimento/` ficam aqui.",
+        "Fonte que instrumento lê: `nucleo/`.",
+        "Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`. Os "
+        "vizinhos clonados moram em `projetos/<nome>` — `ls projetos/` lista "
+        "o que existe; a wiki deles, `conhecimento/projetos/`, é perfil, não "
+        "prova.",
         "Rode `python montar.py --sincronizar` depois de editar página, "
         "skill, módulo ou `nucleo/`.",
     ]),
@@ -3137,6 +3138,14 @@ PAGINAS = {
         '            ".agents/skills/portao/SKILL.md",\n'
         '            ".claude/skills/portao/SKILL.md"\n'
         '          ]\n'
+        '        },\n'
+        '        {\n'
+        '          "caso": "o prompt 05 cita a skill `portao` pelo nome e pelo caminho, e pede as barreiras do portão como prova de leitura",\n'
+        '          "ocorrencias": 3,\n'
+        '          "razao": "é o nome da skill e o título dela, não o tipo de etapa que espera decisão humana.",\n'
+        '          "arquivos": [\n'
+        '            ".agents/prompts/05-o-agente-le-a-camada.md"\n'
+        '          ]\n'
         '        }\n'
         '      ],\n'
         '      "nota": "No JSON o tipo vira `\\"tipo\\": \\"aprovacao-manual\\"`, NÃO `aprovacao`: o campo `aprovacao` já existe na mesma etapa, e tipo com o mesmo nome de campo é o oposto de declarar. O estado `aguardando-portao` vira `aguardando-aprovacao`.",\n'
@@ -3391,10 +3400,12 @@ PAGINAS = {
         '\n'
         '## O fluxo\n'
         '\n'
-        '1. **Consulte a wiki.** O mapa em `conhecimento/projetos/LEIAME.md` diz o que\n'
-        '   cada repositório oferece; o perfil do repositório alvo e dos vizinhos diz\n'
-        '   onde está e que padrões seguir. Sem wiki no workspace, diga isso e sugira\n'
-        '   gerá-la (skill `perfil-de-repositorio`).\n'
+        '1. **Liste o que está clonado, depois consulte a wiki.** A lista do que\n'
+        '   existe é a pasta dos repositórios (`ls projetos/`, ou a que o workspace\n'
+        '   usar) — a wiki em `conhecimento/projetos/LEIAME.md` é o perfil destilado\n'
+        '   de cada um, e pode estar atrasada: repositório sem perfil ainda existe.\n'
+        '   Nunca conclua "não está clonado" pela wiki; conclua pela pasta. Sem wiki\n'
+        '   no workspace, diga isso e sugira gerá-la (skill `perfil-de-repositorio`).\n'
         '2. **Busque na hora.** A wiki é destilada; o código é a verdade. Procure o\n'
         '   conceito nos repositórios antes de concluir que não existe:\n'
         '\n'
@@ -4894,6 +4905,10 @@ PAGINAS = {
         'Várias sessões podem trabalhar ao mesmo tempo, e o que separa uma da outra\n'
         'é o território, não o assunto:\n'
         '\n'
+        '- **Os vizinhos moram em `projetos/<nome>`**, clonados nesta máquina; a\n'
+        '  wiki em `conhecimento/projetos/` é o perfil deles, não a prova de que\n'
+        '  existem. `ls projetos/` antes de dizer ao dono que algo não está clonado\n'
+        '  — em 03/09 uma sessão perguntou isso com os três repositórios na pasta.\n'
         '- **Cada sessão escreve só no seu alvo** — o repositório declarado em\n'
         '  `PROJETO`. Pasta de outro projeto é de outra sessão, mesmo que o pedido\n'
         '  pareça o mesmo: duas sessões receberam a mesma tarefa em 01/09 e só não\n'
@@ -4976,6 +4991,56 @@ PAGINAS = {
         '\n'
         '<escreva aqui o pedido desta sessão: o alvo, o que muda nele quando\n'
         'fechar, o que está fora, e a prioridade se houver mais de um bloco>\n'
+    ),
+    '.agents/prompts/05-o-agente-le-a-camada.md': (
+        '# Prove que você lê a camada — antes de trabalhar\n'
+        '\n'
+        'Prompt para QUALQUER agente de IA aberto na raiz de um repositório que\n'
+        'instalou a camada: cole inteiro e deixe o agente responder. Serve para o\n'
+        'agente de terminal, o assistente do editor e o Claude Code. O objetivo é um\n'
+        'só: o agente prova, com saída colada, que enxerga as instruções e as skills\n'
+        'que este repositório carrega — ou diz exatamente o que não enxerga.\n'
+        '\n'
+        '## O que você faz, nesta ordem\n'
+        '\n'
+        '1. **Liste as skills que você enxerga agora**, pelo nome, sem abrir pasta\n'
+        '   nenhuma. Depois rode `ls .agents/skills` e compare: o que está na pasta\n'
+        '   e não apareceu na sua lista é skill que você NÃO lê. Cole as duas listas.\n'
+        '2. **Responda sem abrir arquivo:** quais são as nove barreiras do portão da\n'
+        '   camada, na ordem? Só depois abra `.agents/skills/portao/SKILL.md` e\n'
+        '   confira. Acertou os nove nomes na ordem: você leu a skill. Inventou ou\n'
+        '   pulou: não leu. Diga qual foi.\n'
+        '3. **Responda sem abrir arquivo:** o que este repositório manda fazer antes\n'
+        '   de criar algo novo, e quem pode publicar? Depois abra `AGENTS.md` e\n'
+        '   confira. "Procurar e citar o que já existe" e "publicar é do dono" são as\n'
+        '   respostas que provam a leitura.\n'
+        '4. **Diga de onde você lê instrução e skill** — o nome exato dos arquivos e\n'
+        '   pastas que o seu runtime carrega neste repositório. Se você não sabe,\n'
+        '   diga "não sei", nunca chute.\n'
+        '5. **Repita 1 a 3 numa conversa nova**, porque uma medição não é medição: a\n'
+        '   escolha de skill varia entre conversas.\n'
+        '\n'
+        '## O que você entrega\n'
+        '\n'
+        'Uma tabela, colada num comentário da issue que pediu esta prova:\n'
+        '\n'
+        '| passo | resultado | prova colada |\n'
+        '| --- | --- | --- |\n'
+        '| skills que enxergo | N de M da pasta | as duas listas |\n'
+        '| barreiras do portão | acertei / errei em ... | a resposta antes de abrir |\n'
+        '| ordem do AGENTS.md | acertei / errei em ... | a resposta antes de abrir |\n'
+        '| de onde leio | arquivos e pastas | a lista, ou "não sei" |\n'
+        '| repetição | igual / diferente em ... | a segunda rodada |\n'
+        '\n'
+        'E um veredito em uma linha: **leio os dois**, **leio só as skills**, **leio só\n'
+        'o AGENTS.md** ou **não leio nenhum**. Onde não ler, o que faltou, com nome:\n'
+        'arquivo que o runtime não carrega, configuração que falta, política que barra.\n'
+        'Nada de suposição.\n'
+        '\n'
+        '## O que você NÃO faz\n'
+        '\n'
+        'Não instale nada, não mude configuração, não edite a camada. Se algo barrar,\n'
+        'isso é achado para o dono, com a mensagem exata — não conserto seu.\n'
     ),
     '.agents/evidencia/evidencia.py': (
         'import argparse\n'

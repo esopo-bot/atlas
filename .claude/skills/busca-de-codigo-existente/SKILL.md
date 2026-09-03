@@ -10,10 +10,12 @@ vizinho. Esta skill o troca por procurar → citar → só então criar.
 
 ## O fluxo
 
-1. **Consulte a wiki.** O mapa em `conhecimento/projetos/LEIAME.md` diz o que
-   cada repositório oferece; o perfil do repositório alvo e dos vizinhos diz
-   onde está e que padrões seguir. Sem wiki no workspace, diga isso e sugira
-   gerá-la (skill `perfil-de-repositorio`).
+1. **Liste o que está clonado, depois consulte a wiki.** A lista do que
+   existe é a pasta dos repositórios (`ls projetos/`, ou a que o workspace
+   usar) — a wiki em `conhecimento/projetos/LEIAME.md` é o perfil destilado
+   de cada um, e pode estar atrasada: repositório sem perfil ainda existe.
+   Nunca conclua "não está clonado" pela wiki; conclua pela pasta. Sem wiki
+   no workspace, diga isso e sugira gerá-la (skill `perfil-de-repositorio`).
 2. **Busque na hora.** A wiki é destilada; o código é a verdade. Procure o
    conceito nos repositórios antes de concluir que não existe:
 

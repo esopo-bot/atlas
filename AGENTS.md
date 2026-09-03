@@ -8,14 +8,13 @@ Para qualquer agente de IA neste repositório.
 
 - Camada genérica de skills e conhecimento para sessões de IA; `montar.py` a
   instala em outros repositórios.
-- O que viaja para quem instala: as regras (`nucleo/` e
-  `conhecimento/regras-da-camada.md`), as skills de `.agents/skills/`, os
-  instrumentos e os ganchos. As outras páginas de `conhecimento/` ficam neste
-  repositório.
-- Fonte que instrumento lê: `nucleo/`. `modulos/` não viaja — chega por
-  `--modulo <nome>`.
-- Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`; a wiki dos
-  vizinhos, `conhecimento/projetos/`.
+- Viaja para quem instala: regras (`nucleo/`,
+  `conhecimento/regras-da-camada.md`), skills, instrumentos, ganchos e módulos
+  ligados; as outras páginas de `conhecimento/` ficam aqui.
+- Fonte que instrumento lê: `nucleo/`.
+- Onde escrever cada coisa: `conhecimento/mapa-do-repositorio.md`. Os vizinhos
+  clonados moram em `projetos/<nome>` — `ls projetos/` lista o que existe; a
+  wiki deles, `conhecimento/projetos/`, é perfil, não prova.
 - Rode `python montar.py --sincronizar` depois de editar página, skill, módulo
   ou `nucleo/`.
 

@@ -21,6 +21,10 @@ em nada que a camada rastreie.
 Várias sessões podem trabalhar ao mesmo tempo, e o que separa uma da outra
 é o território, não o assunto:
 
+- **Os vizinhos moram em `projetos/<nome>`**, clonados nesta máquina; a
+  wiki em `conhecimento/projetos/` é o perfil deles, não a prova de que
+  existem. `ls projetos/` antes de dizer ao dono que algo não está clonado
+  — em 03/09 uma sessão perguntou isso com os três repositórios na pasta.
 - **Cada sessão escreve só no seu alvo** — o repositório declarado em
   `PROJETO`. Pasta de outro projeto é de outra sessão, mesmo que o pedido
   pareça o mesmo: duas sessões receberam a mesma tarefa em 01/09 e só não
