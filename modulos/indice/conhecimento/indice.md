@@ -287,6 +287,21 @@ python3 .agents/indice/indexar.py               # indexa, esperando cada um term
 python3 .agents/indice/indexar.py --refazer     # reindexa o que já está indexado
 ```
 
+**Ligar a ronda no ritual.** O indexador tem estado: `--ligar` grava
+`"ligado": true` no `alvos.json`, `--desligar` tira, `--estado` diz como está
+e como foi a última ronda. Ligado, a rotina `indice` do ritual roda
+`--ronda`: indexa só o que mudou em cada alvo — o servidor compara por árvore
+de Merkle, e alvo sem mudança leva um segundo — com teto curto por alvo.
+Desligado, a rotina diz isso e passa. A indexação inteira de um acervo grande
+não cabe no ritual: ela roda de fundo pelo mesmo instrumento, e a ronda só
+acompanha depois.
+
+```bash
+python3 .agents/indice/indexar.py --ligar
+python3 .agents/indice/indexar.py --estado
+nohup python3 .agents/indice/indexar.py > tmp/indexacao.log 2>&1 &   # a primeira, de fundo
+```
+
 **Por que ele ESPERA, e por que isso não é detalhe:** o `index_codebase`
 devolve na hora e indexa em segundo plano. Quem dispara e encerra o processo
 **aborta o trabalho do servidor** — a rodada parece ter terminado em zero

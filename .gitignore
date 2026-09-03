@@ -78,7 +78,9 @@ __pycache__/
 # Os alvos do indexador sao caminhos DESTA maquina, e o servidor
 # mora fora do repositorio. O indice nunca viaja — so a receita.
 .agents/indice/alvos.json
+.agents/indice/ultima-ronda.json
 modulos/indice/.agents/indice/alvos.json
+modulos/indice/.agents/indice/ultima-ronda.json
 modulos/indice/.agents/indice/docker-compose.override.yml
 
 .playwright-mcp/

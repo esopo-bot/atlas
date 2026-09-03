@@ -1,4 +1,6 @@
 import argparse
+import contextlib
+import io
 import json
 import os
 import re
@@ -19,6 +21,17 @@ CAMPO_DO_SERVIDOR = "servidor"
 CAMPO_DO_AMBIENTE = "ambiente"
 CAMPO_DO_QUE_IGNORAR = "ignorar"
 CAMPO_DOS_PADROES_IGNORADOS = "ignorePatterns"
+CAMPO_DO_LIGADO = "ligado"
+ARQUIVO_DA_ULTIMA_RONDA = ".agents/indice/ultima-ronda.json"
+TEMPO_DA_RONDA = 300
+RONDA_DESLIGADA = ("índice desligado em {}: nada a indexar. Ligue com "
+                   "`indexar.py --ligar` quando quiser a ronda no ritual")
+LIGADO = "índice LIGADO em {}: a ronda indexa o que mudou em {} alvo(s)"
+DESLIGADO = "índice desligado em {}: a ronda não roda"
+ESTADO_DA_ULTIMA_RONDA = ("última ronda em {quando}: {feitos} indexado(s), "
+                          "{pulados} já estava(m), {sem_elegivel} sem arquivo "
+                          "elegível, {falharam} falhou(ram), em {duracao}")
+SEM_RONDA_AINDA = "nenhuma ronda registrada ainda"
 
 PROTOCOLO = "2024-11-05"
 QUEM_CHAMA = {"name": "indexar", "version": "1"}
@@ -114,6 +127,52 @@ def configuracao(cwd: str = "") -> dict:
         return json.loads(alvo.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def gravar_configuracao(dado: dict, cwd: str = "") -> None:
+    alvo = Path(cwd or ".") / ARQUIVO_DOS_ALVOS
+    alvo.write_text(json.dumps(dado, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+
+
+def esta_ligado(dado: dict) -> bool:
+    return bool(dado.get(CAMPO_DO_LIGADO))
+
+
+def estado_em_uma_linha(dado: dict) -> str:
+    if esta_ligado(dado):
+        return LIGADO.format(ARQUIVO_DOS_ALVOS,
+                             len(dado.get(CAMPO_DOS_ALVOS) or []))
+    return DESLIGADO.format(ARQUIVO_DOS_ALVOS)
+
+
+def ligar(dado: dict, cwd: str, ligado: bool) -> int:
+    dado[CAMPO_DO_LIGADO] = ligado
+    gravar_configuracao(dado, cwd)
+    print(estado_em_uma_linha(dado))
+    return 0
+
+
+def ultima_ronda(cwd: str = ""):
+    alvo = Path(cwd or ".") / ARQUIVO_DA_ULTIMA_RONDA
+    try:
+        return json.loads(alvo.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def gravar_ultima_ronda(cwd: str, resumo: dict) -> None:
+    alvo = Path(cwd or ".") / ARQUIVO_DA_ULTIMA_RONDA
+    alvo.write_text(json.dumps(resumo, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
+
+
+def estado(dado: dict, cwd: str) -> int:
+    print(estado_em_uma_linha(dado))
+    registro = ultima_ronda(cwd)
+    print(ESTADO_DA_ULTIMA_RONDA.format(**registro) if registro
+          else SEM_RONDA_AINDA)
+    return 0
 
 
 def recusa_da_configuracao(dado: dict, cwd: str = "") -> str:
@@ -347,7 +406,7 @@ def ensaiar(alvos: list, extensoes) -> int:
 
 
 def indexar(dado: dict, teto: int, refazer: bool = False,
-            extensoes=None) -> int:
+            extensoes=None, cwd: str = "") -> int:
     alvos = dado[CAMPO_DOS_ALVOS]
     servidor = Servidor(dado[CAMPO_DO_SERVIDOR], dado.get(CAMPO_DO_AMBIENTE))
     print(CABECA_DA_RODADA.format(len(alvos), dado[CAMPO_DO_SERVIDOR]))
@@ -401,9 +460,13 @@ def indexar(dado: dict, teto: int, refazer: bool = False,
                   flush=True)
     servidor.encerra()
     falharam = len(alvos) - feitos - pulados - sem_elegivel
-    print(RESUMO_COM_PULADOS.format(
-        feitos, pulados, sem_elegivel, falharam,
-        duracao(time.monotonic() - comeco_da_rodada)))
+    gasto = duracao(time.monotonic() - comeco_da_rodada)
+    print(RESUMO_COM_PULADOS.format(feitos, pulados, sem_elegivel, falharam,
+                                    gasto))
+    gravar_ultima_ronda(cwd, {
+        "quando": time.strftime("%Y-%m-%dT%H:%M:%S"), "feitos": feitos,
+        "pulados": pulados, "sem_elegivel": sem_elegivel,
+        "falharam": falharam, "duracao": gasto})
     return 0 if not falharam else 1
 
 
@@ -570,6 +633,35 @@ def testar() -> int:
         caso("duração sai em minutos quando passa de um minuto",
              duracao(90) == "1.5 min" and duracao(30) == "30s")
 
+        (raiz / ".agents" / "indice").mkdir(parents=True)
+        cwd = str(raiz)
+        caso("sem a chave, o índice está desligado — a ronda nasce muda, e "
+             "quem quer o ritual indexando liga de propósito",
+             not esta_ligado({}) and not esta_ligado(configuracao(cwd)))
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            ligar({CAMPO_DOS_ALVOS: [str(acervo)]}, cwd, True)
+        caso("--ligar grava a chave no arquivo dos alvos e diz que ligou",
+             esta_ligado(configuracao(cwd)) and "LIGADO" in saida.getvalue())
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            ligar(configuracao(cwd), cwd, False)
+        caso("--desligar desliga sem apagar os alvos",
+             not esta_ligado(configuracao(cwd))
+             and configuracao(cwd)[CAMPO_DOS_ALVOS] == [str(acervo)])
+        caso("sem ronda registrada, o estado diz isso em vez de inventar "
+             "zero",
+             ultima_ronda(cwd) is None)
+        gravar_ultima_ronda(cwd, {"quando": "2026-09-03T06:00:00",
+                                  "feitos": 1, "pulados": 9,
+                                  "sem_elegivel": 0, "falharam": 0,
+                                  "duracao": "12s"})
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            estado(configuracao(cwd), cwd)
+        caso("o estado mostra a última ronda gravada, com os quatro números",
+             "1 indexado(s), 9 já estava(m)" in saida.getvalue())
+
     print(f"{'OK' if not falhou else 'FALHOU'}: {passou + falhou} casos")
     return 1 if falhou else 0
 
@@ -583,6 +675,16 @@ def montar_parser() -> argparse.ArgumentParser:
                         help="teto em segundos de cada alvo")
     parser.add_argument("--refazer", action="store_true",
                         help="reindexa o que já está indexado")
+    parser.add_argument("--ligar", action="store_true",
+                        help="liga a ronda: o ritual passa a indexar o que "
+                             "mudou")
+    parser.add_argument("--desligar", action="store_true",
+                        help="desliga a ronda sem apagar nada")
+    parser.add_argument("--estado", action="store_true",
+                        help="diz se está ligado e como foi a última ronda")
+    parser.add_argument("--ronda", action="store_true",
+                        help="indexa só o que mudou, se ligado; feito para o "
+                             "ritual, com teto curto por alvo")
     parser.add_argument(BANDEIRA_DE_TESTE, action="store_true")
     return parser
 
@@ -592,13 +694,22 @@ def main() -> int:
         return testar()
     a = montar_parser().parse_args()
     dado = configuracao(a.cwd)
+    if a.ligar or a.desligar:
+        return ligar(dado, a.cwd, a.ligar)
+    if a.estado:
+        return estado(dado, a.cwd)
+    if a.ronda and not esta_ligado(dado):
+        print(RONDA_DESLIGADA.format(ARQUIVO_DOS_ALVOS))
+        return 0
     if (recusa := recusa_da_configuracao(dado, a.cwd)):
         print(recusa, file=sys.stderr)
         return 2
     extensoes = extensoes_do_servidor(dado[CAMPO_DO_SERVIDOR])
     if a.ensaio:
         return ensaiar(dado[CAMPO_DOS_ALVOS], extensoes)
-    return indexar(dado, a.tempo_limite, a.refazer, extensoes)
+    teto = TEMPO_DA_RONDA if a.ronda and a.tempo_limite == TEMPO_POR_ALVO \
+        else a.tempo_limite
+    return indexar(dado, teto, a.refazer, extensoes, a.cwd)
 
 
 if __name__ == "__main__":

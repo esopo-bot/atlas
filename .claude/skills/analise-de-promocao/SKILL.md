@@ -48,7 +48,8 @@ abrir outra.
 
 Não achou página nenhuma? A página nova só se propõe **com o endereço de
 chegada junto** — o link vindo de uma página que já é lida. A regra está em
-`conhecimento/mapa-do-repositorio.md`, em "Página nova precisa de quem a leia":
+`conhecimento/mapa-do-repositorio.md` do repositório de origem da camada, em
+"Página nova precisa de quem a leia":
 conhecimento sem endereço não existe para quem precisa dele, e há rotina que
 reprova página órfã.
 

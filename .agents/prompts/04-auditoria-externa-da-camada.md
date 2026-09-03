@@ -8,7 +8,7 @@ você, não o contrário.
 
 ## Por que uma sessão de fora
 
-O ritual do repositório tem doze rotinas e elas passam verdes com defeito
+O ritual do repositório tem treze rotinas e elas passam verdes com defeito
 grave dentro. Já aconteceu: um instrumento nunca conseguiu mover o cartão do
 quadro por falta de permissão e a recusa aparecia como "não achei" — semanas
 assim, ritual verde o tempo todo. Ritual verifica o que alguém pensou em
@@ -31,7 +31,10 @@ mediu.
 
 - [ ] `cat AGENTS.md` e `cat CLAUDE.md` — as instruções que toda sessão paga.
 - [ ] `python3 verificacoes.py` — a lista das rotinas e o que cada uma prova.
-- [ ] `python3 verificacoes.py ritual` — rode e leia a saída inteira.
+- [ ] `python3 verificacoes.py ritual` — rode e leia a saída inteira. Ela passa
+      de 100 KB: leia por seção, com `grep` ou `awk`, em vez de abrir tudo de
+      uma vez — leitor que estoura o teto de saída perde o fim, que é onde
+      mora o veredito.
 - [ ] `python3 verificacoes.py instalada` — **esta não está no ritual** e é a
       que roda o `--testar` de cada gancho e instrumento. Rode sempre.
 - [ ] `python3 .agents/camada/camada.py --largada` — o que toda sessão paga
@@ -62,6 +65,15 @@ Para cada peça que você encontrar, pergunte nesta ordem:
 - [ ] Cópia gerada que diverge da fonte sem ninguém acusar.
 - [ ] Cerca que barra por uma via e cala por outra — o mesmo efeito por
       `Edit` e por `Bash`, por exemplo.
+- [ ] Cerca que reconhece uma **lista fechada de programas**: liste todo
+      programa que o parser de comando conhece e pergunte o que produz o
+      mesmo efeito e NÃO está na lista. A falha mora dentro do mesmo canal,
+      não entre canais — em 03/09/2026 foi `curl -o`, `wget -O`, `rsync`,
+      `perl -i` e `dd of=` atravessando quatro cercas de escrita que só
+      conheciam `rm`, `mv`, `cp`, `tee` e `sed -i`.
+- [ ] **Antes de atacar um gancho, leia a issue mais recente que o tocou**
+      (`gh issue list --search "<nome do gancho>"`). Achado que a issue já
+      discutiu e deixou fora de propósito não é achado — é comentário nela.
 - [ ] Recusa de permissão que aparece como "não encontrei".
 
 ### 4. Consulte a documentação oficial, e cite

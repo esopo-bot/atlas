@@ -30,7 +30,8 @@ mentindo. Só crie nova quando o assunto for outro de verdade.
 
 Leia comigo a fonte — sistema interno, wiki, chamado, tela — com a
 ferramenta de navegador disponível. Não tem uma? A receita de montar está em
-`conhecimento/navegador-por-projeto.md`. Enquanto lê:
+`conhecimento/navegador-por-projeto.md`, no repositório de origem da camada.
+Enquanto lê:
 
 - **Resuma em voz alta**: o que esta tela decide, o que ela exige antes, o
   que ela quebra se estiver errada. Pergunte o que não estiver claro.
