@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import re
-import shlex
 import sys
 from datetime import date
 from pathlib import Path
@@ -698,8 +697,8 @@ def testar() -> int:
                 corpo.read_text(encoding="utf-8")))
 
         guardado = dict(os.environ)
-        os.environ[gh.VARIAVEL_DO_GH] = " ".join(
-            shlex.quote(str(parte)) for parte in (sys.executable, falso_gh))
+        os.environ[gh.VARIAVEL_DO_GH] = gh.linha_de_comando(sys.executable,
+                                                           falso_gh)
         os.environ["CAIXA_TESTE_CORPO"] = str(corpo)
         os.environ["CAIXA_TESTE_LOG"] = str(registro)
         os.environ["CAIXA_TESTE_COMENTARIOS"] = str(comentarios)

@@ -200,7 +200,7 @@ def _bancada(pasta: Path):
     falso = caixa / "gh-falso.py"
     falso.write_text(FALSO_GH, encoding="utf-8")
     os.environ["ENTREGA_TESTE_CAIXA"] = str(caixa)
-    os.environ[gh.VARIAVEL_DO_GH] = f"{sys.executable} {falso}"
+    os.environ[gh.VARIAVEL_DO_GH] = gh.linha_de_comando(sys.executable, falso)
     return caixa
 
 

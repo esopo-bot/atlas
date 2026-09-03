@@ -1,4 +1,4 @@
-VERSAO = "0.711"
+VERSAO = "0.712"
 
 import functools
 import datetime
@@ -2084,7 +2084,15 @@ def _saiu_com_erro(chamada) -> bool:
     return False
 
 
+BANCADA_SO_NA_CASA = ("bancada de testes ausente: os casos do instalador só "
+                      "rodam no repositório da camada, onde modulos/ e as "
+                      "fontes existem. Nada a rodar aqui.")
+
+
 def testar() -> int:
+    if not e_a_casa_do_desenvolvimento(casa_do_instalador()):
+        print(BANCADA_SO_NA_CASA)
+        return 0
     import contextlib
     import io
     import tempfile
@@ -10209,13 +10217,31 @@ PAGINAS = {
         '\n'
         'GH_PADRAO = "gh"\n'
         'VARIAVEL_DO_GH = "ATLAS_GH"\n'
+        'SISTEMA_WINDOWS = "nt"\n'
+        'ASPAS = "\\"\'"\n'
         'TEMPO_DO_GH = 60\n'
         'LIMITE_DO_ERRO = 300\n'
         'NAO_RODOU = "o gh não rodou"\n'
         '\n'
         '\n'
+        'def _sem_as_aspas_que_envolvem(token: str) -> str:\n'
+        '    if len(token) >= 2 and token[0] in ASPAS and token[-1] == token[0]:\n'
+        '        return token[1:-1]\n'
+        '    return token\n'
+        '\n'
+        '\n'
+        'def partir_comando(valor: str, windows: bool = os.name == SISTEMA_WINDOWS) -> list:\n'
+        '    if not windows:\n'
+        '        return shlex.split(valor)\n'
+        '    return [_sem_as_aspas_que_envolvem(t) for t in shlex.split(valor, posix=False)]\n'
+        '\n'
+        '\n'
+        'def linha_de_comando(*partes) -> str:\n'
+        '    return " ".join(f\'"{parte}"\' for parte in partes)\n'
+        '\n'
+        '\n'
         'def _comando() -> list:\n'
-        '    return shlex.split(os.environ.get(VARIAVEL_DO_GH, GH_PADRAO))\n'
+        '    return partir_comando(os.environ.get(VARIAVEL_DO_GH, GH_PADRAO))\n'
         '\n'
         '\n'
         'def rodar(argumentos: list, ambiente: dict = None, entrada=None):\n'
@@ -10283,7 +10309,22 @@ PAGINAS = {
         '        falso = caixa / "gh-falso.py"\n'
         '        falso.write_text(FALSO, encoding="utf-8")\n'
         '        os.environ["GH_TESTE_CAIXA"] = str(caixa)\n'
-        '        os.environ[VARIAVEL_DO_GH] = f"{sys.executable} {falso}"\n'
+        '        os.environ[VARIAVEL_DO_GH] = linha_de_comando(sys.executable, falso)\n'
+        '\n'
+        '        caso("caminho do Windows com espaço e contrabarra fica inteiro: o "\n'
+        '             "shlex posix quebrava C:\\\\Program Files em dois e comia as barras, "\n'
+        '             "e o gh falso nunca rodava",\n'
+        '             partir_comando(\n'
+        '                 \'"C:\\\\Program Files\\\\Python314\\\\python.exe" "C:\\\\x\\\\gh falso.py"\',\n'
+        '                 windows=True)\n'
+        '             == ["C:\\\\Program Files\\\\Python314\\\\python.exe", "C:\\\\x\\\\gh falso.py"])\n'
+        '        caso("no Linux o mesmo comando entre aspas também fica inteiro",\n'
+        '             partir_comando(\'"/tmp/com espaco/python3" "/tmp/x/gh.py"\',\n'
+        '                            windows=False)\n'
+        '             == ["/tmp/com espaco/python3", "/tmp/x/gh.py"])\n'
+        '        caso("a linha de comando que os testes montam vai com aspas em cada "\n'
+        '             "parte — é o que sobrevive aos dois sistemas",\n'
+        '             linha_de_comando("a b", "c") == \'"a b" "c"\')\n'
         '\n'
         '        caso("sem conta declarada não há token — e o gh usa a conta ativa",\n'
         '             token_da_conta("") == "")\n'
@@ -10323,7 +10364,6 @@ PAGINAS = {
         'import json\n'
         'import os\n'
         'import re\n'
-        'import shlex\n'
         'import sys\n'
         'from datetime import date\n'
         'from pathlib import Path\n'
@@ -11019,8 +11059,8 @@ PAGINAS = {
         '                corpo.read_text(encoding="utf-8")))\n'
         '\n'
         '        guardado = dict(os.environ)\n'
-        '        os.environ[gh.VARIAVEL_DO_GH] = " ".join(\n'
-        '            shlex.quote(str(parte)) for parte in (sys.executable, falso_gh))\n'
+        '        os.environ[gh.VARIAVEL_DO_GH] = gh.linha_de_comando(sys.executable,\n'
+        '                                                           falso_gh)\n'
         '        os.environ["CAIXA_TESTE_CORPO"] = str(corpo)\n'
         '        os.environ["CAIXA_TESTE_LOG"] = str(registro)\n'
         '        os.environ["CAIXA_TESTE_COMENTARIOS"] = str(comentarios)\n'
@@ -11569,7 +11609,7 @@ PAGINAS = {
         '    falso = caixa / "gh-falso.py"\n'
         '    falso.write_text(FALSO_GH, encoding="utf-8")\n'
         '    os.environ["ENTREGA_TESTE_CAIXA"] = str(caixa)\n'
-        '    os.environ[gh.VARIAVEL_DO_GH] = f"{sys.executable} {falso}"\n'
+        '    os.environ[gh.VARIAVEL_DO_GH] = gh.linha_de_comando(sys.executable, falso)\n'
         '    return caixa\n'
         '\n'
         '\n'
