@@ -89,7 +89,7 @@ def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):
         try:
             corrida = subprocess.run(comando, shell=True, cwd=raiz, env=ambiente,
                                      input=json.dumps(pergunta),
-                                     capture_output=True, text=True,
+                                     capture_output=True, text=True, encoding="utf-8", errors="replace",
                                      timeout=TEMPO_DE_UMA_CERCA_S)
         except (subprocess.SubprocessError, OSError):
             continue

@@ -32,7 +32,7 @@ for linha in ENVFILE.read_text(encoding="utf-8").splitlines():
 if os.name == "nt":
     for nome, valor in nomes:
         publicou = subprocess.run(["setx", nome, valor],
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True, encoding="utf-8", errors="replace")
         if publicou.returncode != 0:
             sys.exit(FALHA_AO_PUBLICAR.format(
                 nome, publicou.stderr.strip()[:100]))

@@ -312,7 +312,8 @@
           "ocorrencias": 2,
           "razao": "outro referente: é arquivo vizinho no mesmo repositório, não repositório vizinho. 'repositório vizinho .md' não existe.",
           "arquivos": [
-            ".agents/camada/camada.py"
+            ".agents/camada/camada.py",
+            ".agents/camada/testes.py"
           ]
         }
       ],

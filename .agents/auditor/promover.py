@@ -48,7 +48,7 @@ def promover(trabalho: str, nomeados: list, cwd: str = "") -> tuple:
         if cwd:
             comando += ["--cwd", cwd]
         try:
-            feito = subprocess.run(comando, capture_output=True, text=True,
+            feito = subprocess.run(comando, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                    timeout=TEMPO_DA_CAIXA)
         except (OSError, subprocess.SubprocessError) as erro:
             recados.append(FALHOU_AO_PROMOVER.format(um["id"], erro))

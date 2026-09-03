@@ -10,7 +10,8 @@
       "id": 1,
       "regra": "Abra a sessão na raiz — a pasta que tem o `AGENTS.md`.",
       "faca": [
-        "O que decide é onde você abre, não onde o arquivo mora: numa subpasta, a sessão roda sem as skills da raiz, e nada avisa."
+        "O que decide é onde você abre, não onde o arquivo mora: numa subpasta, a sessão roda sem as skills da raiz, e nada avisa.",
+        "A sessão já está na raiz: não prefixe comando com `cd <raiz>;` nem use caminho relativo depois de um `cd` — o auto mode não consegue saber que pasta o comando lê, e para para perguntar ao dono a cada comando. Escreva o caminho absoluto no próprio argumento; o harness devolve o cwd depois de todo `cd`, então o prefixo é redundante."
       ],
       "procedencia": {
         "titulo": "mapa do repositório",
@@ -32,7 +33,8 @@
         "Antes de agir sobre uma conclusão importante, rode a skill `verificacao-adversarial`: ela separa o provado do suposto e desenha a medição mais barata que derrubaria cada suposição.",
         "Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova.",
         "Estado que se relata se lê na hora: antes de dizer a alguém o que falta numa issue, num pedido de incorporação ou num arquivo, abra e leia. Resumo de memória envelhece calado, e o que sai dele é dedução vestida de fato.",
-        "Prova feita aqui não vale lá. Proposta que depende de ferramenta — instalar pacote, subir container, baixar modelo, registrar servidor MCP — vem com o comando de UMA linha que a pessoa roda no ambiente dela ANTES de tentar, e com o contorno quando ele já é conhecido. Ambiente corporativo trancado é a regra em empresa grande, não a exceção: proxy que reassina TLS com autoridade interna, política que barra comando de linha, registro de pacote bloqueado por categoria, proxy autenticado que derruba download de binário nativo. Quem propõe sem o teste do ambiente empurra a descoberta para quem instala, e ela custa o dobro lá."
+        "Prova feita aqui não vale lá. Proposta que depende de ferramenta — instalar pacote, subir container, baixar modelo, registrar servidor MCP — vem com o comando de UMA linha que a pessoa roda no ambiente dela ANTES de tentar, e com o contorno quando ele já é conhecido. Ambiente corporativo trancado é a regra em empresa grande, não a exceção: proxy que reassina TLS com autoridade interna, política que barra comando de linha, registro de pacote bloqueado por categoria, proxy autenticado que derruba download de binário nativo. Quem propõe sem o teste do ambiente empurra a descoberta para quem instala, e ela custa o dobro lá.",
+        "Uma medição não é medição. Onde a saída varia entre execuções iguais — escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e desconfie de diferença menor que ele. Rodada única não separa causa de acaso: ela devolve um número, e número sozinho parece fato."
       ]
     },
     {

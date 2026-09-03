@@ -183,6 +183,13 @@ sobre elas:
 - **O prompt refinado é autossuficiente.** Escreva-o para quem abre a sessão
   sem ter lido esta conversa: o que ler antes, o que fazer, em que ordem, o
   que provar, e o que não tocar.
+- **Issue de política não vai ao executor.** Se "Onde mexer" cita gancho,
+  `settings.json`, lista de cerca ou os arquivos de regra e vocabulário — os
+  caminhos de `.claude/caminhos-de-politica.txt` —, a cerca recusa a escrita
+  durante a etapa e a execução morre para descobrir a parede. O executor de
+  roteiros já recusa essa issue antes de abrir etapa; o certo é nem
+  disparar: ela é da sessão interativa do dono, que aplica a mudança na
+  árvore e retoma com `--retomar --resposta` quando houver execução parada.
 
 ### As três recusas
 

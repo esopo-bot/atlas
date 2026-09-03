@@ -7,8 +7,9 @@ disso o `grep` ganha, e a página do módulo traz a régua medida.
 
 Duas peças de terceiros, nenhuma escrita aqui: o banco vetorial (Milvus, em
 container) e o gerador de embeddings (Ollama, em container, modelo pequeno —
-nada de LLM local). Quem liga as duas à sessão é o servidor MCP
-`@zilliz/claude-context-mcp`.
+nada de LLM local). Quem indexa é o servidor `@zilliz/claude-context-mcp`,
+conduzido pelo `indexar.py`; quem busca é o `buscar.py`, por HTTP puro — a
+porta normal, porque política de organização pode barrar todo MCP sem aviso.
 
 ```bash
 python montar.py --modulo indice
@@ -17,8 +18,8 @@ docker exec indice-embeddings-1 ollama pull nomic-embed-text
 ```
 
 **O banco é sempre derivado.** Nada nasce dentro dele: apagar os volumes e
-reindexar reconstrói tudo. A configuração da sessão (o `claude mcp add`) está
-na página `conhecimento/indice.md`, que viaja junto.
+reindexar reconstrói tudo. A receita inteira — subir, indexar, buscar, e o registro
+opcional do MCP — está na página `conhecimento/indice.md`, que viaja junto.
 
 **Ambiente corporativo trancado recusa as três linhas acima.** Proxy que
 reassina TLS, registro de pacote bloqueado por política e CLI barrado por

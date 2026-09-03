@@ -70,7 +70,7 @@ if __name__ == "__main__":
 def _git(repo, *args, tempo_limite=TEMPO_LIMITE_DO_GIT):
     try:
         return subprocess.run(["git", "-C", str(repo), *args],
-                              capture_output=True, text=True,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=tempo_limite)
     except (OSError, subprocess.SubprocessError):
         return None

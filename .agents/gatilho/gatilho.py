@@ -144,7 +144,7 @@ def skill_da_linha(linha: str):
 
 def escolha_da_sessao(raiz: Path, pedido: str, modelo: str = MODELO) -> tuple:
     processo = subprocess.Popen(
-        comando_da_sessao(pedido, modelo), cwd=raiz, text=True,
+        comando_da_sessao(pedido, modelo), cwd=raiz, text=True, encoding="utf-8", errors="replace",
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     estourou = []
 

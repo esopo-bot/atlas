@@ -184,7 +184,7 @@ def branch_de_integracao(raiz: Path) -> str:
 def responde(comando: list, raiz: Path, tempo: int):
     try:
         pronto = subprocess.run(comando, cwd=raiz, capture_output=True,
-                                text=True, timeout=tempo)
+                                text=True, encoding="utf-8", errors="replace", timeout=tempo)
     except (OSError, subprocess.SubprocessError):
         return NAO_MEDIDO
     return pronto.returncode, (pronto.stdout or "").strip()
@@ -810,7 +810,7 @@ def testar() -> int:
     daqui = raiz_do_projeto_nunca_o_cwd()
     direto = subprocess.run(
         [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA],
-        cwd=daqui, capture_output=True, text=True)
+        cwd=daqui, capture_output=True, text=True, encoding="utf-8", errors="replace")
     caso("a segunda condição chama o instrumento, e concorda com ele",
          bool(sobra_fora_da_branch_de_entrega(daqui))
          == (direto.returncode != 0))

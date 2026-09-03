@@ -164,7 +164,7 @@ def instalar_o_motor(pasta_do_venv: Path, sistema: str) -> bool:
     passos = ([sys.executable, "-m", "venv", str(pasta_do_venv)],
               [str(pip), "install", "--quiet", PACOTE_DO_MOTOR])
     for comando in passos:
-        concluido = subprocess.run(comando, capture_output=True, text=True)
+        concluido = subprocess.run(comando, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if concluido.returncode != 0:
             print(LOG_MOTOR_NAO_INSTALOU.format(
                 concluido.stderr.strip()[:TETO_DO_ERRO]))

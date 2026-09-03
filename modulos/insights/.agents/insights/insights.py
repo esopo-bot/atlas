@@ -124,7 +124,7 @@ def _aws_json(argumentos: list, regiao: str, tempo_de_leitura: int) -> dict:
     try:
         feito = subprocess.run(
             linha_de_comando_do_aws(argumentos, regiao, tempo_de_leitura),
-            capture_output=True, text=True)
+            capture_output=True, text=True, encoding="utf-8", errors="replace")
     except OSError as erro:
         raise SystemExit(ERRO_AWS_MUDO.format(erro))
     if feito.returncode != 0:

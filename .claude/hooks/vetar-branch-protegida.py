@@ -273,7 +273,7 @@ def verbo_e_resto(tokens: list):
 def branch_atual(alvo: Path):
     try:
         r = subprocess.run(COMANDO_DA_BRANCH_ATUAL, cwd=alvo,
-                           capture_output=True, text=True,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=TEMPO_LIMITE_DO_GIT)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -284,7 +284,7 @@ def branch_atual(alvo: Path):
 def branches_conhecidas(alvo: Path) -> set:
     try:
         r = subprocess.run(COMANDO_DAS_BRANCHES, cwd=alvo,
-                           capture_output=True, text=True,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=TEMPO_LIMITE_DO_GIT)
     except (OSError, subprocess.SubprocessError):
         return set()
@@ -845,7 +845,7 @@ def _o_init_encadeado_e_julgado_no_bercario(falhas):
         bercario.mkdir(parents=True)
         _subprocess.run(["git", "-C", str(atlas_de_mentira), "init", "-q",
                          "-b", "issue/1", "."], check=True,
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
         (atlas_de_mentira / "nucleo").mkdir()
         (atlas_de_mentira / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
             {CHAVE_DAS_AUTORIZACOES: {"commit": True, "push": True}}),
@@ -869,7 +869,7 @@ def _a_branch_julgada_e_a_do_alvo(falhas):
 
     def _git(onde, *args):
         _subprocess.run(["git", "-C", str(onde), *args], check=True,
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     def _hook(projeto_dir, cwd, comando):
         entrada = json.dumps({"tool_input": {"command": comando},

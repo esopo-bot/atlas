@@ -146,6 +146,15 @@
             "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-sessao-paralela.py\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-caminho-relativo-apos-cd.py\""
+          }
+        ]
       }
     ],
     "Stop": [

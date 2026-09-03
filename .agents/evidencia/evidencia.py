@@ -729,7 +729,7 @@ def _rodar_fantoche(pasta, nome, script):
     arquivo = Path(pasta) / f"fantoche-{nome}.py"
     arquivo.write_text(script, encoding="utf-8")
     return subprocess.run([sys.executable, str(arquivo)],
-                          capture_output=True, text=True, timeout=60)
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
 
 
 def _encadear(pasta, trabalho, etapas):

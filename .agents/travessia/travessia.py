@@ -102,7 +102,7 @@ def contar_o_que_ensina(raiz):
                     for p in (Path(raiz) / PASTA_DAS_SKILLS_FONTE).glob("*/SKILL.md"))
     print(f"  skills na fonte: {len(skills)}")
     vistas = subprocess.run([FERRAMENTA, "skills", "list"], cwd=raiz,
-                            capture_output=True, text=True,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace",
                             timeout=TEMPO_DE_UMA_SONDA_S).stdout
     faltando = [s for s in skills if s not in vistas]
     print(f"  vistas por {FERRAMENTA}: {len(skills) - len(faltando)}")
@@ -117,7 +117,7 @@ def custo_de_uma_sessao(raiz, pedido):
         subprocess.run([FERRAMENTA, "-p", "--permission-mode", "auto",
                         "--export", str(saida), "--respect-workspace-trust",
                         "false", "--", pedido],
-                       cwd=raiz, capture_output=True, text=True, timeout=900)
+                       cwd=raiz, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
         if not saida.exists():
             return None
         return json.loads(saida.read_text(encoding="utf-8"))["final_metrics"]

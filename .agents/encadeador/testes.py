@@ -16,6 +16,8 @@ from string import Formatter
 
 import encadeador
 from encadeador import (
+    caminhos_de_politica, politica_citada, secao_onde_mexer,
+    ARQUIVO_DOS_CAMINHOS_DE_POLITICA,
     _ambiente_da_conta,
     _conta_do_remoto,
     _com_a_conta_no_git,
@@ -188,7 +190,7 @@ class Bancada:
             ambiente[VARIAVEL_DA_ISSUE] = issue
         return subprocess.run(
             [sys.executable, str(ESTE_INSTRUMENTO)] + argumentos,
-            capture_output=True, text=True, timeout=TEMPO_DO_DUBLE,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_DUBLE,
             env=ambiente)
 
 
@@ -244,7 +246,7 @@ def _sobre_a_conta_no_remoto(b) -> None:
 
 def _git(pasta, *ordem):
     return subprocess.run(["git", "-C", str(pasta), *ordem],
-                          capture_output=True, text=True,
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=TETO_DO_DUBLE)
 
 
@@ -1340,7 +1342,7 @@ def _sobre_o_tempo_limite(b) -> None:
         (Path(b.evidencias) / "t-tempo" / "01-trava-c1.json")
         .read_text(encoding="utf-8"))
     orfaos = subprocess.run(["pgrep", "-f", dorminhoco],
-                            capture_output=True, text=True)
+                            capture_output=True, text=True, encoding="utf-8", errors="replace")
     b.caso("estouro de tempo vira para morta, exit 5, com log",
          resposta.returncode == 5 and evidencia_tempo["motivo"] == "morta"
          and "tempo-limite" in evidencia_tempo["faltas"][0]
@@ -2315,7 +2317,7 @@ def _sobre_as_branches_proprias_do_alvo(b) -> None:
         veredito = {}
     atual = subprocess.run(["git", "-C", str(vizinho), "branch",
                             "--show-current"], capture_output=True,
-                           text=True).stdout.strip()
+                           text=True, encoding="utf-8", errors="replace").stdout.strip()
     b.caso("o roteiro de vizinho abre a branch a partir da base DO PROJETO "
            "quando o cadastro a declara — a base da raiz é só o padrão de "
            "quem não declara",
@@ -2335,7 +2337,7 @@ def _sobre_o_veto_de_integracao_inexistente(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-veto-integracao",
          "--dir", b.evidencias, "--cwd", str(alvo)],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE, env=b.ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_DUBLE, env=b.ambiente)
     b.caso("integração declarada que não existe no remoto do alvo: o disparo "
            "recusa com erro de uso ANTES de gravar estado, e nomeia a branch",
          recusa.returncode == EXIT_ERRO_DE_USO_OU_AMBIENTE
@@ -2348,7 +2350,7 @@ def _sobre_o_veto_de_integracao_inexistente(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-veto-integracao-ok",
          "--dir", b.evidencias, "--cwd", str(alvo)],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE, env=b.ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_DUBLE, env=b.ambiente)
     b.caso("integração que existe no remoto: o disparo roda como sempre",
          roda.returncode == EXIT_COMPLETA
          and ERRO_INTEGRACAO_INEXISTENTE_NO_REMOTO.split("{")[0] not in roda.stderr)
@@ -2361,7 +2363,7 @@ def _sobre_o_veto_de_integracao_inexistente(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-veto-sem-remoto",
          "--dir", b.evidencias, "--cwd", str(sem_remoto)],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE, env=b.ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_DUBLE, env=b.ambiente)
     b.caso("sem remoto declarado não há o que medir: o disparo roda calado, "
            "sem recusa e sem aviso de integração",
          avisa.returncode == EXIT_COMPLETA and "integração" not in avisa.stderr)
@@ -2399,7 +2401,7 @@ def _sobre_o_ambiente_gravado_da_execucao(b) -> None:
          "--roteiro", roteiro, "--trabalho", "t-ambiente-gravado",
          "--dir", b.evidencias, "--cwd", str(raiz),
          "--configuracao", str(configuracao)],
-        capture_output=True, text=True, timeout=TEMPO_DO_DUBLE, env=ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_DUBLE, env=ambiente)
 
     pasta = Path(b.evidencias) / "t-ambiente-gravado"
     arquivo = pasta / ARQUIVO_DO_AMBIENTE
@@ -2419,7 +2421,7 @@ def _sobre_o_ambiente_gravado_da_execucao(b) -> None:
     sem_o_alvo.pop(VARIAVEL_DO_ALVO)
     auditoria = subprocess.run(
         [sys.executable, str(AUDITOR), str(pasta), "--cwd", str(raiz)],
-        capture_output=True, text=True, timeout=TEMPO_DO_DUBLE,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_DUBLE,
         env=sem_o_alvo)
     b.caso("o auditor repõe o ambiente gravado: sem PROJETO no shell de quem "
            "audita, o verificador re-executou as provas e não acusou "
@@ -3029,6 +3031,46 @@ def _sobre_a_entrada_da_suite(b) -> None:
                for no in arvore.body))
 
 
+def _sobre_a_issue_de_politica(b) -> None:
+    raiz = Path(b.pasta) / "com-cerca"
+    (raiz / ".claude").mkdir(parents=True, exist_ok=True)
+    (raiz / ARQUIVO_DOS_CAMINHOS_DE_POLITICA).write_text(
+        "# a lista\n.claude/settings.json\n.claude/hooks/\n"
+        "nucleo/regras.json\n", encoding="utf-8")
+    declarados = caminhos_de_politica(str(raiz))
+    b.caso("a lista de política vem do arquivo que o gancho lê, sem os "
+           "comentários — a mesma cerca, um lugar só",
+           declarados == [".claude/settings.json", ".claude/hooks/",
+                          "nucleo/regras.json"])
+    b.caso("repositório sem a lista não tem cerca a respeitar: a lista é "
+           "None e a issue roda normal, sem aviso a cada execução",
+           caminhos_de_politica(str(Path(b.pasta) / "sem-cerca")) is None
+           and politica_citada("## Onde mexer\n.claude/hooks/x.py", None)
+           == "")
+    corpo = ("## Escopo\nFora: .claude/hooks/ nao entra\n\n## Onde mexer\n"
+             "`.claude/hooks/vetar-x.py` e o `.claude/settings.json`\n\n"
+             "## Estado\nFase: investigar\n")
+    b.caso("só a seção Onde mexer conta: ela nomeia o que o trabalho vai "
+           "escrever, as outras só citam",
+           "vetar-x.py" in secao_onde_mexer(corpo)
+           and "nao entra" not in secao_onde_mexer(corpo))
+    b.caso("issue cujo Onde mexer cita gancho é issue de política, e o "
+           "caminho citado volta para a mensagem",
+           politica_citada(corpo, declarados) == ".claude/hooks/vetar-x.py")
+    b.caso("pasta declarada com barra pega o que estiver dentro dela, em "
+           "qualquer profundidade; arquivo declarado pega só quem termina "
+           "nele",
+           politica_citada("## Onde mexer\nx/.claude/hooks/a/b.py",
+                           declarados) == "x/.claude/hooks/a/b.py"
+           and politica_citada("## Onde mexer\nnucleo/outro-regras.json",
+                               declarados) == "")
+    b.caso("issue que só cita a cerca fora do Onde mexer, ou cita "
+           "instrumento comum, roda normal",
+           politica_citada("## Escopo\n.claude/hooks/\n## Onde mexer\n"
+                           ".agents/camada/camada.py", declarados) == ""
+           and politica_citada("", declarados) == "")
+
+
 def _sobre_a_notificacao_nos_marcos(b) -> None:
     raiz = Path(b.pasta) / "com-notificacao"
     raiz.mkdir(exist_ok=True)
@@ -3191,6 +3233,7 @@ def _sobre_a_notificacao_nos_marcos(b) -> None:
 
 TEMAS = (
     _sobre_a_entrada_da_suite,
+    _sobre_a_issue_de_politica,
     _sobre_a_conta_no_remoto,
     _sobre_a_conta_que_age,
     _sobre_o_repositorio_do_remoto,

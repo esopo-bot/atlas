@@ -277,7 +277,7 @@ def reexecutar(pasta: Path, cwd: str) -> tuple:
     if cwd:
         comando += ["--cwd", cwd]
     try:
-        pronto = subprocess.run(comando, capture_output=True, text=True,
+        pronto = subprocess.run(comando, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                 env=ambiente_da_execucao(pasta),
                                 timeout=TEMPO_DA_VERIFICACAO)
     except (OSError, subprocess.SubprocessError) as erro:

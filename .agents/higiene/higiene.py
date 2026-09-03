@@ -35,7 +35,7 @@ def issues_abertas(repositorio):
     corrida = subprocess.run(
         [FERRAMENTA, "issue", "list", "--repo", repositorio, "--state", "open",
          "--limit", str(TETO_DA_VARREDURA), "--json", CAMPOS],
-        capture_output=True, text=True, timeout=TEMPO_DA_REDE_S)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DA_REDE_S)
     if corrida.returncode != 0:
         return None
     return json.loads(corrida.stdout or "[]")
@@ -47,7 +47,7 @@ def estado_de_cada_referencia(repositorio, numeros):
         corrida = subprocess.run(
             [FERRAMENTA, "issue", "view", str(numero), "--repo", repositorio,
              "--json", "state,title"],
-            capture_output=True, text=True, timeout=TEMPO_DA_REDE_S)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DA_REDE_S)
         if corrida.returncode != 0:
             continue
         estados[numero] = json.loads(corrida.stdout)["state"]

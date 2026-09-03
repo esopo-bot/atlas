@@ -417,6 +417,18 @@ ERRO_NADA_RODOU_SEM_A_CONTA = (
     "que realmente faz. Nenhuma sessão abriu.")
 RESPOSTA_SEM_TOKEN = ("`gh auth token --user {}` não devolveu token, e sem "
                       "token o motor agiria como a conta ativa")
+ARQUIVO_DOS_CAMINHOS_DE_POLITICA = ".claude/caminhos-de-politica.txt"
+SECAO_ONDE_MEXER = "## onde mexer"
+MARCA_DE_SECAO = "## "
+MARCA_DE_COMENTARIO_NA_LISTA = "#"
+BARRA = "/"
+CAMINHO_CITADO = re.compile(r"[\w.\-${}]*/[\w.\-/${}]*|[\w\-]+\.[A-Za-z]{2,5}\b")
+ERRO_ISSUE_DE_POLITICA = (
+    "issue de política: o \"Onde mexer\" da issue {issue} cita `{caminho}`, "
+    "que a cerca de {lista} recusa durante etapa do executor de roteiros. "
+    "Rodar aqui gastaria uma execução para descobrir a parede: este trabalho "
+    "é da sessão interativa do dono, que aplica a mudança e retoma. Nada "
+    "rodou.")
 ERRO_MODO_SO_ISSUES = ("modo so-issues: esta configuração só permite abrir "
                        "issue; executar está desligado.")
 ERRO_CLAUDE_FORA_DO_PATH = (
@@ -1372,7 +1384,7 @@ def _rodar_processo(comando, *, shell, cwd, env, entrada, tempo):
     processo = subprocess.Popen(
         comando, shell=shell, cwd=cwd, env=env,
         stdin=subprocess.PIPE if entrada is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
         start_new_session=True)
     _PROCESSOS_DA_VEZ.add(processo)
     try:
@@ -1391,7 +1403,7 @@ def _rodar_processo(comando, *, shell, cwd, env, entrada, tempo):
 
 def _cli_evidencia(argumentos, entrada=None):
     return subprocess.run([sys.executable, str(EVIDENCIA)] + argumentos,
-                          input=entrada, capture_output=True, text=True,
+                          input=entrada, capture_output=True, text=True, encoding="utf-8", errors="replace",
                           timeout=TEMPO_DO_CLI_DE_EVIDENCIA)
 
 
@@ -1508,7 +1520,7 @@ def _branch_atual(cwd) -> str:
     try:
         feito = subprocess.run(
             ["git", "-C", str(cwd), "branch", "--show-current"],
-            capture_output=True, text=True, timeout=TEMPO_DO_GIT_LOCAL)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_GIT_LOCAL)
     except (OSError, subprocess.SubprocessError):
         return ""
     return feito.stdout.strip() if feito.returncode == 0 else ""
@@ -1559,7 +1571,7 @@ def integracao_no_remoto_do_alvo(configuracao, cwd, ambiente) -> tuple:
     comando = [parte.format(alvo=alvo, integracao=integracao)
                for parte in COMANDO_DA_INTEGRACAO_NO_REMOTO]
     try:
-        feito = subprocess.run(comando, capture_output=True, text=True,
+        feito = subprocess.run(comando, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                timeout=TEMPO_DA_REDE_NO_DISPARO_S)
     except (OSError, subprocess.SubprocessError) as erro:
         return None, AVISO_INTEGRACAO_NAO_MEDIDA.format(
@@ -1578,7 +1590,7 @@ def _tem_remoto_declarado(alvo) -> bool:
     try:
         feito = subprocess.run(
             [parte.format(alvo=alvo) for parte in COMANDO_DO_REMOTO_DECLARADO],
-            capture_output=True, text=True, timeout=TEMPO_DA_REDE_NO_DISPARO_S)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DA_REDE_NO_DISPARO_S)
     except (OSError, subprocess.SubprocessError):
         return False
     return feito.returncode == 0 and bool(feito.stdout.strip())
@@ -2303,7 +2315,7 @@ def _token_da_conta(conta):
         return None
     try:
         achado = subprocess.run(GH + ["auth", "token", "--user", conta],
-                                capture_output=True, text=True,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace",
                                 timeout=TEMPO_DO_TOKEN)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -2374,7 +2386,7 @@ def sem_caminho_de_maquina(texto, *raizes):
 
 def _gh_da_conta(conta, argumentos, tempo=TEMPO_DO_GH):
     try:
-        return subprocess.run(GH + argumentos, capture_output=True, text=True,
+        return subprocess.run(GH + argumentos, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=tempo, env=_ambiente_da_conta(conta))
     except (OSError, subprocess.SubprocessError):
         return None
@@ -2388,7 +2400,7 @@ def _repositorio_do_remoto(cwd):
     try:
         achado = subprocess.run(
             ["git", "-C", str(cwd), "remote", "get-url", REMOTO_GIT_PADRAO],
-            capture_output=True, text=True, timeout=TEMPO_DO_GIT)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_GIT)
     except (OSError, subprocess.SubprocessError):
         return None
     if achado.returncode != 0:
@@ -2436,6 +2448,45 @@ def problemas_de_acesso(configuracao, roteiro, cwd) -> tuple:
             papel=papel, conta=conta, repositorio=repositorio,
             resposta=resposta))
     return recusas, nao_medidos
+
+
+def caminhos_de_politica(cwd):
+    try:
+        linhas = (Path(cwd) / ARQUIVO_DOS_CAMINHOS_DE_POLITICA).read_text(
+            encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    return [l.strip() for l in linhas
+            if l.strip() and not l.strip().startswith(
+                MARCA_DE_COMENTARIO_NA_LISTA)]
+
+
+def secao_onde_mexer(corpo: str) -> str:
+    dentro, achadas = False, []
+    for linha in (corpo or "").splitlines():
+        if linha.strip().lower().startswith(SECAO_ONDE_MEXER):
+            dentro = True
+            continue
+        if dentro and linha.startswith(MARCA_DE_SECAO):
+            break
+        if dentro:
+            achadas.append(linha)
+    return "\n".join(achadas)
+
+
+def toca_politica(caminho: str, declarado: str) -> bool:
+    cheio = BARRA + caminho.replace("\\", BARRA).lstrip(BARRA)
+    agulha = BARRA + declarado.lstrip(BARRA)
+    if declarado.endswith(BARRA):
+        return agulha in cheio + BARRA
+    return cheio.endswith(agulha)
+
+
+def politica_citada(corpo: str, declarados) -> str:
+    for citado in CAMINHO_CITADO.findall(secao_onde_mexer(corpo)):
+        if any(toca_politica(citado, d) for d in declarados or []):
+            return citado
+    return ""
 
 
 def _por_ou_tirar_etiqueta(configuracao, issue, etiqueta, por, cor,
@@ -3044,6 +3095,12 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
         for reaberta in voltam:
             print(LOG_SESSAO_REABERTA.format(reaberta))
     _EM_CURSO[CORPO_DA_ISSUE] = corpo_da_issue(configuracao, issue)
+    if (tocado := politica_citada(_EM_CURSO[CORPO_DA_ISSUE],
+                                  caminhos_de_politica(cwd))):
+        print(ERRO_ISSUE_DE_POLITICA.format(
+            issue=issue, caminho=tocado,
+            lista=ARQUIVO_DOS_CAMINHOS_DE_POLITICA), file=sys.stderr)
+        return EXIT_ERRO_DE_USO_OU_AMBIENTE
     _EM_CURSO.update({"dir_base": dir_base, "trabalho": trabalho,
                       "issue": issue, "bloco": bloco, "resposta": resposta,
                       CAMPO_DO_TEMPO_DA_PROVA:
@@ -3215,7 +3272,7 @@ def _etapas_do_andamento(atuais: dict) -> list:
 def _git(cwd, *ordem, tempo=TEMPO_DO_GIT_LOCAL):
     try:
         return subprocess.run(["git", "-C", str(cwd), *ordem],
-                              capture_output=True, text=True, timeout=tempo)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=tempo)
     except (OSError, subprocess.SubprocessError):
         return None
 
@@ -3745,13 +3802,13 @@ def _cli(argumentos):
     ambiente.pop(VARIAVEL_DA_ISSUE, None)
     return subprocess.run(
         [sys.executable, str(ESTE_INSTRUMENTO)] + argumentos,
-        capture_output=True, text=True, timeout=300, env=ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, env=ambiente)
 
 
 def _cli_verificar(alvo, cwd):
     return subprocess.run(
         [sys.executable, str(VERIFICAR), "evidencia", str(alvo), "--cwd", str(cwd)],
-        capture_output=True, text=True, timeout=300)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
 
 
 

@@ -90,7 +90,7 @@ SEM_TESTE = "sem --testar"
 
 def arquivos_python():
     saida = subprocess.run(["git", "ls-files", "-z", "*.py"],
-                           capture_output=True, text=True, check=True).stdout
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
     return sorted(p for p in saida.split("\0") if p)
 
 

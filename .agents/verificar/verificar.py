@@ -341,7 +341,7 @@ def _reexecutar(item: dict, cwd: str, tempo_limite: int,
     teto = _teto_do_item(item, tempo_limite)
     try:
         rodada = subprocess.run(item["comando"], shell=True, cwd=cwd,
-                                capture_output=True, text=True, timeout=teto,
+                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=teto,
                                 executable=SHELL_DA_REEXECUCAO)
     except subprocess.TimeoutExpired:
         return ACUSA_TEMPO_ESGOTADO.format(teto=teto, comando=item["comando"],

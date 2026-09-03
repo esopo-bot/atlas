@@ -11,6 +11,11 @@ de consulta, não de sessão.
 1. **Abra a sessão na raiz — a pasta que tem o `AGENTS.md`.**
     - O que decide é onde você abre, não onde o arquivo mora: numa subpasta, a
       sessão roda sem as skills da raiz, e nada avisa.
+    - A sessão já está na raiz: não prefixe comando com `cd <raiz>;` nem use
+      caminho relativo depois de um `cd` — o auto mode não consegue saber que
+      pasta o comando lê, e para para perguntar ao dono a cada comando. Escreva
+      o caminho absoluto no próprio argumento; o harness devolve o cwd depois
+      de todo `cd`, então o prefixo é redundante.
     - Procedência: [mapa do repositório](mapa-do-repositorio.md).
 
 2. **Só é pronto o que um instrumento provou.**
@@ -59,6 +64,10 @@ de consulta, não de sessão.
       linha, registro de pacote bloqueado por categoria, proxy autenticado que
       derruba download de binário nativo. Quem propõe sem o teste do ambiente
       empurra a descoberta para quem instala, e ela custa o dobro lá.
+    - Uma medição não é medição. Onde a saída varia entre execuções iguais —
+      escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e
+      desconfie de diferença menor que ele. Rodada única não separa causa de
+      acaso: ela devolve um número, e número sozinho parece fato.
 
 3. **Antes de criar, procure e cite.**
     - O que o conjunto já oferece não se reimplementa; aplicação nova imita o

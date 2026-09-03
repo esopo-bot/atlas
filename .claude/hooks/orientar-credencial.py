@@ -755,13 +755,13 @@ def testar_a_evidencia_materializada(caso, falhas: list) -> None:
              and "metadata" in r_metadata["provado"][0]["afirmacao"])
         prova = subprocess.run(
             INTERPRETADOR_DE_SHELL + [r1["provado"][0]["comando"]],
-            capture_output=True, text=True, cwd=raiz_real)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real)
         caso("a prova do provado re-executa igual",
              prova.stdout.strip() == r1["provado"][0]["saida"])
         ambiente_limpo = {"PATH": "/usr/local/bin:/usr/bin:/bin"}
         prova_limpa = subprocess.run(
             INTERPRETADOR_DE_SHELL + [r1["provado"][0]["comando"]],
-            capture_output=True, text=True, cwd=raiz_real, env=ambiente_limpo)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real, env=ambiente_limpo)
         caso("a prova re-executa com o mesmo interpretador que o "
              "settings.json usa, mesmo sem o PATH da sessão",
              prova_limpa.returncode == 0
@@ -789,7 +789,7 @@ def testar_a_evidencia_materializada(caso, falhas: list) -> None:
              BANDEIRA_DE_AVALIAR_ARQUIVO in r3["provado"][0]["comando"])
         prova_arquivo = subprocess.run(
             INTERPRETADOR_DE_SHELL + [r3["provado"][0]["comando"]],
-            capture_output=True, text=True, cwd=raiz_real, env=ambiente_limpo)
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real, env=ambiente_limpo)
         caso("a prova da bandeira --avaliar-arquivo também re-executa sem "
              "o PATH da sessão",
              prova_arquivo.returncode == 0
