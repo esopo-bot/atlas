@@ -19,7 +19,8 @@ docker exec indice-embeddings-1 ollama pull nomic-embed-text
 
 **O banco é sempre derivado.** Nada nasce dentro dele: apagar os volumes e
 reindexar reconstrói tudo. A receita inteira — subir, indexar, buscar, e o registro
-opcional do MCP — está na página `conhecimento/indice.md`, que viaja junto.
+do MCP, que o `montar.py --atualizar` faz sozinho no `.mcp.json` — está na página
+`conhecimento/indice.md`, que viaja junto.
 
 **Ambiente corporativo trancado recusa as três linhas acima.** Proxy que
 reassina TLS, registro de pacote bloqueado por política e CLI barrado por

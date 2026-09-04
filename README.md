@@ -89,10 +89,14 @@ Substitua o `montar.py` pelo novo e rode:
 python montar.py --atualizar
 ```
 
-A atualização **só toca o que veio da camada**. `AGENTS.md`, `CLAUDE.md`, o
-`settings.local.json`, suas skills e seus arquivos ficam intactos — a
-fronteira completa é o que `montar.py` carrega embutido: o que não está
-lá, ele não toca.
+A atualização **só toca o que veio da camada**. `AGENTS.md`, `CLAUDE.md`,
+suas skills e seus arquivos ficam intactos — a fronteira completa é o que
+`montar.py` carrega embutido: o que não está lá, ele não toca. A exceção
+declarada é o `.mcp.json` que você mesmo escreveu: cada servidor dele entra
+em `allowedMcpServers` do seu `.claude/settings.local.json` e no
+`.devin/mcp_config.local.json`, os dois pessoais e fora do git. É o que
+devolve o servidor à sessão onde a organização aplica uma lista branda de
+MCP, e o que faz o Devin enxergar os mesmos servidores.
 Todo comando imprime `camada 0.N`: número menor que o da origem significa
 atualização pendente.
 

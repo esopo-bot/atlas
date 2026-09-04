@@ -51,9 +51,24 @@ docker compose -f .agents/indice/docker-compose.yml -p indice up -d
 docker exec indice-embeddings-1 ollama pull nomic-embed-text
 ```
 
-O registro abaixo é opcional: ele dá à sessão a ferramenta `search_code` do
-MCP. Sem ele, ou onde a política o barrar, a busca é pelo `buscar.py` e nada
-mais muda.
+O registro dá à sessão a ferramenta `search_code` do MCP. Sem ele, ou onde
+a política o barrar, a busca é pelo `buscar.py` e nada mais muda.
+
+**Quem registra é o instalador.** `python montar.py --atualizar` escreve o
+servidor `indice` no `.mcp.json` da raiz se ele ainda não estiver lá — no
+Windows, por `cmd /c npx`, senão o servidor não sobe — e nunca sobrescreve
+uma entrada `indice` que você já tenha. Na mesma passada ele faz duas coisas
+por TODOS os servidores do `.mcp.json`, não só por este:
+
+- entra uma linha por servidor em `allowedMcpServers` do
+  `.claude/settings.local.json` — stdio vira `serverCommand` com o comando
+  exato, HTTP vira `serverUrl`. É o que devolve o servidor à sessão onde a
+  organização aplica uma **lista branda** de MCP (ver o relato 5, abaixo);
+- o mesmo `mcpServers` é espelhado em `.devin/mcp_config.local.json`, o
+  arquivo de servidores por projeto do Devin CLI. Os dois são pessoais e
+  ficam fora do git.
+
+Registrar à mão continua possível, e é o mesmo servidor:
 
 ```bash
 claude mcp add indice \
@@ -219,6 +234,30 @@ método primário onde o CLI não passa:
 Com a instalação do item 1, o `command` é `node` apontando para o arquivo
 instalado — não `npx`, que voltaria a buscar o pacote na rede a cada abertura
 de sessão.
+
+### 5. O servidor está declarado e some da sessão sem aviso — a lista branda
+
+Medido em 03/09/2026: a organização empurra, por configuração gerenciada do
+Claude Code, uma lista `allowedMcpServers` só com nomes e URLs dos
+conectores dela. Efeito: **todo servidor local declarado no `.mcp.json` some
+da sessão em silêncio**, e servidor HTTP fora das URLs também — mesmo com o
+nome na lista, porque quando há entrada de URL o nome deixa de contar para
+servidor remoto. Nada avisa; `claude mcp list` simplesmente não os mostra.
+
+A causa se lê na própria documentação do Claude Code: sem a chave
+`allowManagedMcpServersOnly`, a lista é **branda** — a lista de cada escopo
+de configuração se soma, inclusive a do usuário e a do projeto. Entrada
+`serverCommand` exige o comando **exato**, argumento por argumento, depois da
+expansão de `${VAR}`; `serverUrl` aceita `*`. O `--atualizar` gera as
+entradas a partir do `.mcp.json`, então elas batem por construção. Se a
+organização ligar a chave rígida, esse caminho fecha e o que resta é pedir
+a inclusão ao administrador — e o `buscar.py` continua de pé, porque é
+comando, não servidor.
+
+Para o Devin CLI a lista não existe: ela é do Claude Code. O Devin lê o
+`.devin/mcp_config.json` (compartilhado) e o `.devin/mcp_config.local.json`
+(pessoal), e é neste que o `--atualizar` espelha o `mcpServers`. Entrada
+HTTP com `headers` foi espelhada como está e **não foi medida** no Devin.
 
 ## O que este módulo não é
 

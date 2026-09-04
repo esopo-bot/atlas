@@ -1,8 +1,9 @@
-VERSAO = "0.715"
+VERSAO = "0.718"
 
 import functools
 import datetime
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -103,6 +104,22 @@ LOG_DEVIN_EM_DIA = "  em dia:  configuração do Devin (ponte desligada)"
 LOG_DEVIN_AJUSTADO = ("  ajustado: .devin/config.json (ponte desligada, "
                       "negações próprias)")
 LOG_SEM_AGENTS_MD = "  pulado: AGENTS.md não existe aqui"
+LOG_SEM_MCP_DECLARADO = ("  pulado: .mcp.json não existe aqui — nenhum servidor "
+                         "MCP a liberar")
+LOG_MCP_LIBERADO = ("  liberado: {} servidor(es) do .mcp.json entraram em "
+                    "allowedMcpServers de .claude/settings.local.json — onde a "
+                    "organização aplica lista branda, é isto que devolve o "
+                    "servidor à sessão")
+LOG_MCP_JA_LIBERADO = ("  em dia:  os {} servidor(es) do .mcp.json já estão em "
+                       "allowedMcpServers")
+LOG_MCP_ESPELHADO_NO_DEVIN = ("  espelhado: {} servidor(es) do .mcp.json em "
+                              ".devin/mcp_config.local.json")
+LOG_MCP_DEVIN_EM_DIA = "  em dia:  .devin/mcp_config.local.json igual ao .mcp.json"
+LOG_INDICE_REGISTRADO = ("  registrado: servidor MCP `indice` no .mcp.json — "
+                         "versão presa, nunca @latest")
+LOG_INDICE_JA_REGISTRADO = "  em dia:  servidor MCP `indice` já está no .mcp.json"
+LOG_CONFIGURACAO_ILEGIVEL = ("  AVISO: {} não é JSON válido ({}) — pulei sem "
+                             "escrever; conserte o arquivo e rode de novo")
 LOG_PONTEIRO_EM_DIA = "  em dia:  o AGENTS.md aponta a lista de regras"
 LOG_PONTEIRO_ACRESCENTADO = ("  acrescentado: o endereço da lista de regras, "
                              "no fim do AGENTS.md")
@@ -286,6 +303,25 @@ CASO_COPIA_AUSENTE_NAO_E_INSTALADA = ("arquivo de fonte sem cópia em uso não "
                                       "instalou o módulo não o ganha")
 CASO_MOLDE_SEGUE_INTACTO = ("território do repositório não é regravado — o "
                             "molde de conhecimento fica como o dono deixou")
+CASO_SEM_MCP_NADA_NASCE = ("sem .mcp.json, nenhum dos três arquivos nasce — "
+                           "liberar o nada criaria settings.local vazio")
+CASO_LIBERACAO_SAI_DA_DECLARACAO = ("a liberação sai do .mcp.json: stdio vira "
+                                    "serverCommand exato, http vira serverUrl, "
+                                    "o resto do settings.local fica")
+CASO_LIBERACAO_NAO_DUPLICA = "rodar de novo não duplica entrada"
+CASO_DEVIN_RECEBE_O_ESPELHO = ("o Devin recebe o mesmo mcpServers em "
+                               "mcp_config.local.json")
+CASO_ESPELHO_DO_DEVIN_FICA_FORA_DO_GIT = ("o espelho do Devin é pessoal: "
+                                          ".devin/.gitignore o exclui")
+CASO_INDICE_ENTRA_SEM_APAGAR_OS_OUTROS = ("o módulo índice registra o servidor "
+                                          "`indice` no .mcp.json sem tocar nos "
+                                          "outros, com a versão presa")
+CASO_INDICE_DO_DONO_NAO_E_SOBRESCRITO = ("entrada `indice` que o dono já tem "
+                                         "não é sobrescrita")
+CASO_INDICE_NO_WINDOWS_PASSA_PELO_CMD = ("no Windows o npx passa por cmd /c, "
+                                         "senão o servidor não sobe")
+CASO_JSON_QUEBRADO_AVISA_E_NAO_ESCREVE = ("settings.local quebrado: avisa e não "
+                                          "escreve por cima")
 CASO_MOLDE_DO_REPOSITORIO_NAO_CONTA = ("subpasta de conhecimento/ é território "
                                        "do repositório, e não se compara")
 CASO_MONTAGEM_INTEIRA_RODA = ("a montagem inteira roda numa árvore nova — sem isto, nome que sumiu do topo só aparece na máquina de quem instala")
@@ -371,6 +407,26 @@ PREFIXO_DA_VERSAO = "VERSAO = "
 
 CHAVE_DOS_GANCHOS = "hooks"
 CHAVE_DA_PONTE = "read_config_from"
+ARQUIVO_DE_DECLARACAO_DE_MCP = ".mcp.json"
+ARQUIVO_SETTINGS_LOCAL = ".claude/settings.local.json"
+ARQUIVO_MCP_LOCAL_DO_DEVIN = ".devin/mcp_config.local.json"
+CHAVE_DOS_SERVIDORES_MCP = "mcpServers"
+CHAVE_DOS_MCP_PERMITIDOS = "allowedMcpServers"
+CHAVE_DO_COMANDO_DO_MCP = "command"
+CHAVE_DOS_ARGUMENTOS_DO_MCP = "args"
+CHAVE_DA_URL_DO_MCP = "url"
+CHAVE_DO_COMANDO_PERMITIDO = "serverCommand"
+CHAVE_DA_URL_PERMITIDA = "serverUrl"
+NOME_DO_MCP_DO_INDICE = "indice"
+ARQUIVO_QUE_PROVA_O_MODULO_INDICE = ".agents/indice/indexar.py"
+PACOTE_DO_SERVIDOR_DO_INDICE = "@zilliz/claude-context-mcp@0.1.15"
+AMBIENTE_DO_SERVIDOR_DO_INDICE = {
+    "EMBEDDING_PROVIDER": "Ollama",
+    "EMBEDDING_MODEL": "nomic-embed-text",
+    "OLLAMA_HOST": "http://127.0.0.1:11434",
+    "MILVUS_ADDRESS": "127.0.0.1:19530",
+}
+INVOCADOR_DO_NPX_NO_WINDOWS = ("cmd", "/c")
 CHAVE_DO_CLAUDE = "claude"
 CHAVE_DAS_PERMISSOES = "permissions"
 CHAVE_DO_DENY = "deny"
@@ -856,6 +912,7 @@ ARQUIVOS = {
         "  },\n" + PERMISSOES_DO_DEVIN + "}\n"
     ),
     ".devin/skills/.gitkeep": "",
+    ".devin/.gitignore": "mcp_config.local.json\n",
     ARQUIVO_BRANCHES_PROTEGIDAS: LISTA_PROTEGIDA,
     ARQUIVO_CAMINHOS_DE_AUTOMACAO: LISTA_DE_AUTOMACAO,
     ARQUIVO_DIRETIVAS_DE_FERRAMENTA: LISTA_DE_DIRETIVAS,
@@ -942,6 +999,9 @@ MOTIVO_LOCAL = ("# Configuração deste repositório e resultado de execução, 
 
 ROTULO_DO_GITIGNORE_DO_LIXO = ".gitignore (descartáveis)"
 ROTULO_DO_GITIGNORE_LOCAL = ".gitignore (local)"
+ROTULO_DO_GITIGNORE_DO_DEVIN = ".devin/.gitignore (espelho pessoal do MCP)"
+MOTIVO_DO_ESPELHO_PESSOAL = ("# Espelho pessoal do .mcp.json para o Devin CLI: "
+                             "nasce do --atualizar e não viaja.")
 
 MARCA_INICIO = "# === PÁGINAS (gerado — não edite à mão) ==="
 MARCA_FIM = "# === FIM DAS PÁGINAS ==="
@@ -1594,6 +1654,94 @@ def garantir_ponte_do_devin_desligada(raiz: Path) -> None:
     print(LOG_DEVIN_AJUSTADO)
 
 
+def ler_json_ou_avisar(origem: Path):
+    try:
+        return ler_json_ou_vazio(origem)
+    except json.JSONDecodeError as erro:
+        print(LOG_CONFIGURACAO_ILEGIVEL.format(origem.name, erro.msg))
+        return None
+
+
+def servidores_mcp_declarados(raiz: Path) -> dict:
+    declaracao = ler_json_ou_avisar(raiz / ARQUIVO_DE_DECLARACAO_DE_MCP)
+    servidores = (declaracao or {}).get(CHAVE_DOS_SERVIDORES_MCP, {})
+    return servidores if isinstance(servidores, dict) else {}
+
+
+def entrada_de_permissao_do_mcp(servidor: dict):
+    if CHAVE_DA_URL_DO_MCP in servidor:
+        return {CHAVE_DA_URL_PERMITIDA: servidor[CHAVE_DA_URL_DO_MCP]}
+    if CHAVE_DO_COMANDO_DO_MCP in servidor:
+        return {CHAVE_DO_COMANDO_PERMITIDO: [
+            servidor[CHAVE_DO_COMANDO_DO_MCP],
+            *servidor.get(CHAVE_DOS_ARGUMENTOS_DO_MCP, [])]}
+    return None
+
+
+def liberar_servidores_mcp_declarados(raiz: Path) -> None:
+    servidores = servidores_mcp_declarados(raiz)
+    if not servidores:
+        print(LOG_SEM_MCP_DECLARADO)
+        return
+    entradas = [entrada for entrada in map(entrada_de_permissao_do_mcp,
+                                           servidores.values()) if entrada]
+    destino = raiz / ARQUIVO_SETTINGS_LOCAL
+    configuracao = ler_json_ou_avisar(destino)
+    if configuracao is None:
+        return
+    permitidos = configuracao.setdefault(CHAVE_DOS_MCP_PERMITIDOS, [])
+    faltam = [entrada for entrada in entradas if entrada not in permitidos]
+    if not faltam:
+        print(LOG_MCP_JA_LIBERADO.format(len(entradas)))
+        return
+    permitidos.extend(faltam)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    gravar_configuracao_json(destino, configuracao)
+    print(LOG_MCP_LIBERADO.format(len(faltam)))
+
+
+def espelhar_mcp_para_o_devin(raiz: Path) -> None:
+    servidores = servidores_mcp_declarados(raiz)
+    if not servidores:
+        return
+    destino = raiz / ARQUIVO_MCP_LOCAL_DO_DEVIN
+    espelho = {CHAVE_DOS_SERVIDORES_MCP: servidores}
+    if ler_json_ou_avisar(destino) == espelho:
+        print(LOG_MCP_DEVIN_EM_DIA)
+        return
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    gravar_configuracao_json(destino, espelho)
+    print(LOG_MCP_ESPELHADO_NO_DEVIN.format(len(servidores)))
+    acrescentar_linhas_que_faltam(destino.parent / ARQUIVO_GITIGNORE,
+                                  (destino.name,), ROTULO_DO_GITIGNORE_DO_DEVIN,
+                                  MOTIVO_DO_ESPELHO_PESSOAL)
+
+
+def servidor_mcp_do_indice(windows: bool = os.name == "nt") -> dict:
+    comando = ["npx", PACOTE_DO_SERVIDOR_DO_INDICE]
+    if windows:
+        comando = [*INVOCADOR_DO_NPX_NO_WINDOWS, *comando]
+    return {CHAVE_DO_COMANDO_DO_MCP: comando[0],
+            CHAVE_DOS_ARGUMENTOS_DO_MCP: comando[1:],
+            "env": dict(AMBIENTE_DO_SERVIDOR_DO_INDICE)}
+
+
+def registrar_mcp_do_indice(raiz: Path) -> None:
+    if not (raiz / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).exists():
+        return
+    destino = raiz / ARQUIVO_DE_DECLARACAO_DE_MCP
+    declaracao = ler_json_ou_avisar(destino)
+    if declaracao is None:
+        return
+    servidores = declaracao.setdefault(CHAVE_DOS_SERVIDORES_MCP, {})
+    if NOME_DO_MCP_DO_INDICE in servidores:
+        print(LOG_INDICE_JA_REGISTRADO)
+        return
+    servidores[NOME_DO_MCP_DO_INDICE] = servidor_mcp_do_indice()
+    gravar_configuracao_json(destino, declaracao)
+    print(LOG_INDICE_REGISTRADO)
+
+
 def garantir_gancho_declarado(raiz: Path, gancho) -> None:
     if gancho.arquivo_exigido and not (raiz / gancho.arquivo_exigido).exists():
         print(LOG_GANCHO_PULADO.format(gancho.nome))
@@ -1895,6 +2043,9 @@ def garantir_ajustes(raiz: Path, numero: int) -> None:
     garantir_gancho_declarado(raiz, GANCHO_DA_VERIFICACAO_DE_MCP)
     garantir_gancho_declarado(raiz, GANCHO_DA_VERIFICACAO_DE_AMBIENTE)
     garantir_ponte_do_devin_desligada(raiz)
+    registrar_mcp_do_indice(raiz)
+    liberar_servidores_mcp_declarados(raiz)
+    espelhar_mcp_para_o_devin(raiz)
     acrescentar_linhas_que_faltam(raiz / ARQUIVO_GITIGNORE, IGNORAR_LIXO,
                                   ROTULO_DO_GITIGNORE_DO_LIXO, MOTIVO_LIXO)
     acrescentar_linhas_que_faltam(raiz / ARQUIVO_GITIGNORE, IGNORAR_LOCAL,
@@ -2383,6 +2534,90 @@ def testar() -> int:
                  not e_a_casa_do_desenvolvimento(alvo))
         finally:
             globals()["casa_do_instalador"] = de_verdade
+
+    with tempfile.TemporaryDirectory() as pasta:
+        raiz = Path(pasta)
+        silencio = io.StringIO()
+        with contextlib.redirect_stdout(silencio):
+            liberar_servidores_mcp_declarados(raiz)
+            espelhar_mcp_para_o_devin(raiz)
+            registrar_mcp_do_indice(raiz)
+        caso(CASO_SEM_MCP_NADA_NASCE,
+             not (raiz / ARQUIVO_SETTINGS_LOCAL).exists()
+             and not (raiz / ARQUIVO_MCP_LOCAL_DO_DEVIN).exists()
+             and not (raiz / ARQUIVO_DE_DECLARACAO_DE_MCP).exists())
+
+        declarados = {CHAVE_DOS_SERVIDORES_MCP: {
+            "local": {"command": "python", "args": ["servidor.py", "--x"]},
+            "remoto": {"type": "http", "url": "https://mcp.exemplo/mcp",
+                       "headers": {"Authorization": "Bearer ${TOKEN}"}},
+            "torto": {"type": "sdk"}}}
+        gravar_configuracao_json(raiz / ARQUIVO_DE_DECLARACAO_DE_MCP,
+                                 declarados)
+        (raiz / ARQUIVO_SETTINGS_LOCAL).parent.mkdir(parents=True)
+        gravar_configuracao_json(raiz / ARQUIVO_SETTINGS_LOCAL,
+                                 {"permissions": {"allow": ["Bash(ls)"]}})
+        with contextlib.redirect_stdout(silencio):
+            liberar_servidores_mcp_declarados(raiz)
+        local = ler_json_ou_vazio(raiz / ARQUIVO_SETTINGS_LOCAL)
+        caso(CASO_LIBERACAO_SAI_DA_DECLARACAO,
+             local.get(CHAVE_DOS_MCP_PERMITIDOS) == [
+                 {"serverCommand": ["python", "servidor.py", "--x"]},
+                 {"serverUrl": "https://mcp.exemplo/mcp"}]
+             and local.get("permissions") == {"allow": ["Bash(ls)"]})
+        antes = (raiz / ARQUIVO_SETTINGS_LOCAL).read_text(encoding="utf-8")
+        with contextlib.redirect_stdout(silencio):
+            liberar_servidores_mcp_declarados(raiz)
+        caso(CASO_LIBERACAO_NAO_DUPLICA,
+             (raiz / ARQUIVO_SETTINGS_LOCAL).read_text(
+                 encoding="utf-8") == antes)
+
+        with contextlib.redirect_stdout(silencio):
+            espelhar_mcp_para_o_devin(raiz)
+        caso(CASO_DEVIN_RECEBE_O_ESPELHO,
+             ler_json_ou_vazio(raiz / ARQUIVO_MCP_LOCAL_DO_DEVIN) == declarados)
+        caso(CASO_ESPELHO_DO_DEVIN_FICA_FORA_DO_GIT,
+             ARQUIVOS[".devin/.gitignore"].strip()
+             == Path(ARQUIVO_MCP_LOCAL_DO_DEVIN).name
+             and Path(ARQUIVO_MCP_LOCAL_DO_DEVIN).name in (
+                 raiz / ".devin" / ARQUIVO_GITIGNORE).read_text(
+                     encoding="utf-8").splitlines())
+
+        (raiz / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).parent.mkdir(parents=True)
+        (raiz / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).write_text(
+            "", encoding="utf-8")
+        with contextlib.redirect_stdout(silencio):
+            registrar_mcp_do_indice(raiz)
+        registrados = servidores_mcp_declarados(raiz)
+        caso(CASO_INDICE_ENTRA_SEM_APAGAR_OS_OUTROS,
+             set(registrados) == {"local", "remoto", "torto",
+                                  NOME_DO_MCP_DO_INDICE}
+             and PACOTE_DO_SERVIDOR_DO_INDICE in (
+                 registrados[NOME_DO_MCP_DO_INDICE]["args"]))
+        registrados[NOME_DO_MCP_DO_INDICE] = {"command": "node",
+                                              "args": ["meu.js"]}
+        gravar_configuracao_json(raiz / ARQUIVO_DE_DECLARACAO_DE_MCP,
+                                 {CHAVE_DOS_SERVIDORES_MCP: registrados})
+        with contextlib.redirect_stdout(silencio):
+            registrar_mcp_do_indice(raiz)
+        caso(CASO_INDICE_DO_DONO_NAO_E_SOBRESCRITO,
+             servidores_mcp_declarados(raiz)[NOME_DO_MCP_DO_INDICE]
+             == {"command": "node", "args": ["meu.js"]})
+        caso(CASO_INDICE_NO_WINDOWS_PASSA_PELO_CMD,
+             servidor_mcp_do_indice(windows=True)["command"] == "cmd"
+             and servidor_mcp_do_indice(windows=True)["args"][:2]
+             == ["/c", "npx"]
+             and servidor_mcp_do_indice(windows=False)["command"] == "npx")
+
+        (raiz / ARQUIVO_SETTINGS_LOCAL).write_text("{quebrado",
+                                                   encoding="utf-8")
+        aviso = io.StringIO()
+        with contextlib.redirect_stdout(aviso):
+            liberar_servidores_mcp_declarados(raiz)
+        caso(CASO_JSON_QUEBRADO_AVISA_E_NAO_ESCREVE,
+             "AVISO" in aviso.getvalue()
+             and (raiz / ARQUIVO_SETTINGS_LOCAL).read_text(
+                 encoding="utf-8") == "{quebrado")
 
     if falhas:
         print(RESUMO_DE_FALHA.format(len(falhas), rodados))
@@ -4082,6 +4317,96 @@ PAGINAS = {
         '- "quero acrescentar uma regra nova na camada genérica. o que ela precisa atravessar antes de entrar?"\n'
         '- "vou apagar uma página do conhecimento que ninguém usa mais, pode?"\n'
         '- "pensei numa skill nova pra camada. me diz se ela passa ou não"\n'
+    ),
+    '.agents/skills/reuniao-diaria/SKILL.md': (
+        '---\n'
+        'name: reuniao-diaria\n'
+        'description: Reunião diária de 30 minutos entre o dono e a sessão — abre com o que mudou, tira impedimentos, decide o pacote da noite e fecha com minuta escrita no quadro. Use quando pedirem a daily, a reunião do dia, o planejamento da noite ou "o que entra hoje". Escopo — A REUNIÃO. Executar o pacote é do executor de roteiros, pela trabalho-por-issue; colher o que a sessão ensinou é da encerramento-de-sessao. Palavras que a acordam — "vamos fazer a daily", "reunião do dia", "o que roda hoje à noite".\n'
+        '---\n'
+        '\n'
+        '# Reunião diária\n'
+        '\n'
+        'Trinta minutos, com hora de acabar. A reunião é conversa; o que fica dela é a\n'
+        '**minuta**, escrita no quadro. Sem minuta não houve reunião.\n'
+        '\n'
+        'Se a casa tiver voz, a sessão fala a abertura e cada pergunta — e escreve\n'
+        'tudo, porque o texto é a minuta. O dono responde como quiser, inclusive só\n'
+        'por texto. A voz é da casa, não da camada: o comando mora onde a casa guarda\n'
+        'os scripts dela, e o dono o informa uma vez, no arquivo de instruções de\n'
+        'usuário dele.\n'
+        '\n'
+        '## Antes de falar, meça\n'
+        '\n'
+        'Tudo por instrumento, nada de cabeça, e o resultado cabe em cinco linhas.\n'
+        'Despejar a saída dos comandos é o erro caro desta etapa.\n'
+        '\n'
+        '- **Projetos.** A lista única é o campo `projetos` de `nucleo/executor.json`\n'
+        '  — não existe outra. Ativo hoje é o que se moveu: commit nos últimos sete\n'
+        '  dias no repositório dele (`git -C projetos/<repositorio> log\n'
+        "  --since='7 days ago' --oneline`) ou linha aberta no quadro com a etiqueta\n"
+        '  dele. Os demais ficam calados.\n'
+        '- **O que espera pelo dono.** Cartão parado nele, sempre com o link — ele\n'
+        '  decide do celular.\n'
+        '- **A última minuta.** O comentário mais recente do quadro que começa por\n'
+        '  "Minuta": o que ficou combinado é o ponto de partida, não a memória.\n'
+        '- **Os dois contadores da semana, lado a lado.** Entregas vistas por quem\n'
+        '  recebe (PR mesclado nos últimos sete dias em cada repositório de projeto)\n'
+        "  e mudanças na camada (`git log --since='7 days ago' --oneline | wc -l` na\n"
+        '  raiz da camada). A camada é meio; o termômetro é a entrega. Os dois lado a\n'
+        '  lado é o que impede a ferramenta de virar o trabalho.\n'
+        '\n'
+        '## A pauta, nesta ordem\n'
+        '\n'
+        '1. **Abertura, 5 min.** As cinco linhas da medição. A sessão diz a hora de\n'
+        '   acabar.\n'
+        '2. **Impedimentos, 5 min.** O que trava o dono. Uma pergunta por vez, e a\n'
+        '   resposta vira linha no quadro ou item com link para ele — nunca fica só na\n'
+        '   conversa.\n'
+        '3. **O que entra, 15 min.** Para cada candidato, três perguntas, sempre as\n'
+        '   mesmas: *o que quem recebe vê no fim?* — *qual a menor mudança que prova a\n'
+        '   hipótese?* — *qual verificação diz que está pronto?* Candidato sem as três\n'
+        '   respostas não entra hoje.\n'
+        '4. **Fechamento, 5 min.** A minuta, lida e gravada.\n'
+        '\n'
+        'A sessão avisa na metade do tempo e no fim. O dono estende dizendo; sem isso,\n'
+        'acabou.\n'
+        '\n'
+        '## O pacote da noite\n'
+        '\n'
+        'Cada item que entra é uma issue com as três respostas escritas, no repositório\n'
+        'que `nucleo/configuracao.json` declara — a receita é a skill\n'
+        '`trabalho-por-issue`. O pacote são esses números, na minuta. Disparar o\n'
+        'executor de roteiros é o passo seguinte e é decisão do dono na reunião.\n'
+        '\n'
+        'Nada roda sozinho. Reunião pulada é fila parada, e está certo assim: a\n'
+        'próxima parte da última minuta.\n'
+        '\n'
+        '## Onde já há quem decida\n'
+        '\n'
+        'Onde a casa tem quem prioriza e quem lidera a técnica, a reunião é a\n'
+        'preparação do dono: a sessão é o par sênior que traduz o pedido recebido nas\n'
+        'três respostas, e a minuta é o que ele leva.\n'
+        '\n'
+        '## A minuta\n'
+        '\n'
+        'Comentário novo no quadro, pelo instrumento que já existe:\n'
+        '`python3 .agents/caixa/caixa.py relatar --corpo "..."`. Até quinze linhas:\n'
+        '\n'
+        '- Minuta de <data>\n'
+        '- Impedimentos: um por linha, cada um com o destino que ganhou\n'
+        '- Entra hoje: uma linha por issue, com a verificação que diz pronto\n'
+        '- Espera pelo dono: o link\n'
+        '- Contadores da semana: entregas vistas × mudanças na camada\n'
+        '- A correção do dia: uma linha — o que o dono pediu de um jeito caro e como\n'
+        '  sairia mais barato. É o item 4 da `encerramento-de-sessao`, em uma linha,\n'
+        '  todo dia.\n'
+        '- Próxima reunião: quando\n'
+        '\n'
+        '## Pedidos de exemplo\n'
+        '\n'
+        '- "vamos fazer a daily"\n'
+        '- "reunião do dia: o que entra hoje à noite?"\n'
+        '- "abre a reunião, tenho trinta minutos"\n'
     ),
     '.agents/skills/trabalho-por-issue/SKILL.md': (
         '---\n'
@@ -29198,9 +29523,24 @@ MODULOS = {
             'docker exec indice-embeddings-1 ollama pull nomic-embed-text\n'
             '```\n'
             '\n'
-            'O registro abaixo é opcional: ele dá à sessão a ferramenta `search_code` do\n'
-            'MCP. Sem ele, ou onde a política o barrar, a busca é pelo `buscar.py` e nada\n'
-            'mais muda.\n'
+            'O registro dá à sessão a ferramenta `search_code` do MCP. Sem ele, ou onde\n'
+            'a política o barrar, a busca é pelo `buscar.py` e nada mais muda.\n'
+            '\n'
+            '**Quem registra é o instalador.** `python montar.py --atualizar` escreve o\n'
+            'servidor `indice` no `.mcp.json` da raiz se ele ainda não estiver lá — no\n'
+            'Windows, por `cmd /c npx`, senão o servidor não sobe — e nunca sobrescreve\n'
+            'uma entrada `indice` que você já tenha. Na mesma passada ele faz duas coisas\n'
+            'por TODOS os servidores do `.mcp.json`, não só por este:\n'
+            '\n'
+            '- entra uma linha por servidor em `allowedMcpServers` do\n'
+            '  `.claude/settings.local.json` — stdio vira `serverCommand` com o comando\n'
+            '  exato, HTTP vira `serverUrl`. É o que devolve o servidor à sessão onde a\n'
+            '  organização aplica uma **lista branda** de MCP (ver o relato 5, abaixo);\n'
+            '- o mesmo `mcpServers` é espelhado em `.devin/mcp_config.local.json`, o\n'
+            '  arquivo de servidores por projeto do Devin CLI. Os dois são pessoais e\n'
+            '  ficam fora do git.\n'
+            '\n'
+            'Registrar à mão continua possível, e é o mesmo servidor:\n'
             '\n'
             '```bash\n'
             'claude mcp add indice \\\n'
@@ -29366,6 +29706,30 @@ MODULOS = {
             'Com a instalação do item 1, o `command` é `node` apontando para o arquivo\n'
             'instalado — não `npx`, que voltaria a buscar o pacote na rede a cada abertura\n'
             'de sessão.\n'
+            '\n'
+            '### 5. O servidor está declarado e some da sessão sem aviso — a lista branda\n'
+            '\n'
+            'Medido em 03/09/2026: a organização empurra, por configuração gerenciada do\n'
+            'Claude Code, uma lista `allowedMcpServers` só com nomes e URLs dos\n'
+            'conectores dela. Efeito: **todo servidor local declarado no `.mcp.json` some\n'
+            'da sessão em silêncio**, e servidor HTTP fora das URLs também — mesmo com o\n'
+            'nome na lista, porque quando há entrada de URL o nome deixa de contar para\n'
+            'servidor remoto. Nada avisa; `claude mcp list` simplesmente não os mostra.\n'
+            '\n'
+            'A causa se lê na própria documentação do Claude Code: sem a chave\n'
+            '`allowManagedMcpServersOnly`, a lista é **branda** — a lista de cada escopo\n'
+            'de configuração se soma, inclusive a do usuário e a do projeto. Entrada\n'
+            '`serverCommand` exige o comando **exato**, argumento por argumento, depois da\n'
+            'expansão de `${VAR}`; `serverUrl` aceita `*`. O `--atualizar` gera as\n'
+            'entradas a partir do `.mcp.json`, então elas batem por construção. Se a\n'
+            'organização ligar a chave rígida, esse caminho fecha e o que resta é pedir\n'
+            'a inclusão ao administrador — e o `buscar.py` continua de pé, porque é\n'
+            'comando, não servidor.\n'
+            '\n'
+            'Para o Devin CLI a lista não existe: ela é do Claude Code. O Devin lê o\n'
+            '`.devin/mcp_config.json` (compartilhado) e o `.devin/mcp_config.local.json`\n'
+            '(pessoal), e é neste que o `--atualizar` espelha o `mcpServers`. Entrada\n'
+            'HTTP com `headers` foi espelhada como está e **não foi medida** no Devin.\n'
             '\n'
             '## O que este módulo não é\n'
             '\n'
