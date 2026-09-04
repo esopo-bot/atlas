@@ -25,7 +25,7 @@ CHAVE_DO_MOTIVO_LONGO = "permissionDecisionReason"
 CHAVE_DA_DECISAO_CURTA = "decision"
 CHAVE_DO_MOTIVO_CURTO = "reason"
 CHAVE_DO_ENSINO = "additionalContext"
-PALAVRA_QUE_RECUSA = ("deny", "block")
+PALAVRA_QUE_BARRA_ONDE_NINGUEM_RESPONDE = ("deny", "block", "ask")
 PALAVRA_QUE_RECUSA_NA_OUTRA = "block"
 SAIDA_QUE_BARRA = 2
 RECUSADO_SEM_MOTIVO_DITO = "recusado sem motivo dito"
@@ -39,6 +39,8 @@ CHAVE_DO_CWD_NO_EDITOR = "cwd"
 RAIZ_QUE_A_OUTRA_FERRAMENTA_DA = "DEVIN_PROJECT_DIR"
 RAIZ_QUE_AS_CERCAS_LEEM = "CLAUDE_PROJECT_DIR"
 EVENTO_PADRAO = "PreToolUse"
+CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
+MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
 
 
 def raiz_do_repositorio(pedido=None):
@@ -90,12 +92,18 @@ def a_recusa_e_o_ensino_de_uma_cerca(saida, codigo):
         except json.JSONDecodeError:
             continue
         longa = dito.get(CHAVE_DA_RESPOSTA_LONGA, {})
-        if longa.get(CHAVE_DA_DECISAO_LONGA) in PALAVRA_QUE_RECUSA:
+        if longa.get(CHAVE_DA_DECISAO_LONGA) in PALAVRA_QUE_BARRA_ONDE_NINGUEM_RESPONDE:
             return longa.get(CHAVE_DO_MOTIVO_LONGO, ""), None
-        if dito.get(CHAVE_DA_DECISAO_CURTA) in PALAVRA_QUE_RECUSA:
+        if dito.get(CHAVE_DA_DECISAO_CURTA) in PALAVRA_QUE_BARRA_ONDE_NINGUEM_RESPONDE:
             return dito.get(CHAVE_DO_MOTIVO_CURTO, ""), None
         ensino = ensino or longa.get(CHAVE_DO_ENSINO)
     return None, ensino
+
+
+def pergunta_para_as_cercas(pedido_da_outra_ferramenta, ferramenta):
+    pergunta = dict(pedido_da_outra_ferramenta, tool_name=ferramenta)
+    pergunta.setdefault(CAMPO_DO_MODO_DE_PERMISSAO, MODO_SEM_QUEM_RESPONDA)
+    return pergunta
 
 
 def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):
@@ -105,7 +113,7 @@ def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):
     evento = pedido_da_outra_ferramenta.get("hook_event_name", EVENTO_PADRAO)
     ferramenta = COMO_A_OUTRA_FERRAMENTA_CHAMA_A_MESMA_COISA.get(chegou, chegou)
 
-    pergunta = dict(pedido_da_outra_ferramenta, tool_name=ferramenta)
+    pergunta = pergunta_para_as_cercas(pedido_da_outra_ferramenta, ferramenta)
     ambiente = dict(os.environ, **{RAIZ_QUE_AS_CERCAS_LEEM: str(raiz)})
 
     ensinos = []
@@ -133,6 +141,8 @@ RECUSA_LONGA = ('{"hookSpecificOutput": {"permissionDecision": "deny", '
 RECUSA_CURTA = '{"decision": "block", "reason": "porque nao"}'
 ENSINO = ('{"hookSpecificOutput": {"additionalContext": "cuidado com isso"}}')
 LIBERADO = '{"hookSpecificOutput": {"permissionDecision": "allow"}}'
+PERGUNTA = ('{"hookSpecificOutput": {"permissionDecision": "ask", '
+            '"permissionDecisionReason": "quem decide e o dono"}}')
 SETTINGS_DE_TESTE = {
     "hooks": {"PreToolUse": [
         {"matcher": "Write|Edit", "hooks": [{"command": "cerca-da-escrita"}]},
@@ -149,7 +159,9 @@ CASOS_DA_RESPOSTA = (
     ("silencio deixa passar", "", 0, None, None),
     ("lixo antes do json nao atrapalha", "ruido\n" + RECUSA_CURTA, 0,
      "porque nao", None),
-    ("json quebrado nao derruba", "{nao e json}", 0, None, None))
+    ("json quebrado nao derruba", "{nao e json}", 0, None, None),
+    ("pergunta barra onde ninguem responde", PERGUNTA, 0,
+     "quem decide e o dono", None))
 
 CASOS_DO_NOME = (("write", "Write"), ("edit", "Edit"), ("exec", "Bash"),
                  ("shell_command", "Bash"), ("read", "Read"),
@@ -215,12 +227,23 @@ def testar():
                            "permissionDecisionReason": "porque sim"}:
         quebrou += 1
         print(FALHA.format("resposta ao editor", "deny", saida_do_editor))
+    sem_modo = pergunta_para_as_cercas({"tool_name": "exec"}, "Bash")
+    if sem_modo.get(CAMPO_DO_MODO_DE_PERMISSAO) != MODO_SEM_QUEM_RESPONDA:
+        quebrou += 1
+        print(FALHA.format("pedido sem modo declara que ninguem responde",
+                           MODO_SEM_QUEM_RESPONDA, sem_modo))
+    com_modo = pergunta_para_as_cercas(
+        {"tool_name": "exec", CAMPO_DO_MODO_DE_PERMISSAO: "default"}, "Bash")
+    if com_modo.get(CAMPO_DO_MODO_DE_PERMISSAO) != "default":
+        quebrou += 1
+        print(FALHA.format("modo que a outra ferramenta declarou fica",
+                           "default", com_modo))
     saida_da_outra = resposta_para_quem_perguntou({"tool_name": "exec"}, "x")
     if saida_da_outra != {"decision": "block", "reason": "x"}:
         quebrou += 1
         print(FALHA.format("resposta a outra ferramenta", "block", saida_da_outra))
     total = (len(CASOS_DA_RESPOSTA) + len(CASOS_DO_NOME)
-             + len(CASOS_DO_CASADOR) + 1 + len(CASOS_DO_EDITOR) + 2)
+             + len(CASOS_DO_CASADOR) + 1 + len(CASOS_DO_EDITOR) + 4)
     print(PLACAR.format(total - quebrou, total))
     return 1 if quebrou else 0
 
