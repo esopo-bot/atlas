@@ -86,7 +86,19 @@ QUANDO_QUE_O_MATERIALIZADOR_SUBSTITUI = "2000-01-01T00:00:00Z"
 CICLO_QUE_O_MATERIALIZADOR_SUBSTITUI = {"i": 1, "teto": 1}
 CODIFICACAO_SEGURA_EM_QUALQUER_LOCALIDADE = "ascii"
 TEMPO_LIMITE_DA_EVIDENCIA = 10
-INTERPRETADOR_DE_SHELL = ["bash", "-c"]
+BASH_AO_LADO_DO_GIT = (("bin", "bash.exe"), ("usr", "bin", "bash.exe"))
+
+
+def interpretador_de_shell() -> list:
+    import shutil
+    bash_nu_resolveria_para_o_subsistema_linux = shutil.which("bash")
+    git = shutil.which("git") if os.name == "nt" else None
+    for pasta in (Path(git).resolve().parents if git else []):
+        for relativo in BASH_AO_LADO_DO_GIT:
+            achado = pasta.joinpath(*relativo)
+            if achado.is_file():
+                return [str(achado), "-c"]
+    return [bash_nu_resolveria_para_o_subsistema_linux or "bash", "-c"]
 
 EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
@@ -153,7 +165,8 @@ AFIRMACAO_POR_RESPOSTA = {
     RESPOSTA_VETA_METADATA: (
         "o pedido chama o endpoint de metadata da nuvem ({})"),
 }
-COMANDO_DA_PROVA = "python3 .claude/hooks/orientar-credencial.py {} {}"
+COMANDO_DA_PROVA = ("bash .claude/hooks/interpretador.sh "
+                    ".claude/hooks/orientar-credencial.py {} {}")
 PROXIMO_DO_VETO = (
     "Refaça o comando sem o valor da credencial: referencie pelo NOME "
     "(${VARIAVEL}) ou use a bandeira de mensagem — o conteúdo não sobe para "
@@ -753,19 +766,17 @@ def testar_a_evidencia_materializada(caso, falhas: list) -> None:
              r_metadata.get("veredito") == VEREDITO_PARA
              and r_metadata.get("proximo")
              and "metadata" in r_metadata["provado"][0]["afirmacao"])
+        shell_da_prova = interpretador_de_shell()
         prova = subprocess.run(
-            INTERPRETADOR_DE_SHELL + [r1["provado"][0]["comando"]],
+            shell_da_prova + [r1["provado"][0]["comando"]],
             capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real)
         caso("a prova do provado re-executa igual",
              prova.stdout.strip() == r1["provado"][0]["saida"])
-        ambiente_limpo = {"PATH": "/usr/local/bin:/usr/bin:/bin"}
-        prova_limpa = subprocess.run(
-            INTERPRETADOR_DE_SHELL + [r1["provado"][0]["comando"]],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real, env=ambiente_limpo)
-        caso("a prova re-executa com o mesmo interpretador que o "
-             "settings.json usa, mesmo sem o PATH da sessão",
-             prova_limpa.returncode == 0
-             and prova_limpa.stdout.strip() == r1["provado"][0]["saida"])
+        caso("a prova re-executa pelo bash que mora ao lado do git, que é "
+             "onde o lançador do settings.json vai parar — antes ela pedia "
+             "um python3 que nesta máquina é o atalho da loja",
+             prova.returncode == 0
+             and prova.stdout.strip() == r1["provado"][0]["saida"])
         valida = subprocess.run(
             [sys.executable, str(origem / NOME_DO_SCRIPT_DE_EVIDENCIA),
              SUBCOMANDO_VALIDAR, str(primeiro)], capture_output=True)
@@ -788,12 +799,16 @@ def testar_a_evidencia_materializada(caso, falhas: list) -> None:
              "bandeira no comando gravado",
              BANDEIRA_DE_AVALIAR_ARQUIVO in r3["provado"][0]["comando"])
         prova_arquivo = subprocess.run(
-            INTERPRETADOR_DE_SHELL + [r3["provado"][0]["comando"]],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real, env=ambiente_limpo)
-        caso("a prova da bandeira --avaliar-arquivo também re-executa sem "
-             "o PATH da sessão",
+            shell_da_prova + [r3["provado"][0]["comando"]],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz_real)
+        caso("a prova da bandeira --avaliar-arquivo também re-executa por "
+             "esse bash",
              prova_arquivo.returncode == 0
              and prova_arquivo.stdout.strip() == r3["provado"][0]["saida"])
+        caso("o interpretador escolhido não é o do subsistema Linux, que na "
+             "máquina de trabalho é bloqueado",
+             "system32" not in shell_da_prova[0].lower()
+             and "windowsapps" not in shell_da_prova[0].lower())
 
 
 def testar_a_falha_aberta_sem_executor(caso) -> None:

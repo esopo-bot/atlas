@@ -259,6 +259,14 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 
 - **A promoção é um passo explícito**, depois dos critérios provados — nunca
   efeito colateral de salvar o trabalho do dia.
+- **Entregar é a integração conter o trabalho.** Onde o repositório autoriza
+  push, a branch de trabalho entrega **mesclando** na integração declarada;
+  empurrá-la é sincronizar. Da branch de trabalho para a integração não cabe
+  pedido de incorporação: o pedido é o caminho da integração para a branch
+  por incorporação, e o do vizinho somente leitura, onde exige autorização
+  expressa do dono. Onde o cadastro nega push, a entrega é do dono — diga a
+  ele o que ficou commitado e pare. O gancho de destino cobra a integração de
+  cada vizinho tocado pelo cadastro do projeto.
 - **O corpo do pedido de revisão cobre o que o diff entrega.** Antes de
   pedir revisão, confira as seções do corpo contra a lista real de commits:
   o que o diff tem e o corpo não conta, o revisor aprova sem ver.

@@ -17,6 +17,10 @@ Para qualquer agente de IA neste repositório.
   wiki deles, `conhecimento/projetos/`, é perfil, não prova.
 - Rode `python montar.py --sincronizar` depois de editar página, skill, módulo
   ou `nucleo/`.
+- Onde as issues nascem: `nucleo/configuracao.json`, campo
+  `repositorio_das_issues`, que aponta o arquivo local com o endereço. Toda
+  issue nasce lá, mesmo quando o código mora em outro repositório — procurar no
+  repositório de código devolve zero, e zero parece resposta.
 
 ## Ordens deste repositório
 
@@ -54,6 +58,9 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 16. Ao dar por entregue, prove que nada ficou sem destino — nem commit fora da
     branch, nem entrega sem o passo seguinte.
 17. Explique na altura de quem lê, começando por júnior.
+18. Número não mora em prosa.
+19. Não pare sem necessidade.
+20. Decisão do dono não se reabre sem citar a data e o motivo.
 
 ## Os nomes
 

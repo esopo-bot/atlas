@@ -15,3 +15,6 @@ montar.py linguist-generated=true
 # O manual em HTML e gerado das paginas de conhecimento/ pelo
 # .agents/manual/manual.py --escrever. Colapsa nos diffs do GitHub.
 manual.html linguist-generated=true
+
+# O lançador dos ganchos é lido pelo bash, que não aceita quebra de linha CRLF.
+.claude/hooks/interpretador.sh text eol=lf

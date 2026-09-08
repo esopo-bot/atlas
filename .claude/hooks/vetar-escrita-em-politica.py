@@ -84,7 +84,7 @@ MANDA_GRAVAR = (
 LIMITE_CONFESSADO = (
     "O que esta cerca NÃO cobre, dito de frente para ninguém confiar "
     "demais nela: ela lê o CAMINHO pedido, não o que um programa faz por "
-    "dentro. `python3 montar.py --sincronizar` reescreve o settings.json e "
+    "dentro. `python montar.py --sincronizar` reescreve o settings.json e "
     "passa, porque não nomeia o arquivo — e é assim de propósito, senão a "
     "própria execução travaria. Isso não é permissão: é o limite do "
     "instrumento."

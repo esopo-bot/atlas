@@ -43,7 +43,9 @@ PASTA_DO_CONHECIMENTO = "conhecimento"
 INSTALADOR = "montar.py"
 INTERPRETADOR = sys.executable
 INTERPRETADOR_NO_SHELL = f'"{sys.executable}"'
-CANDIDATOS_DE_INTERPRETADOR = ("python3", "python", "py")
+ARQUIVO_DO_LANCADOR = ".claude/hooks/interpretador.sh"
+SHELL_DO_LANCADOR = "bash"
+LINHA_DOS_CANDIDATOS = re.compile(r'^CANDIDATOS="([^"]*)"', re.M)
 PERGUNTA_DA_VERSAO = "import sys; print(sys.version_info[0])"
 VERSAO_QUE_SERVE = "3"
 TETO_DO_INTERPRETADOR_S = 10
@@ -88,6 +90,24 @@ SEM_ENTREGA = ("{} não tem para onde entregar — nem upstream declarado, "
                "nem origin/{} no remoto. Nada saiu da máquina, então "
                "não há como provar que nada ficou para trás.")
 FORA_DE_REPOSITORIO = "Sem git aqui — nada a medir."
+ARQUIVO_DO_EXECUTOR = "nucleo/executor.json"
+CHAVE_DAS_ISSUES = "issues"
+CHAVE_DO_REPOSITORIO_DAS_ISSUES = "repositorio"
+TITULO_DO_QUADRO = "ONDE AS ISSUES NASCEM"
+QUADRO_DECLARADO = "  {}"
+QUADRO_SEM_ARQUIVO = (
+    "  {} não existe aqui — sem ele a sessão não sabe onde a issue "
+    "nasce, e\n  procurar no repositório de código devolve zero, que "
+    "parece resposta.\n  Copie {} e preencha.")
+QUADRO_ILEGIVEL = "  {} não se deixou ler: {}"
+QUADRO_POR_PREENCHER = (
+    "  {} ainda não declara o repositório das issues — o campo {}.{} "
+    "está\n  vazio ou por preencher.")
+ARQUIVO_DO_EXEMPLO_DO_EXECUTOR = "nucleo/executor.exemplo.json"
+MARCA_POR_PREENCHER = "${"
+SAIDA_LIMPA = 0
+SAIDA_COM_ACHADO = 1
+SAIDA_NAO_MEDIDO = 2
 ARQUIVO_DAS_PROTEGIDAS = ".claude/branches-protegidas.txt"
 CHAVE_POR_INCORPORACAO = "branches_por_incorporacao"
 MARCA_DE_COMENTARIO_NA_LISTA = "#"
@@ -95,8 +115,8 @@ PREFIXO_DO_REMOTO = "origin/"
 CABECA_DO_REMOTO = "origin/HEAD"
 SEPARADOR_DO_REMOTO = "/"
 COMANDO_DA_REFERENCIA = "git rev-parse --verify --quiet {}"
-COMANDO_DAS_LOCAIS = "git branch --format='%(refname:short)'"
-COMANDO_DAS_REMOTAS = "git branch -r --format='%(refname:short)'"
+COMANDO_DAS_LOCAIS = 'git branch --format="%(refname:short)"'
+COMANDO_DAS_REMOTAS = 'git branch -r --format="%(refname:short)"'
 COMANDO_DO_QUE_ACRESCENTA = "git diff --quiet {}...{}"
 COMANDO_DO_TOPO = "git rev-parse {}"
 NAO_ACRESCENTA_NADA = 0
@@ -120,8 +140,8 @@ PODA_ESCAPE = ("  Quer guardar alguma? Declare o nome em {} — o arquivo é seu
 TITULO_MATRICULA = ("A MATRÍCULA — todo gancho e instrumento rastreado viaja "
                     "no instalador")
 TODOS_OS_EVENTOS = ""
-COMANDO_DOS_GANCHOS_RASTREADOS = "git ls-files '.claude/hooks/*.py'"
-COMANDO_DOS_INSTRUMENTOS_RASTREADOS = "git ls-files '.agents/*/*.py'"
+COMANDO_DOS_GANCHOS_RASTREADOS = 'git ls-files ".claude/hooks/*.py"'
+COMANDO_DOS_INSTRUMENTOS_RASTREADOS = 'git ls-files ".agents/*/*.py"'
 NOME_DO_ESCOPO_DA_MATRICULA = "matricula"
 NOME_DE_FONTES = "FONTES"
 NOME_DE_MODULOS = "MODULOS"
@@ -182,7 +202,7 @@ INTERPRETADOR_QUE_SOME = (
     "silêncio dele é indistinguível de verde — todos os ganchos registrados "
     "com `{0}` morrem juntos e calados. Conserte o comando em "
     ".claude/settings.json (ou settings.local.json) para um interpretador que "
-    "resolve, e rode `python3 .agents/camada/camada.py --matricula` de novo.")
+    "resolve, e rode `python .agents/camada/camada.py --matricula` de novo.")
 MATRICULA_FECHADA = ("Matrícula fechada: {} gancho(s) e {} instrumento(s) "
                      "rastreado(s), todos no instalador.")
 GANCHO_LIGADO_FORA_DO_GIT = (
@@ -194,8 +214,26 @@ MATRICULA_ABERTA = ("Matrícula ABERTA: {} saldo(s) — o instalador não "
                     "recebe menos do que vê aqui.")
 TITULO_DAS_CHAVES = ("AS CHAVES — toda chave de configuração tem quem a "
                      "leia")
-COMANDO_DOS_JSON_RASTREADOS = "git ls-files '*.json'"
-COMANDO_DOS_JSON_FORA_DO_GIT = "git ls-files --others '*.json'"
+COMANDO_DOS_JSON_RASTREADOS = 'git ls-files "*.json"'
+COMANDO_DO_QUE_O_GIT_IGNORA = 'git check-ignore -q "{}"'
+CHAVE_DAS_REFERENCIAS_FORA_DO_GIT = "referencias_que_ficam_fora_do_git"
+CAMPO_DO_CAMINHO_DECLARADO = "caminho"
+ARQUIVO_DO_GITIGNORE = ".gitignore"
+TITULO_DOS_DECLARADOS = ("O QUE FICA FORA DO GIT — a declaração e o git "
+                         "dizem a mesma coisa")
+DECLARADO_IGNORADO = "o git ignora"
+DECLARADO_SOLTO = "SOLTO: o git ainda o vê"
+LINHA_DO_DECLARADO = "  {:<44} {}"
+SEM_DECLARACAO = ("{} não declara caminho nenhum fora do git — nada a "
+                  "alinhar.")
+DECLARACAO_DESALINHADA = (
+    "{} caminho(s) declarado(s) em {} que o git NÃO ignora. Declaração pela "
+    "metade é pior que nenhuma: a sessão lê que o caminho está fora do git, "
+    "o `git status` continua acusando, e a cobrança de destino pede destino "
+    "para o que ninguém vai commitar. Ponha cada um em {}.")
+DECLARACAO_ALINHADA = ("Os {} caminho(s) declarados fora do git estão em {}: "
+                       "a declaração e o git dizem a mesma coisa.")
+COMANDO_DOS_JSON_FORA_DO_GIT = 'git ls-files --others "*.json"'
 SUFIXO_DO_EXEMPLO = ".exemplo.json"
 VALOR_QUE_A_MAQUINA_PREENCHE = re.compile(r"^\$\{[^}]*\}$")
 CHAVE_DA_MAQUINA = "dado da máquina"
@@ -204,12 +242,15 @@ CHAVE_DAS_EXCECOES_SEM_LEITOR = "chaves_de_configuracao_sem_leitor"
 CAMPO_DO_ARQUIVO = "arquivo"
 CAMPO_DA_CHAVE = "chave"
 CAMPO_DO_MOTIVO = "motivo"
-COMANDO_DOS_LEITORES_RASTREADOS = "git ls-files '*.py'"
+COMANDO_DOS_LEITORES_RASTREADOS = 'git ls-files "*.py"'
 CONFIGURACAO_ILEGIVEL = ("Chaves NÃO MEDIDAS: {} não se deixou ler — {}. "
                          "Sem a declaração não há chave a cobrar, e zero "
                          "aqui seria invenção.")
-SEM_CONFIGURACAO = ("Nenhum `.json` rastreado declara chave de topo ({}) — "
-                    "nada a medir.")
+SEM_CONFIGURACAO = ("Chaves NÃO MEDIDAS: `{}` não devolveu nenhum `.json` "
+                    "rastreado. Universo vazio não é universo limpo — um "
+                    "repositório sem configuração nenhuma é raro, e a "
+                    "listagem que volta vazia por engano se parece com ele. "
+                    "Confira o comando antes de acreditar no verde.")
 CHAVES_NAO_MEDIDAS = ("Chaves NÃO MEDIDAS: `{}` falhou. Sem a listagem do git "
                       "não existe universo a cobrar, e zero aqui seria "
                       "invenção.")
@@ -371,9 +412,9 @@ Sua ÚLTIMA mensagem tem de ser só este JSON, sem cerca de código:
   "o_que_e_pronto": "<quando a camada deixa chamar um trabalho de pronto>"}}"""
 
 
-def corre(comando, tempo=TEMPO_DE_UM_TESTE):
+def corre(comando, tempo=TEMPO_DE_UM_TESTE, cwd=None):
     r = subprocess.run(comando, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       timeout=tempo)
+                       timeout=tempo, cwd=cwd)
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -433,21 +474,37 @@ def catalogo_e_corpo(skill: Path) -> tuple:
     return listada, len(texto.encode()) - len(frente.group(1).encode())
 
 
-@functools.lru_cache(maxsize=1)
-def interpretador_com_nome_portatil() -> str:
-    for nome in CANDIDATOS_DE_INTERPRETADOR:
-        if not shutil.which(nome):
-            continue
-        try:
-            pronto = subprocess.run(
-                [nome, "-c", PERGUNTA_DA_VERSAO], capture_output=True,
-                text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_INTERPRETADOR_S)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if pronto.returncode == 0 and \
-                pronto.stdout.strip() == VERSAO_QUE_SERVE:
+def candidatos_do_lancador(raiz: Path) -> tuple:
+    try:
+        texto = (raiz / ARQUIVO_DO_LANCADOR).read_text(encoding="utf-8")
+    except OSError:
+        return ()
+    achado = LINHA_DOS_CANDIDATOS.search(texto)
+    return tuple(achado.group(1).split()) if achado else ()
+
+
+def responde_python_3(nome: str) -> bool:
+    try:
+        pronto = subprocess.run(
+            [shutil.which(nome) or nome, "-c", PERGUNTA_DA_VERSAO],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=TETO_DO_INTERPRETADOR_S)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return pronto.returncode == 0 and pronto.stdout.strip() == VERSAO_QUE_SERVE
+
+
+def interpretador_que_roda(candidatos: tuple):
+    for nome in candidatos:
+        if responde_python_3(nome):
             return nome
-    return CANDIDATOS_DE_INTERPRETADOR[0]
+    return None
+
+
+@functools.lru_cache(maxsize=1)
+def interpretador_com_nome_portatil(raiz: Path) -> str:
+    return (interpretador_que_roda(candidatos_do_lancador(raiz))
+            or INTERPRETADOR_NO_SHELL)
 
 
 def comandos_dos_ganchos(raiz: Path, arquivos: tuple,
@@ -470,23 +527,39 @@ def comandos_dos_ganchos(raiz: Path, arquivos: tuple,
     return comandos
 
 
-def interpretadores_que_somem(comandos: list) -> list:
+ASPAS_QUE_O_SHELL_TIRARIA = "\"'"
+
+
+def chama_o_lancador(pedacos: list) -> bool:
+    return (pedacos[0] == SHELL_DO_LANCADOR and len(pedacos) > 1
+            and pedacos[1].endswith(ARQUIVO_DO_LANCADOR))
+
+
+def interpretadores_que_somem(comandos: list, raiz: Path) -> list:
+    candidatos = candidatos_do_lancador(raiz)
     ausentes = []
     for comando in comandos:
-        pedacos = shlex.split(comando)
+        pedacos = [p.strip(ASPAS_QUE_O_SHELL_TIRARIA)
+                   for p in shlex.split(comando, posix=os.name != "nt")]
         if not pedacos:
             continue
         chamado = pedacos[0]
-        if shutil.which(chamado) or Path(chamado).is_file():
-            continue
-        if chamado not in ausentes:
+        if chama_o_lancador(pedacos):
+            chamado = ARQUIVO_DO_LANCADOR
+            roda = bool(shutil.which(SHELL_DO_LANCADOR)
+                        and interpretador_que_roda(candidatos))
+        elif chamado in candidatos:
+            roda = responde_python_3(chamado)
+        else:
+            roda = bool(shutil.which(chamado) or Path(chamado).is_file())
+        if not roda and chamado not in ausentes:
             ausentes.append(chamado)
     return sorted(ausentes)
 
 
 def ganchos_com_interpretador_que_some(raiz: Path) -> list:
     return interpretadores_que_somem(
-        comandos_dos_ganchos(raiz, CONFIGURACOES_DO_CLAUDE, ""))
+        comandos_dos_ganchos(raiz, CONFIGURACOES_DO_CLAUDE, ""), raiz)
 
 
 def comandos_de_abertura(raiz: Path) -> list:
@@ -546,6 +619,14 @@ def soma_das_contagens(saida: str):
     return total
 
 
+SEM_O_GLOB_QUE_COMERIA_A_CONTRABARRA_DO_PADRAO = {"MSYS": "noglob",
+                                                  "CYGWIN": "noglob"}
+
+
+def ambiente_do_grep() -> dict:
+    return {**os.environ, **SEM_O_GLOB_QUE_COMERIA_A_CONTRABARRA_DO_PADRAO}
+
+
 def quantas_linhas_casam(padrao: str, alvos: list, raiz: Path):
     total = 0
     for lote in lotes_de_caminhos(alvos):
@@ -553,7 +634,7 @@ def quantas_linhas_casam(padrao: str, alvos: list, raiz: Path):
             pronto = subprocess.run(
                 ["grep", "-cHInP", padrao] + lote, cwd=raiz,
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=TEMPO_DE_UM_TESTE)
+                timeout=TEMPO_DE_UM_TESTE, env=ambiente_do_grep())
         except (OSError, subprocess.SubprocessError):
             return None
         if pronto.returncode >= GREP_ERROU_A_PARTIR_DE:
@@ -594,7 +675,7 @@ def saldo_do_vocabulario(raiz: Path) -> list:
         termos = json.loads(fonte.read_text(encoding="utf-8"))["termos"]
     except (json.JSONDecodeError, KeyError, TypeError):
         return []
-    listados = corre(f'cd "{raiz}" && git ls-files')[1].split("\n")
+    listados = corre("git ls-files", cwd=raiz)[1].split("\n")
     alvos = [c for c in listados
              if c and c not in FORA_DA_CONTA_DO_VOCABULARIO]
     if not alvos:
@@ -674,8 +755,7 @@ def branch_de_incorporacao(raiz: Path) -> str:
 
 def referencia_que_existe(raiz: Path, nome: str) -> str:
     for candidata in (f"{PREFIXO_DO_REMOTO}{nome}", nome):
-        codigo, _ = corre(
-            f'cd "{raiz}" && {COMANDO_DA_REFERENCIA.format(candidata)}')
+        codigo, _ = corre(COMANDO_DA_REFERENCIA.format(candidata), cwd=raiz)
         if codigo == 0:
             return candidata
     return ""
@@ -690,7 +770,7 @@ def nome_curto_da_branch(bruta: str) -> str:
 def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
                           protegidas: set) -> tuple:
     def topo(nome):
-        codigo, saida = corre(f'cd "{raiz}" && {COMANDO_DO_TOPO.format(nome)}')
+        codigo, saida = corre(COMANDO_DO_TOPO.format(nome), cwd=raiz)
         return saida.strip() if codigo == 0 else ""
 
     topo_da_referencia = topo(referencia)
@@ -698,15 +778,14 @@ def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
     def e_rastro(bruta):
         if topo(bruta) == topo_da_referencia:
             return False, True
-        codigo, _ = corre(
-            f'cd "{raiz}" && '
-            f'{COMANDO_DO_QUE_ACRESCENTA.format(referencia, bruta)}')
+        codigo, _ = corre(COMANDO_DO_QUE_ACRESCENTA.format(referencia, bruta),
+                          cwd=raiz)
         if codigo not in (NAO_ACRESCENTA_NADA, ACRESCENTA_ALGUMA_COISA):
             return False, False
         return codigo == NAO_ACRESCENTA_NADA, True
 
     def colher(comando, e_remota):
-        codigo, saida = corre(f'cd "{raiz}" && {comando}')
+        codigo, saida = corre(comando, cwd=raiz)
         if codigo != 0 or not topo_da_referencia:
             return [], False
         colhidas, mediu = [], True
@@ -730,23 +809,21 @@ def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
 
 
 def o_que_ainda_nao_saiu(raiz: Path, atual: str) -> int:
-    codigo, alvo = corre(f'cd "{raiz}" && {COMANDO_DO_UPSTREAM}')
+    codigo, alvo = corre(COMANDO_DO_UPSTREAM, cwd=raiz)
     if codigo != 0 or not alvo:
-        codigo, alvo = corre(
-            f'cd "{raiz}" && {COMANDO_DO_ESPELHO.format(atual)}')
+        codigo, alvo = corre(COMANDO_DO_ESPELHO.format(atual), cwd=raiz)
     if codigo != 0 or not alvo:
         print(SEM_ENTREGA.format(atual, atual))
-        return 1
-    _, sobra = corre(
-        f'cd "{raiz}" && {COMANDO_DO_QUE_FALTA.format(alvo)}')
+        return SAIDA_COM_ACHADO
+    _, sobra = corre(COMANDO_DO_QUE_FALTA.format(alvo), cwd=raiz)
     linhas = [l for l in sobra.split("\n") if l.strip()]
     if not linhas:
         print(ENTREGA_LIMPA.format(atual, alvo))
-        return 0
+        return SAIDA_LIMPA
     print(ENTREGA_COM_SOBRA.format(len(linhas), atual, alvo))
     for linha in linhas:
         print(f"  {linha}")
-    return 1
+    return SAIDA_COM_ACHADO
 
 
 def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
@@ -764,10 +841,10 @@ def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
         raiz, referencia, atual, branches_de_longa_duracao(raiz))
     if not mediu:
         print(PODA_NAO_MEDIDA)
-        return 1
+        return SAIDA_NAO_MEDIDO
     if not locais and not remotas:
         print(PODA_LIMPA)
-        return 0
+        return SAIDA_LIMPA
     print(PODA_COM_SOBRA.format(len(locais) + len(remotas), referencia))
     if locais:
         print(PODA_LOCAL.format(" ".join(locais)))
@@ -775,18 +852,53 @@ def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
         print(PODA_REMOTA.format(
             " ".join(nome_curto_da_branch(r) for r in remotas)))
     print(PODA_ESCAPE.format(ARQUIVO_DAS_PROTEGIDAS))
-    return 1
+    return SAIDA_COM_ACHADO
+
+
+def veredito_da_entrega(faltou: int, sobrou: int) -> int:
+    if SAIDA_COM_ACHADO in (faltou, sobrou):
+        return SAIDA_COM_ACHADO
+    if SAIDA_NAO_MEDIDO in (faltou, sobrou):
+        return SAIDA_NAO_MEDIDO
+    return SAIDA_LIMPA
 
 
 def entrega(raiz: Path) -> int:
-    codigo, atual = corre(f'cd "{raiz}" && {COMANDO_DA_BRANCH}')
+    codigo, atual = corre(COMANDO_DA_BRANCH, cwd=raiz)
     if codigo != 0 or not atual:
         print(FORA_DE_REPOSITORIO)
-        return 0
+        return SAIDA_LIMPA
     print(f"\n{TITULO_ENTREGA}")
     faltou = o_que_ainda_nao_saiu(raiz, atual)
     sobrou = o_que_saiu_e_ficou(raiz, atual)
-    return 1 if (faltou or sobrou) else 0
+    return veredito_da_entrega(faltou, sobrou)
+
+
+def onde_a_issue_nasce(raiz: Path) -> int:
+    print(f"\n{TITULO_DO_QUADRO}")
+    caminho = raiz / ARQUIVO_DO_EXECUTOR
+    if not caminho.is_file():
+        print(QUADRO_SEM_ARQUIVO.format(ARQUIVO_DO_EXECUTOR,
+                                        ARQUIVO_DO_EXEMPLO_DO_EXECUTOR))
+        return 1
+    try:
+        dado = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as falha:
+        print(QUADRO_ILEGIVEL.format(ARQUIVO_DO_EXECUTOR, falha))
+        return 1
+    declarado = ""
+    if isinstance(dado, dict):
+        issues = dado.get(CHAVE_DAS_ISSUES)
+        if isinstance(issues, dict):
+            declarado = str(
+                issues.get(CHAVE_DO_REPOSITORIO_DAS_ISSUES) or "").strip()
+    if not declarado or MARCA_POR_PREENCHER in declarado:
+        print(QUADRO_POR_PREENCHER.format(
+            ARQUIVO_DO_EXECUTOR, CHAVE_DAS_ISSUES,
+            CHAVE_DO_REPOSITORIO_DAS_ISSUES))
+        return 1
+    print(QUADRO_DECLARADO.format(declarado))
+    return 0
 
 
 def dias_parado(arquivo: Path, agora: float) -> int:
@@ -795,9 +907,10 @@ def dias_parado(arquivo: Path, agora: float) -> int:
 
 def arquivos_do_rascunho(raiz: Path) -> list:
     pasta = raiz / RASCUNHO
-    return sorted(a for a in pasta.rglob("*")
-                  if a.is_file() and a.relative_to(pasta).parts[0]
-                  not in PASTAS_DE_INSTRUMENTO_NO_RASCUNHO)
+    return sorted((a for a in pasta.rglob("*")
+                   if a.is_file() and a.relative_to(pasta).parts[0]
+                   not in PASTAS_DE_INSTRUMENTO_NO_RASCUNHO),
+                  key=lambda a: a.as_posix())
 
 
 def esquecidos_no_rascunho(arquivos: list, rastreados: set, raiz: Path,
@@ -806,6 +919,46 @@ def esquecidos_no_rascunho(arquivos: list, rastreados: set, raiz: Path,
             if (rel := arquivo.relative_to(raiz).as_posix()) not in rastreados
             and (dias := dias_parado(arquivo, agora))
             > TETO_DE_DIAS_NO_RASCUNHO]
+
+
+def caminho_que_o_git_ignora(raiz: Path, caminho: str) -> bool:
+    codigo, _ = corre(COMANDO_DO_QUE_O_GIT_IGNORA.format(caminho), cwd=raiz)
+    return codigo == 0
+
+
+def declarados_fora_do_git(raiz: Path) -> int:
+    print(f"\n{TITULO_DOS_DECLARADOS}")
+    caminho = raiz / ARQUIVO_DE_CONFIGURACAO
+    if not caminho.is_file():
+        print(SEM_DECLARACAO.format(ARQUIVO_DE_CONFIGURACAO))
+        return 0
+    try:
+        dado = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as erro:
+        print(CONFIGURACAO_ILEGIVEL.format(ARQUIVO_DE_CONFIGURACAO, erro))
+        return 1
+    declaracao = dado.get(CHAVE_DAS_REFERENCIAS_FORA_DO_GIT) or []
+    if not isinstance(declaracao, list) or not declaracao:
+        print(SEM_DECLARACAO.format(ARQUIVO_DE_CONFIGURACAO))
+        return 0
+    desalinhados = []
+    for entrada in declaracao:
+        tem_caminho = (isinstance(entrada, dict)
+                       and entrada.get(CAMPO_DO_CAMINHO_DECLARADO))
+        if not tem_caminho:
+            continue
+        alvo = entrada[CAMPO_DO_CAMINHO_DECLARADO]
+        ignorado = caminho_que_o_git_ignora(raiz, alvo)
+        print(LINHA_DO_DECLARADO.format(
+            alvo, DECLARADO_IGNORADO if ignorado else DECLARADO_SOLTO))
+        if not ignorado:
+            desalinhados.append(alvo)
+    if desalinhados:
+        print(DECLARACAO_DESALINHADA.format(
+            len(desalinhados), ARQUIVO_DE_CONFIGURACAO, ARQUIVO_DO_GITIGNORE))
+        return 1
+    print(DECLARACAO_ALINHADA.format(len(declaracao), ARQUIVO_DO_GITIGNORE))
+    return 0
 
 
 def rascunho(raiz: Path) -> int:
@@ -998,7 +1151,7 @@ def medidas_da_versao(raiz: Path) -> list:
          if teto is not None else MEDIDA_LARGADA_SEM_TETO.format(paga)),
         (MEDIDA_CUSTO, custo_por_entrega(custo_das_execucoes(raiz))),
         (MEDIDA_ROTA, MEDIDA_ROTA_NAO_MEDIDA.format(
-            interpretador_com_nome_portatil())),
+            interpretador_com_nome_portatil(raiz))),
     ]
 
 
@@ -1035,7 +1188,7 @@ def largada(raiz: Path) -> int:
 
 
 def rastreados_por_git(raiz: Path, comando: str):
-    codigo, saida = corre(f'cd "{raiz}" && {comando}')
+    codigo, saida = corre(comando, cwd=raiz)
     if codigo != 0:
         return None
     return sorted(l.strip() for l in saida.split("\n") if l.strip())
@@ -1256,7 +1409,7 @@ def chaves(raiz: Path) -> int:
         return 1
     if not declaradas:
         print(SEM_CONFIGURACAO.format(COMANDO_DOS_JSON_RASTREADOS))
-        return 0
+        return 1
     medido, erro = leitores_da_configuracao(raiz)
     if medido is None:
         print(erro)
@@ -1528,7 +1681,8 @@ def provar(raiz: Path) -> tuple:
     for alvo in instrumentos_com_teste(raiz):
         partida = time.monotonic()
         codigo, saida = corre(
-            f'cd "{raiz}" && {INTERPRETADOR_NO_SHELL} "{alvo.relative_to(raiz)}" {BANDEIRA_DE_TESTE}')
+            f'{INTERPRETADOR_NO_SHELL} "{alvo.relative_to(raiz)}" {BANDEIRA_DE_TESTE}',
+            cwd=raiz)
         gasto = time.monotonic() - partida
         segundos += gasto
         if codigo == 0 and MARCA_DE_BANCADA_AUSENTE in saida:
@@ -1552,7 +1706,7 @@ def provar(raiz: Path) -> tuple:
     for nome in sem_teste:
         linhas.append(LINHA_DE_CASO.format("CAIU", f"{nome} — sem --testar próprio"))
     if (raiz / INSTALADOR).is_file():
-        codigo, _ = corre(f'cd "{raiz}" && {INTERPRETADOR_NO_SHELL} {INSTALADOR} --verificar')
+        codigo, _ = corre(f'{INTERPRETADOR_NO_SHELL} {INSTALADOR} --verificar', cwd=raiz)
         rodados += 1
         if codigo != 0:
             caidos.append(INSTALADOR)
@@ -1652,10 +1806,10 @@ def simular(raiz: Path) -> tuple:
 
     partida = time.monotonic()
     _, bruto = corre(
-        f'cd "{raiz}" && claude -p {json.dumps(PEDIDO.format(arquivo=ARQUIVO_PEDIDO))} '
+        f'claude -p {json.dumps(PEDIDO.format(arquivo=ARQUIVO_PEDIDO))} '
         f'--output-format json --model {MODELO_DA_SIMULACAO} '
         f'--allowedTools "{FERRAMENTAS_DA_SIMULACAO}"',
-        tempo=TEMPO_DA_SIMULACAO)
+        tempo=TEMPO_DA_SIMULACAO, cwd=raiz)
     parede = time.monotonic() - partida
 
     sessao = colher_json(bruto)
@@ -1667,7 +1821,7 @@ def simular(raiz: Path) -> tuple:
 
     if alvo.is_file():
         codigo_do_teste, berro = corre(
-            f'cd "{raiz}" && {INTERPRETADOR_NO_SHELL} "{ARQUIVO_PEDIDO}" {BANDEIRA_DE_TESTE}')
+            f'{INTERPRETADOR_NO_SHELL} "{ARQUIVO_PEDIDO}" {BANDEIRA_DE_TESTE}', cwd=raiz)
     else:
         codigo_do_teste, berro = 1, "a sessão não escreveu o arquivo"
     do_artefato.append((f"entregou {ARQUIVO_PEDIDO} com --testar que passa",
@@ -1778,8 +1932,8 @@ def evidencia(raiz: Path, passo: str) -> dict:
     provado, faltas = [], []
     for afirmacao, chave in PROVAS[passo]:
         comando = COMANDO_DO_NUMERO.format(
-            interpretador_com_nome_portatil(), chave)
-        codigo, saida = corre(f'cd "{raiz}" && {comando}')
+            interpretador_com_nome_portatil(raiz), chave)
+        codigo, saida = corre(comando, cwd=raiz)
         provado.append({"afirmacao": afirmacao, "comando": comando,
                         "saida": saida})
         if codigo != 0:
@@ -1839,10 +1993,15 @@ def main() -> int:
                     help="cobra que todo gancho rastreado viaje no instalador")
     ap.add_argument("--chaves", action="store_true",
                     help="acusa chave de configuração que ninguém lê")
+    ap.add_argument("--declarados", action="store_true",
+                    help="cobra que todo caminho declarado fora do git "
+                         "esteja mesmo no .gitignore")
     ap.add_argument("--markdown", action="store_true",
                     help="classifica todo .md rastreado pelo que o lê")
     ap.add_argument("--rascunho", action="store_true",
                     help="acusa arquivo não rastreado envelhecido em tmp/")
+    ap.add_argument("--quadro", action="store_true",
+                    help="imprime onde as issues deste workspace nascem")
     ap.add_argument("--conta", action="store_true",
                     help="mostra o que cada execução gravada custou")
     ap.add_argument("--versao", action="store_true",
@@ -1881,11 +2040,17 @@ def main() -> int:
     if a.chaves:
         return chaves(raiz)
 
+    if a.declarados:
+        return declarados_fora_do_git(raiz)
+
     if a.markdown:
         return markdown(raiz)
 
     if a.rascunho:
         return rascunho(raiz)
+
+    if a.quadro:
+        return onde_a_issue_nasce(raiz)
 
     if a.conta:
         return conta(raiz)

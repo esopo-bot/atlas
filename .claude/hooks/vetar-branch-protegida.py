@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 PROTEGIDAS_EMBUTIDAS = {
@@ -49,6 +50,10 @@ ACAO_APAGAR = "apagar"
 ACAO_RENOMEAR = "renomear"
 ACAO_COMMIT = "commit"
 VERBO_MERGE = "merge"
+VERBO_PULL = "pull"
+VERBOS_QUE_PODEM_MESCLAR = {VERBO_MERGE, VERBO_PULL}
+BANDEIRA_QUE_NAO_CRIA_COMMIT = "--ff-only"
+MARCAS_QUE_SO_O_SHELL_USA = "<>&|"
 VERBO_INIT = "init"
 VERBO_CHECKOUT = "checkout"
 VERBO_SWITCH = "switch"
@@ -60,6 +65,7 @@ COMANDO_DAS_BRANCHES = ["git", "for-each-ref", "--format=%(refname:short)",
                         "refs/heads/"]
 
 NOMES_DO_GIT = {"git", "git.exe"}
+BANDEIRA_DA_PASTA = "-C"
 NOME_DO_GH = "gh"
 EXTENSAO_EXE = ".exe"
 PROGRAMAS_QUE_ACIONAM = ("git", "gh")
@@ -90,6 +96,14 @@ SEM_ACAO = ""
 SEM_VERBO = -1
 SEM_RECUSA = ""
 SILENCIO = 0
+MARCADORES_DE_EXPANSAO = ("$", "`", "%")
+RECUSA_SEM_MEDIR_O_ALVO = (
+    "Este gancho ia recusar, mas não sabe QUAL repositório o comando toca: o "
+    "alvo é {!r}, e o gancho recebe o texto cru, sem expansão. Julgar pela "
+    "raiz da sessão daria uma razão inventada — e razão inventada manda quem "
+    "lê procurar o problema no lugar errado. Passe o caminho literal no lugar "
+    "da expansão e refaça o comando; o veto volta a julgar o repositório certo."
+)
 RECUSA_SEM_ENTENDER = (
     "Este gancho não entendeu o pedido, e por isso recusa em vez de liberar: "
     "{} — {}. Quem veta e não consegue julgar não pode dizer sim: a parede "
@@ -336,6 +350,20 @@ def cd_que_abre_o_comando(comando: str) -> str:
     return ""
 
 
+def pasta_que_a_bandeira_c_aponta(comando: str) -> str:
+    for segmento in separar(comando):
+        tokens = partir_em_tokens(segmento.strip())
+        if not tokens or not e_git(tokens[0]):
+            continue
+        for i, token in enumerate(tokens[1:], start=1):
+            if token == BANDEIRA_DA_PASTA and i + 1 < len(tokens):
+                return tokens[i + 1]
+            if token.startswith(BANDEIRA_DA_PASTA) \
+                    and len(token) > len(BANDEIRA_DA_PASTA):
+                return token[len(BANDEIRA_DA_PASTA):]
+    return ""
+
+
 def comando_traz_git_init(comando: str) -> bool:
     for segmento in separar(comando):
         tokens = partir_em_tokens(segmento.strip())
@@ -347,9 +375,24 @@ def comando_traz_git_init(comando: str) -> bool:
     return False
 
 
+ALVO_QUE_O_SHELL_EXPANDIRIA = re.compile(
+    r"""(?:-C\s*|\bcd\s+)['"]?((?:\$\(|\$\{|\$|`|%)[^\s'"|;&]*)""")
+
+
+def expansao_que_o_gancho_nao_resolve(comando: str) -> str:
+    destino = (pasta_que_a_bandeira_c_aponta(comando)
+               or cd_que_abre_o_comando(comando))
+    if destino and any(marca in destino for marca in MARCADORES_DE_EXPANSAO):
+        return destino
+    no_texto_cru = ALVO_QUE_O_SHELL_EXPANDIRIA.search(comando or "")
+    return no_texto_cru.group(1) if no_texto_cru else ""
+
+
 def repositorio_que_o_comando_muda(onde: str, padrao: Path,
                                    comando: str = "") -> Path:
-    if (destino := cd_que_abre_o_comando(comando)):
+    destino = (pasta_que_a_bandeira_c_aponta(comando)
+               or cd_que_abre_o_comando(comando))
+    if destino:
         alvo = Path(destino)
         onde = str(alvo if alvo.is_absolute() else Path(onde or ".") / alvo)
     if not onde:
@@ -387,7 +430,28 @@ def autorizacoes(raiz: Path) -> dict:
     return permitido
 
 
-def acao_do_comando(tokens: list) -> str:
+def e_pedaco_de_shell(token: str) -> bool:
+    return any(marca in token for marca in MARCAS_QUE_SO_O_SHELL_USA)
+
+
+def so_avanca_para_o_proprio_espelho(tokens: list, aqui: str) -> bool:
+    i = indice_do_verbo(tokens)
+    resto = tokens[i + 1:] if i != SEM_VERBO else []
+    if BANDEIRA_QUE_NAO_CRIA_COMMIT not in {t.lower() for t in resto}:
+        return False
+    atual = (aqui or "").strip().lower()
+    if not atual:
+        return False
+    for token in resto:
+        if token.startswith("-") or e_pedaco_de_shell(token):
+            continue
+        nome = branch_de_destino_do_ref(token)
+        if nome != atual and not nome.endswith("/" + atual):
+            return False
+    return True
+
+
+def acao_do_comando(tokens: list, aqui: str = "") -> str:
     if not tokens:
         return SEM_ACAO
     programa = Path(tokens[0]).name.lower().removesuffix(EXTENSAO_EXE)
@@ -401,7 +465,9 @@ def acao_do_comando(tokens: list) -> str:
     if segundo in SUBVERBOS_QUE_SO_PEDEM.get(primeiro, frozenset()):
         return SEM_ACAO
     e_do_git = Path(tokens[0]).name.lower() in NOMES_DO_GIT
-    if primeiro == VERBO_MERGE and e_do_git:
+    if primeiro in VERBOS_QUE_PODEM_MESCLAR and e_do_git:
+        if so_avanca_para_o_proprio_espelho(tokens, aqui):
+            return SEM_ACAO
         return ACAO_COMMIT
     for acao, verbos in VERBOS_POR_ACAO.items():
         if primeiro in verbos:
@@ -480,7 +546,7 @@ def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
         if segue_a_branch:
             aqui = branch_depois_do_segmento(tokens, aqui, conhecidas)
 
-        acao = acao_do_comando(tokens)
+        acao = acao_do_comando(tokens, aqui)
         if acao == ACAO_COMMIT and aqui in por_incorporacao:
             return MOTIVO_GRAVA_EM_PROTEGIDA.format(acao, aqui)
         if (acao and not permitido.get(acao, False)
@@ -557,6 +623,15 @@ def raiz_do_projeto_nunca_o_cwd() -> Path:
     return Path(__file__).resolve().parents[NIVEIS_DO_GANCHO_ATE_A_RAIZ]
 
 
+def recusa_por_nao_medir_o_alvo(alvo: str) -> int:
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+        "permissionDecision": DECISAO_DE_NEGAR,
+        "permissionDecisionReason": RECUSA_SEM_MEDIR_O_ALVO.format(alvo),
+    }}, ensure_ascii=False))
+    return SILENCIO
+
+
 def recusa_por_nao_entender(falha) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
@@ -592,6 +667,8 @@ def decidir() -> int:
         branches_por_incorporacao(alvo))
     if not motivo:
         return SILENCIO
+    if nao_expandido := expansao_que_o_gancho_nao_resolve(comando):
+        return recusa_por_nao_medir_o_alvo(nao_expandido)
 
     e_recusa_por_autorizacao = MARCA_DA_RECUSA_POR_AUTORIZACAO in motivo
     print(json.dumps({"hookSpecificOutput": {
@@ -693,6 +770,22 @@ GIT_MERGE_NAO_E_PUBLICAR = [
 GIT_MERGE_EM_PROTEGIDA = [
     ("merge grava na protegida sem passar pelo pedido",
      "git merge homolog"),
+    ("o atalho de sempre é fetch mais merge, e pode gravar igual",
+     "git pull"),
+    ("o atalho com remoto e branch também pode gravar",
+     "git pull origin homolog"),
+    ("avançar para OUTRA branch não cria commit, mas promove trabalho "
+     "sem passar pelo pedido de incorporação",
+     "git merge --ff-only issue/1-alguma-coisa"),
+]
+AVANCA_O_PONTEIRO_SEM_GRAVAR = [
+    ("avançar para o próprio espelho não cria commit nenhum: é adotar o que "
+     "o remoto já tem", "git merge --ff-only origin/{}"),
+    ("o atalho travado em avanço também não cria commit", "git pull --ff-only"),
+    ("redirecionar a saída não é apontar para outra branch",
+     "git pull --ff-only 2>&1"),
+    ("nem encadear com o que vem depois",
+     "git merge --ff-only origin/{} 2>&1"),
 ]
 GH_MERGE_CONTINUA_SENDO_PUBLICAR = [
     ("gh pr merge continua exigindo autorização de publicar",
@@ -738,8 +831,26 @@ FALHA_ARQUIVO_VIROU_BRANCH = (
     "commit seguinte ainda cai na protegida")
 FALHA_MERGE_LOCAL_BARRADO = (
     "  DEVIA PASSAR: git merge local não é publicar — {}")
+FALHA_EXPANSAO_NAO_VISTA = (
+    "  expansão não vista ({}): em {!r} o gancho leu {!r}, e o alvo cru é {!r} "
+    "— sem enxergar a expansão ele julga a branch da raiz e recusa com razão "
+    "inventada")
+FALHA_LITERAL_ACUSADO = (
+    "  caminho literal acusado de expansão ({}): {!r} não tem expansão nenhuma "
+    "e o gancho recusaria sem precisar")
+FALHA_RECUSA_INVENTA_RAZAO = (
+    "  a recusa por alvo não medido fala de branch protegida ou nomeia a main "
+    "— é exatamente a razão inventada que ela existe para não dar")
+FALHA_BANDEIRA_C_IGNORADA = (
+    "  ALVO ERRADO: `git -C <pasta>` tem de apontar o mesmo repositório que "
+    "`cd <pasta> &&`. Sem isso o gancho julga a branch da RAIZ e recusa "
+    "mescla que ia para dentro da branch de trabalho. Esperado {}; pelo cd "
+    "{}; pela bandeira separada {}; pela bandeira colada {}")
 FALHA_MERGE_EM_PROTEGIDA_PASSOU = (
     "  DEVIA BARRAR: git merge grava na branch de incorporação — {}")
+FALHA_AVANCO_BARRADO = (
+    "  DEVIA PASSAR: avanço de ponteiro que não cria commit foi barrado — "
+    "{} ({})")
 FALHA_GH_MERGE_PASSOU = (
     "  DEVIA BARRAR sem autorização de publicar — {}")
 
@@ -991,6 +1102,43 @@ def testar() -> int:
         if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
                             fora, declaradas_do_merge):
             falhas.append(FALHA_MERGE_LOCAL_BARRADO.format(rotulo))
+    ALVOS_POR_EXPANSAO = (
+        ("variável simples", 'git -C "$WT" commit -m x', "$WT"),
+        ("variável entre chaves", "git -C ${RAIZ} push origin main", "${RAIZ}"),
+        ("variável do outro shell", "git -C %RAIZ% push origin main", "%RAIZ%"),
+        ("substituição de comando", "git -C $(pwd) push origin main", "$(pwd)"),
+        ("cd por variável", 'cd "$WT" && git commit -m x', "$WT"),
+    )
+    for rotulo, comando, esperado in ALVOS_POR_EXPANSAO:
+        if expansao_que_o_gancho_nao_resolve(comando) != esperado:
+            falhas.append(FALHA_EXPANSAO_NAO_VISTA.format(
+                rotulo, comando, expansao_que_o_gancho_nao_resolve(comando),
+                esperado))
+    ALVOS_LITERAIS = (
+        ("caminho absoluto no -C", "git -C /tmp/x push origin main"),
+        ("caminho relativo no -C", "git -C ../vizinho push origin main"),
+        ("sem alvo nenhum", "git push origin main"),
+    )
+    for rotulo, comando in ALVOS_LITERAIS:
+        if expansao_que_o_gancho_nao_resolve(comando):
+            falhas.append(FALHA_LITERAL_ACUSADO.format(rotulo, comando))
+    if ("protegida" in RECUSA_SEM_MEDIR_O_ALVO
+            or "main" in RECUSA_SEM_MEDIR_O_ALVO):
+        falhas.append(FALHA_RECUSA_INVENTA_RAZAO)
+
+    with tempfile.TemporaryDirectory(prefix="alvo-do-comando-") as pasta:
+        vizinho = (Path(pasta) / "outro-repo").resolve()
+        (vizinho / PASTA_DO_GIT).mkdir(parents=True)
+        daqui = str(Path.cwd())
+        pelo_cd = repositorio_que_o_comando_muda(
+            daqui, raiz, f"cd {vizinho} && git merge origin/main")
+        separado = repositorio_que_o_comando_muda(
+            daqui, raiz, f"git -C {vizinho} merge origin/main")
+        colado = repositorio_que_o_comando_muda(
+            daqui, raiz, f"git -C{vizinho} merge origin/main")
+        if not (pelo_cd == separado == colado == vizinho):
+            falhas.append(FALHA_BANDEIRA_C_IGNORADA.format(
+                vizinho, pelo_cd, separado, colado))
     for rotulo, comando in GIT_MERGE_EM_PROTEGIDA:
         for onde in declaradas_do_merge:
             if not motivo_da_recusa(comando, protegidas, raiz,
@@ -998,6 +1146,12 @@ def testar() -> int:
                                     declaradas_do_merge):
                 falhas.append(
                     FALHA_MERGE_EM_PROTEGIDA_PASSOU.format(rotulo))
+    for rotulo, molde in AVANCA_O_PONTEIRO_SEM_GRAVAR:
+        for onde in declaradas_do_merge:
+            comando = molde.format(onde)
+            if motivo_da_recusa(comando, protegidas, raiz, AUTORIZA_TUDO,
+                                onde, declaradas_do_merge):
+                falhas.append(FALHA_AVANCO_BARRADO.format(rotulo, comando))
     for rotulo, comando in GH_MERGE_CONTINUA_SENDO_PUBLICAR:
         if not motivo_da_recusa(comando, protegidas, raiz, None, fora):
             falhas.append(FALHA_GH_MERGE_PASSOU.format(rotulo))
@@ -1025,7 +1179,8 @@ def testar() -> int:
              + len(SO_PEDEM) + len(BARRA) + len(DEIXA_PASSAR)
              + len(BARRA_SEM_AUTORIZACAO) * 2 + 1
              + len(GIT_MERGE_NAO_E_PUBLICAR)
-             + len(GIT_MERGE_EM_PROTEGIDA)
+             + (len(GIT_MERGE_EM_PROTEGIDA)
+                + len(AVANCA_O_PONTEIRO_SEM_GRAVAR))
              * len(BRANCHES_POR_INCORPORACAO_DO_TESTE)
              + len(GH_MERGE_CONTINUA_SENDO_PUBLICAR)) + 7
     if falhas:

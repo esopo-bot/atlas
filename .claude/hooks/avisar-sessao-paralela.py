@@ -8,6 +8,7 @@ from pathlib import Path
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 PASTA_DOS_TRANSCRITOS = ".claude/projects"
+SEPARADORES_QUE_VIRAM_HIFEN_NO_NOME_DA_PASTA = (":", "/", "\\", ".")
 EXTENSAO_DO_TRANSCRITO = ".jsonl"
 JANELA_DE_VIDA_EM_SEGUNDOS = 600
 QUANTAS_SESSOES_NOMEADAS = 3
@@ -50,7 +51,10 @@ def raiz_do_projeto_nunca_o_cwd() -> Path:
 
 
 def pasta_dos_transcritos(raiz: Path, lar: Path) -> Path:
-    return lar / PASTA_DOS_TRANSCRITOS / str(raiz).replace(os.sep, "-")
+    nome = str(raiz)
+    for separador in SEPARADORES_QUE_VIRAM_HIFEN_NO_NOME_DA_PASTA:
+        nome = nome.replace(separador, "-")
+    return lar / PASTA_DOS_TRANSCRITOS / nome
 
 
 def idade_legivel(segundos: float) -> str:
@@ -141,6 +145,20 @@ def testar() -> int:
         if not passou:
             falhas.append(rotulo)
 
+    lar_de_prova = Path("Z:/lar") if os.sep == "\\" else Path("/lar")
+    calculada = pasta_dos_transcritos(Path("D:/um/dois"), lar_de_prova)
+    caso("a pasta de transcritos troca dois-pontos E separador por hifen, "
+         "como a ferramenta grava — o nome esperado e literal, para o caso "
+         "nao concordar com o defeito que ele deveria pegar",
+         calculada.name == "D--um-dois")
+    caso("a pasta de transcritos nasce sob o lar: com a letra de drive "
+         "colada o pathlib a trataria como relativa e descartaria o lar",
+         calculada.parent == lar_de_prova / PASTA_DOS_TRANSCRITOS)
+    caso("o ponto do caminho tambem vira hifen — medido numa arvore de "
+         "trabalho sob pasta oculta, que a ferramenta gravou com hifen "
+         "no lugar do ponto",
+         pasta_dos_transcritos(Path("D:/um/.dois"),
+                               lar_de_prova).name == "D--um--dois")
     with tempfile.TemporaryDirectory(prefix="aviso-paralela-") as pasta:
         base = Path(pasta)
         raiz = base / "repo"

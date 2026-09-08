@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
           }
         ]
       },
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-mcp.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-mcp.py\""
           }
         ]
       },
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-ambiente.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-ambiente.py\""
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-branch-protegida.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-branch-protegida.py\""
           }
         ]
       },
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/orientar-credencial.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/orientar-credencial.py\""
           }
         ]
       },
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/vetar-conhecimento-em-codigo.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/vetar-conhecimento-em-codigo.py\""
           }
         ]
       },
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-andamento-em-arquivo.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-andamento-em-arquivo.py\""
           }
         ]
       },
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-automacao.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-automacao.py\""
           }
         ]
       },
@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-somente-leitura.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-somente-leitura.py\""
           }
         ]
       },
@@ -90,7 +90,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-pergunta-ja-respondida.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-pergunta-ja-respondida.py\""
           }
         ]
       },
@@ -99,7 +99,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-fora-da-execucao.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-fora-da-execucao.py\""
           }
         ]
       },
@@ -108,7 +108,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-comentario-explicativo.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-comentario-explicativo.py\""
           }
         ]
       },
@@ -117,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-copia-gerada.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-copia-gerada.py\""
           }
         ]
       },
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-politica.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-politica.py\""
           }
         ]
       },
@@ -135,7 +135,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-sessao-paralela.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-sessao-paralela.py\""
           }
         ]
       },
@@ -144,7 +144,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-caminho-relativo-apos-cd.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-caminho-relativo-apos-cd.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-sessao-de-pesquisa.py\""
           }
         ]
       }
@@ -154,7 +163,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-encerramento.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-encerramento.py\""
           }
         ]
       },
@@ -162,7 +171,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-destino-da-entrega.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-destino-da-entrega.py\""
           }
         ]
       },
@@ -170,7 +179,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-relato-da-sessao.py\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-relato-da-sessao.py\""
           }
         ]
       }

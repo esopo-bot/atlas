@@ -126,7 +126,8 @@ APRENDIZADO = (
     "commitado na branch de trabalho."
 )
 
-PASTA_DO_RASCUNHO_DO_AGENTE = "claude-"
+PASTA_DO_RASCUNHO_DO_AGENTE = "claude"
+SEPARADOR_DO_RASCUNHO = "-"
 FALHA_BARRA = "BARRA [{}]: deixou passar"
 FALHA_DEIXA_PASSAR = "DEIXA_PASSAR [{}]: barrou — {}"
 FALHA_COMPORTAMENTO = "COMPORTAMENTO [{}]"
@@ -417,8 +418,11 @@ def e_rascunho_do_agente(alvo) -> bool:
             Path(tempfile.gettempdir()).resolve())
     except (ValueError, OSError):
         return False
-    return bool(dentro.parts) and dentro.parts[0].startswith(
-        PASTA_DO_RASCUNHO_DO_AGENTE)
+    if not dentro.parts:
+        return False
+    primeira = dentro.parts[0]
+    return primeira == PASTA_DO_RASCUNHO_DO_AGENTE or primeira.startswith(
+        PASTA_DO_RASCUNHO_DO_AGENTE + SEPARADOR_DO_RASCUNHO)
 
 
 def fora_da_raiz(declarado: str, alvo, raiz: Path) -> bool:
@@ -495,6 +499,15 @@ def casos_que_barram(fora: str, vizinha: str) -> list:
     return [
         ("Write por caminho absoluto fora da raiz",
          pedido_de_escrita("Write", f"{fora}/novo.py")),
+        ("pasta qualquer sob a temporária NÃO é rascunho do agente — "
+         "reconhecer o rascunho por prefixo não pode abrir a temporária "
+         "inteira para escrita",
+         pedido_de_escrita(
+             "Write", f"{tempfile.gettempdir()}/claudia/x/nota.md")),
+        ("nem uma que só comece com o nome, sem ser a pasta nem o formato "
+         "com hífen",
+         pedido_de_escrita(
+             "Write", f"{tempfile.gettempdir()}/claudeoutra/x/nota.md")),
         ("Edit de arquivo que já existe fora",
          pedido_de_escrita("Edit", f"{fora}/x.py")),
         ("NotebookEdit fora",
@@ -570,6 +583,18 @@ def casos_que_passam(raiz: str, fora: str) -> list:
         ("e escrever nele por shell também passa",
          pedido_de_shell(
              f"echo oi > {tempfile.gettempdir()}/claude-7/x/y/"
+             "scratchpad/n.txt")),
+        ("o rascunho no outro formato — pasta `claude` sem sufixo, com o "
+         "projeto e a sessão abaixo — também é rascunho: a ferramenta grava "
+         "assim nesta plataforma, e exigir o hífen deixava a sessão sem "
+         "lugar para escrever",
+         pedido_de_escrita(
+             "Write",
+             f"{tempfile.gettempdir()}/claude/projeto/sessao/"
+             "scratchpad/nota.md")),
+        ("e nele por shell também",
+         pedido_de_shell(
+             f"echo oi > {tempfile.gettempdir()}/claude/p/s/"
              "scratchpad/n.txt")),
         ("ler fora é livre", pedido_de_shell(f"cat {fora}/x.py")),
         ("varrer fora é livre", pedido_de_shell(f"grep -rn assunto {fora}")),

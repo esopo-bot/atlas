@@ -15,6 +15,7 @@ CHAVE_DA_INTEGRACAO = "integracao"
 
 INSTRUMENTO_DA_ENTREGA = ".agents/camada/camada.py"
 BANDEIRA_DA_ENTREGA = "--entrega"
+SAIDA_DO_INSTRUMENTO_NAO_MEDIDO = 2
 COMANDO_DA_SUJEIRA = ["git", "status", "--porcelain"]
 COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM = [
     "git", "log", "--oneline", "--no-decorate", "{}..{}"]
@@ -22,7 +23,21 @@ COMANDO_DO_QUE_ESTA_SESSAO_ACRESCENTOU = [
     "git", "log", "--oneline", "--no-decorate", "--since=@{2}", "{0}..{1}"]
 COMANDO_DO_PEDIDO_ABERTO = [
     "gh", "pr", "list", "--base", "{0}", "--head", "{1}", "--state", "open",
-    "--json", "number", "--jq", "length"]
+    "--json", "number,author,reviewRequests,latestReviews"]
+CHAVE_DOS_PROJETOS = "projetos"
+CHAVE_DO_REPOSITORIO = "repositorio"
+CHAVE_DO_REVISOR = "revisor"
+CAMPO_DO_AUTOR = "author"
+CHAVE_DO_SOMENTE_LEITURA = "somente_leitura"
+CHAVE_DAS_AUTORIZACOES = "autorizacoes"
+CHAVE_DO_PUSH = "push"
+COMANDO_DA_INTEGRACAO_NO_REMOTO = ["git", "ls-remote", "--heads", "origin", "{}"]
+COMANDO_DE_BUSCA_DA_INTEGRACAO = ["git", "fetch", "--quiet", "origin", "{}"]
+COMANDO_DO_QUE_A_INTEGRACAO_NAO_TEM = [
+    "git", "log", "--oneline", "--no-decorate", "{}..HEAD"]
+ESTE_REPOSITORIO = "."
+CAMPO_DOS_SOLICITADOS = "reviewRequests"
+CAMPO_DAS_REVISOES = "latestReviews"
 COMANDO_DO_PEDIDO_MESCLADO = [
     "gh", "pr", "list", "--base", "{0}", "--head", "{1}", "--state", "merged",
     "--limit", "1", "--json", "mergeCommit", "--jq",
@@ -45,9 +60,13 @@ COMANDO_DO_COMMIT_DA_ARVORE = ["git", "rev-parse", "HEAD"]
 COMANDO_DA_BRANCH_NO_DURAVEL = [
     "git", "ls-remote", "--heads", "origin", "{}"]
 COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{}", "{}"]
+COMANDO_DA_RAIZ_DO_REPOSITORIO = ["git", "rev-parse", "--show-toplevel"]
+COMANDO_DO_QUE_NAO_ESTA_EM_REMOTO_NENHUM = [
+    "git", "log", "--oneline", "--no-decorate", "HEAD", "--not", "--remotes"]
 CHAVE_DO_TRANSCRITO = "transcript_path"
 CHAVE_DA_SESSAO = "session_id"
 PASTA_DOS_TRANSCRITOS = ".claude/projects"
+SEPARADORES_QUE_VIRAM_HIFEN_NO_NOME_DA_PASTA = (":", "/", "\\", ".")
 EXTENSAO_DO_TRANSCRITO = ".jsonl"
 JANELA_DE_VIDA_EM_SEGUNDOS = 600
 QUANTAS_SESSOES_NOMEADAS = 3
@@ -67,8 +86,16 @@ TEMPO_DO_GIT = 15
 TEMPO_DA_REDE = 25
 
 MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
+MARCA_NO_AMBIENTE = "ATLAS_SO_LEITURA"
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
+
+DITO_DA_SESSAO_DE_PESQUISA = (
+    "Sessão de pesquisa: a regra 16 não cobra destino aqui, porque esta "
+    "sessão não entrega em disco — o modo somente leitura está posto "
+    "({}), e a cerca recusou qualquer escrita no repositório.\n"
+    "O destino dela é a ISSUE: antes de fechar, o que a sessão apurou vira "
+    "corpo ou comentário lá. O que não estiver na issue não existe.")
 
 EVENTO_DE_PARADA = "Stop"
 DECISAO_DE_BLOQUEAR = "block"
@@ -95,6 +122,11 @@ COBRA_SOBRA_DA_BRANCH = (
     "Commit em branch que ninguém vai incorporar não existe para o resto do "
     "mundo, e some no dia em que a branch for podada."
 )
+COBRA_SOBRA_NAO_MEDIDO = (
+    "Não deu para medir se há commit fora da branch de entrega — `{} {}` "
+    "respondeu que NÃO MEDIU. Sem a medição isto é 'não medido', nunca "
+    "'não há': confira à mão antes de encerrar."
+)
 COBRA_INTEGRACAO_SEM_PEDIDO = (
     "A integração {!r} está {} commit(s) à frente de {!r} e NÃO há pedido de "
     "incorporação aberto entre elas:\n{}\n"
@@ -119,6 +151,32 @@ COBRA_PEDIDO_NAO_MEDIDO = (
     "respondeu. Sem a medição isto é 'não medido', nunca 'não existe': "
     "confira à mão antes de encerrar."
 )
+COBRA_PEDIDO_SEM_REVISOR = (
+    "O pedido de incorporação de {0!r} para {1!r} está aberto, mas o "
+    "revisor configurado {2!r} não foi solicitado nem revisou "
+    "(`gh pr list --base {1} --head {0} --json "
+    "reviewRequests,latestReviews`).\n"
+    "Pedido sem revisor pedido é entrega parada na mesa de ninguém: solicite "
+    "com `gh api -X POST repos/{{owner}}/{{repo}}/pulls/<n>/requested_reviewers "
+    "-f \"reviewers[]={2}\"` (o `gh pr edit --add-reviewer` tropeça em "
+    "repositório com projetos clássicos), ou diga em uma linha por que fica "
+    "assim."
+)
+COBRA_REVISAO_NAO_MEDIDA = (
+    "O pedido de incorporação de {0!r} para {1!r} está aberto e há "
+    "revisor configurado ({2!r}), mas não deu para medir se ele foi "
+    "solicitado — o `gh` não devolveu os campos de revisão. Sem a medição "
+    "isto é 'não medido', nunca 'solicitado': confira à mão antes de "
+    "encerrar."
+)
+RELATA_REVISOR_QUE_E_O_AUTOR = (
+    "Para saber, não para resolver: o revisor configurado ({!r}) é quem "
+    "abriu o pedido, e o GitHub recusa pedir revisão ao próprio autor "
+    "(HTTP 422). Por isso a cobrança de revisor cala aqui — pedir o "
+    "impossível a cada parada ensina a sessão a ignorar a cobrança inteira. "
+    "O pedido já está na mesa de quem decide; se você quer outro par de "
+    "olhos, o caminho é abrir o pedido por outra conta ou nomear outro "
+    "revisor no cadastro do projeto.")
 RELATA_HERDADO = (
     "Para saber, não para resolver: a integração {!r} já estava {} commit(s) "
     "à frente de {!r} quando esta sessão abriu, e não há pedido de "
@@ -127,6 +185,61 @@ RELATA_HERDADO = (
     "uma dívida é quem a fez. Fica dito porque estado sem destino não passa "
     "calado."
 )
+COBRA_VIZINHO_SEM_DESTINO = (
+    "O repositório vizinho {} foi tocado nesta sessão e ficou sem destino:\n{}\n"
+    "A regra 16 vale por repositório tocado, não só por este: fechar um "
+    "inteiro dá a sensação de ter fechado tudo, e é assim que o outro fica "
+    "para trás. Dê a cada linha acima o destino que ela pede, ou descarte "
+    "dizendo a razão em uma linha."
+)
+LINHA_DO_VIZINHO_SUJO = "  {} arquivo(s) fora de commit:\n{}"
+LINHA_DO_VIZINHO_SEM_REMOTO = (
+    "  {} commit(s) que não estão em remoto nenhum "
+    "(`git log HEAD --not --remotes`):\n{}")
+LINHA_DO_VIZINHO_NAO_MEDIDO = (
+    "  não deu para medir os commits sem remoto — o git não respondeu; "
+    "confira à mão, porque não medido nunca é zero")
+LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO = (
+    "  {0} commit(s) da branch {1!r} que não estão em {2} "
+    "(`git log {2}..HEAD`):\n{3}\n"
+    "  aqui a sessão pode empurrar, e onde ela pode empurrar a entrega é a "
+    "MESCLA na integração declarada no cadastro: branch de trabalho "
+    "empurrada é sincronização, não entrega. Da branch de trabalho para a "
+    "integração não se abre pedido de incorporação — o pedido é o caminho "
+    "da integração para a branch por incorporação, e o do vizinho somente "
+    "leitura. `git -C {4} switch {5} && git -C {4} merge --no-ff {1} && "
+    "git -C {4} push origin {5}`")
+LINHA_DO_VIZINHO_SEM_PUSH = (
+    "  {0} commit(s) da branch {1!r} que não estão em {2} "
+    "(`git log {2}..HEAD`):\n{3}\n"
+    "  o cadastro do projeto NÃO autoriza push aqui (`autorizacoes.push`), "
+    "e omissão nega: a entrega é do dono, não desta sessão. Diga a ele o "
+    "que está commitado e onde, e pare — empurrar mesmo assim é passar por "
+    "cima da autorização que o cadastro declara")
+LINHA_DO_VIZINHO_SEM_PEDIDO = (
+    "  {0} commit(s) da branch {1!r} que não estão em {2}, e NENHUM pedido "
+    "de incorporação aberto de {1!r} para {3!r}:\n{4}\n"
+    "  vizinho somente leitura é território de terceiro: a entrega é por "
+    "pedido de incorporação, e ele só se abre com autorização EXPRESSA do "
+    "dono, uma por vez. Pergunte a ele primeiro; com o sim, `gh pr create "
+    "-R <dono>/<repo> --base {3} --head {1}`. Sem o sim, diga a ele o que "
+    "está pendente e pare")
+LINHA_DO_VIZINHO_PEDIDO_NAO_MEDIDO = (
+    "  {0} commit(s) da branch {1!r} que não estão em {2}, e não deu para "
+    "medir se há pedido de incorporação aberto — o `gh` não respondeu. Não "
+    "medido nunca é 'aberto': confira com `gh pr list -R <dono>/<repo> "
+    "--base {3} --head {1} --state open` antes de encerrar")
+LINHA_DO_VIZINHO_SEM_A_INTEGRACAO = (
+    "  a integração {0!r} que o cadastro declara para este vizinho NÃO "
+    "existe no remoto dele (`git ls-remote --heads origin {0}` veio vazio). "
+    "Sem ela não há para onde entregar, e o nome não se adivinha: declare a "
+    "certa em `nucleo/executor.json`, no `branches.integracao` do projeto "
+    "deste vizinho — a do topo é a DESTE repositório, e só serve de reserva "
+    "quando por acaso coincide")
+LINHA_DO_VIZINHO_INTEGRACAO_NAO_MEDIDA = (
+    "  não deu para medir a integração {0!r} do cadastro — o git não "
+    "respondeu (`git ls-remote --heads origin {0}`). Não medido nunca é "
+    "'entregue': confira à mão antes de encerrar")
 ABERTURA_DA_COBRANCA = (
     "A regra 16 cobra destino antes de encerrar, e alguma coisa ficou sem:"
 )
@@ -313,6 +426,13 @@ def _o_caminho_da_linha(raiz: Path, linha: str) -> str:
     return str(raiz / linha[3:].strip().strip('"'))
 
 
+def pasta_dos_transcritos(raiz: Path, lar: Path) -> Path:
+    nome = str(raiz)
+    for separador in SEPARADORES_QUE_VIRAM_HIFEN_NO_NOME_DA_PASTA:
+        nome = nome.replace(separador, "-")
+    return lar / PASTA_DOS_TRANSCRITOS / nome
+
+
 def sujeira_desta_sessao_e_herdada(raiz: Path, abertura, entrada=None,
                                    agora=None, lar=None) -> tuple:
     suja = linhas_da_arvore_suja(raiz)
@@ -322,7 +442,7 @@ def sujeira_desta_sessao_e_herdada(raiz: Path, abertura, entrada=None,
     if entrada is None:
         return minha, herdada
     lar = Path.home() if lar is None else lar
-    pasta = lar / PASTA_DOS_TRANSCRITOS / str(raiz).replace(os.sep, "-")
+    pasta = pasta_dos_transcritos(raiz, lar)
     agora = time.time() if agora is None else agora
     vizinha = sessoes_vivas_ao_lado(
         pasta, str(entrada.get(CHAVE_DA_SESSAO) or ""), agora)
@@ -356,15 +476,20 @@ def pedido_mesclado_que_ja_contem(raiz: Path, principal: str,
     return True
 
 
-def sobra_fora_da_branch_de_entrega(raiz: Path) -> str:
+def sobra_fora_da_branch_de_entrega(raiz: Path):
     if not (raiz / INSTRUMENTO_DA_ENTREGA).is_file():
         return ""
     resposta = responde(
         [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA],
         raiz, TEMPO_DO_GIT)
-    if resposta is NAO_MEDIDO or resposta[0] == 0:
+    if resposta is NAO_MEDIDO:
+        return NAO_MEDIDO
+    codigo, dito = resposta
+    if codigo == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO:
+        return NAO_MEDIDO
+    if codigo == 0:
         return ""
-    return resposta[1]
+    return dito
 
 
 def commits_da_integracao_fora_da_principal(raiz: Path, principal: str,
@@ -396,17 +521,70 @@ def commits_desta_sessao(raiz: Path, principal: str, integracao: str,
     return [l for l in resposta[1].split("\n") if l.strip()]
 
 
-def ha_pedido_de_incorporacao_aberto(raiz: Path, principal: str,
-                                     integracao: str):
+def pedidos_abertos(raiz: Path, principal: str, integracao: str):
     comando = [parte.format(principal, integracao)
                for parte in COMANDO_DO_PEDIDO_ABERTO]
     resposta = responde(comando, raiz, TEMPO_DA_REDE)
     if resposta is NAO_MEDIDO or resposta[0] != 0:
         return NAO_MEDIDO
     try:
-        return int(resposta[1]) > 0
+        pedidos = json.loads(resposta[1] or "[]")
     except ValueError:
         return NAO_MEDIDO
+    return pedidos if isinstance(pedidos, list) else NAO_MEDIDO
+
+
+def ha_pedido_de_incorporacao_aberto(pedidos):
+    return NAO_MEDIDO if pedidos is NAO_MEDIDO else bool(pedidos)
+
+
+def revisor_deste_repositorio(raiz: Path) -> str:
+    try:
+        dado = json.loads((raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    projetos = dado.get(CHAVE_DOS_PROJETOS) if isinstance(dado, dict) else None
+    if not isinstance(projetos, dict):
+        return ""
+    for projeto in projetos.values():
+        if not isinstance(projeto, dict):
+            continue
+        if projeto.get(CHAVE_DO_REPOSITORIO) in (ESTE_REPOSITORIO, raiz.name):
+            nome = projeto.get(CHAVE_DO_REVISOR)
+            return nome.strip() if isinstance(nome, str) else ""
+    return ""
+
+
+def quem_esta_no_pedido(pedido: dict) -> set:
+    nomes = set()
+    for solicitado in pedido.get(CAMPO_DOS_SOLICITADOS) or []:
+        if isinstance(solicitado, dict):
+            nomes.add(solicitado.get("login") or solicitado.get("slug") or "")
+    for revisao in pedido.get(CAMPO_DAS_REVISOES) or []:
+        if isinstance(revisao, dict):
+            nomes.add((revisao.get("author") or {}).get("login") or "")
+    return {nome.lower() for nome in nomes if nome}
+
+
+def o_revisor_e_o_autor(pedidos, revisor: str) -> bool:
+    if pedidos is NAO_MEDIDO or not pedidos or not revisor:
+        return False
+    autores = {(pedido.get(CAMPO_DO_AUTOR) or {}).get("login", "").lower()
+               for pedido in pedidos if isinstance(pedido, dict)}
+    autores.discard("")
+    return bool(autores) and autores == {revisor.lower()}
+
+
+def revisao_do_pedido(pedidos, revisor: str):
+    if pedidos is NAO_MEDIDO or not pedidos or not revisor:
+        return NAO_MEDIDO
+    medidos = [pedido for pedido in pedidos if isinstance(pedido, dict)
+               and (CAMPO_DOS_SOLICITADOS in pedido
+                    or CAMPO_DAS_REVISOES in pedido)]
+    if not medidos:
+        return NAO_MEDIDO
+    return any(revisor.lower() in quem_esta_no_pedido(pedido)
+               for pedido in medidos)
 
 
 def resposta_limpa(comando: list, raiz: Path, tempo: int) -> str:
@@ -433,8 +611,8 @@ def etapa_em_curso() -> str:
 
 
 def _ha_destino_declarado(raiz: Path, principal: str, integracao: str,
-                          adiante: list):
-    aberto = ha_pedido_de_incorporacao_aberto(raiz, principal, integracao)
+                          adiante: list, pedidos):
+    aberto = ha_pedido_de_incorporacao_aberto(pedidos)
     if aberto is True:
         return True
     if pedido_mesclado_que_ja_contem(raiz, principal, integracao, adiante):
@@ -442,9 +620,147 @@ def _ha_destino_declarado(raiz: Path, principal: str, integracao: str,
     return aberto
 
 
+def raiz_git_da_pasta(pasta: Path):
+    while not pasta.is_dir():
+        if pasta.parent == pasta:
+            return None
+        pasta = pasta.parent
+    resposta = responde(COMANDO_DA_RAIZ_DO_REPOSITORIO, pasta, TEMPO_DO_GIT)
+    if resposta is NAO_MEDIDO or resposta[0] != 0 or not resposta[1]:
+        return None
+    return Path(resposta[1]).resolve()
+
+
+def repositorios_tocados(escritos: set, raiz: Path) -> list:
+    principal = raiz.resolve()
+    pastas = {(raiz / caminho).parent for caminho in escritos}
+    raizes = {achada for achada in map(raiz_git_da_pasta, pastas)
+              if achada and achada != principal}
+    return sorted(raizes)
+
+
+def push_autorizado(projeto: dict, vizinho: Path) -> bool:
+    do_projeto = projeto.get(CHAVE_DAS_AUTORIZACOES)
+    if isinstance(do_projeto, dict) and CHAVE_DO_PUSH in do_projeto:
+        return bool(do_projeto[CHAVE_DO_PUSH])
+    try:
+        do_alvo = json.loads(
+            (vizinho / ARQUIVO_CONFIGURACAO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    declarado = (do_alvo.get(CHAVE_DAS_AUTORIZACOES)
+                 if isinstance(do_alvo, dict) else None)
+    if not isinstance(declarado, dict):
+        return False
+    return bool(declarado.get(CHAVE_DO_PUSH))
+
+
+def cadastro_do_vizinho(raiz: Path, vizinho: Path) -> dict:
+    sem_cadastro = {"integracao": "", "somente_leitura": False,
+                    "pode_empurrar": False}
+    try:
+        dado = json.loads((raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return sem_cadastro
+    if not isinstance(dado, dict):
+        return sem_cadastro
+    projetos = dado.get(CHAVE_DOS_PROJETOS)
+    projeto = next((p for p in (projetos.values() if isinstance(projetos, dict) else [])
+                    if isinstance(p, dict)
+                    and p.get(CHAVE_DO_REPOSITORIO) == vizinho.name), None)
+    if projeto is None:
+        return sem_cadastro
+    do_topo = dado.get(CHAVE_DAS_BRANCHES)
+    do_projeto = projeto.get(CHAVE_DAS_BRANCHES)
+    integracao = ((do_projeto.get(CHAVE_DA_INTEGRACAO)
+                   if isinstance(do_projeto, dict) else None)
+                  or (do_topo.get(CHAVE_DA_INTEGRACAO)
+                      if isinstance(do_topo, dict) else None))
+    return {"integracao": str(integracao).strip() if integracao else "",
+            "somente_leitura": bool(projeto.get(CHAVE_DO_SOMENTE_LEITURA)),
+            "pode_empurrar": push_autorizado(projeto, vizinho)}
+
+
+SEM_A_INTEGRACAO = "sem-a-integracao"
+
+
+def integracao_existe_no_vizinho(vizinho: Path, integracao: str):
+    resposta = responde(
+        [parte.format(integracao) for parte in COMANDO_DA_INTEGRACAO_NO_REMOTO],
+        vizinho, TEMPO_DA_REDE)
+    if resposta is NAO_MEDIDO or resposta[0] != 0:
+        return NAO_MEDIDO
+    return bool(resposta[1].strip())
+
+
+def commits_fora_da_integracao(vizinho: Path, integracao: str):
+    if not integracao:
+        return []
+    existe = integracao_existe_no_vizinho(vizinho, integracao)
+    if existe is NAO_MEDIDO:
+        return NAO_MEDIDO
+    if not existe:
+        return SEM_A_INTEGRACAO
+    responde([parte.format(integracao) for parte in COMANDO_DE_BUSCA_DA_INTEGRACAO],
+             vizinho, TEMPO_DA_REDE)
+    espelho = ESPELHO_NO_REMOTO.format(integracao)
+    resposta = responde(
+        [parte.format(espelho) for parte in COMANDO_DO_QUE_A_INTEGRACAO_NAO_TEM],
+        vizinho, TEMPO_DO_GIT)
+    if resposta is NAO_MEDIDO or resposta[0] != 0:
+        return NAO_MEDIDO
+    return [l for l in resposta[1].split("\n") if l.strip()]
+
+
+def medir_vizinho(vizinho: Path, abertura, raiz: Path) -> dict:
+    suja, _ = sujeira_desta_sessao_e_herdada(vizinho, abertura)
+    resposta = responde(COMANDO_DO_QUE_NAO_ESTA_EM_REMOTO_NENHUM, vizinho,
+                        TEMPO_DO_GIT)
+    if resposta is NAO_MEDIDO or resposta[0] != 0:
+        sem_remoto = NAO_MEDIDO
+    else:
+        sem_remoto = [l for l in resposta[1].split("\n") if l.strip()]
+    cadastro = cadastro_do_vizinho(raiz, vizinho)
+    branch = resposta_limpa(COMANDO_DA_BRANCH_DA_ARVORE, vizinho, TEMPO_DO_GIT)
+    integracao = cadastro["integracao"]
+    fora = ([] if not integracao or branch == integracao
+            else commits_fora_da_integracao(vizinho, integracao))
+    pedido = NAO_MEDIDO
+    if cadastro["somente_leitura"] and isinstance(fora, list) and fora:
+        pedido = ha_pedido_de_incorporacao_aberto(
+            pedidos_abertos(vizinho, integracao, branch))
+    return {"raiz": str(vizinho), "suja": suja, "sem_remoto": sem_remoto,
+            "branch": branch, "integracao": integracao,
+            "somente_leitura": cadastro["somente_leitura"],
+            "pode_empurrar": cadastro["pode_empurrar"],
+            "fora_da_integracao": fora, "pedido": pedido}
+
+
+def vizinho_sem_destino(medido: dict) -> bool:
+    if medido["suja"] or medido["sem_remoto"] is NAO_MEDIDO or medido["sem_remoto"]:
+        return True
+    fora = medido.get("fora_da_integracao")
+    if fora is NAO_MEDIDO or fora == SEM_A_INTEGRACAO:
+        return True
+    if not fora:
+        return False
+    return not (medido.get("somente_leitura") and medido.get("pedido") is True)
+
+
+def vizinhos_sem_destino(raiz: Path, abertura, entrada) -> list:
+    if not isinstance(entrada, dict):
+        return []
+    escritos = arquivos_que_esta_sessao_escreveu(
+        entrada.get(CHAVE_DO_TRANSCRITO), raiz)
+    medidos = [medir_vizinho(vizinho, abertura, raiz)
+               for vizinho in repositorios_tocados(escritos, raiz)]
+    return [m for m in medidos if vizinho_sem_destino(m)]
+
+
 def medir(raiz: Path, abertura=None, entrada=None) -> dict:
     suja, herdada = sujeira_desta_sessao_e_herdada(raiz, abertura, entrada)
     nao_julgada = linhas_que_a_camada_nao_julga(raiz)
+    vizinhos = vizinhos_sem_destino(raiz, abertura, entrada)
     etapa = etapa_em_curso()
     if etapa:
         branch = resposta_limpa(COMANDO_DA_BRANCH_DA_ARVORE, raiz, TEMPO_DO_GIT)
@@ -453,6 +769,7 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
             "suja": suja,
             "herdada": herdada,
             "nao_julgada": nao_julgada,
+            "vizinhos": vizinhos,
             "branch": branch,
             "duravel": chegou_ao_repositorio_duravel(raiz, branch),
         }
@@ -464,30 +781,77 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
     if tudo is NAO_MEDIDO:
         return {
             "etapa": "", "suja": suja, "herdada": herdada,
-            "nao_julgada": nao_julgada,
+            "nao_julgada": nao_julgada, "vizinhos": vizinhos,
             "sobra": sobra_fora_da_branch_de_entrega(raiz),
             "principal": principal, "integracao": integracao,
             "adiante": NAO_MEDIDO, "herdados": [], "pedido": NAO_MEDIDO,
         }
     desta = (commits_desta_sessao(raiz, principal, integracao, abertura, tudo)
              if tudo else [])
+    pedidos = (pedidos_abertos(raiz, principal, integracao)
+               if tudo else NAO_MEDIDO)
+    revisor = revisor_deste_repositorio(raiz)
+    pedido_aberto = ha_pedido_de_incorporacao_aberto(pedidos) is True
     return {
         "etapa": "",
         "suja": suja,
         "herdada": herdada,
         "nao_julgada": nao_julgada,
+        "vizinhos": vizinhos,
         "sobra": sobra_fora_da_branch_de_entrega(raiz),
         "principal": principal,
         "integracao": integracao,
         "adiante": desta,
         "herdados": [l for l in tudo if l not in desta],
-        "pedido": (_ha_destino_declarado(raiz, principal, integracao, tudo)
+        "pedido": (_ha_destino_declarado(raiz, principal, integracao, tudo,
+                                         pedidos)
                    if tudo else NAO_MEDIDO),
+        "pedido_aberto": pedido_aberto,
+        "revisor": revisor,
+        "revisao": (revisao_do_pedido(pedidos, revisor)
+                    if pedido_aberto and revisor else NAO_MEDIDO),
+        "revisor_e_o_autor": o_revisor_e_o_autor(pedidos, revisor),
     }
 
 
 def primeiras_linhas(linhas: list) -> str:
     return "\n".join(f"  {l}" for l in linhas[:TETO_DE_LINHAS])
+
+
+def linhas_do_vizinho(vizinho: dict) -> list:
+    linhas = []
+    if vizinho["suja"]:
+        linhas.append(LINHA_DO_VIZINHO_SUJO.format(
+            len(vizinho["suja"]), primeiras_linhas(vizinho["suja"])))
+    if vizinho["sem_remoto"] is NAO_MEDIDO:
+        linhas.append(LINHA_DO_VIZINHO_NAO_MEDIDO)
+    elif vizinho["sem_remoto"]:
+        linhas.append(LINHA_DO_VIZINHO_SEM_REMOTO.format(
+            len(vizinho["sem_remoto"]),
+            primeiras_linhas(vizinho["sem_remoto"])))
+    fora = vizinho.get("fora_da_integracao")
+    integracao = vizinho.get("integracao") or ""
+    espelho = ESPELHO_NO_REMOTO.format(integracao)
+    branch = vizinho.get("branch")
+    if fora is NAO_MEDIDO:
+        linhas.append(LINHA_DO_VIZINHO_INTEGRACAO_NAO_MEDIDA.format(integracao))
+    elif fora == SEM_A_INTEGRACAO:
+        linhas.append(LINHA_DO_VIZINHO_SEM_A_INTEGRACAO.format(integracao))
+    elif not fora:
+        pass
+    elif not vizinho.get("somente_leitura"):
+        molde = (LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO
+                 if vizinho.get("pode_empurrar") else LINHA_DO_VIZINHO_SEM_PUSH)
+        linhas.append(molde.format(
+            len(fora), branch, espelho, primeiras_linhas(fora),
+            vizinho.get("raiz"), integracao))
+    elif vizinho.get("pedido") is NAO_MEDIDO:
+        linhas.append(LINHA_DO_VIZINHO_PEDIDO_NAO_MEDIDO.format(
+            len(fora), branch, espelho, integracao))
+    elif vizinho.get("pedido") is False:
+        linhas.append(LINHA_DO_VIZINHO_SEM_PEDIDO.format(
+            len(fora), branch, espelho, integracao, primeiras_linhas(fora)))
+    return linhas
 
 
 def cobrancas(estado: dict) -> list:
@@ -502,6 +866,9 @@ def cobrancas(estado: dict) -> list:
         cobradas.append(COBRA_SUJEIRA_QUE_A_CAMADA_NAO_JULGA.format(
             len(estado["nao_julgada"]),
             primeiras_linhas(estado["nao_julgada"])))
+    for vizinho in estado.get("vizinhos") or []:
+        cobradas.append(COBRA_VIZINHO_SEM_DESTINO.format(
+            vizinho["raiz"], "\n".join(linhas_do_vizinho(vizinho))))
     if estado.get("etapa"):
         if estado.get("duravel") is NAO_MEDIDO:
             cobradas.append(COBRA_DURAVEL_NAO_MEDIDO.format(
@@ -510,7 +877,10 @@ def cobrancas(estado: dict) -> list:
             cobradas.append(COBRA_FORA_DO_REPOSITORIO_DURAVEL.format(
                 estado.get("branch")))
         return cobradas
-    if estado.get("sobra"):
+    if estado.get("sobra", "") is NAO_MEDIDO:
+        cobradas.append(COBRA_SOBRA_NAO_MEDIDO.format(
+            INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA))
+    elif estado.get("sobra"):
         cobradas.append(COBRA_SOBRA_DA_BRANCH.format(
             INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA, estado["sobra"]))
     adiante = estado.get("adiante")
@@ -523,21 +893,41 @@ def cobrancas(estado: dict) -> list:
             cobradas.append(COBRA_PEDIDO_NAO_MEDIDO.format(
                 estado.get("integracao"), len(adiante),
                 estado.get("principal")))
+        elif (estado.get("pedido_aberto") and estado.get("revisor")
+                and not estado.get("revisor_e_o_autor")):
+            if estado.get("revisao") is False:
+                cobradas.append(COBRA_PEDIDO_SEM_REVISOR.format(
+                    estado.get("integracao"), estado.get("principal"),
+                    estado.get("revisor")))
+            elif estado.get("revisao") is NAO_MEDIDO:
+                cobradas.append(COBRA_REVISAO_NAO_MEDIDA.format(
+                    estado.get("integracao"), estado.get("principal"),
+                    estado.get("revisor")))
     return cobradas
 
 
 def relato(estado: dict) -> list:
+    dito = []
+    if estado.get("pedido_aberto") and estado.get("revisor_e_o_autor"):
+        dito.append(RELATA_REVISOR_QUE_E_O_AUTOR.format(
+            estado.get("revisor")))
     herdados = estado.get("herdados")
-    if not herdados or estado.get("pedido") is True:
-        return []
-    return [RELATA_HERDADO.format(estado.get("integracao"), len(herdados),
-                                  estado.get("principal"),
-                                  primeiras_linhas(herdados))]
+    if herdados and estado.get("pedido") is not True:
+        dito.append(RELATA_HERDADO.format(
+            estado.get("integracao"), len(herdados), estado.get("principal"),
+            primeiras_linhas(herdados)))
+    return dito
 
 
-def decisao(entrada: dict, raiz: Path):
+def o_modo_esta_posto(ambiente) -> bool:
+    return bool((ambiente or {}).get(MARCA_NO_AMBIENTE))
+
+
+def decisao(entrada: dict, raiz: Path, ambiente=None):
     if entrada.get("stop_hook_active"):
         return "", ""
+    if o_modo_esta_posto(os.environ if ambiente is None else ambiente):
+        return "", DITO_DA_SESSAO_DE_PESQUISA.format(MARCA_NO_AMBIENTE)
     estado = medir(raiz, abertura_da_sessao(entrada), entrada)
     cobradas = cobrancas(estado)
     if not cobradas:
@@ -590,6 +980,12 @@ COBRA_FORA_DA_ETAPA = [
      com(adiante=["abc1234 trabalho"], pedido=False)),
     ("integração à frente e o pedido nem medido",
      com(adiante=["abc1234 trabalho"], pedido=NAO_MEDIDO)),
+    ("pedido aberto sem o revisor configurado solicitado",
+     com(adiante=["abc1234 trabalho"], pedido=True, pedido_aberto=True,
+         revisor="conta-x", revisao=False)),
+    ("pedido aberto com revisor configurado e a revisão nem medida",
+     com(adiante=["abc1234 trabalho"], pedido=True, pedido_aberto=True,
+         revisor="conta-x", revisao=NAO_MEDIDO)),
 ]
 
 FORA_DA_ETAPA_PALAVRA_POR_PALAVRA = [
@@ -616,6 +1012,22 @@ FORA_DA_ETAPA_PALAVRA_POR_PALAVRA = [
     "para medir se existe pedido de incorporação aberto entre elas — o `gh` "
     "não respondeu. Sem a medição isto é 'não medido', nunca 'não existe': "
     "confira à mão antes de encerrar.",
+
+    "O pedido de incorporação de 'homolog' para 'main' está aberto, mas o "
+    "revisor configurado 'conta-x' não foi solicitado nem revisou "
+    "(`gh pr list --base main --head homolog --json "
+    "reviewRequests,latestReviews`).\n"
+    "Pedido sem revisor pedido é entrega parada na mesa de ninguém: solicite "
+    "com `gh api -X POST repos/{owner}/{repo}/pulls/<n>/requested_reviewers "
+    "-f \"reviewers[]=conta-x\"` (o `gh pr edit --add-reviewer` tropeça em "
+    "repositório com projetos clássicos), ou diga em uma linha por que fica "
+    "assim.",
+
+    "O pedido de incorporação de 'homolog' para 'main' está aberto e há "
+    "revisor configurado ('conta-x'), mas não deu para medir se ele foi "
+    "solicitado — o `gh` não devolveu os campos de revisão. Sem a medição "
+    "isto é 'não medido', nunca 'solicitado': confira à mão antes de "
+    "encerrar.",
 ]
 
 COBRA_DENTRO_DA_ETAPA = [
@@ -637,6 +1049,16 @@ CALA = [
      com(adiante=[], pedido=NAO_MEDIDO)),
     ("dentro da execução, a branch de trabalho já está no repositório "
      "durável, no mesmo commit", DENTRO_DA_ETAPA),
+    ("pedido aberto e o revisor configurado já solicitado ou já revisou",
+     com(adiante=["abc1234 trabalho"], pedido=True, pedido_aberto=True,
+         revisor="conta-x", revisao=True)),
+    ("pedido aberto sem revisor configurado: ambiente que não cobra revisão",
+     com(adiante=["abc1234 trabalho"], pedido=True, pedido_aberto=True,
+         revisor="", revisao=False)),
+    ("destino por pedido já mesclado, sem pedido aberto: nada de revisão a "
+     "cobrar", com(adiante=["abc1234 trabalho"], pedido=True,
+                   pedido_aberto=False, revisor="conta-x",
+                   revisao=NAO_MEDIDO)),
 ]
 
 MARCA_DA_SUJEIRA = "?? "
@@ -646,6 +1068,17 @@ ORIGEM_DE_MENTIRA = "origem"
 TRABALHO_DE_MENTIRA = "arvore"
 BRANCH_DE_MENTIRA = "issue/999-prova"
 ENTRADA_DE_PARADA = "{}"
+INSTRUMENTO_DE_MENTIRA_QUE_ACUSA = """import sys
+sys.stdout.write(" ".join(sys.argv))
+sys.exit(1)
+"""
+INSTRUMENTO_DE_MENTIRA_CALADO = """import sys
+sys.exit(0)
+"""
+INSTRUMENTO_DE_MENTIRA_QUE_NAO_MEDIU = """import sys
+sys.stdout.write("Branch entregue por podar: NAO MEDIDO")
+sys.exit(2)
+"""
 
 
 def git_de_mentira(arvore: Path, *argumentos) -> None:
@@ -737,6 +1170,20 @@ def testar() -> int:
     caso("comparacao nao medida nao derruba o gancho inteiro: sem origin, "
          "sem rede ou em clone novo ele ainda cobra a arvore suja",
          cobrancas(com(adiante=NAO_MEDIDO, suja=["?? novo.py"])))
+    lar_de_prova = Path("Z:/lar") if os.sep == "\\" else Path("/lar")
+    calculada = pasta_dos_transcritos(Path("D:/um/dois"), lar_de_prova)
+    caso("a pasta de transcritos troca dois-pontos E separador por hifen, "
+         "como a ferramenta grava — o nome esperado e literal, para o caso "
+         "nao concordar com o defeito que ele deveria pegar",
+         calculada.name == "D--um-dois")
+    caso("a pasta de transcritos nasce sob o lar: com a letra de drive "
+         "colada o pathlib a trataria como relativa e descartaria o lar",
+         calculada.parent == lar_de_prova / PASTA_DOS_TRANSCRITOS)
+    caso("o ponto do caminho tambem vira hifen — medido numa arvore de "
+         "trabalho sob pasta oculta, que a ferramenta gravou com hifen "
+         "no lugar do ponto",
+         pasta_dos_transcritos(Path("D:/um/.dois"),
+                               lar_de_prova).name == "D--um--dois")
     with tempfile.TemporaryDirectory(prefix="cobra-vizinha-") as pasta:
         base = Path(pasta)
         raiz_falsa = base / "repo"
@@ -744,7 +1191,7 @@ def testar() -> int:
         (raiz_falsa / "meu.py").write_text("x", encoding="utf-8")
         (raiz_falsa / "alheio.py").write_text("y", encoding="utf-8")
         lar = base / "lar"
-        transcritos = lar / PASTA_DOS_TRANSCRITOS / str(raiz_falsa).replace(os.sep, "-")
+        transcritos = pasta_dos_transcritos(raiz_falsa, lar)
         transcritos.mkdir(parents=True)
         agora = 1000.0
         meu_transcrito = transcritos / "minha.jsonl"
@@ -808,12 +1255,36 @@ def testar() -> int:
                  for l in linhas_da_arvore_suja(arvore)))
 
     daqui = raiz_do_projeto_nunca_o_cwd()
-    direto = subprocess.run(
-        [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA],
-        cwd=daqui, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    caso("a segunda condição chama o instrumento, e concorda com ele",
-         bool(sobra_fora_da_branch_de_entrega(daqui))
-         == (direto.returncode != 0))
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-duble-") as tmp:
+        duble = Path(tmp).resolve()
+        instrumento = duble / INSTRUMENTO_DA_ENTREGA
+        instrumento.parent.mkdir(parents=True, exist_ok=True)
+        instrumento.write_text(INSTRUMENTO_DE_MENTIRA_QUE_ACUSA,
+                               encoding="utf-8")
+        caso("a segunda condição chama o instrumento no caminho e com a "
+             "bandeira declarados, e devolve o texto dele",
+             sobra_fora_da_branch_de_entrega(duble)
+             == f"{INSTRUMENTO_DA_ENTREGA} {BANDEIRA_DA_ENTREGA}")
+        instrumento.write_text(INSTRUMENTO_DE_MENTIRA_CALADO,
+                               encoding="utf-8")
+        caso("instrumento que sai zero não vira cobrança",
+             sobra_fora_da_branch_de_entrega(duble) == "")
+        instrumento.write_text(INSTRUMENTO_DE_MENTIRA_QUE_NAO_MEDIU,
+                               encoding="utf-8")
+        caso("instrumento que sai pelo código de NÃO MEDIDO não vira texto "
+             "de acusação — antes qualquer saída diferente de zero virava "
+             "commit fora da branch",
+             sobra_fora_da_branch_de_entrega(duble) is NAO_MEDIDO)
+        instrumento.unlink()
+        caso("sem o instrumento no disco a segunda condição cala, em vez "
+             "de estourar",
+             sobra_fora_da_branch_de_entrega(duble) == "")
+
+    nao_medida = "".join(cobrancas(com(sobra=NAO_MEDIDO)))
+    caso("sobra não medida cobra dizendo que NÃO MEDIU, e não acusa commit "
+         "que ninguém viu",
+         "não medido" in nao_medida
+         and COBRA_SOBRA_DA_BRANCH[:24] not in nao_medida)
     caso("parada que já é laço de gancho cala",
          decisao({"stop_hook_active": True}, daqui) == ("", ""))
     montado = [parte.format("principal-x", "integracao-y")
@@ -822,6 +1293,72 @@ def testar() -> int:
          "duas vezes",
          montado[montado.index("--base") + 1] == "principal-x"
          and montado[montado.index("--head") + 1] == "integracao-y")
+    solicitado = [{"number": 1,
+                   "reviewRequests": [{"__typename": "User",
+                                       "login": "Conta-X"}],
+                   "latestReviews": []}]
+    revisado = [{"number": 1, "reviewRequests": [],
+                 "latestReviews": [{"author": {"login": "conta-x"},
+                                    "state": "APPROVED"}]}]
+    ninguem = [{"number": 1, "reviewRequests": [], "latestReviews": []}]
+    caso("revisor solicitado conta como revisão pedida, sem olhar maiúscula",
+         revisao_do_pedido(solicitado, "conta-x") is True)
+    caso("revisor que já revisou conta mesmo depois de a solicitação sumir",
+         revisao_do_pedido(revisado, "conta-x") is True)
+    caso("pedido aberto sem o revisor em lugar nenhum é revisão não pedida",
+         revisao_do_pedido(ninguem, "conta-x") is False)
+    caso("gh que não devolve os campos de revisão é não medido, nunca falso",
+         revisao_do_pedido([{"number": 1}], "conta-x") is NAO_MEDIDO)
+    caso("time solicitado como revisor é reconhecido pelo slug",
+         revisao_do_pedido([{"number": 1, "reviewRequests": [
+             {"__typename": "Team", "slug": "conta-x"}]}], "conta-x") is True)
+    caso("sem pedido aberto ou sem revisor não há o que medir",
+         revisao_do_pedido([], "conta-x") is NAO_MEDIDO
+         and revisao_do_pedido(ninguem, "") is NAO_MEDIDO)
+    do_proprio_autor = [{"number": 1, "author": {"login": "Conta-X"},
+                         "reviewRequests": [], "latestReviews": []}]
+    de_outro = [{"number": 1, "author": {"login": "outra-conta"},
+                 "reviewRequests": [], "latestReviews": []}]
+    caso("quando o revisor configurado é quem abriu o pedido, o gancho sabe "
+         "— o GitHub recusa pedir revisão ao autor com 422, e cobrar o "
+         "impossível a cada parada ensina a ignorar a cobrança inteira",
+         o_revisor_e_o_autor(do_proprio_autor, "conta-x") is True)
+    caso("pedido aberto por outra conta continua cobrando revisor",
+         o_revisor_e_o_autor(de_outro, "conta-x") is False)
+    caso("sem o campo do autor não se inventa isenção — gh que não devolve "
+         "o autor deixa a cobrança de pé",
+         o_revisor_e_o_autor(ninguem, "conta-x") is False)
+    caso("basta um pedido de outra conta para a isenção cair",
+         o_revisor_e_o_autor(do_proprio_autor + de_outro, "conta-x") is False)
+    caso("a cobrança de revisor CALA quando o autor é o revisor, e o motivo "
+         "fica dito no relato em vez de sumir calado",
+         not any("revisor configurado" in linha and "não foi solicitado"
+                 in linha
+                 for linha in cobrancas({"adiante": ["a"], "pedido": True,
+                                         "pedido_aberto": True,
+                                         "revisor": "conta-x",
+                                         "revisao": False,
+                                         "revisor_e_o_autor": True}))
+         and any("422" in linha
+                 for linha in relato({"pedido_aberto": True,
+                                      "revisor": "conta-x",
+                                      "revisor_e_o_autor": True})))
+    caso("pedido aberto é o que a lista do gh traz; lista vazia é não",
+         ha_pedido_de_incorporacao_aberto(ninguem) is True
+         and ha_pedido_de_incorporacao_aberto([]) is False
+         and ha_pedido_de_incorporacao_aberto(NAO_MEDIDO) is NAO_MEDIDO)
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-revisor-") as tmp:
+        raiz_com_revisor = Path(tmp)
+        caso("sem configuração local, não há revisor e a cobrança cala",
+             revisor_deste_repositorio(raiz_com_revisor) == "")
+        (raiz_com_revisor / ARQUIVO_CONFIGURACAO).parent.mkdir(parents=True)
+        (raiz_com_revisor / ARQUIVO_EXECUTOR).write_text(json.dumps({
+            "projetos": {"vizinho": {"repositorio": "outro",
+                                     "revisor": "conta-do-vizinho"},
+                         "eu": {"repositorio": ".", "revisor": " conta-x "}}}),
+            encoding="utf-8")
+        caso("o revisor vem do projeto que é este repositório, não do vizinho",
+             revisor_deste_repositorio(raiz_com_revisor) == "conta-x")
     for (rotulo, estado), palavra_por_palavra in zip(
             COBRA_FORA_DA_ETAPA, FORA_DA_ETAPA_PALAVRA_POR_PALAVRA):
         caso("sem a marca de etapa, a cobrança de hoje sai palavra por "
@@ -934,6 +1471,145 @@ def testar() -> int:
          and "regra 4" in FECHAMENTO_DA_COBRANCA
          and "`conhecimento/`" in FECHAMENTO_DA_COBRANCA
          and "nada fica sem destino" in FECHAMENTO_DA_COBRANCA)
+
+    caso("sessão de pesquisa: com a marca no ambiente a cobrança CALA, "
+         "porque não há destino em disco a cobrar",
+         decisao({}, Path("."), {MARCA_NO_AMBIENTE: "1"})[0] == "")
+    caso("e o silêncio vem explicado: a sessão é mandada para a issue",
+         "ISSUE" in decisao({}, Path("."), {MARCA_NO_AMBIENTE: "1"})[1])
+    caso("marca vazia não conta como posta, e a cobrança segue normal",
+         not o_modo_esta_posto({MARCA_NO_AMBIENTE: ""}))
+    caso("sem a marca, a árvore suja continua sendo cobrada",
+         any("árvore está suja" in c for c in cobrancas(
+             {**ARVORE_LIMPA, "suja": ["?? sujo.py"]})))
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-vizinho-") as tmp:
+        base = Path(tmp).resolve()
+        principal, vizinho = base / "principal", base / "vizinho"
+        for pasta in (principal, vizinho):
+            pasta.mkdir()
+            git_de_mentira(pasta, "init", "-q", "-b", "main")
+            git_de_mentira(pasta, "config", "user.email", "prova@exemplo")
+            git_de_mentira(pasta, "config", "user.name", "Prova")
+        tocado = vizinho / FEITO_DE_MENTIRA
+        tocado.write_text("feito no vizinho", encoding="utf-8")
+        git_de_mentira(vizinho, "add", "-A")
+        git_de_mentira(vizinho, "commit", "-qm", "trabalho no vizinho")
+        transcrito = base / "sessao.jsonl"
+        transcrito.write_text(json.dumps({"message": {"content": [
+            {"type": "tool_use", "name": "Write",
+             "input": {"file_path": str(tocado)}},
+            {"type": "tool_use", "name": "Bash",
+             "input": {"command": f"echo x > {base / 'fora-de-git.txt'}"}},
+            {"type": "tool_use", "name": "Write",
+             "input": {"file_path": str(principal / "meu.py")}}]}}) + "\n",
+            encoding="utf-8")
+        entrada_com_vizinho = {CHAVE_DA_SESSAO: "vizinha",
+                               CHAVE_DO_TRANSCRITO: str(transcrito)}
+        caso("os repositórios tocados nesta sessão saem do transcrito: o "
+             "vizinho entra, a principal não, e caminho fora de git não estoura",
+             repositorios_tocados(
+                 arquivos_que_esta_sessao_escreveu(str(transcrito), principal),
+                 principal) == [vizinho])
+        cobradas = cobrancas(medir(principal, None, entrada_com_vizinho))
+        caso("vizinho tocado nesta sessão com commit que não está em remoto "
+             "nenhum é cobrado, pelo caminho dele",
+             any(str(vizinho) in c and "remoto nenhum" in c for c in cobradas))
+        origem = base / "origem"
+        origem.mkdir()
+        git_de_mentira(origem, "init", "-q", "--bare", "-b", "main")
+        git_de_mentira(vizinho, "remote", "add", "origin", str(origem))
+        git_de_mentira(vizinho, "push", "-q", "-u", "origin", "main")
+        caso("vizinho com tudo empurrado cala",
+             not any(str(vizinho) in c for c in
+                     cobrancas(medir(principal, None, entrada_com_vizinho))))
+        tocado.write_text("mexido de novo", encoding="utf-8")
+        caso("arquivo solto no vizinho também é cobrado, pelo caminho dele",
+             any(str(vizinho) in c and "fora de commit" in c for c in
+                 cobrancas(medir(principal, None, entrada_com_vizinho))))
+
+        def o_que_cobra_do_vizinho():
+            return [c for c in cobrancas(medir(principal, None, entrada_com_vizinho))
+                    if str(vizinho) in c]
+
+        def cadastrar(somente_leitura, integracao_do_projeto="homolog",
+                      push=True):
+            (principal / ARQUIVO_EXECUTOR).parent.mkdir(parents=True, exist_ok=True)
+            projeto = {"repositorio": vizinho.name,
+                       "somente_leitura": somente_leitura}
+            if integracao_do_projeto:
+                projeto["branches"] = {"integracao": integracao_do_projeto}
+            if push is not None:
+                projeto["autorizacoes"] = {"commit": True, "push": push}
+            (principal / ARQUIVO_EXECUTOR).write_text(json.dumps({
+                "branches": {"integracao": "develop"},
+                "projetos": {"viz": projeto}}), encoding="utf-8")
+
+        git_de_mentira(vizinho, "checkout", "-q", "--", FEITO_DE_MENTIRA)
+        git_de_mentira(vizinho, "branch", "homolog")
+        git_de_mentira(vizinho, "push", "-q", "origin", "homolog")
+        git_de_mentira(vizinho, "checkout", "-q", "-b", BRANCH_DE_MENTIRA)
+        git_de_mentira(vizinho, "commit", "-q", "--allow-empty", "-m", "na branch")
+        git_de_mentira(vizinho, "push", "-q", "-u", "origin", BRANCH_DE_MENTIRA)
+        caso("sem cadastro do vizinho, a branch empurrada cala: a camada não "
+             "adivinha a integração de ninguém",
+             o_que_cobra_do_vizinho() == [])
+        cadastrar(False)
+        caso("a integração do vizinho vem do cadastro do projeto; a do topo é reserva",
+             cadastro_do_vizinho(principal, vizinho)["integracao"] == "homolog")
+        cadastrar(False, integracao_do_projeto="")
+        caso("projeto cadastrado sem branches herda a integração do topo",
+             cadastro_do_vizinho(principal, vizinho)["integracao"] == "develop")
+        cadastrar(False, push=None)
+        caso("cadastro sem autorizações nega push, como manda a regra 9: "
+             "omissão não é permissão",
+             cadastro_do_vizinho(principal, vizinho)["pode_empurrar"] is False)
+        cadastrar(False, push=False)
+        caso("push negado no cadastro cobra avisando o dono, e NÃO manda "
+             "mesclar onde a sessão não pode empurrar",
+             any("NÃO autoriza push" in c and "MESCLA na integração" not in c
+                 for c in o_que_cobra_do_vizinho()))
+        cadastrar(False)
+        caso("vizinho próprio com a branch de trabalho empurrada mas fora da "
+             "integração do cadastro é cobrado: empurrar é sincronizar, "
+             "entregar é mesclar — o caso de 07/09",
+             any("MESCLA na integração" in c and BRANCH_DE_MENTIRA in c
+                 for c in o_que_cobra_do_vizinho()))
+        git_de_mentira(vizinho, "checkout", "-q", "homolog")
+        git_de_mentira(vizinho, "merge", "-q", BRANCH_DE_MENTIRA)
+        git_de_mentira(vizinho, "push", "-q", "origin", "homolog")
+        git_de_mentira(vizinho, "checkout", "-q", BRANCH_DE_MENTIRA)
+        caso("mesclado na integração e empurrado, o vizinho cala",
+             o_que_cobra_do_vizinho() == [])
+        git_de_mentira(vizinho, "commit", "-q", "--allow-empty", "-m", "mais")
+        git_de_mentira(vizinho, "push", "-q", "origin", BRANCH_DE_MENTIRA)
+        cadastrar(False, integracao_do_projeto="nao-existe-no-remoto")
+        caso("integração declarada que não existe no remoto do vizinho manda "
+             "declarar a certa no cadastro, e não vira 'entregue' nem "
+             "'não medido'",
+             any("NÃO" in c and "existe no remoto" in c
+                 and "branches.integracao" in c
+                 for c in o_que_cobra_do_vizinho()))
+        cadastrar(True)
+
+        def o_que_cobra_com_pedidos(pedidos):
+            global pedidos_abertos
+            guardada = pedidos_abertos
+            pedidos_abertos = lambda *_: pedidos
+            try:
+                return o_que_cobra_do_vizinho()
+            finally:
+                pedidos_abertos = guardada
+
+        caso("vizinho somente leitura fora da integração e sem pedido aberto é "
+             "cobrado pelo pedido, não pela mescla",
+             any("pedido de incorporação" in c and "MESCLA na integração" not in c
+                 for c in o_que_cobra_com_pedidos([])))
+        caso("vizinho somente leitura com pedido de incorporação aberto cala",
+             o_que_cobra_com_pedidos([{"number": 1}]) == [])
+        caso("gh mudo no vizinho somente leitura é não medido, nunca pedido aberto",
+             any("não deu para medir" in c
+                 for c in o_que_cobra_com_pedidos(NAO_MEDIDO)))
 
     falhas += [FALHA_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]

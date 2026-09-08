@@ -26,6 +26,11 @@ de consulta, não de sessão.
       a sessão já ter dito pronto.
     - Fluxo que ninguém executou nem tem fonte citada é hipótese — grava-se
       marcado como hipótese, nunca como instrução.
+    - Achado que nasce de leitura, e não de instrumento rodado, entra no quadro
+      como hipótese, com o comando que a decide na própria linha; só vira
+      defeito depois que o instrumento reproduziu. Leitura em lote erra na
+      causa mais do que parece, e a linha errada custa uma sessão de conserto
+      no lugar errado.
     - Resultado negativo pede contraprova: zero, vazio e "sem permissão" viram
       prova só quando o mesmo instrumento, na mesma janela, achar alguma coisa.
       Sem isso, escreva "não medido", nunca "não existe".
@@ -64,6 +69,16 @@ de consulta, não de sessão.
       linha, registro de pacote bloqueado por categoria, proxy autenticado que
       derruba download de binário nativo. Quem propõe sem o teste do ambiente
       empurra a descoberta para quem instala, e ela custa o dobro lá.
+    - O NOME do interpretador não é fato do mundo, é fato da máquina. As
+      receitas desta camada escrevem `python`; onde esse nome não existir, use
+      o Python 3 da máquina. Nunca julgue pelo `which`: em Windows `python3` é
+      o atalho da loja de aplicativos, que está no PATH, sai sem rodar e o
+      `which` o dá por presente — receita que manda rodar `python3` ali ensina
+      a sessão nova a concluir que a camada inteira não funciona. Julgue
+      executando: `python -c "import sys; print(sys.version_info[0])"` tem de
+      responder `3`. Gancho não passa por isso porque vai pelo lançador
+      `.claude/hooks/interpretador.sh`, que escolhe o interpretador por
+      execução.
     - Uma medição não é medição. Onde a saída varia entre execuções iguais —
       escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e
       desconfie de diferença menor que ele. Rodada única não separa causa de
@@ -75,6 +90,11 @@ de consulta, não de sessão.
     - Procurar não é só no repositório: antes de escrever o próprio, meça o que
       a plataforma já entrega de fábrica — o que ela já publica não se
       reimplementa.
+    - Vale também para diagnóstico: antes de concluir a causa de uma falha,
+      procure no acervo se ela já foi paga — a skill `buscar-no-acervo` é a
+      porta — e cite o que achou. Conclusão nova sobre problema velho costuma
+      ser conhecimento que não se procurou: procurar custa segundos; não
+      procurar é pagar duas vezes o mesmo erro.
 
 4. **A memória mora no disco, não no contexto.**
     - O que vale amanhã se escreve — wiki, nota, decisão — nas subpastas de
@@ -156,9 +176,12 @@ de consulta, não de sessão.
     - O que aciona automação — integração contínua, implantação, aviso a outras
       pessoas — é sempre do dono, mesmo onde o resto é liberado: sincronizar
       não é entregar.
-    - Propor não é publicar: abrir o pedido de incorporação é da sessão, quando
-      o repositório autorizar; publicar é o merge, e é do dono; sincronizar não
-      é nem um nem outro.
+    - Propor não é publicar, e nem todo merge é publicar. A mescla da branch de
+      trabalho na INTEGRAÇÃO é da sessão onde o repositório autorizou push — é
+      assim que o trabalho chega. O que é do dono é a promoção para a branch
+      por incorporação (a que `branches_por_incorporacao` nomeia), e ela vai
+      por pedido de incorporação: abri-lo é da sessão, aprová-lo e mesclá-lo é
+      dele. Sincronizar não é nem um nem outro.
     - Antes de empurrar para branch compartilhada, olhe os PRs abertos dela:
       push em branch com PR aberto entra na entrega em rota, e o corpo do PR
       precisa cobrir o que entrou — corpo que não cobre o diff é revisão
@@ -171,6 +194,11 @@ de consulta, não de sessão.
       Chutar para não parar é decidir no lugar do dono, calado.
     - Redesenho de experiência pede esboço e pergunta fechada antes do código;
       conserto de defeito não pede.
+    - **Comando local não pede autorização.** A trava é a branch e o que sai da
+      máquina, não a pergunta: ler, varrer, rodar instrumento, rodar teste e
+      escrever na árvore de trabalho são atos de quem desenvolve, e pedir
+      permissão para cada um custa a vez de quem espera. O que continua sendo
+      do dono está acima nesta mesma regra.
 
 10. **Texto na régua.**
     - Markdown validado, conclusão primeiro, frases curtas, pt-BR.
@@ -251,9 +279,17 @@ de consulta, não de sessão.
 
 16. **Ao dar por entregue, prove que nada ficou sem destino — nem commit fora
     da branch, nem entrega sem o passo seguinte.**
-    - A prova é uma listagem, não memória: `git log <branch-da-entrega>..HEAD
-      --oneline`. Vazio é a prova; qualquer linha é trabalho que fica para
-      trás.
+    - A prova é o instrumento, não memória: `python .agents/camada/camada.py
+      --entrega`, que lê a branch remota que a local segue e acusa quando não
+      há para onde entregar. O comando à mão contra um nome de branch devolve
+      zero calado quando a branch não existe no remoto — e zero calado não é
+      prova.
+    - Vale por repositório tocado, não só pelo workspace: a parada que mexe em
+      vários prova o destino em cada um, inclusive no vizinho sem camada, onde
+      a leitura é `git log HEAD --not --remotes` — vazio é a prova. Fechar um
+      repositório inteiro dá a sensação de ter fechado tudo, e é assim que o
+      outro fica para trás; o gancho `cobrar-destino-da-entrega.py` cobra cada
+      um.
     - Commit em branch que ninguém vai incorporar não existe para o resto do
       mundo, e some no dia em que a branch for podada.
     - Este é o achado que depende de lembrar no fim da sessão mais longa do dia
@@ -263,6 +299,16 @@ de consulta, não de sessão.
       trabalho é por pedido de incorporação, ele fica **aberto**, não planejado
       para depois: trabalho parado antes disso não chegou a lugar nenhum, só
       parece pronto.
+    - A branch de trabalho entrega MESCLANDO na integração, onde o repositório
+      autoriza push — empurrá-la é sincronizar, não entregar. Da branch de
+      trabalho para a integração não cabe pedido de incorporação; o pedido é o
+      caminho da integração para a branch por incorporação, e o do vizinho
+      somente leitura, onde ele exige autorização expressa do dono. Onde o
+      cadastro nega push, a entrega é do dono: diga a ele o que ficou commitado
+      e pare. O gancho mede cada vizinho tocado pelo cadastro do projeto — sem
+      cadastro ele não adivinha, e quando a integração declarada não existe no
+      remoto do vizinho ele manda declarar a certa em vez de chamar isso de
+      entregue.
     - Ou vai, ou é descartado — não existe terceiro estado. O que não serve se
       apaga, com a razão dita em uma linha. O meio-termo é exatamente o que se
       perde quando a sessão fecha, e ninguém fica sabendo que existiu.
@@ -290,6 +336,40 @@ de consulta, não de sessão.
       sobrecarga.
     - Vale para tudo que a sessão escreve para gente ler — resposta, issue,
       relatório de entrega e proposta de melhoria.
+    - Explicar mais é ser mais CLARO, nunca mais LONGO. Texto que cresce para
+      parecer completo esconde a conclusão no meio; corte o que não muda a
+      decisão de quem lê.
+
+18. **Número não mora em prosa.**
+    - Guarde o COMANDO que produz o número, nunca o valor: contagem escrita em
+      página envelhece calada, e quem a lê depois acredita nela.
+    - Onde o número precisa ser cobrado, ele vira rotina do ritual —
+      instrumento que mede na hora reprova sozinho; parágrafo não reprova nada.
+    - Número medido pode ser citado com a data e o comando ao lado, quando
+      serve de marco histórico. O que não pode é ser citado como se fosse o de
+      hoje.
+
+19. **Não pare sem necessidade.**
+    - Trabalhe até o resultado. Pergunte só o que muda o trabalho: pergunta
+      cuja resposta não altera o próximo passo custa a vez de quem espera.
+    - O que a pergunta economiza, a prova devolve: em troca da autonomia vêm
+      teste rigoroso e registro na issue, sempre.
+    - Achou incerteza no meio? Faça primeiro tudo que não depende dela, e só
+      então pergunte — ou declare a suposição e siga, dizendo qual é.
+    - Parar com nada entregue só se justifica quando seguir por qualquer
+      caminho seria inseguro ou tornaria o trabalho inútil se a suposição
+      estiver errada.
+
+20. **Decisão do dono não se reabre sem citar a data e o motivo.**
+    - Antes de desfazer o que ele decidiu, ache a decisão e leia a razão dela:
+      a mensagem do commit, o comentário da issue, o campo da configuração.
+    - Reabrir é legítimo quando um fato novo derruba a razão antiga. Aí a
+      proposta cita as duas coisas — a data da decisão e o fato que mudou.
+    - Sem fato novo, a decisão vale, mesmo que a sessão discorde. Quem discorda
+      diz por quê e segue; não desfaz por conta própria.
+    - Vale para o que não tem trava mecânica: uma lista que ele encolheu, um
+      teto que ele definiu, um módulo que ele tirou. Ninguém veta desfazer isso
+      — é a regra que segura.
 
 ## Como propor mudança — e como consultar por código
 

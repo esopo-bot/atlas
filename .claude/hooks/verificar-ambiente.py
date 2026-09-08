@@ -2,11 +2,17 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 ARQUIVO_MCP = ".mcp.json"
 ARQUIVO_AMBIENTE = "nucleo/ambiente.json"
+ARQUIVO_DO_LANCADOR = ".claude/hooks/interpretador.sh"
+LINHA_DOS_CANDIDATOS = re.compile(r'^CANDIDATOS="([^"]*)"', re.M)
+PERGUNTA_DA_VERSAO = "import sys; print(sys.version_info[0])"
+VERSAO_QUE_SERVE = "3"
+TETO_DO_INTERPRETADOR_S = 10
 ARQUIVO_ANTIGO = "ambiente.txt"
 
 TIPO_RECEITA = "receita"
@@ -42,6 +48,9 @@ PROBLEMA_POR_TIPO = {
     TIPO_ARQUIVO: "- arquivo `{}` não está no disco",
     TIPO_VARIAVEL: "- variável `{}` ausente do ambiente",
 }
+PROBLEMA_INTERPRETADOR_NAO_RODA = (
+    "- `{}` está no PATH mas não roda um Python 3 — é o atalho, não o "
+    "interpretador")
 
 FECHO_COM_RECEITA = "A receita para repor: {}"
 FECHO_SEM_RECEITA = (
@@ -110,12 +119,41 @@ def ler_declaracao(caminho: Path) -> tuple:
     return dados, ""
 
 
+def candidatos_do_lancador(raiz: Path) -> tuple:
+    try:
+        texto = (raiz / ARQUIVO_DO_LANCADOR).read_text(encoding="utf-8")
+    except OSError:
+        return ()
+    achado = LINHA_DOS_CANDIDATOS.search(texto)
+    return tuple(achado.group(1).split()) if achado else ()
+
+
+def responde_python_3(caminho: str) -> bool:
+    try:
+        pronto = subprocess.run(
+            [caminho, "-c", PERGUNTA_DA_VERSAO], capture_output=True,
+            text=True, encoding="utf-8", errors="replace",
+            timeout=TETO_DO_INTERPRETADOR_S)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return pronto.returncode == 0 and pronto.stdout.strip() == VERSAO_QUE_SERVE
+
+
+def problema_da_declaracao(tipo: str, valor: str, caminho_path) -> str:
+    if tipo == TIPO_COMANDO and shutil.which(valor, path=caminho_path):
+        return PROBLEMA_INTERPRETADOR_NAO_RODA.format(valor)
+    return PROBLEMA_POR_TIPO[tipo].format(valor)
+
+
 def declaracao_atendida(tipo: str, valor: str, raiz: Path, env,
                         caminho_path) -> bool:
     if tipo in (TIPO_RECEITA, TIPO_ARQUIVO):
         return alvo_no_disco(raiz, valor).is_file()
     if tipo == TIPO_COMANDO:
-        return bool(shutil.which(valor, path=caminho_path))
+        achado = shutil.which(valor, path=caminho_path)
+        if achado and valor in candidatos_do_lancador(raiz):
+            return responde_python_3(achado)
+        return bool(achado)
     if tipo == TIPO_PASTA:
         return alvo_no_disco(raiz, valor).is_dir()
     return valor in env
@@ -142,7 +180,8 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
             if tipo == TIPO_VARIAVEL and valor in variaveis_ja_acusadas:
                 continue
             if not declaracao_atendida(tipo, valor, raiz, env, caminho_path):
-                problemas.append(PROBLEMA_POR_TIPO[tipo].format(valor))
+                problemas.append(problema_da_declaracao(
+                    tipo, valor, caminho_path))
 
     if (raiz / ARQUIVO_ANTIGO).is_file():
         problemas.append(PROBLEMA_ENDERECO_ANTIGO.format(
@@ -192,6 +231,9 @@ ACUSA = [
      dict(declarado="{quebrado")),
     ("o endereço velho ainda no disco acusa a mudança",
      dict(antigo="comando prensa-de-flores\n")),
+    ("interpretador que o lançador lista, existe no PATH e não roda — o "
+     "atalho da loja",
+     dict(declarado={"comando": ["python3"]})),
 ]
 
 CALA = [
@@ -213,7 +255,20 @@ CALA = [
                      "receita": None})),
     ("lista vazia não inventa exigência",
      dict(declarado={"comando": [], "pasta": [], "variavel": []})),
+    ("interpretador que o lançador lista e roda um Python 3",
+     dict(declarado={"comando": ["python"]})),
 ]
+
+
+def executavel_de_mentira(pasta: Path, nome: str, no_posix: str,
+                          no_windows: str) -> None:
+    if os.name == "nt":
+        (pasta / f"{nome}.cmd").write_text(
+            f"@echo off\r\n{no_windows}\r\n", encoding="utf-8")
+        return
+    alvo = pasta / nome
+    alvo.write_text(f"#!/bin/sh\n{no_posix}\n", encoding="utf-8")
+    alvo.chmod(0o755)
 
 
 def testar() -> int:
@@ -226,6 +281,15 @@ def testar() -> int:
         util = caixa_de_ferramentas / "prensa-de-flores"
         util.write_text("#!/bin/sh\n", encoding="utf-8")
         util.chmod(0o755)
+        executavel_de_mentira(caixa_de_ferramentas, "python3",
+                              "exit 9", "exit /b 9")
+        executavel_de_mentira(caixa_de_ferramentas, "python",
+                              f'exec "{sys.executable}" "$@"',
+                              f'"{sys.executable}" %*')
+        lancador = raiz / ARQUIVO_DO_LANCADOR
+        lancador.parent.mkdir(parents=True)
+        shutil.copyfile(Path(__file__).resolve().with_name(lancador.name),
+                        lancador)
 
         (raiz / "estufa").mkdir()
         (raiz / "estufa/regras.md").write_text("", encoding="utf-8")

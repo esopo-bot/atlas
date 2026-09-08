@@ -32,7 +32,7 @@ COBRANCA = (
     "nenhuma. Sem ele o dono não tem como ver o que foi feito nem o que "
     "ficou para ele — e número de issue solto, sem link, obriga a "
     "garimpar. Poste antes de fechar:\n\n"
-    "  python3 {instrumento} --issue <n> \\\n"
+    "  python {instrumento} --issue <n> \\\n"
     "    --pedido \"<o pedido do dono, colado>\" \\\n"
     "    --executado \"<um passo>\" \\\n"
     "    --entregue \"<o que|link>\" \\\n"

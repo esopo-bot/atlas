@@ -94,7 +94,7 @@ caro é vazar o que era particular — isso não se despublica.
 
 Passar pelas nove barreiras é condição para escrever, não para dar por pronto.
 O que prova é o ritual do repositório onde você está. Onde a camada foi
-instalada, quem prova é `python3 .agents/camada/camada.py medir provar`, que
+instalada, quem prova é `python .agents/camada/camada.py medir provar`, que
 viaja junto. Se um instrumento
 reprova, o trabalho não está pronto, por mais bonito que o texto esteja. Quem
 commita, empurra e publica está escrito no `AGENTS.md`, e só lá.

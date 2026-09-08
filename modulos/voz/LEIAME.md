@@ -21,5 +21,8 @@ Instalar é ligar; `"ligada": false` cala sem desinstalar. Não instalar é
 desligar — ele é conforto, não guarda: nada que precise valer sempre depende
 de alguém ouvir.
 
-Windows é lacuna confessada, e a página diz onde: o motor roda, o tocador
-nunca foi medido lá, e a reserva offline não existe.
+Windows: medido em 07/09/2026, o motor roda e o tocador TAMBÉM — fala em voz
+alta, com áudio audível, em texto curto e em parágrafo longo. A reserva
+offline continua não existindo lá, e isso virou decisão em vez de lacuna: sem
+rede a própria sessão de IA não funciona, então reserva offline resolveria
+problema que não existe.

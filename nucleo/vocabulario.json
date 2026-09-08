@@ -213,13 +213,14 @@
           ]
         },
         {
-          "caso": "o nome literal da skill de barreiras da camada, citado no prompt de abertura, no comando de barra que o carrega e na linha dela no catálogo das skills — fonte e espelho",
-          "ocorrencias": 4,
-          "razao": "não é o termo velho da etapa de espera: é o comando que a pessoa digita para disparar a skill, e a skill se chama assim no disco. Renomear a skill é decisão própria, fora deste termo.",
+          "caso": "o nome literal da skill de barreiras da camada, citado no comando de barra que a carrega, na linha dela no catálogo das skills e no prompt de abertura — fonte e espelho",
+          "ocorrencias": 3,
+          "razao": "não é o termo velho da etapa de espera: é o comando que a pessoa digita para disparar a skill, e a skill se chama assim no disco. Renomear a skill é decisão própria, fora deste termo. O número caiu de 4 para 3 em 08/09/2026, medido: a declaração perdoava mais do que existia, e o prompt de abertura entrou na lista porque cita a skill pelo nome.",
           "arquivos": [
             ".agents/prompts/01-abertura-de-sessao-na-camada.md",
-            ".claude/commands/bootstart.md",
+            ".agents/prompts/bootstart.md",
             ".agents/skills/README.md",
+            ".claude/commands/bootstart.md",
             ".claude/skills/README.md"
           ]
         },
@@ -277,17 +278,21 @@
       "excecoes": [
         {
           "caso": "o VERBO casar conjugado — 'não casa com', 'casa com um esquema proibido', a variável `casa` do avaliador de esquema",
-          "ocorrencias": 14,
-          "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate. Este número anda com a prosa: o verbo aparece toda vez que alguém escreve que um padrão não casa, e por isso a conta envelhece sozinha — quem a mede é o ritual, não a memória.",
+          "ocorrencias": 18,
+          "razao": "outro referente: é o verbo, não o substantivo. Trocar por 'repositório' viraria disparate. Este número anda com a prosa: o verbo aparece toda vez que alguém escreve que um padrão não casa, e por isso a conta envelhece sozinha — quem a mede é o ritual, não a memória. Medido em 08/09/2026, quando o grep parou de perder o padrão neste sistema operacional e o instrumento enxergou quatro arquivos que a lista não tinha: a bancada da camada, o indexador na fonte e na cópia, e o roteiro das verificações.",
           "arquivos": [
+            ".agents/camada/testes.py",
             ".agents/encadeador/testes.py",
             ".agents/evidencia/evidencia.py",
             ".agents/higiene/higiene.py",
+            ".agents/indice/indexar.py",
             "execucoes/entrega.json",
             "execucoes/prompts/trabalhar-no-workspace.md",
             "modulos/encadeador/.agents/encadeador/testes.py",
             "modulos/encadeador/execucoes/entrega.json",
-            "modulos/encadeador/execucoes/prompts/trabalhar-no-workspace.md"
+            "modulos/encadeador/execucoes/prompts/trabalhar-no-workspace.md",
+            "modulos/indice/.agents/indice/indexar.py",
+            "verificacoes.py"
           ]
         }
       ],

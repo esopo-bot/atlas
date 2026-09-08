@@ -8,7 +8,7 @@ se misturam.
 ## A barreira que manda em tudo
 
 Você NÃO muda a camada no meio de trabalho de projeto. Achado de melhoria
-do atlas vira LINHA no quadro fixo (`python3 .agents/caixa/caixa.py
+do atlas vira LINHA no quadro fixo (`python .agents/caixa/caixa.py
 melhoria --id <kebab> --assunto "..."`), nunca edição. O auditor fica
 LIGADO em toda execução: é ele quem colhe o que melhora a camada depois.
 
@@ -88,7 +88,7 @@ Várias sessões podem trabalhar ao mesmo tempo, e o que separa uma da outra
   local, peça-o ao dono), com `auditoria: true` e `issue: <n>`. Não
   edite o original.
 - Disparo DA RAIZ do workspace:
-  `PROJETO=projetos/<nome> ISSUE=<n> ASSUNTO=<kebab> nohup python3
+  `PROJETO=projetos/<nome> ISSUE=<n> ASSUNTO=<kebab> nohup python
   .agents/encadeador/encadeador.py executar --roteiro <local>
   --trabalho issue-<n> --dir execucoes/evidencias &` — `ensaio` antes;
   vigia em background no `estado.json`.

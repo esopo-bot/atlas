@@ -1,11 +1,15 @@
 import argparse
 import contextlib
+import fnmatch
 import io
 import json
 import os
 import re
+import shutil
+import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -28,6 +32,17 @@ RONDA_DESLIGADA = ("índice desligado em {}: nada a indexar. Ligue com "
                    "`indexar.py --ligar` quando quiser a ronda no ritual")
 LIGADO = "índice LIGADO em {}: a ronda indexa o que mudou em {} alvo(s)"
 DESLIGADO = "índice desligado em {}: a ronda não roda"
+PORTAS_QUE_O_INDICE_PRECISA = (("MILVUS_ADDRESS", "o banco de vetores"),
+                               ("OLLAMA_HOST", "quem gera os vetores"))
+TEMPO_DA_SONDA_EM_SEGUNDOS = 1.5
+PORTA_RESPONDE = "  {} responde em {}"
+PORTA_MUDA = ("  {} NÃO responde em {} — declarado não é respondendo, e a "
+              "ronda vai falhar quando chegar nele")
+PORTA_SEM_ENDERECO = "  {} sem endereço declarado em {}: nada a sondar"
+NEM_UMA_PORTA_RESPONDE = ("Nenhuma porta do índice responde: o motor de "
+                          "contêineres parece parado. Para levantar: "
+                          "docker compose -f .agents/indice/docker-compose.yml "
+                          "up -d")
 ESTADO_DA_ULTIMA_RONDA = ("última ronda em {quando}: {feitos} indexado(s), "
                           "{pulados} já estava(m), {sem_elegivel} sem arquivo "
                           "elegível, {falharam} falhou(ram), em {duracao}")
@@ -37,10 +52,12 @@ PROTOCOLO = "2024-11-05"
 QUEM_CHAMA = {"name": "indexar", "version": "1"}
 FERRAMENTA_DE_INDEXAR = "index_codebase"
 FERRAMENTA_DO_ESTADO = "get_indexing_status"
+FERRAMENTA_DE_DESFAZER = "clear_index"
 CAMPO_DO_CAMINHO = "path"
 
 TEMPO_DE_HANDSHAKE = 60
 TEMPO_POR_ALVO = 8 * 3600
+TEMPO_DA_SINCRONIZACAO = 8 * 3600
 INTERVALO_DA_ESPERA = 5
 
 RECUSA_SEM_ALVOS = ("sem alvos: declare `{}` com a lista de caminhos a "
@@ -53,6 +70,10 @@ RECUSA_ALVO_AUSENTE = "alvo que não existe no disco: {}"
 NAO_RESPONDEU = "o servidor não respondeu em {}s"
 LINHA_DO_ENSAIO = ("  {} — {} arquivo(s) sob ele, {} rastreado(s) no git, {} "
                    "com extensão que o servidor indexa")
+LINHA_DO_QUE_O_IGNORAR_TIROU = ("      {} arquivo(s) fora da conta porque o "
+                                "`ignorar` de {} os exclui — eles nunca "
+                                "chegariam ao servidor, e contá-los inflava "
+                                "a régua")
 AVISO_DO_EXCESSO = ("      ATENÇÃO: {} arquivo(s) que o git não rastreia — "
                     "quase sempre artefato de build ou cache. O servidor "
                     "filtra por extensão, então imagem e binário não entram "
@@ -104,9 +125,47 @@ LINHA_DA_CONTAGEM = ("        {} arquivo(s) elegível(is) sob o alvo, {} "
 SEM_CONTAGEM_DO_SERVIDOR = ("        o servidor não disse quantos arquivos "
                             "indexou — não dá para comparar")
 MARCA_DE_ANDANDO = "currently being indexed"
-NAO_TERMINOU = ("o alvo foi disparado mas nao terminou em {} — o servidor "
-                "indexa em segundo plano, e matar o processo aqui aborta o "
-                "trabalho dele")
+NAO_TERMINOU = "o servidor deu a indexação por falha: {}"
+NAO_COUBE_NO_TETO = ("não terminou em {} — a coleção pela metade foi desfeita, "
+                     "e o alvo entra inteiro na próxima ronda; se ele é "
+                     "grande, rode com `--tempo-limite` maior")
+ANDANDO = "andando"
+MARCA_DE_CONCLUSAO_NO_REGISTRO = "Indexing completed successfully"
+MARCA_DE_FALHA_NO_REGISTRO = "Indexing failed for"
+MARCAS_DE_SINCRONIZACAO_FEITA = ("Index sync completed for all codebases",
+                                 "No codebases indexed. Skipping sync")
+MARCA_DE_SINCRONIZACAO_PULADA = "Another MCP process is already syncing"
+SINCRONIZACAO_FEITA = "feita"
+SINCRONIZACAO_PULADA = "pulada"
+TRAVA_DA_SINCRONIZACAO = Path.home() / ".context" / "mcp-sync.lock"
+ARQUIVO_DO_DONO_DA_TRAVA = "owner.json"
+TRAVA_ORFA_REMOVIDA = ("  trava de sincronização do processo {} removida: o "
+                       "processo já morreu, e o servidor só a reclamaria "
+                       "depois de 10 min")
+SINCRONIZACAO_PULADA_POR_TRAVA = ("  a sincronização foi pulada: outro servidor "
+                                  "do índice segura a trava em {} — o que "
+                                  "mudou desde a última ronda entra na "
+                                  "próxima")
+VARIAVEL_DO_INTERVALO_DE_SYNC = "CLAUDE_CONTEXT_SYNC_INTERVAL_MS"
+INTERVALO_DE_SYNC_QUE_NAO_ATRAPALHA = str(24 * 3600 * 1000)
+VARIAVEL_DA_SINCRONIZACAO = "CLAUDE_CONTEXT_BACKGROUND_SYNC"
+SINCRONIZACAO_DESLIGADA = "false"
+SEM_SINCRONIZACAO = ("  sincronização desligada: com `--refazer` cada alvo é "
+                     "reconstruído do zero, e sincronizar os outros só "
+                     "disputaria quem gera os vetores")
+ESPERANDO_SINCRONIZACAO = ("  o servidor sincroniza o que mudou nos alvos já "
+                           "indexados antes do primeiro disparo")
+SINCRONIZACAO_FECHOU = "  sincronização feita em {}"
+SINCRONIZACAO_NAO_FECHOU = ("  a sincronização não fechou em {} — a ronda "
+                            "segue, mas o que ela indexar agora pode "
+                            "disputar o Ollama com ela")
+INTERRUPCAO = ("interrompido com {} alvo(s) em curso: desfazendo cada um, "
+               "para o servidor não os chamar de completos na subida "
+               "seguinte")
+DESFEITO = "  {} — desfeito; entra inteiro na próxima ronda"
+NAO_DESFEZ = ("  {} — não deu para desfazer: ficou pela metade, reindexe "
+              "com `--refazer`")
+CODIGO_DA_INTERRUPCAO = 130
 JA_ESTAVA = "já estava indexado"
 FALHOU = "FALHOU"
 MARCA_DE_JA_INDEXADO = "already indexed"
@@ -146,6 +205,42 @@ def estado_em_uma_linha(dado: dict) -> str:
     return DESLIGADO.format(ARQUIVO_DOS_ALVOS)
 
 
+def maquina_e_porta(endereco: str):
+    limpo = re.sub(r"^[a-zA-Z]+://", "", (endereco or "").strip())
+    limpo = limpo.split("/")[0]
+    if ":" not in limpo:
+        return None
+    maquina, _, porta = limpo.rpartition(":")
+    try:
+        return maquina or "127.0.0.1", int(porta)
+    except ValueError:
+        return None
+
+
+def a_porta_responde(endereco: str) -> bool:
+    alvo = maquina_e_porta(endereco)
+    if alvo is None:
+        return False
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sonda:
+        sonda.settimeout(TEMPO_DA_SONDA_EM_SEGUNDOS)
+        return sonda.connect_ex(alvo) == 0
+
+
+def sondagem_das_portas(dado: dict) -> list:
+    ambiente = dado.get(CAMPO_DO_AMBIENTE) or {}
+    achados = []
+    for chave, quem in PORTAS_QUE_O_INDICE_PRECISA:
+        endereco = ambiente.get(chave)
+        if not endereco:
+            achados.append((quem, None, PORTA_SEM_ENDERECO.format(
+                quem, ARQUIVO_DOS_ALVOS)))
+            continue
+        responde = a_porta_responde(endereco)
+        molde = PORTA_RESPONDE if responde else PORTA_MUDA
+        achados.append((quem, responde, molde.format(quem, endereco)))
+    return achados
+
+
 def ligar(dado: dict, cwd: str, ligado: bool) -> int:
     dado[CAMPO_DO_LIGADO] = ligado
     gravar_configuracao(dado, cwd)
@@ -172,7 +267,15 @@ def estado(dado: dict, cwd: str) -> int:
     registro = ultima_ronda(cwd)
     print(ESTADO_DA_ULTIMA_RONDA.format(**registro) if registro
           else SEM_RONDA_AINDA)
-    return 0
+    if not esta_ligado(dado):
+        return 0
+    sondagem = sondagem_das_portas(dado)
+    for _, _, linha in sondagem:
+        print(linha)
+    respostas = [responde for _, responde, _ in sondagem]
+    if respostas and not any(respostas):
+        print(NEM_UMA_PORTA_RESPONDE)
+    return 0 if all(respostas) else 1
 
 
 def recusa_da_configuracao(dado: dict, cwd: str = "") -> str:
@@ -218,16 +321,28 @@ def sob_pasta_oculta(relativo: Path) -> bool:
     return any(parte.startswith(PONTO) for parte in relativo.parts[:-1])
 
 
-def contagem_do_servidor(caminho: str, extensoes) -> dict:
+def o_ignorar_exclui(relativo: Path, ignorar) -> bool:
+    if not ignorar:
+        return False
+    texto = relativo.as_posix()
+    return any(fnmatch.fnmatch(texto, padrao)
+               or fnmatch.fnmatch("/" + texto, padrao)
+               for padrao in ignorar)
+
+
+def contagem_do_servidor(caminho: str, extensoes, ignorar=None) -> dict:
     raiz = Path(caminho).expanduser()
     conta = {"elegiveis": None if extensoes is None else 0, "ocultos": 0,
-             "json": 0}
+             "json": 0, "ignorados": 0}
     for arquivo in arquivos_sob_o_alvo(caminho):
         if arquivo.suffix == EXTENSAO_DE_JSON:
             conta["json"] += 1
         if extensoes is None or arquivo.suffix not in extensoes:
             continue
-        if sob_pasta_oculta(arquivo.relative_to(raiz)):
+        relativo = arquivo.relative_to(raiz)
+        if o_ignorar_exclui(relativo, ignorar):
+            conta["ignorados"] += 1
+        elif sob_pasta_oculta(relativo):
             conta["ocultos"] += 1
         else:
             conta["elegiveis"] += 1
@@ -265,15 +380,106 @@ def excesso_de_nao_rastreados(total: int, rastreados: int) -> int:
         else 0
 
 
+def ambiente_que_nao_atrapalha(ambiente: dict, refazer: bool = False) -> dict:
+    """A sincronização periódica do servidor reindexa por mudança em cima do
+    alvo que está sendo indexado; a ronda a empurra para um dia e deixa só a
+    inicial, que ela espera terminar antes do primeiro disparo. Com
+    `--refazer` não há o que sincronizar: cada alvo é reconstruído."""
+    completo = dict(ambiente or {})
+    if refazer:
+        completo.setdefault(VARIAVEL_DA_SINCRONIZACAO, SINCRONIZACAO_DESLIGADA)
+    completo.setdefault(VARIAVEL_DO_INTERVALO_DE_SYNC,
+                        INTERVALO_DE_SYNC_QUE_NAO_ATRAPALHA)
+    return completo
+
+
+def veredito_do_registro(linhas: list):
+    """Lê o que o servidor escreveu no stderr desde o disparo: concluiu,
+    falhou, ou ainda nada."""
+    for linha in linhas:
+        if MARCA_DE_CONCLUSAO_NO_REGISTRO in linha:
+            return FEITO, linha.strip()
+        if MARCA_DE_FALHA_NO_REGISTRO in linha:
+            return FALHOU, linha.strip()
+    return None, ""
+
+
+def sincronizacao_terminou(linhas: list):
+    """Lê o registro: a sincronização inicial fechou, foi pulada porque outro
+    servidor segura a trava, ou ainda nada."""
+    for linha in linhas:
+        if any(marca in linha for marca in MARCAS_DE_SINCRONIZACAO_FEITA):
+            return SINCRONIZACAO_FEITA
+        if MARCA_DE_SINCRONIZACAO_PULADA in linha:
+            return SINCRONIZACAO_PULADA
+    return None
+
+
+def processo_vivo(pid: int) -> bool:
+    if os.name == "nt":
+        saida = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                               capture_output=True, text=True)
+        return str(pid) in saida.stdout
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def dono_da_trava(trava: Path):
+    try:
+        return int(json.loads((trava / ARQUIVO_DO_DONO_DA_TRAVA)
+                              .read_text(encoding="utf-8")).get("pid"))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def limpar_trava_orfa(trava: Path = TRAVA_DA_SINCRONIZACAO,
+                      vivo=processo_vivo) -> str:
+    """Servidor morto de fora deixa a trava global de sincronização, e o
+    próximo só a reclama depois de 10 min — a ronda inicial pula a
+    sincronização e espera por uma marca que nunca vem."""
+    if not trava.is_dir():
+        return ""
+    pid = dono_da_trava(trava)
+    if pid is not None and vivo(pid):
+        return ""
+    shutil.rmtree(trava, ignore_errors=True)
+    return TRAVA_ORFA_REMOVIDA.format(pid if pid is not None else "?")
+
+
 class Servidor:
-    def __init__(self, caminho: str, ambiente: dict):
+    def __init__(self, caminho: str, ambiente: dict, refazer: bool = False):
         self.processo = subprocess.Popen(
             ["node", str(Path(caminho).expanduser())],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, bufsize=1,
+            stderr=subprocess.PIPE, text=True, bufsize=1,
             encoding="utf-8", errors="replace",
-            env=dict(os.environ, **(ambiente or {})))
+            env=dict(os.environ,
+                     **ambiente_que_nao_atrapalha(ambiente, refazer)))
         self.proxima_id = 1
+        self.registro = []
+        self.partida = 0
+        threading.Thread(target=self.le_o_registro, daemon=True).start()
+
+    def le_o_registro(self) -> None:
+        for linha in self.processo.stderr:
+            self.registro.append(linha)
+
+    def desde_a_partida(self) -> list:
+        return self.registro[self.partida:]
+
+    def espera_sincronizacao(self, teto: int, intervalo: int):
+        comeco = time.monotonic()
+        while time.monotonic() - comeco < teto:
+            dito = sincronizacao_terminou(self.registro)
+            if dito:
+                return dito
+            time.sleep(intervalo)
+        return None
 
     def manda(self, mensagem: dict) -> None:
         self.processo.stdin.write(json.dumps(mensagem) + "\n")
@@ -317,6 +523,7 @@ class Servidor:
             argumentos["force"] = True
         if ignorar:
             argumentos[CAMPO_DOS_PADROES_IGNORADOS] = list(ignorar)
+        self.partida = len(self.registro)
         return self.pergunta("tools/call", {
             "name": FERRAMENTA_DE_INDEXAR, "arguments": argumentos}, teto)
 
@@ -326,20 +533,23 @@ class Servidor:
             "arguments": {CAMPO_DO_CAMINHO: str(Path(caminho).expanduser())}},
             teto)
 
-    def espera_terminar(self, caminho: str, teto: int, intervalo: int,
-                        relator=None):
+    def espera_terminar(self, caminho: str, teto: int, intervalo: int):
+        """Espera pelo registro, nunca pela consulta de estado: cada
+        `get_indexing_status` roda a recuperação do servidor, que grava como
+        completo qualquer alvo em curso que já tenha linhas no banco."""
         comeco = time.monotonic()
-        ultimo = ""
         while time.monotonic() - comeco < teto:
-            ultimo = texto_da_resposta(self.estado(caminho, TEMPO_DE_HANDSHAKE))
-            if terminou(ultimo):
-                return True, ultimo
-            if not ainda_anda(ultimo):
-                return False, ultimo
-            if relator:
-                relator(ultimo)
+            dito, linha = veredito_do_registro(self.desde_a_partida())
+            if dito:
+                return dito, linha
             time.sleep(intervalo)
-        return False, ultimo
+        return ANDANDO, ""
+
+    def desfaz(self, caminho: str, teto: int):
+        return self.pergunta("tools/call", {
+            "name": FERRAMENTA_DE_DESFAZER,
+            "arguments": {CAMPO_DO_CAMINHO: str(Path(caminho).expanduser())}},
+            teto)
 
     def encerra(self) -> None:
         self.processo.kill()
@@ -365,6 +575,54 @@ def ainda_anda(texto: str) -> bool:
     return MARCA_DE_ANDANDO in texto
 
 
+def sincronizar_antes_do_primeiro_disparo(servidor, refazer: bool,
+                                          comeco: float) -> str:
+    """A sincronização inicial é quem traz o que mudou nos alvos já
+    indexados; a ronda a espera para não disputar quem gera os vetores com o
+    próprio trabalho. Com `--refazer` ela nem sobe."""
+    if refazer:
+        print(SEM_SINCRONIZACAO, flush=True)
+        return SINCRONIZACAO_DESLIGADA
+    print(ESPERANDO_SINCRONIZACAO, flush=True)
+    dito = servidor.espera_sincronizacao(TEMPO_DA_SINCRONIZACAO,
+                                         INTERVALO_DA_ESPERA)
+    gasto = duracao(time.monotonic() - comeco)
+    if dito == SINCRONIZACAO_FEITA:
+        print(SINCRONIZACAO_FECHOU.format(gasto), flush=True)
+    elif dito == SINCRONIZACAO_PULADA:
+        print(SINCRONIZACAO_PULADA_POR_TRAVA.format(TRAVA_DA_SINCRONIZACAO),
+              flush=True)
+    else:
+        print(SINCRONIZACAO_NAO_FECHOU.format(gasto), flush=True)
+    return dito
+
+
+def desfazer_a_metade(servidor, caminho: str) -> bool:
+    """Alvo que o servidor deu por falho fica com a coleção pela metade, e na
+    subida seguinte ele a chama de completa; apagar agora é o que faz a
+    próxima ronda refazê-lo inteiro."""
+    resposta = servidor.desfaz(caminho, TEMPO_DE_HANDSHAKE)
+    desfez = veredito(resposta) == FEITO
+    print((DESFEITO if desfez else NAO_DESFEZ).format(caminho), flush=True)
+    return desfez
+
+
+def desfazer_o_que_anda(servidor, em_curso: list) -> list:
+    """Apaga a coleção de cada alvo em curso; devolve os que não deu."""
+    if not em_curso:
+        return []
+    print(INTERRUPCAO.format(len(em_curso)), file=sys.stderr, flush=True)
+    nao_desfeitos = []
+    for caminho in em_curso:
+        resposta = servidor.desfaz(caminho, TEMPO_DE_HANDSHAKE)
+        if veredito(resposta) == FEITO:
+            print(DESFEITO.format(caminho), file=sys.stderr, flush=True)
+        else:
+            nao_desfeitos.append(caminho)
+            print(NAO_DESFEZ.format(caminho), file=sys.stderr, flush=True)
+    return nao_desfeitos
+
+
 def veredito(resposta) -> str:
     if resposta is None or "error" in resposta:
         return FALHOU
@@ -388,16 +646,19 @@ def avisos_do_alvo(caminho: str, extensoes, conta: dict) -> list:
     return avisos
 
 
-def ensaiar(alvos: list, extensoes) -> int:
+def ensaiar(alvos: list, extensoes, ignorar=None) -> int:
     print(CABECA_DO_ENSAIO.format(len(alvos)))
     for caminho in alvos:
         total = quantos_arquivos(caminho)
         rastreados = quantos_rastreados(caminho)
-        conta = contagem_do_servidor(caminho, extensoes)
+        conta = contagem_do_servidor(caminho, extensoes, ignorar)
         print(LINHA_DO_ENSAIO.format(
             caminho, total,
             rastreados if rastreados >= 0 else NAO_MEDIDO,
             NAO_MEDIDO if conta["elegiveis"] is None else conta["elegiveis"]))
+        if conta["ignorados"]:
+            print(LINHA_DO_QUE_O_IGNORAR_TIROU.format(
+                conta["ignorados"], ARQUIVO_DOS_ALVOS))
         if (sobra := excesso_de_nao_rastreados(total, rastreados)):
             print(AVISO_DO_EXCESSO.format(sobra, ARQUIVO_DOS_ALVOS))
         for aviso in avisos_do_alvo(caminho, extensoes, conta):
@@ -405,59 +666,81 @@ def ensaiar(alvos: list, extensoes) -> int:
     return 0
 
 
+def disparar_um_alvo(servidor, i: int, total: int, caminho: str, teto: int,
+                     refazer: bool, extensoes, ignorar, em_curso: list) -> str:
+    """Dispara um alvo e espera ele terminar pelo registro do servidor, um
+    por vez: alvo em paralelo é o que a recuperação do servidor grava como
+    completo antes da hora. O que não termina no teto é desfeito."""
+    print(LINHA_DO_COMECO.format(i, total, caminho), flush=True)
+    conta = contagem_do_servidor(caminho, extensoes, ignorar)
+    if conta["elegiveis"] == 0:
+        print(LINHA_DO_FIM.format(i, total, caminho, PULADO_SEM_ELEGIVEL,
+                                  duracao(0)), flush=True)
+        return PULADO_SEM_ELEGIVEL
+    comeco = time.monotonic()
+    resposta = servidor.indexa(caminho, teto, refazer, ignorar)
+    dito = veredito(resposta)
+    explicacao = texto_da_resposta(resposta)[:200] or NAO_RESPONDEU.format(teto)
+    if dito == FEITO:
+        em_curso.append(caminho)
+        sobrou = max(1, int(teto - (time.monotonic() - comeco)))
+        dito, linha = servidor.espera_terminar(
+            caminho, sobrou, INTERVALO_DA_ESPERA)
+        em_curso.remove(caminho)
+        gasto = duracao(time.monotonic() - comeco)
+        if dito == ANDANDO:
+            dito, explicacao = FALHOU, NAO_COUBE_NO_TETO.format(gasto)
+        elif dito == FALHOU:
+            explicacao = NAO_TERMINOU.format(linha[:200])
+    gasto = duracao(time.monotonic() - comeco)
+    print(LINHA_DO_FIM.format(i, total, caminho, dito, gasto), flush=True)
+    if dito == FALHOU:
+        print(LINHA_DO_ESTADO.format(explicacao), flush=True)
+        if explicacao != NAO_RESPONDEU.format(teto):
+            desfazer_a_metade(servidor, caminho)
+    else:
+        dito_pelo_servidor = texto_da_resposta(servidor.estado(caminho, teto))
+        print(LINHA_DO_ESTADO.format(
+            dito_pelo_servidor.replace(chr(10), " · ")[:200]), flush=True)
+        indexados = quantos_o_servidor_indexou(dito_pelo_servidor)
+        elegiveis = (quantos_arquivos(caminho)
+                     if conta["elegiveis"] is None else conta["elegiveis"])
+        print(LINHA_DA_CONTAGEM.format(elegiveis, indexados)
+              if indexados is not None else SEM_CONTAGEM_DO_SERVIDOR,
+              flush=True)
+    return dito
+
+
 def indexar(dado: dict, teto: int, refazer: bool = False,
-            extensoes=None, cwd: str = "") -> int:
+            extensoes=None, cwd: str = "", fabrica=None,
+            trava: Path = TRAVA_DA_SINCRONIZACAO) -> int:
     alvos = dado[CAMPO_DOS_ALVOS]
-    servidor = Servidor(dado[CAMPO_DO_SERVIDOR], dado.get(CAMPO_DO_AMBIENTE))
     print(CABECA_DA_RODADA.format(len(alvos), dado[CAMPO_DO_SERVIDOR]))
+    if (trava_removida := limpar_trava_orfa(trava)):
+        print(trava_removida, flush=True)
+    servidor = (fabrica or Servidor)(dado[CAMPO_DO_SERVIDOR],
+                                     dado.get(CAMPO_DO_AMBIENTE), refazer)
     if not servidor.apresenta():
         servidor.encerra()
         print(NAO_RESPONDEU.format(TEMPO_DE_HANDSHAKE), file=sys.stderr)
         return 1
     feitos = pulados = sem_elegivel = 0
     comeco_da_rodada = time.monotonic()
-    for i, caminho in enumerate(alvos, 1):
-        print(LINHA_DO_COMECO.format(i, len(alvos), caminho), flush=True)
-        conta = contagem_do_servidor(caminho, extensoes)
-        if conta["elegiveis"] == 0:
-            sem_elegivel += 1
-            print(LINHA_DO_FIM.format(i, len(alvos), caminho,
-                                      PULADO_SEM_ELEGIVEL, duracao(0)),
-                  flush=True)
-            continue
-        comeco = time.monotonic()
-        resposta = servidor.indexa(caminho, teto, refazer,
-                                   dado.get(CAMPO_DO_QUE_IGNORAR))
-        gasto = duracao(time.monotonic() - comeco)
-        dito = veredito(resposta)
-        if dito == FEITO:
-            sobrou = max(1, int(teto - (time.monotonic() - comeco)))
-            fechou, ultimo = servidor.espera_terminar(
-                caminho, sobrou, INTERVALO_DA_ESPERA)
-            gasto = duracao(time.monotonic() - comeco)
-            if not fechou:
-                dito = FALHOU
-                resposta = {"result": {"content": [{"type": "text", "text": (
-                    NAO_TERMINOU.format(gasto) + " — " + ultimo)}]}}
-        feitos += 1 if dito == FEITO else 0
-        pulados += 1 if dito == JA_ESTAVA else 0
-        print(LINHA_DO_FIM.format(i, len(alvos), caminho, dito, gasto),
-              flush=True)
-        if dito == FALHOU:
-            print(LINHA_DO_ESTADO.format(
-                texto_da_resposta(resposta)[:200] or NAO_RESPONDEU.format(teto)),
-                flush=True)
-        else:
-            dito_pelo_servidor = texto_da_resposta(
-                servidor.estado(caminho, teto))
-            print(LINHA_DO_ESTADO.format(
-                dito_pelo_servidor.replace(chr(10), " · ")[:200]), flush=True)
-            indexados = quantos_o_servidor_indexou(dito_pelo_servidor)
-            elegiveis = (quantos_arquivos(caminho)
-                         if conta["elegiveis"] is None else conta["elegiveis"])
-            print(LINHA_DA_CONTAGEM.format(elegiveis, indexados)
-                  if indexados is not None else SEM_CONTAGEM_DO_SERVIDOR,
-                  flush=True)
+    em_curso = []
+    try:
+        sincronizar_antes_do_primeiro_disparo(servidor, refazer,
+                                              comeco_da_rodada)
+        for i, caminho in enumerate(alvos, 1):
+            dito = disparar_um_alvo(servidor, i, len(alvos), caminho, teto,
+                                    refazer, extensoes,
+                                    dado.get(CAMPO_DO_QUE_IGNORAR), em_curso)
+            feitos += 1 if dito == FEITO else 0
+            pulados += 1 if dito == JA_ESTAVA else 0
+            sem_elegivel += 1 if dito == PULADO_SEM_ELEGIVEL else 0
+    except KeyboardInterrupt:
+        desfazer_o_que_anda(servidor, list(em_curso))
+        servidor.encerra()
+        return CODIGO_DA_INTERRUPCAO
     servidor.encerra()
     falharam = len(alvos) - feitos - pulados - sem_elegivel
     gasto = duracao(time.monotonic() - comeco_da_rodada)
@@ -606,9 +889,33 @@ def testar() -> int:
         caso("a contagem imita o servidor: extensao aceita fora de pasta "
              "oculta e elegivel; sob pasta com ponto e oculto; .json e "
              "contado a parte",
-             conta == {"elegiveis": 1, "ocultos": 1, "json": 1})
+             conta == {"elegiveis": 1, "ocultos": 1, "json": 1,
+                       "ignorados": 0})
         caso("sem a lista do servidor, elegiveis e nao medido — nunca zero",
              contagem_do_servidor(str(mistura), None)["elegiveis"] is None)
+
+        pesada = raiz / "pesada"
+        (pesada / "node_modules" / "fundo").mkdir(parents=True)
+        (pesada / "meu.md").write_text("x", encoding="utf-8")
+        (pesada / "node_modules" / "a.md").write_text("x", encoding="utf-8")
+        (pesada / "node_modules" / "fundo" / "b.md").write_text(
+            "x", encoding="utf-8")
+        sem_ignorar = contagem_do_servidor(str(pesada), extensoes)
+        com_ignorar = contagem_do_servidor(str(pesada), extensoes,
+                                           ["**/node_modules/**"])
+        caso("sem o ignorar, a conta inflava com o que nunca chegaria ao "
+             "servidor — era esta a regua que enganava",
+             sem_ignorar["elegiveis"] == 3)
+        caso("o `ignorar` do alvos.json sai da conta de elegiveis, e o que "
+             "ele tirou e dito em vez de sumir calado",
+             com_ignorar["elegiveis"] == 1
+             and com_ignorar["ignorados"] == 2)
+        caso("padrao que nao casa com nada nao tira ninguem",
+             contagem_do_servidor(str(pesada), extensoes,
+                                  ["**/vendor/**"])["elegiveis"] == 3)
+        caso("sem lista de ignorar a conta segue como antes",
+             contagem_do_servidor(str(pesada), extensoes,
+                                  [])["elegiveis"] == 3)
         caso("alvo sem arquivo elegivel e acusado — o servidor acha 0, diz "
              "100% e nunca diz completed, e a pessoa espera o teto inteiro",
              AVISO_SEM_ELEGIVEL in avisos_do_alvo(
@@ -662,6 +969,188 @@ def testar() -> int:
         caso("o estado mostra a última ronda gravada, com os quatro números",
              "1 indexado(s), 9 já estava(m)" in saida.getvalue())
 
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ouvinte:
+            ouvinte.bind(("127.0.0.1", 0))
+            ouvinte.listen(16)
+            porta_aberta = ouvinte.getsockname()[1]
+            caso("porta que atende é reconhecida como respondendo",
+                 a_porta_responde(f"127.0.0.1:{porta_aberta}"))
+            caso("o endereço com esquema http também é sondado",
+                 a_porta_responde(f"http://127.0.0.1:{porta_aberta}"))
+        caso("porta fechada NÃO responde — é este o caso que o --estado "
+             "calava, dizendo LIGADO com o motor de contêineres parado",
+             not a_porta_responde(f"127.0.0.1:{porta_aberta}"))
+        caso("endereço sem porta não vira falso positivo",
+             maquina_e_porta("127.0.0.1") is None)
+        porta_morta = {CAMPO_DO_LIGADO: True, CAMPO_DOS_ALVOS: ["x"],
+                       CAMPO_DO_AMBIENTE: {
+                           "MILVUS_ADDRESS": f"127.0.0.1:{porta_aberta}",
+                           "OLLAMA_HOST":
+                               f"http://127.0.0.1:{porta_aberta}"}}
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            codigo_do_estado = estado(porta_morta, cwd)
+        caso("com as portas mudas o estado REPROVA, em vez de sair 0 dizendo "
+             "LIGADO",
+             codigo_do_estado == 1 and "NÃO responde" in dito.getvalue())
+        caso("e ele diz como levantar, em vez de deixar a sessão adivinhar",
+             "docker compose" in dito.getvalue())
+
+        concluiu = ("[LOG] [BACKGROUND-INDEX] ✅ Indexing completed "
+                    "successfully! Files: 20, Chunks: 310\n")
+        falhou_no_lote = ("[ERROR] [BACKGROUND-INDEX] Indexing failed for "
+                          "D:\\acervo: Embedding API error (batch size: "
+                          "100): fetch failed\n")
+        progresso = "[LOG] [BACKGROUND-INDEX] Progress: files (3/20) - 40%\n"
+        caso("o registro do servidor diz que concluiu — e e SO por ele que a "
+             "ronda sabe: a consulta de estado roda a recuperacao, que grava "
+             "como completo o alvo em curso que ja tem linhas no banco",
+             veredito_do_registro([progresso, concluiu]) == (FEITO,
+                                                             concluiu.strip()))
+        caso("registro com falha e falha, com a linha do servidor",
+             veredito_do_registro([progresso, falhou_no_lote])[0] == FALHOU)
+        caso("registro so com progresso ainda nao decide",
+             veredito_do_registro([progresso]) == (None, ""))
+        caso("a sincronizacao inicial fecha por qualquer das duas marcas",
+             sincronizacao_terminou(["[LOG] [SYNC-DEBUG] Index sync completed "
+                                     "for all codebases in 812ms\n"])
+             == SINCRONIZACAO_FEITA
+             and sincronizacao_terminou(["[LOG] [SYNC-DEBUG] No codebases "
+                                         "indexed. Skipping sync.\n"])
+             == SINCRONIZACAO_FEITA
+             and sincronizacao_terminou([progresso]) is None)
+        caso("sincronizacao pulada por trava de outro servidor e reconhecida "
+             "— medido: a ronda esperou por uma marca que nunca viria",
+             sincronizacao_terminou(["[LOG] [SYNC-DEBUG] Another MCP process "
+                                     "is already syncing. Skipping this "
+                                     "cycle.\n"]) == SINCRONIZACAO_PULADA)
+
+        trava = raiz / "mcp-sync.lock"
+        trava.mkdir()
+        (trava / ARQUIVO_DO_DONO_DA_TRAVA).write_text(
+            json.dumps({"pid": 4242}), encoding="utf-8")
+        caso("trava cujo dono ainda vive fica",
+             limpar_trava_orfa(trava, vivo=lambda pid: True) == ""
+             and trava.is_dir())
+        dito = limpar_trava_orfa(trava, vivo=lambda pid: False)
+        caso("trava cujo dono morreu e removida antes de subir o servidor, "
+             "e o pid e dito — medido: servidor orfao encerrado deixou a "
+             "trava, e o proximo pulou a sincronizacao por 10 min",
+             "4242" in dito and not trava.exists())
+        caso("sem trava nao ha o que limpar",
+             limpar_trava_orfa(trava, vivo=lambda pid: False) == "")
+        caso("a ronda empurra a sincronizacao periodica para um dia, sem "
+             "sobrescrever o que o dono declarou",
+             ambiente_que_nao_atrapalha({})[VARIAVEL_DO_INTERVALO_DE_SYNC]
+             == INTERVALO_DE_SYNC_QUE_NAO_ATRAPALHA
+             and ambiente_que_nao_atrapalha(
+                 {VARIAVEL_DO_INTERVALO_DE_SYNC: "5"})[
+                     VARIAVEL_DO_INTERVALO_DE_SYNC] == "5")
+        caso("com --refazer a sincronizacao nem sobe: cada alvo e "
+             "reconstruido, e sincronizar os outros varreria a arvore "
+             "inteira antes do primeiro disparo",
+             ambiente_que_nao_atrapalha({}, refazer=True)[
+                 VARIAVEL_DA_SINCRONIZACAO] == SINCRONIZACAO_DESLIGADA
+             and VARIAVEL_DA_SINCRONIZACAO
+             not in ambiente_que_nao_atrapalha({}))
+
+        class ServidorFingido:
+            def __init__(self, espera=(FEITO, ""), desfaz_ok=True):
+                self.resposta_da_espera = espera
+                self.chamadas = []
+                self.desfaz_ok = desfaz_ok
+
+            def apresenta(self):
+                return True
+
+            def espera_sincronizacao(self, teto, intervalo):
+                self.chamadas.append(("sincroniza", ""))
+                return SINCRONIZACAO_FEITA
+
+            def indexa(self, caminho, teto, refazer=False, ignorar=None):
+                self.chamadas.append(("indexa", caminho))
+                return resposta_de("Indexing started in background")
+
+            def espera_terminar(self, caminho, teto, intervalo):
+                self.chamadas.append(("espera", caminho))
+                return self.resposta_da_espera
+
+            def estado(self, caminho, teto):
+                self.chamadas.append(("estado", caminho))
+                return resposta_de("Statistics: 2 files, 3 chunks · "
+                                   "Status: completed")
+
+            def desfaz(self, caminho, teto):
+                self.chamadas.append(("desfaz", caminho))
+                return resposta_de("Index cleared", erro=not self.desfaz_ok)
+
+            def encerra(self):
+                self.chamadas.append(("encerra", ""))
+
+        fingido = ServidorFingido(desfaz_ok=False)
+        saida = io.StringIO()
+        with contextlib.redirect_stderr(saida):
+            sobraram = desfazer_o_que_anda(fingido, ["d", "e"])
+        caso("interrupcao com alvo em curso chama clear_index em cada um, e "
+             "o que nao deu para desfazer e nomeado com a saida --refazer",
+             [c for c in fingido.chamadas if c[0] == "desfaz"]
+             == [("desfaz", "d"), ("desfaz", "e")]
+             and sobraram == ["d", "e"] and "--refazer" in saida.getvalue())
+        caso("sem alvo em curso a interrupcao nao chama nada",
+             desfazer_o_que_anda(ServidorFingido(), []) == [])
+
+        alvo_real = str(acervo)
+        configuracao_de_prova = {CAMPO_DOS_ALVOS: [alvo_real],
+                                 CAMPO_DO_SERVIDOR: str(servidor)}
+
+        def ronda_fingida(fingido):
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                codigo = indexar(configuracao_de_prova, teto=1,
+                                 extensoes={".md"}, cwd=cwd,
+                                 fabrica=lambda c, a, refaz: fingido,
+                                 trava=raiz / "sem-trava")
+            return codigo, [nome for nome, _ in fingido.chamadas], \
+                saida.getvalue()
+
+        fingido = ServidorFingido(espera=(FEITO, concluiu.strip()))
+        codigo, ordem, dito = ronda_fingida(fingido)
+        caso("a ronda espera a sincronizacao inicial ANTES do primeiro "
+             "disparo, espera o alvo pelo registro, e so entao consulta o "
+             "estado e encerra — nessa ordem",
+             codigo == 0 and ordem == ["sincroniza", "indexa", "espera",
+                                       "estado", "encerra"]
+             and "1 indexado(s)" in dito)
+
+        fingido = ServidorFingido(espera=(ANDANDO, ""))
+        codigo, ordem, dito = ronda_fingida(fingido)
+        caso("alvo que nao termina no teto e desfeito e contado como falha — "
+             "medido: seguir para o proximo com este em curso e o que deixou "
+             "6 de 13 alvos pela metade, gravados como completos",
+             codigo == 1 and ("desfaz", alvo_real) in fingido.chamadas
+             and "não terminou" in dito and "1 falhou" in dito
+             and ordem[-1] == "encerra")
+
+        fingido = ServidorFingido(espera=(FEITO, concluiu.strip()))
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            indexar(configuracao_de_prova, teto=1, refazer=True,
+                    extensoes={".md"}, cwd=cwd,
+                    fabrica=lambda caminho, ambiente, refaz: fingido,
+                    trava=raiz / "sem-trava")
+        caso("com --refazer a ronda nao espera sincronizacao nenhuma, e diz "
+             "por que",
+             ("sincroniza", "") not in fingido.chamadas
+             and "sincronização desligada" in saida.getvalue())
+
+        fingido = ServidorFingido(espera=(FALHOU, falhou_no_lote.strip()))
+        codigo, ordem, dito = ronda_fingida(fingido)
+        caso("alvo que o servidor deu por falho e desfeito na hora, com o "
+             "erro do servidor colado — lote de embeddings que estoura 5 min "
+             "e a causa medida",
+             codigo == 1 and ("desfaz", alvo_real) in fingido.chamadas
+             and "fetch failed" in dito)
+
     print(f"{'OK' if not falhou else 'FALHOU'}: {passou + falhou} casos")
     return 1 if falhou else 0
 
@@ -706,7 +1195,8 @@ def main() -> int:
         return 2
     extensoes = extensoes_do_servidor(dado[CAMPO_DO_SERVIDOR])
     if a.ensaio:
-        return ensaiar(dado[CAMPO_DOS_ALVOS], extensoes)
+        return ensaiar(dado[CAMPO_DOS_ALVOS], extensoes,
+                       dado.get(CAMPO_DO_QUE_IGNORAR))
     teto = TEMPO_DA_RONDA if a.ronda and a.tempo_limite == TEMPO_POR_ALVO \
         else a.tempo_limite
     return indexar(dado, teto, a.refazer, extensoes, a.cwd)

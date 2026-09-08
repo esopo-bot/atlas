@@ -1,10 +1,11 @@
 import argparse
 import contextlib
 import graphlib
+import hashlib
 import json
 import os
+import queue
 import re
-import select
 import shlex
 import shutil
 import signal
@@ -61,11 +62,23 @@ BANDEIRA_DOS_TURNOS = "--turnos"
 BANDEIRA_DO_CUSTO = "--custo"
 BANDEIRA_DA_DURACAO = "--duracao"
 ORIGEM_DO_ENCADEADOR = "encadeador"
-Retrato = namedtuple("Retrato", "ciclo veredito origem")
-SEM_RETRATO = Retrato(0, None, None)
+Retrato = namedtuple("Retrato", "ciclo veredito origem assinatura",
+                     defaults=(None,))
+SEM_RETRATO = Retrato(0, None, None, None)
+BANDEIRA_DA_ASSINATURA = "--assinatura"
+TAMANHO_DA_ASSINATURA = 12
+CAMPOS_FORA_DA_ASSINATURA = ("nome", "depende", "tempo-limite", "max-turnos")
+CHAVE_DO_PROMPT_RESOLVIDO = "prompt-texto"
+ABRE_O_LOG_DO_ZERO = "w"
+ANEXA_AO_LOG = "a"
+EVENTO_DE_RETOMADA = "retomada"
 TOKENS_DO_CUSTO = (("entrada", "input_tokens"), ("saida", "output_tokens"),
                    ("cache-lido", "cache_read_input_tokens"),
                    ("cache-criado", "cache_creation_input_tokens"))
+TOKENS_ACUMULADOS_POR_MODELO = (
+    ("entrada", "inputTokens"), ("saida", "outputTokens"),
+    ("cache-lido", "cacheReadInputTokens"),
+    ("cache-criado", "cacheCreationInputTokens"))
 MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
 ARQUIVO_DA_CONFIGURACAO = "nucleo/configuracao.json"
 CHAVE_DOS_ENDERECOS = "enderecos_do_onde_esta"
@@ -86,7 +99,15 @@ ORIGEM_SINTETICA = "encadeador"
 MOTIVO_DO_TETO = "teto-esgotado"
 MARCA_DO_MOTOR = "<!-- escrito pelo executor de roteiros -->"
 MARCA_DA_DEVOLUCAO = "<!-- devolucao pela mesa: nao aprovado -->"
-GH = shlex.split(os.environ.get("ENCADEADOR_GH", "gh"))
+ASPAS_QUE_O_SHELL_TIRARIA = "\"'"
+
+
+def partir_comando_do_ambiente(texto: str) -> list:
+    return [pedaco.strip(ASPAS_QUE_O_SHELL_TIRARIA)
+            for pedaco in shlex.split(texto, posix=os.name != "nt")]
+
+
+GH = partir_comando_do_ambiente(os.environ.get("ENCADEADOR_GH", "gh"))
 CHAVE_DO_AJUDANTE_DE_CREDENCIAL = "credential.helper"
 AJUDANTE_QUE_LE_O_TOKEN = (
     '!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f')
@@ -103,15 +124,16 @@ PADRAO_DA_BANDEIRA_SEM_CAMADA = "--bare"
 PADRAO_DA_BANDEIRA_DE_FERRAMENTAS_NEGADAS = "--disallowed-tools"
 BANDEIRA_MODELO = "--model"
 CAMPO_MODELO_POR_ETAPA = "modelo_por_etapa"
-SESSAO = shlex.split(os.environ.get("ENCADEADOR_SESSAO", PADRAO_DA_SESSAO))
-BANDEIRAS_DA_SESSAO = shlex.split(os.environ.get(
+SESSAO = partir_comando_do_ambiente(
+    os.environ.get("ENCADEADOR_SESSAO", PADRAO_DA_SESSAO))
+BANDEIRAS_DA_SESSAO = partir_comando_do_ambiente(os.environ.get(
     "ENCADEADOR_SESSAO_BANDEIRAS", PADRAO_DAS_BANDEIRAS_DA_SESSAO))
 BANDEIRA_SEM_CAMADA = os.environ.get(
     "ENCADEADOR_BANDEIRA_SEM_CAMADA", PADRAO_DA_BANDEIRA_SEM_CAMADA)
 BANDEIRA_FERRAMENTAS_NEGADAS = os.environ.get(
     "ENCADEADOR_BANDEIRA_DE_FERRAMENTAS_NEGADAS",
     PADRAO_DA_BANDEIRA_DE_FERRAMENTAS_NEGADAS)
-RETOMADA_DA_SESSAO = shlex.split(os.environ.get(
+RETOMADA_DA_SESSAO = partir_comando_do_ambiente(os.environ.get(
     "ENCADEADOR_SESSAO_RETOMADA", PADRAO_DA_RETOMADA))
 PADRAO_NOME_EVIDENCIA = re.compile(r"^([0-9]+)-(.+)-c([0-9]+)\.json$")
 ARQUIVO_CITADO = re.compile(r"[\w./-]+\.(?:py|json|md|js|txt)")
@@ -334,6 +356,47 @@ CLI_FALSO_QUE_MORRE_CARO = (
     '"usage":{"input_tokens":7,"output_tokens":3,'
     '"cache_read_input_tokens":11,"cache_creation_input_tokens":13}}\\n\'\n'
     'exit 1\n')
+CLI_FALSO_QUE_ACORDA_DE_NOVO = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'printf \'{"type":"result","subtype":"error_max_turns","num_turns":41,'
+    '"session_id":"s-acorda","result":"teto",'
+    '"total_cost_usd":3.42,'
+    '"usage":{"input_tokens":80,"output_tokens":23216,'
+    '"cache_read_input_tokens":3380835,'
+    '"cache_creation_input_tokens":114711}}\\n\'\n'
+    'printf \'{"type":"result","subtype":"success","num_turns":10,'
+    '"session_id":"s-acorda","result":"pronto",'
+    '"total_cost_usd":4.28,'
+    '"usage":{"input_tokens":18,"output_tokens":9314,'
+    '"cache_read_input_tokens":1070684,"cache_creation_input_tokens":8843},'
+    '"modelUsage":{"modelo":{"inputTokens":98,"outputTokens":32530,'
+    '"cacheReadInputTokens":4451519,"cacheCreationInputTokens":123554,'
+    '"costUSD":4.28}},'
+    '"structured_output":{"veredito":"segue","provado":[],"suposto":[],'
+    '"faltas":[]}}\\n\'\n')
+CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'case "$*" in\n'
+    '  *resume*)\n'
+    '    printf \'{"type":"assistant","message":{"content":[{"type":"text",'
+    '"text":"SEGUNDA"}]}}\\n\'\n'
+    '    sleep 600\n'
+    '    ;;\n'
+    'esac\n'
+    'printf \'{"type":"assistant","message":{"content":[{"type":"text",'
+    '"text":"PRIMEIRA"}]}}\\n\'\n'
+    'printf \'{"type":"result","subtype":"error_max_turns","num_turns":5,'
+    '"session_id":"s-teto","result":"teto","total_cost_usd":1.0,'
+    '"usage":{"input_tokens":1,"output_tokens":1,'
+    '"cache_read_input_tokens":1,"cache_creation_input_tokens":1}}\\n\'\n')
+CLI_FALSO_QUE_FALA_E_TRAVA = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'printf \'{"type":"assistant","message":{"content":[{"type":"text",'
+    '"text":"comecei"}]}}\\n\'\n'
+    'sleep 600\n')
 CLI_FALSO_QUE_ENTREGA_SEM_CUSTO = (
     '#!/bin/sh\n'
     'cat > /dev/null\n'
@@ -446,6 +509,7 @@ BANCADA_NAO_VIAJA = (
 ERRO_DE_AMBIENTE = "erro de ambiente: {}"
 
 AVISO_VENV_AUSENTE = "AVISO: venv não encontrado em {}; sigo sem ele."
+PASTAS_DE_PROGRAMA_DO_VENV = ("Scripts", "bin")
 AVISO_ENV_AUSENTE = ("AVISO: arquivo de ambiente não encontrado em {}; "
                      "sigo sem ele.")
 AVISO_REGRAS_ILEGIVEIS = ("AVISO: {} ilegível como fonte de regras; o prompt "
@@ -511,6 +575,10 @@ AVISO_INTEGRACAO_NAO_MEDIDA = ("não medi se a integração {integracao!r} exist
 LOG_RETOMANDO_PROVADAS = ("retomando: {quantas} etapas já provadas não "
                           "rodam de novo ({nomes})")
 LOG_JA_PROVADA = "  {}: já provada — não roda de novo"
+LOG_ASSINATURA_MUDOU = ("  {}: o comando ou o prompt mudou desde a prova — "
+                        "a evidência velha não vale, roda de novo")
+LOG_SEM_ASSINATURA = ("  {}: evidência sem assinatura, anterior ao campo — "
+                      "pulada pelo veredito, sem verificar o comando")
 LOG_SESSAO_REABERTA = "  {}: reaberta — uma etapa que depende dela acusou"
 LOG_ESTAGIO = "estagio {n} {marca}: {nomes}"
 LOG_VEREDITO_DA_ETAPA = "  {arquivo}: {veredito}"
@@ -677,6 +745,7 @@ MORTE_TURNOS_GASTOS = "{} turnos gastos"
 MORTE_SEM_CAUSA = "exit {codigo} — leia {log}"
 MORTE_LEIA_O_LOG = " — leia {}"
 DETALHE_TEMPO_ESTOURADO = "{estouro} — leia {log}"
+DETALHE_SEM_SHELL = ("não achei bash nenhum nesta máquina para rodar a etapa de código — nem ao lado do git, nem no PATH")
 DETALHE_DO_QUE_ELA_DIZIA = " | colhido do que ela já dizia, sem fechar: {}"
 DETALHE_VERIFICACAO_MORTA = "verificação: {}"
 DETALHE_VERIFICACAO_COM_ERRO = "verificação com erro de ambiente (exit {})"
@@ -1124,11 +1193,20 @@ def montar_ambiente(roteiro: dict, cwd: str, base: dict) -> dict:
     return ambiente
 
 
+def pasta_dos_programas_do_venv(caminho: Path):
+    for nome in PASTAS_DE_PROGRAMA_DO_VENV:
+        if (caminho / nome).is_dir():
+            return caminho / nome
+    return None
+
+
 def _acrescentar_venv(ambiente: dict, caminho: Path) -> None:
-    if not (caminho / "bin").is_dir():
+    programas = pasta_dos_programas_do_venv(caminho)
+    if programas is None:
         print(AVISO_VENV_AUSENTE.format(caminho), file=sys.stderr)
         return
-    ambiente["PATH"] = f"{caminho / 'bin'}:{ambiente.get('PATH', '')}"
+    ambiente["PATH"] = (f"{programas}{os.pathsep}"
+                        f"{ambiente.get('PATH', '')}")
     ambiente["VIRTUAL_ENV"] = str(caminho)
 
 
@@ -1154,14 +1232,16 @@ def _valor_como_o_source_le(valor: str) -> str:
 
 def _acrescentar_local_bin_no_fim(ambiente: dict) -> None:
     local_bin = str(Path.home() / ".local" / "bin")
-    if local_bin not in ambiente.get("PATH", "").split(":"):
-        ambiente["PATH"] = f"{ambiente.get('PATH', '')}:{local_bin}"
+    if local_bin not in ambiente.get("PATH", "").split(os.pathsep):
+        ambiente["PATH"] = (f"{ambiente.get('PATH', '')}"
+                            f"{os.pathsep}{local_bin}")
 
 
 class TempoEstourado(Exception):
     def __init__(self, tempo):
         super().__init__(ERRO_TEMPO_ESTOURADO.format(tempo))
         self.tempo = tempo
+        self.turnos = 0
 
 
 def _resumo_do_evento(dado: dict) -> str:
@@ -1193,15 +1273,25 @@ def _ferramenta_com_pista(bloco: dict) -> str:
 def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
     tempo = etapa.get("tempo-limite", TEMPO_SESSAO)
     entrada = _prompt_da_sessao(etapa, cwd)
-    retomar, ditos = "", []
+    retomar, ditos, turnos = "", [], 0
     for tentativa in range(RETOMADAS + 1):
-        codigo, saida, erro, marcas = _rodar_sessao_em_fluxo(
-            _comando_sessao(etapa, cwd, retomar), cwd=cwd, env=ambiente,
-            entrada=entrada, tempo=tempo, log=log,
-            rotulo=rotulo + (SUFIXO_DA_RETOMADA.format(tentativa)
-                             if tentativa else ""))
+        if tentativa:
+            _anotar_retomada_no_log(log, tentativa)
+        try:
+            codigo, saida, erro, marcas = _rodar_sessao_em_fluxo(
+                _comando_sessao(etapa, cwd, retomar), cwd=cwd, env=ambiente,
+                entrada=entrada, tempo=tempo, log=log,
+                rotulo=rotulo + (SUFIXO_DA_RETOMADA.format(tentativa)
+                                 if tentativa else ""),
+                modo_do_log=(ANEXA_AO_LOG if tentativa
+                             else ABRE_O_LOG_DO_ZERO))
+        except TempoEstourado as estouro:
+            estouro.turnos = turnos
+            raise
         ditos += marcas.get("ditos", [])
         marcas["ditos"] = ditos
+        turnos += marcas.get("turnos", 0)
+        marcas["turnos"] = turnos
         if (espera := _espera_do_limite(saida, marcas.get("limite"))):
             _dormir_ate_a_janela_abrir(espera, etapa, rotulo)
             retomar = marcas.get("sessao") or retomar
@@ -1216,6 +1306,13 @@ def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
         print(LOG_RETOMANDO_NO_TETO.format(rotulo=rotulo, vez=tentativa + 1,
                                            teto=RETOMADAS), flush=True)
     return codigo, saida, erro, marcas
+
+
+def _anotar_retomada_no_log(log, tentativa: int) -> None:
+    with log.open(ANEXA_AO_LOG, encoding="utf-8") as diario:
+        diario.write(json.dumps(
+            {"type": ORIGEM_DO_ENCADEADOR, "evento": EVENTO_DE_RETOMADA,
+             "tentativa": tentativa}) + "\n")
 
 
 def _dormir_ate_a_janela_abrir(espera: int, etapa: dict, rotulo: str) -> None:
@@ -1265,23 +1362,24 @@ def _bateu_no_teto(saida: str) -> bool:
     return _resultado_da_sessao(saida).get("subtype") == SUBTIPO_TETO_DE_TURNOS
 
 
-def _rodar_sessao_em_fluxo(comando, *, cwd, env, entrada, tempo, log, rotulo):
+def _rodar_sessao_em_fluxo(comando, *, cwd, env, entrada, tempo, log, rotulo,
+                           modo_do_log=ABRE_O_LOG_DO_ZERO):
     with tempfile.TemporaryFile("w+", encoding="utf-8",
                                 errors="replace") as ferro:
-        processo = subprocess.Popen(
+        processo = _abrir_no_grupo_proprio(
             comando, shell=False, cwd=cwd, env=env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=ferro,
-            bufsize=0, start_new_session=True)
+            bufsize=0)
         _alimentar_em_paralelo(processo, entrada)
         colhido = _colher_o_fluxo(processo, tempo=tempo, log=log,
-                                  rotulo=rotulo)
+                                  rotulo=rotulo, modo_do_log=modo_do_log)
         processo.wait()
         ferro.seek(0)
         erro = ferro.read()
     return (processo.returncode,
             colhido["resultado"] or "".join(colhido["linhas"]), erro,
             {"sessao": colhido["sessao"], "ditos": colhido["ditos"],
-             "limite": colhido["limite"]})
+             "limite": colhido["limite"], "turnos": colhido["turnos"]})
 
 
 def _alimentar_em_paralelo(processo, entrada: str) -> None:
@@ -1301,24 +1399,51 @@ def _linhas_do_pedaco(sobra: bytes, pedaco: bytes):
                    for linha in inteiras]
 
 
-def _colher_o_fluxo(processo, *, tempo, log, rotulo) -> dict:
+def _fila_do_fluxo(processo):
+    fila = queue.Queue()
+
+    def encher():
+        try:
+            while True:
+                pedaco = os.read(processo.stdout.fileno(), PEDACO_DO_FLUXO)
+                fila.put(pedaco)
+                if not pedaco:
+                    return
+        except (OSError, ValueError) as leitura_que_falhou:
+            fila.put(leitura_que_falhou)
+
+    threading.Thread(target=encher, daemon=True).start()
+    return fila
+
+
+def _pedaco_ou_nada(fila, espera):
+    try:
+        colhido = fila.get(timeout=espera)
+    except queue.Empty:
+        return None
+    if isinstance(colhido, BaseException):
+        raise colhido
+    return colhido
+
+
+def _colher_o_fluxo(processo, *, tempo, log, rotulo,
+                    modo_do_log=ABRE_O_LOG_DO_ZERO) -> dict:
     fim = time.monotonic() + tempo
     colhido = {"resultado": "", "linhas": [], "sessao": "", "ditos": [],
-               "limite": None}
+               "limite": None, "turnos": 0}
     sobra = b""
-    with log.open("w", encoding="utf-8") as diario:
+    fila = _fila_do_fluxo(processo)
+    with log.open(modo_do_log, encoding="utf-8") as diario:
         try:
             while True:
                 restante = fim - time.monotonic()
                 if restante <= 0:
                     raise TempoEstourado(tempo)
-                pronto, _, _ = select.select([processo.stdout], [], [],
-                                             min(restante, ESPIADA_S))
-                if not pronto:
+                pedaco = _pedaco_ou_nada(fila, min(restante, ESPIADA_S))
+                if pedaco is None:
                     if processo.poll() is not None:
                         break
                     continue
-                pedaco = os.read(processo.stdout.fileno(), PEDACO_DO_FLUXO)
                 if not pedaco:
                     break
                 sobra, linhas = _linhas_do_pedaco(sobra, pedaco)
@@ -1351,17 +1476,94 @@ def _guardar_o_que_importa(dado: dict, linha: str, colhido: dict) -> None:
         colhido["sessao"] = dado["session_id"]
     if dado.get("type") == "result":
         colhido["resultado"] = linha.strip()
+        turnos = dado.get("num_turns")
+        if isinstance(turnos, int) and not isinstance(turnos, bool):
+            colhido["turnos"] += max(turnos, 0)
     if dado.get("type") == "assistant":
         for bloco in dado.get("message", {}).get("content", []):
             if bloco.get("type") == "text" and bloco.get("text"):
                 colhido["ditos"].append(bloco["text"].strip())
 
 
+ESTA_NO_WINDOWS = os.name == "nt"
+CAMPO_DA_ALGEMA_DA_ARVORE = "algema_da_arvore"
+
+if ESTA_NO_WINDOWS:
+    import ctypes
+    from ctypes import wintypes
+
+    TIPO_LIMITE_ESTENDIDO_DA_ALGEMA = 9
+    MATAR_TUDO_AO_FECHAR_A_ALGEMA = 0x2000
+
+    class ContadoresDeEntradaESaida(ctypes.Structure):
+        _fields_ = [("ReadOperationCount", ctypes.c_ulonglong),
+                    ("WriteOperationCount", ctypes.c_ulonglong),
+                    ("OtherOperationCount", ctypes.c_ulonglong),
+                    ("ReadTransferCount", ctypes.c_ulonglong),
+                    ("WriteTransferCount", ctypes.c_ulonglong),
+                    ("OtherTransferCount", ctypes.c_ulonglong)]
+
+    class LimiteBasicoDaAlgema(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_longlong),
+                    ("PerJobUserTimeLimit", ctypes.c_longlong),
+                    ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.POINTER(ctypes.c_ulong)),
+                    ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class LimiteEstendidoDaAlgema(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", LimiteBasicoDaAlgema),
+                    ("IoInfo", ContadoresDeEntradaESaida),
+                    ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+
+def _algemar_a_arvore(processo):
+    kernel = ctypes.windll.kernel32
+    algema = kernel.CreateJobObjectW(None, None)
+    if not algema:
+        return None
+    limites = LimiteEstendidoDaAlgema()
+    limites.BasicLimitInformation.LimitFlags = MATAR_TUDO_AO_FECHAR_A_ALGEMA
+    kernel.SetInformationJobObject(algema, TIPO_LIMITE_ESTENDIDO_DA_ALGEMA,
+                                   ctypes.byref(limites),
+                                   ctypes.sizeof(limites))
+    if not kernel.AssignProcessToJobObject(algema, int(processo._handle)):
+        kernel.CloseHandle(algema)
+        return None
+    return algema
+
+
+def _abrir_no_grupo_proprio(comando, **resto):
+    if ESTA_NO_WINDOWS:
+        processo = subprocess.Popen(
+            comando, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            **resto)
+        setattr(processo, CAMPO_DA_ALGEMA_DA_ARVORE,
+                _algemar_a_arvore(processo))
+        return processo
+    return subprocess.Popen(comando, start_new_session=True, **resto)
+
+
 def _matar_grupo(processo) -> None:
+    algema = getattr(processo, CAMPO_DA_ALGEMA_DA_ARVORE, None)
     try:
-        os.killpg(os.getpgid(processo.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
+        if algema:
+            ctypes.windll.kernel32.TerminateJobObject(algema, 1)
+        elif ESTA_NO_WINDOWS:
+            subprocess.run(["taskkill", "/F", "/T", "/PID",
+                            str(processo.pid)], capture_output=True)
+        else:
+            os.killpg(os.getpgid(processo.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
         pass
+    with contextlib.suppress(OSError):
+        processo.kill()
     processo.wait()
 
 
@@ -1380,21 +1582,17 @@ def _instalar_a_parada_a_pedido(fechar, trabalho, marca_da_vez):
     return signal.signal(signal.SIGTERM, tratador)
 
 
-def _rodar_processo(comando, *, shell, cwd, env, entrada, tempo):
-    processo = subprocess.Popen(
-        comando, shell=shell, cwd=cwd, env=env,
+def _rodar_processo(comando, *, cwd, env, entrada, tempo):
+    processo = _abrir_no_grupo_proprio(
+        comando, cwd=cwd, env=env,
         stdin=subprocess.PIPE if entrada is not None else subprocess.DEVNULL,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-        start_new_session=True)
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        encoding="utf-8", errors="replace")
     _PROCESSOS_DA_VEZ.add(processo)
     try:
         saida, erro = processo.communicate(entrada, timeout=tempo)
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(os.getpgid(processo.pid), signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
-        processo.wait()
+        _matar_grupo(processo)
         raise TempoEstourado(tempo) from None
     finally:
         _PROCESSOS_DA_VEZ.discard(processo)
@@ -1507,6 +1705,16 @@ def _texto_do_prompt(etapa: dict) -> str:
             encoding="utf-8")
     except OSError:
         return ""
+
+
+def assinatura_da_etapa(etapa: dict) -> str:
+    miolo = {chave: valor for chave, valor in etapa.items()
+             if chave not in CAMPOS_FORA_DA_ASSINATURA}
+    if etapa.get("tipo") == "sessao":
+        miolo[CHAVE_DO_PROMPT_RESOLVIDO] = _texto_do_prompt(etapa)
+    resumo = json.dumps(miolo, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(
+        resumo.encode("utf-8")).hexdigest()[:TAMANHO_DA_ASSINATURA]
 
 
 def _prompt_da_sessao(etapa: dict, cwd) -> str:
@@ -1780,7 +1988,8 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                 materializados=None, configuracao=None, issue=None):
     base = ["--dir", dir_base, "--trabalho", trabalho,
             "--etapa", etapa["nome"], "--ordem", str(ordem),
-            "--teto", str(teto)]
+            "--teto", str(teto),
+            BANDEIRA_DA_ASSINATURA, assinatura_da_etapa(etapa)]
 
     if not etapa.get("ligada", True):
         return _evidencia_sintetica(base, "desligada")
@@ -1799,19 +2008,26 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
     comecou = time.monotonic()
     try:
         if etapa["tipo"] == "codigo":
+            shell_da_etapa = _evidencia.bash_do_sistema()
+            if not shell_da_etapa:
+                return _evidencia_sintetica(base, "morta", DETALHE_SEM_SHELL,
+                                            _bandeira_de_duracao(comecou))
             codigo_saida, saida, erro = _rodar_processo(
-                etapa["comando"], shell=True, cwd=cwd, env=ambiente,
-                entrada=None, tempo=etapa.get("tempo-limite", TEMPO_CODIGO))
+                [shell_da_etapa, "-c", etapa["comando"]], cwd=cwd,
+                env=ambiente, entrada=None,
+                tempo=etapa.get("tempo-limite", TEMPO_CODIGO))
         else:
             codigo_saida, saida, erro, marcas = _sessao_com_retomada(
                 etapa, cwd=cwd, ambiente=ambiente, log=log,
                 rotulo=f"{ordem:02d}-{etapa['nome']}")
     except TempoEstourado as estouro:
-        log.write_text(f"{estouro}\n", encoding="utf-8")
+        with log.open(ANEXA_AO_LOG, encoding="utf-8") as diario:
+            diario.write(f"{estouro}\n")
         return _evidencia_sintetica(base, "morta",
                                     DETALHE_TEMPO_ESTOURADO.format(
                                         estouro=estouro, log=log),
-                                    _bandeira_de_duracao(comecou))
+                                    _bandeira_de_turnos("", estouro.turnos)
+                                    + _bandeira_de_duracao(comecou))
 
     _guardar_no_log(log, etapa["tipo"], saida, erro)
     if codigo_saida != 0:
@@ -1822,9 +2038,12 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                            for dito in marcas["ditos"][-DITOS_NA_EVIDENCIA:]))
         return _evidencia_sintetica(base, "morta",
                                     detalhe[:LIMITE_DO_DETALHE],
-                                    _o_que_a_sessao_gastou(saida, comecou))
+                                    _o_que_a_sessao_gastou(
+                                        saida, comecou,
+                                        marcas.get("turnos", 0)))
     feito = _cli_evidencia(["materializar"] + base
-                           + _o_que_a_sessao_gastou(saida, comecou),
+                           + _o_que_a_sessao_gastou(
+                               saida, comecou, marcas.get("turnos", 0)),
                            entrada=saida)
     return feito.stdout.strip()
 
@@ -1833,13 +2052,14 @@ def _bandeira_de_duracao(comecou: float) -> list:
     return [BANDEIRA_DA_DURACAO, f"{time.monotonic() - comecou:.3f}"]
 
 
-def _o_que_a_sessao_gastou(saida: str, comecou: float) -> list:
-    return (_bandeira_de_turnos(saida) + _bandeira_de_custo(saida)
-            + _bandeira_de_duracao(comecou))
+def _o_que_a_sessao_gastou(saida: str, comecou: float,
+                           turnos_colhidos: int = 0) -> list:
+    return (_bandeira_de_turnos(saida, turnos_colhidos)
+            + _bandeira_de_custo(saida) + _bandeira_de_duracao(comecou))
 
 
-def _bandeira_de_turnos(saida: str) -> list:
-    turnos = _resultado_da_sessao(saida).get("num_turns")
+def _bandeira_de_turnos(saida: str, turnos_colhidos: int = 0) -> list:
+    turnos = turnos_colhidos or _resultado_da_sessao(saida).get("num_turns")
     return ([BANDEIRA_DOS_TURNOS, str(turnos)]
             if isinstance(turnos, int) and turnos > 0 else [])
 
@@ -1849,15 +2069,39 @@ def _numero_de_tokens(valor) -> bool:
             and valor >= 0)
 
 
-def _custo_da_sessao(saida: str):
-    dado = _resultado_da_sessao(saida)
-    usd = dado.get("total_cost_usd")
+def _tokens_acumulados_por_modelo(dado: dict):
+    por_modelo = dado.get("modelUsage")
+    if not isinstance(por_modelo, dict) or not por_modelo:
+        return None
+    somados = {nosso: 0 for nosso, _ in TOKENS_ACUMULADOS_POR_MODELO}
+    for uso in por_modelo.values():
+        if not isinstance(uso, dict):
+            return None
+        for nosso, deles in TOKENS_ACUMULADOS_POR_MODELO:
+            if not _numero_de_tokens(uso.get(deles)):
+                return None
+            somados[nosso] += uso[deles]
+    return somados
+
+
+def _tokens_da_ultima_consulta(dado: dict):
     uso = dado.get("usage")
-    if isinstance(usd, bool) or not isinstance(usd, (int, float)) \
-            or usd < 0 or not isinstance(uso, dict):
+    if not isinstance(uso, dict):
         return None
     tokens = {nosso: uso.get(deles) for nosso, deles in TOKENS_DO_CUSTO}
     if not all(_numero_de_tokens(valor) for valor in tokens.values()):
+        return None
+    return tokens
+
+
+def _custo_da_sessao(saida: str):
+    dado = _resultado_da_sessao(saida)
+    usd = dado.get("total_cost_usd")
+    if isinstance(usd, bool) or not isinstance(usd, (int, float)) or usd < 0:
+        return None
+    tokens = (_tokens_acumulados_por_modelo(dado) if "modelUsage" in dado
+              else _tokens_da_ultima_consulta(dado))
+    if tokens is None:
         return None
     return {"usd": usd, "tokens": tokens}
 
@@ -1931,7 +2175,7 @@ def auditar_ao_fim(pasta, cwd, ambiente,
     try:
         _, saida, erro = _rodar_processo(
             [sys.executable, str(AUDITOR), str(pasta), "--cwd", cwd],
-            shell=False, cwd=None, env=ambiente, entrada=None, tempo=tempo)
+            cwd=None, env=ambiente, entrada=None, tempo=tempo)
     except (TempoEstourado, OSError) as falha:
         print(LOG_AUDITORIA_NAO_RODOU.format(falha))
         return
@@ -1986,7 +2230,7 @@ def _acusacoes_dos_criterios(trabalho, dir_base, ambiente, tempo):
     pasta = Path(dir_base) / trabalho
     try:
         codigo, saida, erro = _rodar_processo(
-            _comando_de_criterios(pasta), shell=False, cwd=None,
+            _comando_de_criterios(pasta), cwd=None,
             env=ambiente, entrada=corpo, tempo=tempo)
     except (TempoEstourado, OSError) as falha:
         return 0, NAO_VERIFICADO_NA_JANELA.format(falha)
@@ -2006,7 +2250,7 @@ def verificar_na_janela(alvo, cwd, ambiente, tempo) -> None:
     onde.parent.mkdir(parents=True, exist_ok=True)
     try:
         codigo, saida, erro = _rodar_processo(
-            _comando_de_verificar(alvo, cwd), shell=False, cwd=None,
+            _comando_de_verificar(alvo, cwd), cwd=None,
             env=ambiente, entrada=None, tempo=tempo)
     except (TempoEstourado, OSError) as falha:
         codigo, saida, erro = (EXIT_ERRO_DE_USO_OU_AMBIENTE, "",
@@ -2072,7 +2316,7 @@ def _rodar_verificacao(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
         else:
             try:
                 codigo_um, saida_um, erro_um = _rodar_processo(
-                    _comando_de_verificar(alvo, cwd), shell=False, cwd=None,
+                    _comando_de_verificar(alvo, cwd), cwd=None,
                     env=ambiente, entrada=None,
                     tempo=etapa.get("tempo-limite", TEMPO_CODIGO))
             except TempoEstourado as estouro:
@@ -3016,7 +3260,7 @@ def foto_das_etapas(pasta) -> dict:
         if isinstance(dado, dict) and (nome not in foto
                                        or ciclo > foto[nome][0]):
             foto[nome] = Retrato(ciclo, dado.get("veredito"),
-                                 dado.get("origem"))
+                                 dado.get("origem"), dado.get("assinatura"))
     return foto
 
 
@@ -3082,8 +3326,13 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
     provadas = set()
     if retomar:
         foto = foto_das_etapas(pasta)
-        provadas = {nome for nome, retrato in foto.items()
-                    if retrato.veredito == "segue"}
+        atual = {etapa["nome"]: assinatura_da_etapa(etapa) for etapa in etapas}
+        segues = {nome: retrato for nome, retrato in foto.items()
+                  if retrato.veredito == "segue"}
+        mudaram = sorted(nome for nome, retrato in segues.items()
+                         if nome in atual
+                         and retrato.assinatura not in (None, atual[nome]))
+        provadas = set(segues) - set(mudaram)
         reabertas = sessoes_que_a_acusacao_reabre(etapas, foto)
         voltam = sorted(provadas & reabertas)
         provadas -= reabertas
@@ -3092,6 +3341,11 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
         if provadas:
             print(LOG_RETOMANDO_PROVADAS.format(
                 quantas=len(provadas), nomes=", ".join(sorted(provadas))))
+        for nome in sorted(provadas):
+            if segues[nome].assinatura is None:
+                print(LOG_SEM_ASSINATURA.format(nome))
+        for nome in mudaram:
+            print(LOG_ASSINATURA_MUDOU.format(nome))
         for reaberta in voltam:
             print(LOG_SESSAO_REABERTA.format(reaberta))
     _EM_CURSO[CORPO_DA_ISSUE] = corpo_da_issue(configuracao, issue)
@@ -3464,7 +3718,7 @@ def _comando_que_destrava(estado) -> str:
     roteiro, cwd = estado.get("roteiro"), estado.get("cwd")
     if not roteiro or not cwd:
         return ""
-    return (f"python3 .agents/encadeador/encadeador.py executar "
+    return (f"python .agents/encadeador/encadeador.py executar "
             f"--roteiro {roteiro} --trabalho {estado['trabalho']} "
             f"--dir {estado['dir']} --cwd {cwd} --retomar")
 

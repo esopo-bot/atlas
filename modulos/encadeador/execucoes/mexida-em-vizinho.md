@@ -9,7 +9,7 @@ onde o `git` roda. O alvo chega por variável de ambiente:
 
 ```sh
 PROJETO=<caminho-do-repositorio-alvo> ISSUE=<n> ASSUNTO=<assunto-em-kebab> \
-  python3 .agents/encadeador/encadeador.py executar \
+  python .agents/encadeador/encadeador.py executar \
   --roteiro execucoes/mexida-em-vizinho.json \
   --trabalho issue-<n> \
   --dir execucoes/evidencias

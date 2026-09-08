@@ -4,18 +4,18 @@
     {
       "nome": "quanto-cobra",
       "tipo": "codigo",
-      "comando": "python3 .agents/camada/camada.py --evidencia medir"
+      "comando": "bash .claude/hooks/interpretador.sh .agents/camada/camada.py --evidencia medir"
     },
     {
       "nome": "se-prova",
       "tipo": "codigo",
-      "comando": "python3 .agents/camada/camada.py --evidencia provar",
+      "comando": "bash .claude/hooks/interpretador.sh .agents/camada/camada.py --evidencia provar",
       "tempo-limite": 1800
     },
     {
       "nome": "sessao-simulada",
       "tipo": "codigo",
-      "comando": "python3 .agents/camada/camada.py --evidencia simular",
+      "comando": "bash .claude/hooks/interpretador.sh .agents/camada/camada.py --evidencia simular",
       "tempo-limite": 1800,
       "depende": [
         "quanto-cobra",

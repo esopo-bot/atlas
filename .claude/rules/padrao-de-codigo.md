@@ -36,6 +36,17 @@ paths:
   transforma falha em número — e o zero que sai parece um fato. Falha vira
   "não medido", nunca zero. Vale também para código de saída: a
   ferramenta que sai 2 errou, e errar não é achar nada.
+- **Erro escondido ainda avisa.** Onde suprimir é legítimo — em volta de um
+  efeito colateral —, esconder a EXCEÇÃO é uma coisa e parar de AVISAR é
+  outra. O aviso sobrevive: uma linha dizendo o que falhou e o que se perdeu
+  com isso. Cerca que emudece some em silêncio, e o verde passa a significar
+  "ninguém olhou".
+- **Peça de interface usa o componente do repositório.** Antes de escrever marcação
+  e estilo novos, procure no próprio repositório o componente que já resolve
+  aquilo — mensagem, aviso, card, estado vazio — e use-o; cor, ícone e
+  espaçamento vêm do tema, nunca cravados no arquivo. **A suíte não vê isto:**
+  ela passa igual com a peça fora do padrão, então "os testes estão verdes"
+  não atesta apresentação. Régua do pronto para tela inclui abrir a tela.
 - **Nome diz o que é.** Se precisou de comentário para explicar, o nome está
   errado.
 - **Menor diff coerente:** mudança se fatia em entregas que passam sozinhas.

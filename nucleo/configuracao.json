@@ -10,7 +10,7 @@
     "A automação deste repositório commita e empurra em branch de trabalho, E MESCLA NA `homolog` — a integração é dela. Para a `main` não se mescla nem se empurra: a entrada lá é o pedido de incorporação, que o DONO aprova. Publicar continua do dono.",
     "Enquanto houver ${...} sem valor nesta configuração, não se cria issue — pergunta-se ao dono.",
     "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código.",
-    "`teto_da_largada_em_bytes` é o que TODA sessão paga antes de trabalhar: AGENTS.md, CLAUDE.md, o catálogo das skills e o que os ganchos de abertura injetam. É DECISÃO, não medida — o teto ficou em 10.000, decidido em 24/08/2026, depois que a doutrina de porteiro virou skill disparada por assunto e a largada caiu de 15.559 para 8.984; a largada de hoje sai de `python .agents/camada/camada.py --largada`, nunca desta prosa. Ausente ou nulo, a rotina mede e não cobra: teto que a camada inventasse seria número sem procedência.",
+    "`teto_da_largada_em_bytes` é o que TODA sessão paga antes de trabalhar: AGENTS.md, CLAUDE.md, o catálogo das skills e o que os ganchos de abertura injetam. É DECISÃO, não medida — o teto ficou em 10.000 em 24/08/2026, depois que a doutrina de porteiro virou skill disparada por assunto e a largada caiu de 15.559 para 8.984; subiu para 12.000 em 07/09/2026, para caber as regras novas vindas do inventario de como a sessao trabalha com o dono — o dono pediu 50.000, viu que isso faria toda sessao poder pagar cerca de 12.500 tokens de abertura contra 2.300 de entao, e escolheu 12.000, que deixa folga sem desligar a cobranca; a largada de hoje sai de `python .agents/camada/camada.py --largada`, nunca desta prosa. Ausente ou nulo, a rotina mede e não cobra: teto que a camada inventasse seria número sem procedência.",
     "O `<projeto>` do nome é a chave de `projetos` em nucleo/executor.json, e a mesma chave vira ETIQUETA da issue. A lista mora no arquivo LOCAL porque carrega nome de repositório — nome de projeto não entra em arquivo rastreado. Sem `projetos` declarado, o nome sai sem o prefixo e a issue nasce sem etiqueta: a camada não inventa projeto de ninguém.",
     "Pedido de incorporação só se abre em repositório VIZINHO — os declarados `somente_leitura` em `projetos` —, e só com autorização EXPRESSA do dono, uma por vez. Nos repositórios próprios não se abre PR: o caminho é branch de trabalho e mescla na `homolog`."
   ],
@@ -56,7 +56,7 @@
   "branches_por_incorporacao": [
     "main"
   ],
-  "teto_da_largada_em_bytes": 10000,
+  "teto_da_largada_em_bytes": 12000,
   "chaves_de_configuracao_sem_leitor": [
     {
       "arquivo": "nucleo/executor.json",

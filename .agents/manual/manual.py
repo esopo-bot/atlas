@@ -21,7 +21,7 @@ COPIAS_SEM_MARCA = {
 
 TITULO_DO_MANUAL = "O manual do atlas"
 CHAMADA = ("Um arquivo só, gerado das páginas de <code>conhecimento/</code> "
-           "por <code>python3 .agents/manual/manual.py --escrever</code>. "
+           "por <code>python .agents/manual/manual.py --escrever</code>. "
            "Editar este HTML é trabalho perdido: a próxima geração o "
            "reescreve.")
 SECAO_DAS_PERGUNTAS = "O que este manual responde"
@@ -60,8 +60,8 @@ SINAIS_DE_REDE = ("src=", 'href="http', "@import", "<script", "<link",
 ESCRITO = "manual escrito em {} — {} páginas, {} comandos, {} KB"
 EM_DIA = "manual em dia — {} bate com as {} páginas de origem"
 DIVERGIU = ("manual DESATUALIZADO: {} não bate com as páginas de origem. "
-            "Rode `python3 .agents/manual/manual.py --escrever`.")
-SEM_MANUAL = ("manual NÃO ESCRITO: {} não existe. Rode `python3 "
+            "Rode `python .agents/manual/manual.py --escrever`.")
+SEM_MANUAL = ("manual NÃO ESCRITO: {} não existe. Rode `python "
               ".agents/manual/manual.py --escrever`.")
 ERRO_SEM_PAGINAS = "erro de uso: nenhuma página em {}/*.md"
 ERRO_SEM_ANCORA = ("erro de fronteira: a pergunta {!r} aponta para a seção "
@@ -438,7 +438,7 @@ def arvore_de_mentira(raiz: Path) -> Path:
     (raiz / PAGINA_DA_RECEITA).write_text(
         "# Roteiros que viajam com a camada\n\n"
         "## A receita do disparo, em linhas copiáveis\n\n"
-        "```bash\npython3 encadeador.py ensaio\n```\n", encoding="utf-8")
+        "```bash\npython encadeador.py ensaio\n```\n", encoding="utf-8")
     return raiz
 
 

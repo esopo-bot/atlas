@@ -26,7 +26,7 @@ apagar o que era do dono e poupar o que era lixo.
 
 1. **Resto da versão anterior da camada** — página, gancho ou skill que a
    camada escrevia e deixou de escrever. Não é assunto deste prompt: a
-   receita é o prompt `02` desta pasta, com `python3 .agents/limpeza/limpeza.py
+   receita é o prompt `02` desta pasta, com `python .agents/limpeza/limpeza.py
    rodar --workspace .` listando antes de apagar. Rode o 02 primeiro, ou
    marque esses itens como "resto da camada — prompt 02" no inventário.
 2. **Resto de sessão** — saída de comando na raiz, arquivo `.err`, prompt

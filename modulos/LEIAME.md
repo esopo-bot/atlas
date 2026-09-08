@@ -5,9 +5,9 @@ Módulo só chega onde alguém pedir pelo nome, e são três comandos:
 
 | Comando | O que faz |
 | --- | --- |
-| `python3 montar.py --modulos` | lista os módulos que o instalador carrega |
-| `python3 montar.py --modulo <nome>` | instala esse módulo no repositório de destino |
-| `python3 montar.py --atualizar` | atualiza o que já está instalado, sem trazer módulo novo |
+| `python montar.py --modulos` | lista os módulos que o instalador carrega |
+| `python montar.py --modulo <nome>` | instala esse módulo no repositório de destino |
+| `python montar.py --atualizar` | atualiza o que já está instalado, sem trazer módulo novo |
 
 Onde cada coisa mora:
 [mapa do repositório](../conhecimento/mapa-do-repositorio.md).

@@ -11,6 +11,23 @@ from pathlib import Path
 AQUI = Path(__file__).resolve().parent
 ESQUEMA_PADRAO = AQUI / "recibo.schema.json"
 
+BASH_QUE_MORA_AO_LADO_DO_GIT = (("bin", "bash.exe"),
+                                ("usr", "bin", "bash.exe"))
+
+
+def bash_do_sistema():
+    import shutil
+    bash_nu_resolveria_para_o_subsistema_linux = shutil.which("bash")
+    if os.name != "nt":
+        return bash_nu_resolveria_para_o_subsistema_linux
+    git = shutil.which("git")
+    for pasta in (Path(git).resolve().parents if git else []):
+        for relativo in BASH_QUE_MORA_AO_LADO_DO_GIT:
+            achado = pasta.joinpath(*relativo)
+            if achado.is_file():
+                return str(achado)
+    return bash_nu_resolveria_para_o_subsistema_linux
+
 MOTIVO_DESLIGADA = "desligada"
 MOTIVO_MORTA = "morta"
 MOTIVO_RECIBO_INVALIDO = "recibo-invalido"
@@ -35,6 +52,7 @@ CAMPOS_RESERVADOS_AO_SINTETICO = ("origem", "motivo")
 CAMPO_DOS_TURNOS = "turnos"
 CAMPO_DO_CUSTO = "custo"
 CAMPO_DA_DURACAO = "duracao"
+CAMPO_DA_ASSINATURA = "assinatura"
 
 ORDEM_MINIMA = 1
 ORDEM_MAXIMA = 99
@@ -123,6 +141,9 @@ AJUDA_CUSTO = ("custo que a sessão devolveu (total_cost_usd e usage), como "
                "código na evidência")
 AJUDA_DURACAO = ("segundos de relógio que a etapa levou; opcional, "
                  "carimbado pelo código na evidência")
+AJUDA_ASSINATURA = ("resumo do comando e do prompt da etapa no momento da "
+                    "prova; opcional, carimbado pelo código na evidência — "
+                    "a retomada só pula a etapa cuja assinatura bate")
 AJUDA_SINTETICO = "escreve a evidência de etapa desligada/morta/teto"
 AJUDA_ESQUEMA_SESSAO = "o contrato enxuto da sessão, para --json-schema"
 
@@ -311,7 +332,7 @@ def escrever_atomico(caminho: Path, evidencia: dict) -> Path:
     return caminho
 
 
-def _carimbo_do_codigo(turnos, custo, duracao) -> dict:
+def _carimbo_do_codigo(turnos, custo, duracao, assinatura=None) -> dict:
     medido = {}
     if turnos:
         medido[CAMPO_DOS_TURNOS] = turnos
@@ -319,6 +340,8 @@ def _carimbo_do_codigo(turnos, custo, duracao) -> dict:
         medido[CAMPO_DO_CUSTO] = custo
     if duracao is not None:
         medido[CAMPO_DA_DURACAO] = duracao
+    if assinatura:
+        medido[CAMPO_DA_ASSINATURA] = assinatura
     return medido
 
 
@@ -338,7 +361,8 @@ def _corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe) -> dict:
 
 
 def sintetizar(dir_base, trabalho, etapa, ordem, teto, motivo, detalhe,
-               esquema, turnos=None, custo=None, duracao=None):
+               esquema, turnos=None, custo=None, duracao=None,
+               assinatura=None):
     if motivo not in MOTIVOS:
         sys.exit(ERRO_MOTIVO_DESCONHECIDO.format(motivo, ", ".join(MOTIVOS)))
     caminho, i = caminho_da_evidencia(dir_base, trabalho, ordem, etapa)
@@ -356,7 +380,7 @@ def sintetizar(dir_base, trabalho, etapa, ordem, teto, motivo, detalhe,
         "ciclo": {"i": i, "teto": teto},
     }
     evidencia.update(_corpo_do_motivo(motivo, etapa, trabalho, teto, detalhe))
-    evidencia.update(_carimbo_do_codigo(turnos, custo, duracao))
+    evidencia.update(_carimbo_do_codigo(turnos, custo, duracao, assinatura))
 
     erros = validar_evidencia(evidencia, esquema)
     if erros:
@@ -382,7 +406,7 @@ def _candidato_da_entrada(texto: str):
 
 
 def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema,
-                 turnos=None, custo=None, duracao=None):
+                 turnos=None, custo=None, duracao=None, assinatura=None):
     candidato, erro = _candidato_da_entrada(texto)
     if candidato is not None:
         for reservado in CAMPOS_RESERVADOS_AO_SINTETICO:
@@ -392,9 +416,11 @@ def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema,
         candidato["trabalho"] = trabalho
         candidato["quando"] = agora()
         candidato["ciclo"] = {"i": i, "teto": teto}
-        for medido in (CAMPO_DOS_TURNOS, CAMPO_DO_CUSTO, CAMPO_DA_DURACAO):
+        for medido in (CAMPO_DOS_TURNOS, CAMPO_DO_CUSTO, CAMPO_DA_DURACAO,
+                       CAMPO_DA_ASSINATURA):
             candidato.pop(medido, None)
-        candidato.update(_carimbo_do_codigo(turnos, custo, duracao))
+        candidato.update(_carimbo_do_codigo(turnos, custo, duracao,
+                                            assinatura))
         erros = validar_evidencia(candidato, esquema)
         if not erros:
             return escrever_atomico(caminho, candidato), 0
@@ -423,6 +449,7 @@ def montar_parser() -> argparse.ArgumentParser:
         p.add_argument("--turnos", type=int, help=AJUDA_TURNOS)
         p.add_argument("--custo", help=AJUDA_CUSTO)
         p.add_argument("--duracao", type=float, help=AJUDA_DURACAO)
+        p.add_argument("--assinatura", help=AJUDA_ASSINATURA)
 
     materializa = sub.add_parser("materializar", help=AJUDA_MATERIALIZAR)
     comuns(materializa)
@@ -553,7 +580,8 @@ def _materializar_pela_linha_de_comando(args, esquema: dict) -> int:
         caminho, codigo = materializar(args.dir, args.trabalho, args.etapa,
                                        args.ordem, args.teto, texto, esquema,
                                        turnos=args.turnos, custo=custo,
-                                       duracao=args.duracao)
+                                       duracao=args.duracao,
+                                       assinatura=args.assinatura)
     except FileExistsError as colisao:
         print(ERRO_COLISAO.format(colisao), file=sys.stderr)
         return 2
@@ -569,7 +597,8 @@ def _sintetizar_pela_linha_de_comando(args, esquema: dict) -> int:
         caminho = sintetizar(args.dir, args.trabalho, args.etapa, args.ordem,
                              args.teto, args.motivo, args.detalhe, esquema,
                              turnos=args.turnos, custo=custo,
-                             duracao=args.duracao)
+                             duracao=args.duracao,
+                             assinatura=args.assinatura)
     except FileExistsError as colisao:
         print(ERRO_COLISAO.format(colisao), file=sys.stderr)
         return 2
@@ -635,6 +664,8 @@ def _base(**troca):
 ACEITA = [
     ("o exemplo do corpo da issue", json.loads(EXEMPLO_DA_ISSUE)),
     ("segue mínimo, listas vazias", _base()),
+    ("segue com a assinatura da etapa carimbada pelo código",
+     _base(assinatura="0123456789ab")),
     ("pergunta com o campo pergunta", _base(
         veredito="pergunta",
         pergunta="Recomendo A porque custa um comando; a alternativa B refaz "
@@ -660,6 +691,8 @@ ACEITA = [
 
 RECUSA = [
     ("veredito fora dos 3 valores", _base(veredito="quase"), "não está em"),
+    ("assinatura fora do padrão de doze hexadecimais", _base(assinatura="x"),
+     "[0-9a-f]{12}"),
     ("provado sem saida desce para suposto", _base(provado=[
         {"afirmacao": "funciona", "comando": "pytest -q"}]), "obrigatório 'saida'"),
     ("proximo em veredito segue", _base(proximo="faça X"), "proibido"),
@@ -881,6 +914,22 @@ def _a_duracao_e_o_custo_sao_carimbo_do_codigo(pasta, caso):
          all(campo not in _ler(pasta, "t-morta-nao-medida",
                                "01-alfa-c1.json")
              for campo in ("custo", "turnos", "duracao")))
+    _cli(["materializar", "--dir", pasta, "--trabalho", "t-assinada",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3",
+          "--assinatura", "abcdef012345"],
+         entrada=json.dumps({"structured_output":
+                             json.loads(EXEMPLO_DA_ISSUE)}))
+    caso("a assinatura da etapa vem do argumento — o carimbo é do código",
+         _ler(pasta, "t-assinada", "01-alfa-c1.json").get("assinatura")
+         == "abcdef012345")
+    com_forja = dict(json.loads(EXEMPLO_DA_ISSUE), assinatura="ffffffffffff")
+    _cli(["materializar", "--dir", pasta, "--trabalho", "t-assinatura-forjada",
+          "--etapa", "alfa", "--ordem", "1", "--teto", "3"],
+         entrada=json.dumps({"structured_output": com_forja}))
+    caso("modelo não assina a própria prova: a assinatura forjada some sem "
+         "o argumento",
+         "assinatura" not in _ler(pasta, "t-assinatura-forjada",
+                                  "01-alfa-c1.json"))
 
 
 def _entrada_ruim_vira_para_sintetico(pasta, caso):

@@ -105,6 +105,18 @@ O gabarito é o commit que estreia um gancho: os cinco pontos aparecem juntos
 no mesmo diff. E a prova não é reler o instalador: é montar árvore virgem,
 rodar o `montar.py` nela, e ver o arquivo chegar.
 
+Toda linha de gancho começa pelo **lançador**, `.claude/hooks/interpretador.sh`:
+um script de bash que escolhe o interpretador por execução — o primeiro da
+lista dele que responde `3` a `-c "import sys; print(sys.version_info[0])"` —
+e entrega o gancho a ele. Ele existe porque o nome `python3` não é universal:
+no Windows é o atalho da loja, que está no PATH, não roda, e `which` dá por
+presente. A lista de candidatos mora só nele; a rotina `camada` e o gancho
+`verificar-ambiente` a leem de lá e julgam cada nome executando, nunca por
+`which`. Quando nenhum nome responde, o lançador diz isso no erro do gancho
+em vez de morrer calado. Ele viaja em `FONTES`, sem evento nem matcher, e o
+instalador reescreve no lugar a linha de gancho que ainda nomeia um
+interpretador.
+
 **Gancho se edita em sessão do dono, não dentro de uma execução.** O
 `vetar-escrita-em-politica` recusa escrita em `.claude/hooks/`, no
 `settings.json`, nas listas que as cercas leem e em `nucleo/regras.json`
@@ -112,6 +124,18 @@ enquanto a marca `ENCADEADOR_ETAPA` estiver no ambiente. Em sessão
 interativa a marca não existe e a cerca não morde: é essa a saída do laço
 — o gancho que protege os ganchos protege a si mesmo, e quem o muda é
 quem não está sendo vetado por ele.
+
+**A sessão que só pesquisa não escreve no repositório.** Mesma técnica,
+outra marca: com `ATLAS_SO_LEITURA` no ambiente, o
+`vetar-escrita-em-sessao-de-pesquisa` recusa escrita em qualquer caminho
+de dentro da raiz — inclusive `tmp/` e arquivo temporário —, e o
+`cobrar-destino-da-entrega` **cala**, porque não há destino em disco a
+cobrar. Rascunho e medição vão para a pasta temporária da máquina, que o
+sistema limpa sozinho; o que a sessão apurou vai para a issue. Quem abre
+sessão assim cola o prompt
+[07-sessao-de-pesquisa.md](../.agents/prompts/07-sessao-de-pesquisa.md),
+que declara o trato inteiro. Sem a marca nada disso acontece: a sessão é
+uma sessão comum.
 
 ## Instrumento novo se matricula em um ponto
 

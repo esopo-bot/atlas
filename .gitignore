@@ -89,3 +89,13 @@ modulos/indice/.agents/indice/docker-compose.override.yml
 # dono numa rodada. Rastreá-la faria a aprovação de ontem viajar, e uma
 # aprovação que ninguém deu ficaria valendo no disco de outra pessoa.
 aprovacoes/
+
+# Estado local que a configuracao ja declarava, mas o git ainda via: os
+# quatro caminhos abaixo estao em referencias_que_ficam_fora_do_git, em
+# nucleo/configuracao.json, que carrega o motivo de cada um. Declaracao
+# pela metade fazia a cobranca de destino pedir destino para o que ninguem
+# ia commitar. A rotina `declarados` do camada.py cobra este alinhamento.
+.agents/voz/
+conhecimento/observabilidade.md
+conhecimento/observabilidade/
+references/ingestao.md

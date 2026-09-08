@@ -13,9 +13,13 @@ porta normal, porque política de organização pode barrar todo MCP sem aviso.
 
 ```bash
 python montar.py --modulo indice
-docker compose -f .agents/indice/docker-compose.yml -p indice up -d
-docker exec indice-embeddings-1 ollama pull nomic-embed-text
+python .agents/indice/subir.py
 ```
+
+O `subir.py` sobe as duas peças, baixa o modelo e **liga a placa de vídeo
+sozinho quando houver uma que o docker entregue** — medido: 232 pedaços por
+minuto na placa contra 32 em CPU, 7,2 vezes. Sem placa ele sobe igual, em CPU,
+e diz por quê. `--ensaio` mostra a decisão sem subir nada.
 
 **O banco é sempre derivado.** Nada nasce dentro dele: apagar os volumes e
 reindexar reconstrói tudo. A receita inteira — subir, indexar, buscar, e o registro

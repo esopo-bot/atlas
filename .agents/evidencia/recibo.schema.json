@@ -134,6 +134,11 @@
       "minimum": 0,
       "$comment": "opcional; segundos de relógio que a etapa levou, do disparo ao fim — escrito só pelo encadeador, nunca pelo modelo. Mede a etapa inteira, incluindo a retomada por teto de turnos, porque é o tempo que o dono espera. Ausente = não medido: etapa que morreu antes do cronômetro fechar não vira zero, pelo mesmo motivo do custo. Serve para comparar o antes e o depois de um conserto no motor — sem ele, 'a reabertura custa caro' fica sempre não provado."
     },
+    "assinatura": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{12}$",
+      "$comment": "opcional; escrito só pelo encadeador: resumo do comando e do prompt da etapa no momento da prova, doze hexadecimais. A retomada só pula a etapa provada cuja assinatura bate com a do roteiro atual — evidência de comando editado não vale como prova. Ausente = anterior ao campo: a retomada pula pelo veredito e avisa. O modelo não escreve este campo. Decidido pelo dono em 05/09/2026."
+    },
     "turnos": {
       "type": "integer",
       "minimum": 1,
@@ -180,7 +185,7 @@
           }
         }
       },
-      "$comment": "opcional; escrito só pelo encadeador, com o total_cost_usd e o usage que a sessão devolveu — o modelo não escreve este campo. O valor é a estimativa do próprio CLI e serve para comparar execução com execução, não para fatura. Ausente = custo não medido: falha de medição nunca vira zero. Aprovado pelo dono em 01/09/2026."
+      "$comment": "opcional; escrito só pelo encadeador, com o total_cost_usd e o usage que a sessão devolveu — o modelo não escreve este campo. O valor é a estimativa do próprio CLI e serve para comparar execução com execução, não para fatura. Ausente = custo não medido: falha de medição nunca vira zero. Aprovado pelo dono em 01/09/2026. Desde 05/09/2026 os tokens vêm do acumulado por modelo que a sessão devolve (modelUsage), que é o que gera o usd; antes vinham do usage do último resultado, que é por consulta — os dois não se comparam através dessa data. Acumulado presente mas quebrado é não medido, nunca o da última consulta."
     }
   },
   "allOf": [

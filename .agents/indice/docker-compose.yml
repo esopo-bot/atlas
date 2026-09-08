@@ -1,0 +1,36 @@
+services:
+  vetores:
+    image: milvusdb/milvus:${INDICE_VERSAO_MILVUS:-v2.5.27}
+    command: ["milvus", "run", "standalone"]
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+      COMMON_STORAGETYPE: local
+    volumes:
+      - dados-vetores:/var/lib/milvus
+      - ./embedEtcd.yaml:/milvus/configs/embedEtcd.yaml
+    ports:
+      - "${INDICE_PORTA_MILVUS:-19530}:19530"
+      - "${INDICE_PORTA_SAUDE:-9091}:9091"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  embeddings:
+    image: ollama/ollama:${INDICE_VERSAO_OLLAMA:-latest}
+    restart: unless-stopped
+    volumes:
+      - dados-embeddings:/root/.ollama
+    ports:
+      - "${INDICE_PORTA_OLLAMA:-11434}:11434"
+
+volumes:
+  dados-vetores:
+  dados-embeddings:

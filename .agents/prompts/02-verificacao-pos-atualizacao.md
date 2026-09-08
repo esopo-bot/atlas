@@ -8,7 +8,7 @@ raiz do repositório logo depois de uma atualização da camada (o
 ## O que aconteceu
 
 A camada instalada neste repositório foi atualizada e
-`python3 montar.py --sincronizar` já foi executado. Atualização regrava
+`python montar.py --sincronizar` já foi executado. Atualização regrava
 as cópias — nunca se edita cópia à mão — mas ela não remove sozinha o que
 a versão nova deixou de escrever: skill renomeada, gancho aposentado,
 página movida. Isso é a sujeira que esta sessão caça.
@@ -36,7 +36,7 @@ colada não está feita.
 
 ### 2. A instalação está íntegra
 
-- [ ] **A carga bate com o disco:** `python3 montar.py --verificar` — tem de
+- [ ] **A carga bate com o disco:** `python montar.py --verificar` — tem de
       sair zero. Divergência aqui é cópia editada à mão ou atualização pela
       metade: pare e mostre ao dono antes de qualquer outra coisa.
 - [ ] **Os instrumentos respondem:** rode o `--testar` de cada instrumento
@@ -44,7 +44,7 @@ colada não está feita.
       é defeito de instalação, não do seu repositório. **Cuidado com dois:**
       o `gatilho` abre sessões de verdade e cobra por elas — só rode se o
       dono pedir; e o do `encadeador` demora minutos.
-- [ ] **O ritual, se este repositório o tiver:** `python3 verificacoes.py
+- [ ] **O ritual, se este repositório o tiver:** `python verificacoes.py
       ritual`. Ele só existe no repositório da camada; ausente aqui, não é
       falha.
 
@@ -53,8 +53,15 @@ colada não está feita.
 Confira **só o que este repositório usa**. Ferramenta que ninguém aqui
 chama não precisa existir — e instalar por precaução é sujeira futura.
 
-- [ ] `python3 --version` e `git --version` respondem. São o piso; sem eles
-      nada da camada roda.
+- [ ] **Um Python 3 responde**, e `git --version` responde. São o piso; sem
+      eles nada da camada roda. O NOME do interpretador não é o piso: em
+      Windows `python3` é o atalho da loja de aplicativos, que está no PATH,
+      sai sem rodar e engana o `which`; em Linux enxuto `python` pode não
+      existir. Julgue executando, nunca pelo nome:
+      `python -c "import sys; print(sys.version_info[0])"` — e se esse nome
+      não responder `3`, tente `python3`. Os ganchos não dependem disso:
+      eles passam pelo lançador `.claude/hooks/interpretador.sh`, que
+      escolhe o interpretador por execução.
 - [ ] `gh auth status` — necessário se o repositório abre issue, comenta ou
       mexe no quadro. Se a camada aqui move cartão de projeto, a linha de
       escopos precisa trazer `project`; só `repo` comenta e etiqueta, mas
@@ -72,7 +79,7 @@ chama não precisa existir — e instalar por precaução é sujeira futura.
 
 ### 4. A sujeira que a versão anterior deixou
 
-- [ ] **Liste antes de apagar:** `python3 .agents/limpeza/limpeza.py rodar
+- [ ] **Liste antes de apagar:** `python .agents/limpeza/limpeza.py rodar
       --workspace .` — sem `--aplicar` ele só LISTA. Leia a lista e separe
       em duas: o que é resto da camada antiga (candidato a sair) e o que é
       arquivo seu que só parece órfão (fica).
@@ -122,7 +129,7 @@ Depois de atualizar, faça a triagem dos valores:
    vai `${VARIAVEL}`; no local, prefira apontar para onde a credencial
    mora a colar o valor.
 4. Prove que o resultado é legível:
-   `python3 -m json.tool .claude/settings.local.json > /dev/null && echo legivel`
+   `python -m json.tool .claude/settings.local.json > /dev/null && echo legivel`
    — e lembre que gancho novo só carrega em sessão nova.
 
 ## O que esta sessão NÃO faz

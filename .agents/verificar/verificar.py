@@ -19,7 +19,7 @@ PROXIMO_BANAL = ("tente de novo", "tente novamente", "tenta de novo",
 PROXIMO_MINIMO = 20
 FIM_DE_FRASE = ".;:!…"
 RECOMENDACAO_MINIMA = 15
-SHELL_DA_REEXECUCAO = shutil.which("bash")
+SHELL_DA_REEXECUCAO = _evidencia.bash_do_sistema()
 NOME_DE_EVIDENCIA = re.compile(r"[0-9]{2}-[a-z0-9-]+-c[0-9]+\.json\Z")
 ETAPA_DA_VERIFICACAO = "verificacao"
 NOME_DA_VERIFICACAO = re.compile(
@@ -340,9 +340,9 @@ def _reexecutar(item: dict, cwd: str, tempo_limite: int,
                 igual: bool = False) -> str:
     teto = _teto_do_item(item, tempo_limite)
     try:
-        rodada = subprocess.run(item["comando"], shell=True, cwd=cwd,
-                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=teto,
-                                executable=SHELL_DA_REEXECUCAO)
+        rodada = subprocess.run(
+            [SHELL_DA_REEXECUCAO, "-c", item["comando"]], cwd=cwd,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=teto)
     except subprocess.TimeoutExpired:
         return ACUSA_TEMPO_ESGOTADO.format(teto=teto, comando=item["comando"],
                                            campo=CAMPO_DO_TEMPO_LIMITE)
@@ -815,7 +815,8 @@ def _o_ensaio_nao_executa_nada(pasta, caso):
     sentinela = Path(pasta) / "sentinela.txt"
     vigiado = _gravar(pasta, "vigia/01-fantoche-c1.json", _base(provado=[
         {"afirmacao": "a sentinela grava",
-         "comando": f"touch {sentinela} && echo gravou", "saida": "gravou"}]))
+         "comando": f'touch "{sentinela.as_posix()}" && echo gravou',
+         "saida": "gravou"}]))
     resposta = _cli(["evidencia", str(vigiado), "--ensaio"])
     caso("com --ensaio a sentinela NÃO aparece e o ensaio lista o comando",
          not sentinela.exists() and "re-executaria" in resposta.stdout

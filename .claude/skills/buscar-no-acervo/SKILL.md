@@ -11,9 +11,19 @@ arquivo e linha. A porta é um comando, não um servidor MCP: política de
 organização pode barrar todo MCP sem aviso, e o comando continua de pé.
 
 ```bash
-python3 .agents/indice/buscar.py "<pergunta ou termo exato>"
-python3 .agents/indice/buscar.py "<pergunta>" --alvo <fim do caminho> --quantos 3
+python .agents/indice/buscar.py "<pergunta>" --alvo <fim do caminho> --quantos 3
+python .agents/indice/buscar.py "<pergunta ou termo exato>"
 ```
+
+**Comece com `--alvo`. Sem ele a busca sai cara.** A saída traz os melhores
+trechos **de cada alvo**, então o custo cresce com o número de alvos indexados,
+não com a qualidade da resposta: os alvos que nada têm a ver devolvem os
+respectivos menos ruins do mesmo jeito. Medido num acervo de doze alvos, a
+mesma pergunta custou **quase dez vezes mais contexto** sem alvo do que com — e
+mais que um `grep -r` na pasta certa. Meça no seu com `| wc -c` nas duas formas.
+
+Busca sem alvo serve para uma coisa: **descobrir onde o assunto mora**, quando
+você não sabe. Achou o alvo, repita a pergunta nele.
 
 ## Como ler o que volta
 

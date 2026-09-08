@@ -39,7 +39,7 @@ inteira. Prova avulsa que é lenta sozinha declara o teto dela no próprio
 item do provado, com `"tempo-limite"`, e não precisa da chave do roteiro.
 
 ```bash
-python3 -c "
+python -c "
 import json
 r = json.load(open('execucoes/entrega.json'))
 json.dump({'auditoria': True, 'issue': <n>, **r},
@@ -55,7 +55,7 @@ ciclo refazendo o pronto. A cópia local declara `tempo-limite` na etapa que
 mede, em segundos, e o ensaio mostra o teto de cada sessão antes de gastar:
 
 ```bash
-python3 -c "
+python -c "
 import json
 r = json.load(open('execucoes/roteiro-issue-<n>.json'))
 for etapa in r['etapas']:
@@ -91,7 +91,7 @@ descartável.
 
 ```bash
 ISSUE=<n> ASSUNTO=<assunto> \
-python3 .agents/encadeador/encadeador.py ensaio \
+python .agents/encadeador/encadeador.py ensaio \
   --roteiro execucoes/roteiro-issue-<n>.json \
   --trabalho issue-<n> \
   --dir execucoes/evidencias \
@@ -102,7 +102,7 @@ python3 .agents/encadeador/encadeador.py ensaio \
 
 ```bash
 ISSUE=<n> ASSUNTO=<assunto> \
-nohup python3 .agents/encadeador/encadeador.py executar \
+nohup python .agents/encadeador/encadeador.py executar \
   --roteiro execucoes/roteiro-issue-<n>.json \
   --trabalho issue-<n> \
   --dir execucoes/evidencias \
@@ -117,7 +117,7 @@ instale-o com `--modulo auditor` se ainda não tiver. Sem ele, pule para o
 `touch`: a aprovação é sua, com ou sem auditor.
 
 ```bash
-python3 .agents/auditor/auditor.py execucoes/evidencias/issue-<n> \
+python .agents/auditor/auditor.py execucoes/evidencias/issue-<n> \
   --cwd /tmp/issue-<n>
 touch /tmp/issue-<n>/aprovacoes/entrega.ok
 ```

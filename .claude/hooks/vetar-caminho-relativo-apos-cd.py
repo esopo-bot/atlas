@@ -2,6 +2,7 @@ import json
 import re
 import shlex
 import sys
+from pathlib import Path
 
 EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
@@ -13,6 +14,14 @@ SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\n|\r")
 DOCUMENTO_LITERAL = re.compile(r"<<-?\s*['\"]?\w+['\"]?.*\Z", re.S)
 ASPAS = "\"'"
 PREFIXOS_QUE_JA_SAO_ABSOLUTOS = ("/", "~", "$", "%", "\\", "@")
+LETRA_DE_DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
+COMANDOS_QUE_FALAM_DE_REFERENCIA = ("git", "gh")
+VERBOS_QUE_TOMAM_REFERENCIA = frozenset({
+    "merge", "rebase", "checkout", "switch", "reset", "cherry-pick",
+    "revert", "log", "diff", "fetch", "pull", "push", "branch", "tag",
+    "show", "merge-base", "rev-parse", "rev-list", "describe",
+})
+FIM_DAS_REFERENCIAS = "--"
 MARCA_DE_URL = "://"
 MARCA_DE_OPCAO = "-"
 IGUAL = "="
@@ -40,6 +49,12 @@ BARRA_O_COMANDO = [
      "cd /tmp/x; git status; cat conhecimento/a.md"),
     ("cd com opção que carrega caminho relativo",
      "cd /home/x && ls --directory=tmp/rascunho"),
+    ("pasta relativa sem extensão continua barrada mesmo em comando de git",
+     "cd /home/x && git add tmp/rascunho/a.py"),
+    ("depois do fim das referências, o que vem é caminho de novo",
+     "cd /home/x && git checkout main -- nucleo/regras.json"),
+    ("verbo de git que NÃO toma referência não ganha isenção nenhuma",
+     "cd /tmp/x && git status conhecimento/a.md"),
 ]
 DEIXA_PASSAR = [
     ("sem cd", "grep -n x /home/x/repo/.agents/a.py"),
@@ -55,6 +70,16 @@ DEIXA_PASSAR = [
      "cd /tmp && python3 - <<'PY'\nprint(open('a/b.py'))\nPY"),
     ("cd no meio, não na frente", "git status && cd /tmp && ls x/y"),
     ("cd e opção sem caminho", "cd /tmp && git log --oneline -3"),
+    ("caminho com letra de drive já é absoluto — a sugestão antiga "
+     "concatenava duas raízes e dava um caminho impossível",
+     "cd D:/repo && cat D:/repo/AGENTS.md"),
+    ("letra de drive minúscula e barra invertida também",
+     "cd d:/repo && type d:\\repo\\AGENTS.md"),
+    ("referência de git não é pasta: nome de branch remota tem barra e "
+     "não se lê do disco",
+     "cd D:/repo && git merge origin/main"),
+    ("a referência vale para qualquer verbo que toma referência",
+     "cd /tmp/x && git rebase origin/homolog"),
 ]
 
 
@@ -80,7 +105,7 @@ def valor_do_token(token: str) -> str:
 def e_caminho_relativo(token: str) -> bool:
     valor = valor_do_token(token)
     if not valor or valor.startswith(PREFIXOS_QUE_JA_SAO_ABSOLUTOS) \
-            or MARCA_DE_URL in valor:
+            or MARCA_DE_URL in valor or LETRA_DE_DRIVE.match(valor):
         return False
     if BARRA in valor:
         return True
@@ -95,14 +120,36 @@ def pasta_do_cd(comando: str) -> str:
     return ""
 
 
+def tokens_que_sao_referencia_de_git(tokens: list) -> set:
+    if not tokens or Path(tokens[0]).name.lower() not in \
+            COMANDOS_QUE_FALAM_DE_REFERENCIA:
+        return set()
+    depois_do_verbo = False
+    referencias = set()
+    for token in tokens[1:]:
+        if token == FIM_DAS_REFERENCIAS:
+            break
+        if token.startswith(MARCA_DE_OPCAO):
+            continue
+        if not depois_do_verbo:
+            if token.lower() not in VERBOS_QUE_TOMAM_REFERENCIA:
+                return set()
+            depois_do_verbo = True
+            continue
+        referencias.add(token)
+    return referencias
+
+
 def caminho_relativo_apos_cd(comando: str) -> tuple:
     pasta = pasta_do_cd(comando or "")
     if not pasta:
         return "", ""
     resto = DOCUMENTO_LITERAL.sub("", comando.strip())
     for segmento in SEPARADORES_DE_COMANDO.split(resto)[1:]:
-        for token in tokens_de(segmento):
-            if e_caminho_relativo(token):
+        tokens = tokens_de(segmento)
+        referencias = tokens_que_sao_referencia_de_git(tokens)
+        for token in tokens:
+            if token not in referencias and e_caminho_relativo(token):
                 return pasta, token
     return pasta, ""
 

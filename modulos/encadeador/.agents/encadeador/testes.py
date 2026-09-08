@@ -33,7 +33,8 @@ from encadeador import (
     CLI_FALSO_DA_SESSAO, CLI_FALSO_QUE_DEMORA,
     CLI_FALSO_QUE_SEGUE_SEM_ENTREGAR,
     CLI_FALSO_QUE_MEDE_CUSTO, CLI_FALSO_QUE_ENTREGA_SEM_CUSTO,
-    CLI_FALSO_QUE_MORRE_CARO,
+    CLI_FALSO_QUE_MORRE_CARO, CLI_FALSO_QUE_ACORDA_DE_NOVO,
+    CLI_FALSO_QUE_FALA_E_TRAVA, CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA,
     CUSTO_SEM_MEDICAO, MARCA_DE_QUEM_ESPERA_VOCE,
     CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE,
     ESPERA_MAXIMA_S,
@@ -143,6 +144,84 @@ RECUSA = [
 ]
 
 
+def no_shell(caminho) -> str:
+    return '"' + Path(caminho).as_posix() + '"'
+
+
+def _comando_de_script(caminho) -> str:
+    if os.name != "nt":
+        return str(caminho)
+    bash = no_shell(encadeador._evidencia.bash_do_sistema())
+    return f"{bash} {no_shell(caminho)}"
+
+
+def _fantoche_que_anota(pasta, nome, destino, separador="\n"):
+    escritor = Path(pasta) / f"{nome}-anota.py"
+    escritor.write_text(
+        "import io\n"
+        "import sys\n"
+        f"with io.open({str(destino)!r}, 'a', encoding='utf-8',\n"
+        "             newline='\\n') as saida:\n"
+        f"    saida.write({separador!r}.join(sys.argv[1:]) + '\\n')\n",
+        encoding="utf-8")
+    if os.name == "nt":
+        lancavel = Path(pasta) / f"{nome}.bat"
+        lancavel.write_text(
+            f'@echo off\r\n"{sys.executable}" "{escritor}" %*\r\n',
+            encoding="utf-8")
+        return lancavel
+    lancavel = Path(pasta) / nome
+    lancavel.write_text(
+        "#!/bin/sh\n"
+        f'exec "{sys.executable}" "{escritor}" "$@"\n',
+        encoding="utf-8")
+    lancavel.chmod(0o755)
+    return lancavel
+
+
+CAMINHO_DO_LANCADOR = Path(".claude") / "hooks" / "interpretador.sh"
+
+
+TETO_DO_ENVELOPE = TETO_DO_DUBLE * FOLGA_DO_TETO
+SEM_PID_MORTO = ("nao consegui um pid morto em {} tentativas — o sistema reciclou\ntodos eles, e sem isso a fixture nao modela processo morto nenhum")
+VOLTAS_ATE_O_PID_MORRER = 20
+
+
+def _pid_de_quem_ja_morreu() -> int:
+    for _ in range(VOLTAS_ATE_O_PID_MORRER):
+        morto = subprocess.Popen([sys.executable, "-c", "pass"])
+        morto.wait()
+        pid = morto.pid
+        del morto
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return pid
+    raise RuntimeError(SEM_PID_MORTO.format(VOLTAS_ATE_O_PID_MORRER))
+
+
+def _com_o_lancador_da_camada(raiz) -> Path:
+    copia = Path(raiz) / CAMINHO_DO_LANCADOR
+    copia.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(encadeador.RAIZ_DO_ATLAS / CAMINHO_DO_LANCADOR, copia)
+    copia.chmod(0o755)
+    return copia
+
+
+def _ha_processo_vivo_com(marca) -> bool:
+    if os.name == "nt":
+        listagem = subprocess.run(
+            ["wmic", "process", "get", "commandline"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=TETO_DO_ENVELOPE)
+        pedacos_da_marca = marca.split()
+        return any(all(pedaco in linha for pedaco in pedacos_da_marca)
+                   for linha in (listagem.stdout or "").splitlines())
+    achados = subprocess.run(["pgrep", "-f", marca], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace")
+    return achados.returncode == 0
+
+
 class Bancada:
     def __init__(self, pasta):
         self.pasta = pasta
@@ -247,7 +326,7 @@ def _sobre_a_conta_no_remoto(b) -> None:
 def _git(pasta, *ordem):
     return subprocess.run(["git", "-C", str(pasta), *ordem],
                           capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          timeout=TETO_DO_DUBLE)
+                          timeout=TETO_DO_ENVELOPE)
 
 
 def _com_o_gh_trocado(gh, tempo, medir):
@@ -266,7 +345,7 @@ def _quadro_com_o_duble(pasta, resposta, configuracao):
     duble = caixa / "quadro-duble.py"
     duble.write_text(FONTE_DO_DUBLE_DO_QUADRO.format(caixa=repr(str(caixa))),
                      encoding="utf-8")
-    gh = shlex.split(f"{sys.executable} {duble}")
+    gh = [sys.executable, str(duble)]
     resultado = _com_o_gh_trocado(
         gh, TEMPO_DO_DUBLE,
         lambda: mover_no_quadro(configuracao, 42, "parada"))
@@ -320,7 +399,7 @@ def _sobre_a_fila_que_le_as_issues(b) -> None:
     duble = caixa / "fila-duble.py"
     duble.write_text(FONTE_DO_DUBLE_DA_FILA.format(caixa=repr(str(caixa))),
                      encoding="utf-8")
-    gh = shlex.split(f"{sys.executable} {duble}")
+    gh = [sys.executable, str(duble)]
     (caixa / "issues.json").write_text(json.dumps(
         [{"number": 272, "title": "relato de entrega",
           "url": "https://github.com/dono/repo/issues/272"}]),
@@ -357,7 +436,8 @@ def _sobre_a_conta_que_age(b) -> None:
     roteiro = _roteiro(b.pasta, "m-duas-contas.json", {
         "issue": 77, "etapas": [
             {"nome": "trabalha", "tipo": "codigo",
-             "comando": f'printf "%s" "$GH_TOKEN" > {token_do_trabalho} && '
+             "comando": f'printf "%s" "$GH_TOKEN" > '
+                        f'{no_shell(token_do_trabalho)} && '
                         + FANTOCHE_OK}]})
     b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
                  "t-duas-contas", "--dir", b.evidencias, "--cwd",
@@ -451,7 +531,8 @@ def _sobre_a_configuracao(b) -> None:
     resposta = _cli(["executar", "--roteiro", roteiro_seco, "--trabalho",
                      "t-sem-config", "--dir", b.evidencias, "--cwd", b.pasta])
     b.caso("sem executor.json o disparo recusa e nomeia o arquivo",
-         resposta.returncode == 2 and ARQUIVO_EXECUTOR in resposta.stderr)
+         resposta.returncode == 2
+         and str(Path(ARQUIVO_EXECUTOR)) in resposta.stderr)
     b.caso("e nada foi materializado",
          not (Path(b.evidencias) / "t-sem-config").exists())
     resposta = _cli(["ensaio", "--roteiro", roteiro_seco, "--trabalho",
@@ -596,7 +677,7 @@ def _sobre_o_bloco_de_estado(b) -> None:
         {"nome": "conta", "tipo": "codigo",
          "comando": FANTOCHE_OK},
         {"nome": "espia", "tipo": "codigo", "depende": ["conta"],
-         "comando": f"{shlex.quote(sys.executable)} -c "
+         "comando": f"{no_shell(sys.executable)} -c "
                     + shlex.quote(
                         "import sys;print(sys.argv)") + " > /dev/null && "
                     + FANTOCHE_OK}]})
@@ -840,9 +921,13 @@ def _sobre_a_issue(b) -> None:
              {"etapa": "x", "veredito": "para", "provado": [],
               "proximo": "Leia o log da verificação em `03-x-c1.log`, no "
                          "trabalho t: corrija cada acusação."}, 1, 1))
+    raiz_do_repositorio = Path(b.pasta).resolve() / "r" / "a"
+    dentro_do_repositorio = raiz_do_repositorio / "tmp" / "rec" / "v"
     b.caso("o encurtador troca caminho do repositório por relativo",
-         sem_caminho_de_maquina("$ tail -n 1 /r/a/tmp/rec/v/04.log", "/r/a")
-         == "$ tail -n 1 tmp/rec/v/04.log")
+         sem_caminho_de_maquina(f"$ tail -n 1 {dentro_do_repositorio}"
+                                f"{os.sep}04.log",
+                                str(raiz_do_repositorio))
+         == f"$ tail -n 1 {Path('tmp', 'rec', 'v', '04.log')}")
     b.caso("e o que está fora do repositório vira ~, nunca o nome de quem roda",
          sem_caminho_de_maquina(f"leia {Path.home()}/fora/z.log", "/r/a")
          == "leia ~/fora/z.log")
@@ -940,7 +1025,7 @@ def _sobre_a_janela_e_o_ensaio(b) -> None:
     sentinela = Path(b.pasta) / "sentinela.txt"
     roteiro = _roteiro(b.pasta, "m-sentinela.json", {"etapas": [
         {"nome": "grava", "tipo": "codigo",
-         "comando": f"touch {sentinela} && {FANTOCHE_OK}"},
+         "comando": f"touch {no_shell(sentinela)} && {FANTOCHE_OK}"},
         {"nome": "verifica", "tipo": "verificacao", "depende": ["grava"]},
     ]})
     resposta = _cli(["ensaio", "--roteiro", roteiro, "--trabalho",
@@ -1081,7 +1166,8 @@ def _sobre_o_grafo(b) -> None:
 
     roteiro = _roteiro(b.pasta, "m-teto.json", {"teto": 2, "etapas": [
         {"nome": "aa", "tipo": "codigo",
-         "comando": f"touch {Path(b.pasta) / 'teto-rodou'} && {FANTOCHE_OK}"},
+         "comando": f"touch {no_shell(Path(b.pasta) / 'teto-rodou')} "
+                    f"&& {FANTOCHE_OK}"},
     ]})
     for _ in range(2):
         _cli_evidencia(["sintetico", "--dir", b.evidencias, "--trabalho", "t-teto",
@@ -1098,7 +1184,7 @@ def _sobre_o_grafo(b) -> None:
 
     maior = _roteiro(b.pasta, "m-teto-mais-um.json", {"teto": 3, "etapas": [
         {"nome": "aa", "tipo": "codigo",
-         "comando": f"touch {Path(b.pasta) / 'teto-mais-um-rodou'} "
+         "comando": f"touch {no_shell(Path(b.pasta) / 'teto-mais-um-rodou')} "
                     f"&& {FANTOCHE_OK}"},
     ]})
     resposta = _cli(["executar", "--roteiro", maior, "--trabalho",
@@ -1341,18 +1427,14 @@ def _sobre_o_tempo_limite(b) -> None:
     evidencia_tempo = json.loads(
         (Path(b.evidencias) / "t-tempo" / "01-trava-c1.json")
         .read_text(encoding="utf-8"))
-    orfaos = subprocess.run(["pgrep", "-f", dorminhoco],
-                            capture_output=True, text=True, encoding="utf-8", errors="replace")
     b.caso("estouro de tempo vira para morta, exit 5, com log",
          resposta.returncode == 5 and evidencia_tempo["motivo"] == "morta"
          and "tempo-limite" in evidencia_tempo["faltas"][0]
          and (Path(b.evidencias) / "t-tempo" / "01-trava-c1.log").exists())
     b.caso("o grupo do processo morre junto — nenhum órfão",
-         orfaos.returncode != 0)
+         not _ha_processo_vivo_com(dorminhoco))
 
-    fantoche_bin = Path(b.pasta) / "bin-meia-linha"
-    fantoche_bin.mkdir(exist_ok=True)
-    fingido = fantoche_bin / "claude"
+    fingido = Path(b.pasta) / "cli-meia-linha.sh"
     fingido.write_text(CLAUDE_QUE_PARA_NA_METADE, encoding="utf-8")
     fingido.chmod(0o755)
     roteiro = _roteiro(b.pasta, "m-meia-linha.json", {"etapas": [
@@ -1363,9 +1445,9 @@ def _sobre_o_tempo_limite(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-meia", "--dir", b.evidencias,
          "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
-                 PATH=f"{fantoche_bin}:{os.environ.get('PATH', '')}"))
+                 ENCADEADOR_SESSAO=_comando_de_script(fingido)))
     parede = time.monotonic() - partida
     b.caso("linha pela metade não fura o teto de tempo da etapa",
          resposta.returncode == EXIT_PAROU_NUM_PARA
@@ -1388,7 +1470,8 @@ def _sobre_os_ciclos_e_o_disco(b) -> None:
 
     roteiro = _roteiro(b.pasta, "m-teto2.json", {"teto": 2, "etapas": [
         {"nome": "aa", "tipo": "codigo",
-         "comando": f"touch {Path(b.pasta) / 'teto2-rodou'} && {FANTOCHE_OK}"}]})
+         "comando": f"touch {no_shell(Path(b.pasta) / 'teto2-rodou')} "
+                    f"&& {FANTOCHE_OK}"}]})
     _cli_evidencia(["sintetico", "--dir", b.evidencias, "--trabalho", "t-teto2",
                  "--etapa", "aa", "--ordem", "1", "--teto", "2",
                  "--motivo", "morta", "--detalhe", "plantado"])
@@ -1432,7 +1515,8 @@ def _sobre_os_ciclos_e_o_disco(b) -> None:
 
     roteiro = _roteiro(b.pasta, "m-lista.json", {"teto": 1, "etapas": [
         {"nome": "aa", "tipo": "codigo",
-         "comando": f"touch {Path(b.pasta) / 'lista-rodou'} && {FANTOCHE_OK}"}]})
+         "comando": f"touch {no_shell(Path(b.pasta) / 'lista-rodou')} "
+                    f"&& {FANTOCHE_OK}"}]})
     pasta_lista = Path(b.evidencias) / "t-lista"
     pasta_lista.mkdir(parents=True, exist_ok=True)
     (pasta_lista / "01-aa-c9.json").write_text("[]", encoding="utf-8")
@@ -2004,9 +2088,9 @@ def _sobre_o_teto_declarado_na_sessao(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-medicao-longa",
          "--dir", b.evidencias, "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
-                 ENCADEADOR_SESSAO=str(lento)))
+                 ENCADEADOR_SESSAO=_comando_de_script(lento)))
     evidencia = json.loads(
         (Path(b.evidencias) / "t-medicao-longa" / "01-medir-c1.json")
         .read_text(encoding="utf-8"))
@@ -2019,7 +2103,7 @@ def _sobre_o_teto_declarado_na_sessao(b) -> None:
 def _sobre_a_troca_do_cli_da_sessao(b) -> None:
     marca = Path(b.pasta) / "o-cli-falso-rodou"
     falso = Path(b.pasta) / "cli-falso.sh"
-    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=marca),
+    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=no_shell(marca)),
                      encoding="utf-8")
     falso.chmod(0o755)
     roteiro = _roteiro(b.pasta, "m-cli.json", {"etapas": [
@@ -2029,9 +2113,9 @@ def _sobre_a_troca_do_cli_da_sessao(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-cli", "--dir", b.evidencias,
          "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
-                 ENCADEADOR_SESSAO=str(falso)))
+                 ENCADEADOR_SESSAO=_comando_de_script(falso)))
     b.caso("ENCADEADOR_SESSAO troca o CLI: o falso rodou no lugar do padrão",
          marca.exists())
     b.caso("o CLI trocado não vira erro de ambiente",
@@ -2051,9 +2135,9 @@ def _sobre_o_custo_da_sessao(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", b.pasta],
-            capture_output=True, text=True, timeout=TETO_DO_DUBLE,
+            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
             env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
-                     ENCADEADOR_SESSAO=str(cli)))
+                     ENCADEADOR_SESSAO=_comando_de_script(cli)))
 
     feito = _executar("t-custo-medido", CLI_FALSO_QUE_MEDE_CUSTO)
     evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-custo-medido",
@@ -2096,6 +2180,147 @@ def _sobre_o_custo_da_sessao(b) -> None:
          evidencia.get("veredito") == "para"
          and evidencia.get("motivo") == "morta")
 
+    _executar("t-acorda-de-novo", CLI_FALSO_QUE_ACORDA_DE_NOVO)
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-acorda-de-novo",
+                                    "mede")
+    b.caso("sessão que emite dois resultados no mesmo processo grava o custo "
+           "do último, que já vem acumulado — somar os dois dobraria",
+         (evidencia.get("custo") or {}).get("usd") == 4.28)
+    b.caso("e os tokens vêm do acumulado por modelo, não da última consulta",
+         (evidencia.get("custo") or {}).get("tokens") == {
+             "entrada": 98, "saida": 32530,
+             "cache-lido": 4451519, "cache-criado": 123554})
+    b.caso("e os turnos somam os dois trechos",
+         evidencia.get("turnos") == 51)
+
+    roteiro_curto = _roteiro(b.pasta, "m-fala-e-trava.json", {"etapas": [
+        {"nome": "trava", "tipo": "sessao", "prompt": "oi",
+         "tempo-limite": 1}]})
+    cli = Path(b.pasta) / "cli-fala-e-trava.sh"
+    cli.write_text(CLI_FALSO_QUE_FALA_E_TRAVA, encoding="utf-8")
+    cli.chmod(0o755)
+    subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro_curto, "--trabalho", "t-fala-e-trava",
+         "--dir", b.evidencias, "--cwd", b.pasta],
+        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
+                 ENCADEADOR_SESSAO=_comando_de_script(cli)))
+    log_da_travada = (Path(b.evidencias) / "t-fala-e-trava"
+                      / "01-trava-c1.log").read_text(encoding="utf-8")
+    b.caso("estouro de tempo numa sessão preserva no log o que ela já tinha "
+           "dito, e anexa o motivo — o rastro não some com a morte",
+         "comecei" in log_da_travada and "tempo-limite" in log_da_travada)
+
+    roteiro_teto = _roteiro(b.pasta, "m-teto-e-trava.json", {"etapas": [
+        {"nome": "trava", "tipo": "sessao", "prompt": "oi",
+         "tempo-limite": 2}]})
+    cli = Path(b.pasta) / "cli-teto-e-trava.sh"
+    cli.write_text(CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA, encoding="utf-8")
+    cli.chmod(0o755)
+    subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro_teto, "--trabalho", "t-teto-e-trava",
+         "--dir", b.evidencias, "--cwd", b.pasta],
+        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
+                 ENCADEADOR_SESSAO=_comando_de_script(cli)))
+    log_do_teto = (Path(b.evidencias) / "t-teto-e-trava"
+                   / "01-trava-c1.log").read_text(encoding="utf-8")
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-teto-e-trava",
+                                    "trava")
+    b.caso("retomada por teto anexa ao log em vez de apagar a tentativa "
+           "anterior: os dois trechos ficam, separados",
+         "PRIMEIRA" in log_do_teto and "SEGUNDA" in log_do_teto
+         and "retomada" in log_do_teto)
+    b.caso("e o estouro na retomada ainda grava os turnos que a primeira "
+           "tentativa já tinha devolvido",
+         evidencia.get("turnos") == 5 and evidencia.get("motivo") == "morta")
+
+def _sobre_a_assinatura_da_etapa(b) -> None:
+    def _roteiro_com(comando):
+        return _roteiro(b.pasta, "m-assinatura.json", {"etapas": [
+            {"nome": "prova", "tipo": "codigo", "comando": comando}]})
+
+    def _retomar(roteiro):
+        return _cli(["executar", "--roteiro", roteiro, "--trabalho",
+                     "t-assinatura", "--dir", b.evidencias, "--cwd", b.pasta,
+                     "--retomar"])
+
+    pasta = Path(b.evidencias) / "t-assinatura"
+    roteiro = _roteiro_com(FANTOCHE_OK)
+    _cli(["executar", "--roteiro", roteiro, "--trabalho", "t-assinatura",
+          "--dir", b.evidencias, "--cwd", b.pasta])
+    c1 = json.loads((pasta / "01-prova-c1.json").read_text(encoding="utf-8"))
+    b.caso("a evidência guarda a assinatura da etapa: o resumo do comando e "
+           "do prompt no momento da prova",
+         isinstance(c1.get("assinatura"), str)
+         and len(c1["assinatura"]) == 12)
+    resposta = _retomar(roteiro)
+    b.caso("retomar com o roteiro igual pula a etapa provada, como antes",
+         "já provada" in resposta.stdout
+         and not (pasta / "01-prova-c2.json").exists())
+    resposta = _retomar(_roteiro_com("true && " + FANTOCHE_OK))
+    b.caso("comando editado entre a parada e a retomada faz a etapa rodar de "
+           "novo, e o log diz que a assinatura mudou",
+         "mudou" in resposta.stdout
+         and (pasta / "01-prova-c2.json").exists())
+    resposta = _retomar(_roteiro(b.pasta, "m-assinatura.json", {"etapas": [
+        {"nome": "outra", "tipo": "codigo", "comando": FANTOCHE_OK}]}))
+    b.caso("etapa que saiu do roteiro não é acusada de ter mudado — o log "
+           "não promete rodar o que não existe",
+         "mudou" not in resposta.stdout)
+    c2 = pasta / "01-prova-c2.json"
+    if c2.exists():
+        sem_campo = json.loads(c2.read_text(encoding="utf-8"))
+        sem_campo.pop("assinatura", None)
+        c2.write_text(json.dumps(sem_campo), encoding="utf-8")
+    resposta = _retomar(_roteiro_com("true && " + FANTOCHE_OK))
+    b.caso("evidência sem assinatura, anterior ao campo, ainda é pulada pelo "
+           "veredito — e o log confessa que pulou sem verificar",
+         c2.exists() and "sem assinatura" in resposta.stdout
+         and not (pasta / "01-prova-c3.json").exists())
+
+    def _roteiro_ligado(ligada):
+        return _roteiro(b.pasta, "m-ligada.json", {"etapas": [
+            {"nome": "liga", "tipo": "codigo", "comando": FANTOCHE_OK,
+             "ligada": ligada}]})
+
+    _cli(["executar", "--roteiro", _roteiro_ligado(False), "--trabalho",
+          "t-ligada", "--dir", b.evidencias, "--cwd", b.pasta])
+    _cli(["executar", "--roteiro", _roteiro_ligado(True), "--trabalho",
+          "t-ligada", "--dir", b.evidencias, "--cwd", b.pasta, "--retomar"])
+    religada = Path(b.evidencias) / "t-ligada" / "01-liga-c2.json"
+    b.caso("ligar uma etapa que rodou desligada e retomar faz a etapa rodar "
+           "de verdade: a sintética desligada não vale como prova",
+         religada.exists()
+         and json.loads(religada.read_text(encoding="utf-8")).get("origem")
+         != "encadeador")
+
+    def _sessao_com_prompt(prompt, *argumentos):
+        roteiro = _roteiro(b.pasta, "m-prompt-editado.json", {"etapas": [
+            {"nome": "fala", "tipo": "sessao", "prompt": prompt,
+             "tempo-limite": TETO_DO_DUBLE}]})
+        cli = Path(b.pasta) / "cli-prompt-editado.sh"
+        cli.write_text(CLI_FALSO_QUE_MEDE_CUSTO, encoding="utf-8")
+        cli.chmod(0o755)
+        return subprocess.run(
+            [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+             "--roteiro", roteiro, "--trabalho", "t-prompt-editado",
+             "--dir", b.evidencias, "--cwd", b.pasta, *argumentos],
+            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
+                     ENCADEADOR_SESSAO=_comando_de_script(cli)))
+
+    _sessao_com_prompt("primeiro pedido")
+    resposta = _sessao_com_prompt("segundo pedido", "--retomar")
+    b.caso("sessão com o prompt editado entre a parada e a retomada roda de "
+           "novo — a prova era de outro pedido",
+         "mudou" in resposta.stdout
+         and (Path(b.evidencias) / "t-prompt-editado"
+              / "01-fala-c2.json").exists())
+
+
 def _evidencia_da_etapa(pasta, nome):
     for arquivo in sorted(Path(pasta).glob(f"*-{nome}-c*.json")):
         return json.loads(arquivo.read_text(encoding="utf-8"))
@@ -2132,7 +2357,7 @@ def _sobre_a_branch_que_a_issue_pede(b) -> None:
 
     marca = Path(b.pasta) / "a-sessao-rodou"
     falso = Path(b.pasta) / "cli-da-branch.sh"
-    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=marca),
+    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=no_shell(marca)),
                      encoding="utf-8")
     falso.chmod(0o755)
     alvo = Path(b.pasta) / "alvo-da-branch"
@@ -2150,8 +2375,8 @@ def _sobre_a_branch_que_a_issue_pede(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", str(alvo)],
-            capture_output=True, text=True, timeout=TETO_DO_DUBLE,
-            env=dict(b.ambiente, ENCADEADOR_SESSAO=str(falso)))
+            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso)))
 
     fora = _executar("t-branch-fora")
     pasta_fora = Path(b.evidencias) / "t-branch-fora"
@@ -2184,7 +2409,7 @@ def _sobre_a_branch_do_alvo_vizinho(b) -> None:
     padrao = "issue/<numero>-<assunto-em-kebab>"
     marca = Path(b.pasta) / "a-sessao-do-vizinho-rodou"
     falso = Path(b.pasta) / "cli-do-vizinho.sh"
-    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=marca),
+    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=no_shell(marca)),
                      encoding="utf-8")
     falso.chmod(0o755)
     raiz = Path(b.pasta) / "raiz-que-fica-na-base"
@@ -2207,8 +2432,8 @@ def _sobre_a_branch_do_alvo_vizinho(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", str(raiz)],
-            capture_output=True, text=True, timeout=TETO_DO_DUBLE,
-            env=dict(b.ambiente, ENCADEADOR_SESSAO=str(falso),
+            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso),
                      **{VARIAVEL_DO_ALVO: str(alvo)}))
 
     _executar("t-vizinho-certo", dentro)
@@ -2240,7 +2465,7 @@ def _sobre_a_branch_do_alvo_vizinho(b) -> None:
 def _sobre_as_branches_proprias_do_alvo(b) -> None:
     marca = Path(b.pasta) / "a-sessao-do-alvo-com-branches-rodou"
     falso = Path(b.pasta) / "cli-do-alvo-com-branches.sh"
-    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=marca),
+    falso.write_text(CLI_FALSO_DA_SESSAO.format(marca=no_shell(marca)),
                      encoding="utf-8")
     falso.chmod(0o755)
     raiz = Path(b.pasta) / "raiz-com-branches-por-projeto"
@@ -2265,8 +2490,8 @@ def _sobre_as_branches_proprias_do_alvo(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-branches-proprias",
          "--dir", b.evidencias, "--cwd", str(raiz)],
-        capture_output=True, text=True, timeout=TETO_DO_DUBLE,
-        env=dict(b.ambiente, ENCADEADOR_SESSAO=str(falso),
+        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso),
                  **{VARIAVEL_DO_ALVO: str(alvo)}))
     evidencia = _evidencia_da_etapa(
         Path(b.evidencias) / "t-branches-proprias", "trabalha")
@@ -2306,9 +2531,11 @@ def _sobre_as_branches_proprias_do_alvo(b) -> None:
                      "repositorio": vizinho.name,
                      "branches": {"base": "develop",
                                   "integracao": "develop"}}})
+    _com_o_lancador_da_camada(raiz)
     feito = subprocess.run(
-        ["bash", "-c", abertura], capture_output=True, text=True,
-        cwd=str(raiz), timeout=TETO_DO_DUBLE,
+        [encadeador._evidencia.bash_do_sistema(), "-c", abertura],
+        capture_output=True, text=True,
+        cwd=str(raiz), timeout=TETO_DO_ENVELOPE,
         env=dict(b.ambiente, ISSUE="41", ASSUNTO="base-do-projeto",
                  **{VARIAVEL_DO_ALVO: str(vizinho)}))
     try:
@@ -2337,7 +2564,7 @@ def _sobre_o_veto_de_integracao_inexistente(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-veto-integracao",
          "--dir", b.evidencias, "--cwd", str(alvo)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_DUBLE, env=b.ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_ENVELOPE, env=b.ambiente)
     b.caso("integração declarada que não existe no remoto do alvo: o disparo "
            "recusa com erro de uso ANTES de gravar estado, e nomeia a branch",
          recusa.returncode == EXIT_ERRO_DE_USO_OU_AMBIENTE
@@ -2350,7 +2577,7 @@ def _sobre_o_veto_de_integracao_inexistente(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-veto-integracao-ok",
          "--dir", b.evidencias, "--cwd", str(alvo)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_DUBLE, env=b.ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_ENVELOPE, env=b.ambiente)
     b.caso("integração que existe no remoto: o disparo roda como sempre",
          roda.returncode == EXIT_COMPLETA
          and ERRO_INTEGRACAO_INEXISTENTE_NO_REMOTO.split("{")[0] not in roda.stderr)
@@ -2363,10 +2590,41 @@ def _sobre_o_veto_de_integracao_inexistente(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-veto-sem-remoto",
          "--dir", b.evidencias, "--cwd", str(sem_remoto)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_DUBLE, env=b.ambiente)
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TETO_DO_ENVELOPE, env=b.ambiente)
     b.caso("sem remoto declarado não há o que medir: o disparo roda calado, "
            "sem recusa e sem aviso de integração",
          avisa.returncode == EXIT_COMPLETA and "integração" not in avisa.stderr)
+
+
+def _sobre_o_path_que_o_executor_monta(b) -> None:
+    venv = Path(b.pasta) / "venv-de-mentira"
+    programas = venv / ("Scripts" if os.name == "nt" else "bin")
+    programas.mkdir(parents=True, exist_ok=True)
+    ambiente = {"PATH": "ja-estava"}
+    encadeador._acrescentar_venv(ambiente, venv)
+    b.caso("o venv declarado é achado neste sistema, e não ignorado com aviso",
+           ambiente.get("VIRTUAL_ENV") == str(venv))
+    b.caso("o venv entra no PATH com o separador DESTE sistema, não com o "
+           "do outro",
+           ambiente["PATH"].split(os.pathsep)[0] == str(programas)
+           and ambiente["PATH"].split(os.pathsep)[-1] == "ja-estava")
+
+    vazio = Path(b.pasta) / "venv-sem-programas"
+    vazio.mkdir(parents=True, exist_ok=True)
+    sem = {"PATH": "ja-estava"}
+    encadeador._acrescentar_venv(sem, vazio)
+    b.caso("venv sem pasta de programas continua sendo avisado e ignorado",
+           sem == {"PATH": "ja-estava"})
+
+    local_bin = str(Path.home() / ".local" / "bin")
+    novo = {"PATH": "ja-estava"}
+    encadeador._acrescentar_local_bin_no_fim(novo)
+    b.caso("o local bin entra no fim do PATH com o separador deste sistema",
+           novo["PATH"].split(os.pathsep) == ["ja-estava", local_bin])
+    de_novo = dict(novo)
+    encadeador._acrescentar_local_bin_no_fim(de_novo)
+    b.caso("e não entra duas vezes quando já está lá",
+           de_novo["PATH"] == novo["PATH"])
 
 
 def _sobre_o_ambiente_gravado_da_execucao(b) -> None:
@@ -2392,7 +2650,7 @@ def _sobre_o_ambiente_gravado_da_execucao(b) -> None:
     roteiro = _roteiro(b.pasta, "m-ambiente-gravado.json",
                        {"issue": 68, "etapas": [
                            {"nome": "trabalha", "tipo": "codigo",
-                            "comando": f"cat {prova}"}]})
+                            "comando": f"cat {no_shell(prova)}"}]})
     ambiente = dict(b.ambiente, GH_TOKEN=TOKEN_QUE_NAO_PODE_VAZAR,
                     **{VARIAVEL_DO_ALVO: str(alvo),
                        VARIAVEL_DO_ASSUNTO: ASSUNTO_DO_ALVO_GRAVADO})
@@ -2804,8 +3062,10 @@ def _sobre_a_sessao_que_a_acusacao_reabre(b) -> None:
     def _sessao_falsa(apelido):
         marca = Path(b.pasta) / f"rodadas-da-sessao-{apelido}"
         falso = Path(b.pasta) / f"cli-sem-entrega-{apelido}.sh"
-        falso.write_text(CLI_FALSO_QUE_SEGUE_SEM_ENTREGAR.format(marca=marca),
-                         encoding="utf-8")
+        falso.write_text(
+            CLI_FALSO_QUE_SEGUE_SEM_ENTREGAR.format(
+                marca=no_shell(marca)),
+            encoding="utf-8")
         falso.chmod(0o755)
         return falso, marca
 
@@ -2820,7 +3080,7 @@ def _sobre_a_sessao_que_a_acusacao_reabre(b) -> None:
              "--dir", b.evidencias, "--cwd", b.pasta,
              "--configuracao", str(configuracao), *extra],
             capture_output=True, text=True, timeout=TEMPO_DO_DUBLE,
-            env=dict(b.ambiente, ENCADEADOR_SESSAO=str(falso)))
+            env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso)))
 
     def _evidencia_do_ciclo(trabalho, nome) -> Path:
         return Path(b.evidencias) / trabalho / nome
@@ -2860,7 +3120,8 @@ def _sobre_a_sessao_que_a_acusacao_reabre(b) -> None:
          "depende": ["trabalhar"], "tempo-limite": TETO_DO_DUBLE}]})
     caiu = Path(b.pasta) / "cli-que-morre-por-limite.sh"
     caiu.write_text(
-        CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE.format(marca=marca_morta),
+        CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE.format(
+            marca=no_shell(marca_morta)),
         encoding="utf-8")
     caiu.chmod(0o755)
     _executar(roteiro_morto, "t-morte", caiu)
@@ -2932,15 +3193,14 @@ def _sobre_a_auditoria_ao_fim(b) -> None:
 
 
 def _sobre_a_prova_de_vida_do_estado(b) -> None:
-    morto = subprocess.Popen([sys.executable, "-c", "pass"])
-    morto.wait()
+    pid_morto = _pid_de_quem_ja_morreu()
 
     def _rodando_de_processo_morto(trabalho) -> Path:
         pasta = Path(b.evidencias) / trabalho
         pasta.mkdir(parents=True, exist_ok=True)
         (pasta / ARQUIVO_ESTADO).write_text(json.dumps(
             {"situacao": "rodando", "desde": "2026-08-22T10:00:00-03:00",
-             "pid": morto.pid}), encoding="utf-8")
+             "pid": pid_morto}), encoding="utf-8")
         return pasta
 
     gravar_estado(b.evidencias, "t-pid", "rodando")
@@ -3075,12 +3335,7 @@ def _sobre_a_notificacao_nos_marcos(b) -> None:
     raiz = Path(b.pasta) / "com-notificacao"
     raiz.mkdir(exist_ok=True)
     avisado = raiz / "avisado.txt"
-    ferramenta = raiz / "notificar-de-mentira"
-    ferramenta.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s\\n' \"$1\" >> {shlex.quote(str(avisado))}\n",
-        encoding="utf-8")
-    ferramenta.chmod(0o755)
+    ferramenta = _fantoche_que_anota(raiz, "notificar-de-mentira", avisado)
 
     def avisos() -> str:
         return avisado.read_text(encoding="utf-8") if avisado.exists() else ""
@@ -3177,13 +3432,8 @@ def _sobre_a_notificacao_nos_marcos(b) -> None:
                   etapa=""))
 
     aviso_de_desktop = raiz / "aviso-de-desktop.txt"
-    dublê_desktop = raiz / encadeador.NOTIFICADOR_DE_DESKTOP
-    dublê_desktop.write_text(
-        "#!/bin/sh\n"
-        f"printf '%s|%s\\n' \"$1\" \"$2\" >> "
-        f"{shlex.quote(str(aviso_de_desktop))}\n",
-        encoding="utf-8")
-    dublê_desktop.chmod(0o755)
+    _fantoche_que_anota(
+        raiz, encadeador.NOTIFICADOR_DE_DESKTOP, aviso_de_desktop, "|")
     caminho_original = os.environ.get("PATH", "")
     os.environ["PATH"] = f"{raiz}{os.pathsep}{caminho_original}"
     try:
@@ -3245,6 +3495,7 @@ TEMAS = (
     _sobre_a_branch_do_alvo_vizinho,
     _sobre_as_branches_proprias_do_alvo,
     _sobre_o_veto_de_integracao_inexistente,
+    _sobre_o_path_que_o_executor_monta,
     _sobre_o_ambiente_gravado_da_execucao,
     _sobre_a_issue_do_ambiente,
     _sobre_a_janela_e_o_ensaio,
@@ -3256,6 +3507,7 @@ TEMAS = (
     _sobre_o_teto_declarado_na_sessao,
     _sobre_a_troca_do_cli_da_sessao,
     _sobre_o_custo_da_sessao,
+    _sobre_a_assinatura_da_etapa,
     _sobre_os_ciclos_e_o_disco,
     _sobre_o_prompt_montado,
     _sobre_o_andamento,

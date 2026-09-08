@@ -5,12 +5,14 @@ description: Reunião diária de 30 minutos entre o dono e a sessão — abre co
 
 # Reunião diária
 
-Trinta minutos, com hora de acabar. A reunião é conversa; o que fica dela é a
+Trinta minutos é a régua, não o gatilho de parada: **a reunião fecha quando o
+plano do dia existe.** Passou da hora sem plano, ela continua; saiu o plano
+antes, ela acaba antes. A reunião é conversa; o que fica dela é a
 **minuta**, escrita no quadro. Sem minuta não houve reunião.
 
-Se a casa tiver voz, a sessão fala a abertura e cada pergunta — e escreve
+Se o repositório tiver voz, a sessão fala a abertura e cada pergunta — e escreve
 tudo, porque o texto é a minuta. O dono responde como quiser, inclusive só
-por texto. A voz é da casa, não da camada: o comando mora onde a casa guarda
+por texto. A voz é do repositório, não da camada: o comando mora onde o repositório guarda
 os scripts dela, e o dono o informa uma vez, no arquivo de instruções de
 usuário dele.
 
@@ -28,11 +30,26 @@ Despejar a saída dos comandos é o erro caro desta etapa.
   decide do celular.
 - **A última minuta.** O comentário mais recente do quadro que começa por
   "Minuta": o que ficou combinado é o ponto de partida, não a memória.
+- **Os canais onde o dono já conversa — onde ele abrir, e só.** Caixa de
+  entrada e mensageiro do trabalho, filtrados pelos assuntos que estão
+  abertos. **Espera de terceiro morre no canal onde foi feita:** o quadro só
+  sabe o que alguém digitou nele, e resposta que chegou por mensagem não
+  vira linha sozinha. Cada achado vira comentário na issue correspondente na
+  hora, com a data em que a resposta chegou — nunca fica só na conversa;
+  nome de pessoa de fora não atravessa para issue pública. **Onde a leitura
+  não couber — política da empresa, volume, canal corporativo —, quem filtra
+  é o dono:** ele traz o recorte na abertura e a sessão não vai atrás. Não é
+  perda; é a mesma fonte com outro portador. A minuta registra qual dos dois
+  caminhos valeu no dia.
 - **Os dois contadores da semana, lado a lado.** Entregas vistas por quem
   recebe (PR mesclado nos últimos sete dias em cada repositório de projeto)
-  e mudanças na camada (`git log --since='7 days ago' --oneline | wc -l` na
-  raiz da camada). A camada é meio; o termômetro é a entrega. Os dois lado a
-  lado é o que impede a ferramenta de virar o trabalho.
+  e mudanças na camada. **A camada não se conta pelo total do `git log`:**
+  esse número infla sozinho, porque artefato gerado obriga a regravar o
+  mesmo arquivo a cada parada, e mesclagem conta como trabalho sem ser.
+  Conte os commits que **não** revisitam arquivo já tocado na mesma semana:
+  é o que separa construção de retrabalho. A camada é meio; o termômetro é a
+  entrega. Os dois lado a lado é o que impede a ferramenta de virar o
+  trabalho.
 
 ## A pauta, nesta ordem
 
@@ -47,8 +64,9 @@ Despejar a saída dos comandos é o erro caro desta etapa.
    respostas não entra hoje.
 4. **Fechamento, 5 min.** A minuta, lida e gravada.
 
-A sessão avisa na metade do tempo e no fim. O dono estende dizendo; sem isso,
-acabou.
+A sessão avisa na metade do tempo e quando a régua estoura — avisar não é
+encerrar. **Sem plano do dia não há fechamento**, e o aviso vira uma pergunta:
+o que falta decidir para termos o plano? O dono encurta dizendo; a sessão, não.
 
 ## O pacote da noite
 
@@ -62,16 +80,16 @@ próxima parte da última minuta.
 
 ## Onde já há quem decida
 
-Onde a casa tem quem prioriza e quem lidera a técnica, a reunião é a
+Onde o repositório tem quem prioriza e quem lidera a técnica, a reunião é a
 preparação do dono: a sessão é o par sênior que traduz o pedido recebido nas
 três respostas, e a minuta é o que ele leva.
 
 ## A minuta
 
 Comentário novo no quadro, pelo instrumento que já existe:
-`python3 .agents/caixa/caixa.py relatar --corpo "..."`. Até quinze linhas:
+`python .agents/caixa/caixa.py relatar --corpo "..."`. Até quinze linhas:
 
-- Minuta de <data>
+- Minuta de `<data>`
 - Impedimentos: um por linha, cada um com o destino que ganhou
 - Entra hoje: uma linha por issue, com a verificação que diz pronto
 - Espera pelo dono: o link
@@ -80,6 +98,11 @@ Comentário novo no quadro, pelo instrumento que já existe:
   sairia mais barato. É o item 4 da `encerramento-de-sessao`, em uma linha,
   todo dia.
 - Próxima reunião: quando
+
+Ensaie antes de gravar, com `--ensaio`: o instrumento avisa palavra com
+dígito colado a letra, o erro mais comum de quem escreve número no meio da
+frase. Corrija e só então grave. Depois de gravar, releia o comentário no
+quadro: só é minuta o que está lá como você escreveu — regra 2.
 
 ## Pedidos de exemplo
 

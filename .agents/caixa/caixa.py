@@ -38,6 +38,12 @@ COMECO_DA_LINHA = re.compile(r"^- \*\*")
 PADRAO_DA_IDENTIDADE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 PADRAO_DA_DATA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ESPACO_DEMAIS = re.compile(r"\s+")
+PALAVRA_COM_DIGITO_COLADO = re.compile(r"\S*(?:[^\W\d_]\d|\d[^\W\d_])\S*")
+TRECHO_QUE_NAO_SE_LE = re.compile(r"`[^`]*`|https?://\S+")
+AVISO_DE_DIGITO_COLADO = (
+    "AVISO: {quantas} palavra(s) com dígito colado a letra — {exemplos}. "
+    "Se é engano de digitação, corrija antes de gravar; se é sigla ou "
+    "unidade, siga.\n")
 
 RECUSA_IDENTIDADE = (
     "erro de uso: a identidade {valor!r} não serve. Ela é a chave que faz o "
@@ -485,6 +491,15 @@ def podar(identidade: str, quando: str, cwd: str = "", motivo: str = "",
         registro_da_poda(a_linha(corpo, identidade), quando, motivo), ensaio)
 
 
+def aviso_de_digito_colado(corpo: str) -> str:
+    legivel = TRECHO_QUE_NAO_SE_LE.sub(" ", corpo)
+    coladas = sorted(set(PALAVRA_COM_DIGITO_COLADO.findall(legivel)))
+    if not coladas:
+        return ""
+    return AVISO_DE_DIGITO_COLADO.format(quantas=len(coladas),
+                                         exemplos=", ".join(coladas[:5]))
+
+
 def relatar(corpo: str, cwd: str = "", ensaio: bool = False,
             quadro: str = "") -> tuple:
     if not (corpo or "").strip():
@@ -493,14 +508,15 @@ def relatar(corpo: str, cwd: str = "", ensaio: bool = False,
     if erro:
         return 2, erro
     endereco = enderecos[0]
+    aviso = aviso_de_digito_colado(corpo)
     if ensaio:
-        return 0, RECADO_DO_ENSAIO_DO_RELATO.format(issue=endereco["issue"],
-                                                    corpo=corpo)
+        return 0, aviso + RECADO_DO_ENSAIO_DO_RELATO.format(
+            issue=endereco["issue"], corpo=corpo)
     berro = comentar(endereco, corpo)
     if berro:
         return 2, FALHA_AO_RELATAR.format(issue=endereco["issue"],
                                           motivo=berro)
-    return 0, RECADO_RELATADO.format(issue=endereco["issue"])
+    return 0, aviso + RECADO_RELATADO.format(issue=endereco["issue"])
 
 
 FALSO_GH = """import json
@@ -558,6 +574,15 @@ def testar() -> int:
     caso("identidade com maiúscula não serve",
          not identidade_serve("Prova"))
     caso("identidade vazia não serve", not identidade_serve(""))
+    caso("corpo com dígito colado a letra recebe aviso que nomeia a palavra",
+         "exatamente12pontos" in aviso_de_digito_colado(
+             "Entra hoje: exatamente12pontos e 3daPython"))
+    caso("corpo com os espaços no lugar não recebe aviso",
+         aviso_de_digito_colado(
+             "exatamente 12 pontos, 3 da Python, 16 PRs") == "")
+    caso("hash entre crases e link não contam como dígito colado",
+         aviso_de_digito_colado(
+             "commit `a41d2f25` em https://x.invalid/issues/315#c1") == "")
 
     posto = corpo_com(molde, um)
     caso("o achado posto vira uma linha no bloco",
