@@ -1,8 +1,20 @@
-<!-- GERADO de nucleo/regras.json e nucleo/vocabulario.json pelo `montar.py --sincronizar`. Editar aqui se perde. -->
+<!-- GERADO de nucleo/regras.json pelo `montar.py --sincronizar`. Editar aqui se perde. -->
 
 # Instruções para agentes
 
 Para qualquer agente de IA neste repositório.
+
+## Antes de qualquer pedido
+
+- Leia `.agents/prompts/bootstart.md` INTEIRO antes de escolher skill, abrir
+  arquivo ou responder: é o briefing da camada para qualquer agente — o que a
+  sessão vai encontrar, o que os ganchos recusam, e a tabela que diz o que
+  atende cada tipo de pedido. Pedido que já nomeia uma skill, um vizinho ou uma
+  issue não dispensa a leitura.
+- Depois rode `python .agents/camada/camada.py --abertura`, com a raiz por
+  extenso, e relate na primeira resposta o que ele acusou em falta — instrução,
+  servidor de contexto, endereço do quadro ou índice. Sessão que abre sem eles
+  trabalha com menos do que pensa ter.
 
 ## O repositório
 
@@ -64,8 +76,7 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 
 ## Os nomes
 
-O nome declara a responsabilidade da peça, em português puro. Os nomes
-aprovados, que toda peça NOVA usa: executor de roteiros, roteiro, evidência,
-verificação, aprovação manual, repositório, repositório vizinho. Onde o código
-ainda usar o nome velho, ele está esperando a renomeação — o par velho→novo, o
-sentido de cada um e as exceções estão em `nucleo/vocabulario.json`.
+O nome de uma peça declara a responsabilidade dela, em português comum. Use o
+nome que este repositório já usa para a coisa; não invente jargão nem sinônimo
+novo para o que já tem nome. Quem lê o nome tem de saber o que a peça faz sem
+abrir o arquivo.

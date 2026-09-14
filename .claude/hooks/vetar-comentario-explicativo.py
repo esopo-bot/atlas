@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import sys
@@ -17,6 +18,16 @@ ARQUIVO_DAS_DIRETIVAS = ".claude/diretivas-de-ferramenta.txt"
 MARCA_DE_COMENTARIO = "#"
 SEM_DIRETIVAS = ()
 
+EXTENSAO_DO_PYTHON = ".py"
+ASPAS = ('"', "'")
+ASPAS_TRIPLAS = ('"""', "'''")
+MARCA_DE_REPOSITORIO_VIZINHO = ".git"
+ABERTURAS_DE_CORPO = ("def ", "async def ", "class ")
+FIM_DE_ABERTURA = ":"
+FIM_DE_ASSINATURA_QUEBRADA = "):"
+NOS_QUE_LEVAM_DOCSTRING = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                           ast.ClassDef)
+
 FERRAMENTA_DE_ESCRITA_INTEIRA = "Write"
 FERRAMENTA_DE_UMA_EDICAO = "Edit"
 FERRAMENTA_DE_VARIAS_EDICOES = "MultiEdit"
@@ -26,6 +37,7 @@ CAMPO_DO_TEXTO_VELHO = "old_string"
 CAMPO_DO_TEXTO_NOVO = "new_string"
 CAMPO_DAS_EDICOES = "edits"
 
+MARCA_DE_REPOSITORIO = ".git"
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 
@@ -68,6 +80,22 @@ RECUSA = (
 APRENDIZADO = (
     "comentário em código é recusado: o nome diz o que o comentário "
     "diria, e o porquê vai para a issue ou para a mensagem do commit."
+)
+RECUSA_DE_DOCSTRING = (
+    "Regra 14 da camada: esta escrita acrescenta uma docstring em {}, que "
+    "mora na raiz da camada:\n"
+    "    {}\n"
+    "Docstring é comentário explicativo na régua desta casa: o nome tem de "
+    "dizer o que ela diria. Renomeie o módulo, a classe ou a função até o "
+    "nome contar a história, ou extraia o trecho para uma função com nome "
+    "que a conte. O POR QUÊ de uma decisão não mora no código: mora na "
+    "issue, na mensagem do commit ou em `conhecimento/`. Fora da raiz da "
+    "camada, e dentro de repositório vizinho (projetos/<nome>), docstring é "
+    "normal e passa."
+)
+APRENDIZADO_DA_DOCSTRING = (
+    "docstring em código da camada é recusada como comentário: o nome diz o "
+    "que ela diria, e o porquê vai para a issue ou para a mensagem do commit."
 )
 SEM_A_LISTA = (
     "nenhuma — {} não foi lida, e cerca sem a lista dela nega tudo em vez "
@@ -159,6 +187,108 @@ def texto_no_disco(caminho: str, raiz: Path) -> str:
         return ""
 
 
+def pastas_entre_a_raiz_e_o_arquivo(caminho: str, raiz: Path):
+    alvo = Path(caminho)
+    if not alvo.is_absolute():
+        alvo = raiz / alvo
+    try:
+        dentro = Path(os.path.normcase(str(alvo.resolve()))).relative_to(
+            Path(os.path.normcase(str(raiz.resolve()))))
+    except (ValueError, OSError):
+        return None
+    return dentro.parts[:-1]
+
+
+def dentro_da_raiz_da_camada(caminho: str, raiz: Path) -> bool:
+    partes = pastas_entre_a_raiz_e_o_arquivo(caminho, raiz)
+    if partes is None:
+        return False
+    pasta = raiz
+    for parte in partes:
+        pasta = pasta / parte
+        if (pasta / MARCA_DE_REPOSITORIO_VIZINHO).exists():
+            return False
+    return True
+
+
+def tem_linha_que_comeca_com_aspas(texto: str) -> bool:
+    return any(l.strip().startswith(ASPAS) for l in texto.splitlines())
+
+
+def tem_aspas_triplas(texto: str) -> bool:
+    return any(aspas in texto for aspas in ASPAS_TRIPLAS)
+
+
+def abre_corpo(linha_enxuta: str) -> bool:
+    if not linha_enxuta.endswith(FIM_DE_ABERTURA):
+        return False
+    return (linha_enxuta.startswith(ABERTURAS_DE_CORPO)
+            or linha_enxuta.endswith(FIM_DE_ASSINATURA_QUEBRADA))
+
+
+def docstring_no_fragmento(velho: str, novo: str) -> str:
+    ja_estavam = {linha.strip() for linha in velho.splitlines()}
+    corpo_aberto, primeira = False, True
+    for linha in novo.splitlines():
+        enxuta = linha.strip()
+        if not enxuta:
+            continue
+        acrescentada = enxuta not in ja_estavam
+        logo_apos_abertura = corpo_aberto and enxuta.startswith(ASPAS)
+        abre_o_corpo_do_fragmento = (primeira and linha != linha.lstrip()
+                                     and enxuta.startswith(ASPAS_TRIPLAS))
+        if acrescentada and (logo_apos_abertura or abre_o_corpo_do_fragmento):
+            return enxuta
+        primeira = False
+        corpo_aberto = abre_corpo(enxuta)
+    return PASSA
+
+
+def docstrings_de(texto: str):
+    try:
+        arvore = ast.parse(texto)
+    except (SyntaxError, ValueError):
+        return None
+    return [ast.get_docstring(no, clean=False)
+            for no in ast.walk(arvore)
+            if isinstance(no, NOS_QUE_LEVAM_DOCSTRING)
+            and ast.get_docstring(no, clean=False) is not None]
+
+
+def primeira_linha_da_docstring(dita: str) -> str:
+    primeira = (dita.strip().splitlines() or [""])[0].strip()
+    return ASPAS_TRIPLAS[0] + primeira + ASPAS_TRIPLAS[0]
+
+
+def docstring_pela_arvore(caminho: str, velho: str, novo: str,
+                          raiz: Path) -> str:
+    antes = texto_no_disco(caminho, raiz)
+    if velho not in antes:
+        return PASSA
+    novas = docstrings_de(antes.replace(velho, novo, 1))
+    if novas is None:
+        return PASSA
+    antigas = docstrings_de(antes) or []
+    for dita in novas:
+        if dita not in antigas:
+            return primeira_linha_da_docstring(dita)
+    return PASSA
+
+
+def docstring_acrescentada(caminho: str, velho: str, novo: str,
+                           raiz: Path) -> str:
+    if Path(caminho).suffix.lower() != EXTENSAO_DO_PYTHON:
+        return PASSA
+    if not tem_linha_que_comeca_com_aspas(novo):
+        return PASSA
+    if not dentro_da_raiz_da_camada(caminho, raiz):
+        return PASSA
+    no_fragmento = docstring_no_fragmento(velho, novo)
+    if no_fragmento or not tem_aspas_triplas(novo):
+        return no_fragmento
+    return docstring_pela_arvore(caminho, velho, novo, raiz)
+
+
 def escritas_com_texto_do_pedido(entrada: dict, raiz: Path) -> list:
     ferramenta = entrada.get("tool_name", "")
     dado = entrada.get("tool_input", {}) or {}
@@ -177,6 +307,20 @@ def escritas_com_texto_do_pedido(entrada: dict, raiz: Path) -> list:
         return [(caminho, dado.get(CAMPO_DO_TEXTO_VELHO, ""),
                  dado.get(CAMPO_DO_TEXTO_NOVO, ""))]
     return []
+
+
+def raiz_do_alvo(caminho: str, declarada: Path) -> Path:
+    alvo = Path(str(caminho).replace("\\", "/"))
+    if not alvo.is_absolute():
+        return declarada
+    try:
+        alvo.resolve().relative_to(declarada.resolve())
+        return declarada
+    except (ValueError, OSError):
+        pass
+    donas = [p for p in alvo.resolve().parents
+             if (p / MARCA_DE_REPOSITORIO).exists()]
+    return donas[-1] if donas else declarada
 
 
 def raiz_do_projeto_nunca_o_cwd() -> Path:
@@ -231,6 +375,12 @@ def decidir() -> int:
                 Path(caminho).name, linha,
                 diretivas_para_a_mensagem(diretivas), ARQUIVO_DAS_DIRETIVAS)
                 + MANDA_GRAVAR.format(APRENDIZADO))
+        dita = docstring_acrescentada(caminho, velho, novo,
+                                      raiz_do_alvo(caminho, raiz))
+        if dita:
+            return vetar(entrada, RECUSA_DE_DOCSTRING.format(
+                Path(caminho).name, dita)
+                + MANDA_GRAVAR.format(APRENDIZADO_DA_DOCSTRING))
     return SILENCIO
 
 
@@ -434,6 +584,130 @@ def testar() -> int:
         caso("edição malformada no MultiEdit não derruba o gancho",
              escritas({"tool_name": "MultiEdit", "tool_input": {
                  "file_path": "src/laco.ts", "edits": ["nada"]}}) == [])
+
+    with tempfile.TemporaryDirectory(prefix="veto-docstring-") as tmp, \
+            tempfile.TemporaryDirectory(prefix="veto-docstring-fora-") as fora:
+        raiz = (Path(tmp).resolve() / "arvore")
+        raiz.mkdir()
+        (raiz / ".git").mkdir()
+        (raiz / "app").mkdir()
+        vizinho = raiz / "projetos" / "vizinho"
+        vizinho.mkdir(parents=True)
+        (vizinho / ".git").mkdir()
+        com_docstring = 'def somar(itens):\n    """soma os itens"""\n    return sum(itens)\n'
+        de_modulo = '"""o módulo que conta"""\nimport os\n'
+        sem_docstring = "def somar(itens):\n    return sum(itens)\n"
+
+        def docstring(caminho, velho, novo):
+            return docstring_acrescentada(caminho, velho, novo, raiz)
+
+        caso("docstring de função em arquivo da raiz da camada barra, e a "
+             "recusa mostra a linha",
+             docstring("app/conta.py", "", com_docstring)
+             == '"""soma os itens"""')
+        caso("docstring de módulo na raiz da camada barra — o ritual a "
+             "reprovava e a cerca deixava passar",
+             docstring("app/conta.py", "", de_modulo)
+             == '"""o módulo que conta"""')
+        caso("caminho absoluto dentro da raiz também é território da camada",
+             docstring(str(raiz / "app" / "conta.py"), "", com_docstring)
+             == '"""soma os itens"""')
+        caso("docstring dentro de repositório vizinho (projetos/<nome>, com "
+             ".git próprio) passa — lá docstring é normal",
+             docstring("projetos/vizinho/x.py", "", com_docstring) == PASSA)
+        arvore = raiz / "projetos" / "arvore-de-trabalho"
+        arvore.mkdir(parents=True)
+        (arvore / MARCA_DE_REPOSITORIO_VIZINHO).write_text(
+            "gitdir: /outro/lugar/.git/worktrees/arvore-de-trabalho\n",
+            encoding="utf-8")
+        caso("vizinho cujo .git é ARQUIVO — árvore de trabalho do git, ou "
+             "submódulo — também é território de terceiro: o julgamento "
+             "pergunta se o caminho EXISTE, nunca se é pasta",
+             docstring("projetos/arvore-de-trabalho/x.py", "", com_docstring)
+             == PASSA
+             and not dentro_da_raiz_da_camada(
+                 "projetos/arvore-de-trabalho/x.py", raiz))
+        ao_lado = raiz.parent / (raiz.name + "-ao-lado")
+        (ao_lado / "app").mkdir(parents=True, exist_ok=True)
+        (ao_lado / MARCA_DE_REPOSITORIO).write_text(
+            "gitdir: /outro/lugar\n", encoding="utf-8")
+        vizinho_de_la = ao_lado / "projetos" / "vizinho"
+        vizinho_de_la.mkdir(parents=True, exist_ok=True)
+        (vizinho_de_la / MARCA_DE_REPOSITORIO).mkdir(exist_ok=True)
+        caso("docstring em OUTRA árvore de trabalho da camada barra — a raiz "
+             "sai do alvo, e antes disso a cerca calava em toda worktree",
+             docstring_acrescentada(
+                 str(ao_lado / "app" / "conta.py"), "", com_docstring,
+                 raiz_do_alvo(str(ao_lado / "app" / "conta.py"), raiz)))
+        caso("e o vizinho com git próprio DENTRO da outra árvore continua "
+             "livre: território de terceiro não muda de dono por estar numa "
+             "worktree",
+             not docstring_acrescentada(
+                 str(vizinho_de_la / "x.py"), "", com_docstring,
+                 raiz_do_alvo(str(vizinho_de_la / "x.py"), raiz)))
+
+        caso("docstring em caminho fora da raiz da camada passa",
+             docstring(str(Path(fora) / "x.py"), "", com_docstring) == PASSA)
+        caso("código sem docstring na raiz passa",
+             docstring("app/conta.py", "", sem_docstring) == PASSA)
+        caso("`# noqa` continua passando: não é docstring nem comentário "
+             "barrado",
+             docstring("app/conta.py", "", "import os  # noqa: F401\n")
+             == PASSA
+             and not comentario_acrescentado(
+                 "app/conta.py", "", "import os  # noqa: F401\n", diretivas))
+        caso("docstring em arquivo que não é Python passa",
+             docstring("app/LEIAME.md", "", com_docstring) == PASSA)
+        caso("string tripla atribuída a um nome não é docstring",
+             docstring("app/conta.py", "",
+                       'TEXTO = """\nlinha um\nlinha dois\n"""\n') == PASSA)
+        no_disco = raiz / "app" / "conta.py"
+        no_disco.write_text(sem_docstring, encoding="utf-8")
+        caso("Edit que acrescenta docstring a função que já está no disco "
+             "barra — o texto inteiro é remontado e lido pela árvore",
+             docstring("app/conta.py", "def somar(itens):\n    return",
+                       'def somar(itens):\n    """soma"""\n    return')
+             == '"""soma"""')
+        caso("Edit cujo texto velho não casa com o disco cai na heurística: "
+             "aspas logo após a linha de def barram",
+             docstring("app/conta.py", "    return 1",
+                       'def dobrar(x):\n    """dobra"""\n    return 2 * x')
+             == '"""dobra"""')
+        no_disco.write_text("import os\n" + sem_docstring, encoding="utf-8")
+        caso("Edit que planta docstring de módulo antes do primeiro import "
+             "barra pela árvore — a heurística não enxerga o topo do arquivo "
+             "num fragmento sem recuo",
+             docstring("app/conta.py", "import os",
+                       '"""o módulo"""\nimport os') == '"""o módulo"""')
+        caso("fragmento que é corpo de função e abre com aspas triplas barra",
+             docstring("app/conta.py", "    return sum(itens)",
+                       '    """soma tudo"""\n    return sum(itens)')
+             == '"""soma tudo"""')
+        caso("docstring de uma linha com aspas simples logo após o def barra",
+             docstring("app/conta.py", "",
+                       "def f():\n    'explica'\n    return 1\n")
+             == "'explica'")
+        no_disco.write_text(
+            'MOLDE = """\nlinha velha\n"""\ndef f():\n    return 1\n',
+            encoding="utf-8")
+        caso("Edit que só troca o miolo de uma string tripla atribuída passa "
+             "— o texto remontado não ganhou docstring nenhuma",
+             docstring("app/conta.py", '"""\nlinha velha\n"""',
+                       '"""\nlinha nova\n"""') == PASSA)
+        no_disco.write_text(com_docstring, encoding="utf-8")
+        caso("Write que repete a docstring que JÁ estava no disco não é "
+             "acréscimo",
+             docstring("app/conta.py", com_docstring, com_docstring) == PASSA)
+        caso("a recusa da docstring nomeia a regra 14, diz que é comentário "
+             "na régua da casa e manda gravar o aprendizado",
+             "Regra 14" in RECUSA_DE_DOCSTRING
+             and "comentário explicativo" in RECUSA_DE_DOCSTRING
+             and "regra 4" in MANDA_GRAVAR.format(APRENDIZADO_DA_DOCSTRING))
+        caso("a raiz do julgamento é a da camada, nunca o cwd: arquivo dentro "
+             "dela é território mesmo com o processo rodando em outra pasta",
+             dentro_da_raiz_da_camada("app/conta.py", raiz)
+             and not dentro_da_raiz_da_camada("projetos/vizinho/x.py", raiz)
+             and not dentro_da_raiz_da_camada(str(Path(fora) / "x.py"), raiz))
 
     falhas += [FALHA_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]

@@ -1,7 +1,7 @@
 # Prove que você lê a camada — antes de trabalhar
 
-Prompt para QUALQUER agente de IA aberto na raiz de um repositório que
-instalou a camada: cole inteiro e deixe o agente responder. Serve para o
+Receita para QUALQUER agente de IA aberto na raiz de um repositório que
+instalou a camada: peça ao agente que a siga inteira e responda. Serve para o
 agente de terminal, o assistente do editor e o Claude Code. O objetivo é um
 só: o agente prova, com saída colada, que enxerga as instruções e as skills
 que este repositório carrega — ou diz exatamente o que não enxerga.
@@ -9,8 +9,11 @@ que este repositório carrega — ou diz exatamente o que não enxerga.
 ## O que você faz, nesta ordem
 
 1. **Liste as skills que você enxerga agora**, pelo nome, sem abrir pasta
-   nenhuma. Depois rode `ls .agents/skills` e compare: o que está na pasta
-   e não apareceu na sua lista é skill que você NÃO lê. Cole as duas listas.
+   nenhuma. Depois rode `ls .claude/skills` — a cópia que o runtime carrega,
+   não a fonte em `.agents/skills` — e compare: o que está na pasta e não
+   apareceu na sua lista é skill que você NÃO lê. Cole as duas listas. Se a
+   cópia e a fonte divergem, isso é defeito de sincronização, não de
+   leitura: rode `python montar.py --sincronizar` antes de julgar.
 2. **Responda sem abrir arquivo:** quais são as nove barreiras do portão da
    camada, na ordem? Só depois abra `.agents/skills/portao/SKILL.md` e
    confira. Acertou os nove nomes na ordem: você leu a skill. Inventou ou

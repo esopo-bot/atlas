@@ -66,7 +66,7 @@ TESTE_COMPORTAMENTO = "  COMPORTAMENTO — {}"
 RESUMO_OK = "OK: {} casos — {} barrados, {} liberados"
 
 
-def raiz_do_projeto() -> Path:
+def raiz_da_camada() -> Path:
     posta = os.environ.get(VARIAVEL_DA_RAIZ)
     if posta and (Path(posta) / ARQUIVO_CONFIGURACAO).is_file():
         return Path(posta)
@@ -156,7 +156,7 @@ def decidir() -> int:
             ValueError) as falha:
         return recusa_por_nao_entender(falha)
 
-    raiz = raiz_do_projeto()
+    raiz = raiz_da_camada()
     acao = acao_ja_autorizada(texto_das_perguntas(entrada), autorizacoes(raiz))
     if not acao:
         return SILENCIO

@@ -41,7 +41,7 @@ def rodar(argumentos: list, ambiente: dict = None, entrada=None):
     try:
         return subprocess.run(
             _comando() + argumentos, input=entrada, capture_output=True,
-            text=True, timeout=TEMPO_DO_GH,
+            text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
             env=dict(os.environ, **(ambiente or {})))
     except (OSError, subprocess.SubprocessError):
         return None

@@ -1,4 +1,5 @@
 import json
+import shlex
 import os
 import re
 import shutil
@@ -56,6 +57,17 @@ FECHO_COM_RECEITA = "A receita para repor: {}"
 FECHO_SEM_RECEITA = (
     "Nenhuma receita declarada — a chave `receita` do {} pode apontar a "
     "página que ensina a repor.")
+ARQUIVO_SETTINGS = ".claude/settings.json"
+CHAVE_DOS_GANCHOS = "hooks"
+CHAVE_DO_COMANDO = "command"
+SHELLS_QUE_LANCAM = ("bash", "bash.exe", "sh", "sh.exe", "pwsh", "pwsh.exe",
+                     "powershell", "powershell.exe", "cmd", "cmd.exe")
+PROBLEMA_INTERPRETADOR_DO_GANCHO = (
+    "o interpretador {0!r}, que as linhas de gancho do settings.json chamam "
+    "DIRETO, não responde nesta máquina — então NENHUMA cerca roda, e o que "
+    "elas barram passa. O nome foi medido na instalação e não é fato do "
+    "mundo: se o Python mudou de lugar, rode `python montar.py --atualizar` "
+    "para remedir, ou troque o nome na linha do gancho")
 AVISO = (
     "AVISO do gancho verificar-ambiente: esta máquina não tem tudo o que o "
     "repositório declara precisar. Perda de migração é silenciosa — este é o "
@@ -117,6 +129,46 @@ def ler_declaracao(caminho: Path) -> tuple:
     if not isinstance(dados, dict):
         return {}, ERRO_TOPO_NAO_E_OBJETO
     return dados, ""
+
+
+def linhas_de_gancho_do_settings(raiz: Path) -> list:
+    try:
+        dado = json.loads(
+            (raiz / ARQUIVO_SETTINGS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    ganchos = dado.get(CHAVE_DOS_GANCHOS) or {}
+    if not isinstance(ganchos, dict):
+        return []
+    return [gancho.get(CHAVE_DO_COMANDO, "")
+            for blocos in ganchos.values() if isinstance(blocos, list)
+            for bloco in blocos if isinstance(bloco, dict)
+            for gancho in (bloco.get(CHAVE_DOS_GANCHOS) or [])
+            if isinstance(gancho, dict)]
+
+
+def interpretador_que_o_gancho_chama(linha: str) -> str:
+    partes = shlex.split(linha, posix=False)
+    if not partes:
+        return ""
+    primeiro = partes[0].strip('"')
+    if Path(primeiro).name.lower() in SHELLS_QUE_LANCAM:
+        return ""
+    return primeiro
+
+
+def interpretadores_dos_ganchos(raiz: Path) -> list:
+    achados = []
+    for linha in linhas_de_gancho_do_settings(raiz):
+        nome = interpretador_que_o_gancho_chama(linha)
+        if nome and nome not in achados:
+            achados.append(nome)
+    return achados
+
+
+def interpretador_do_gancho_que_nao_roda(raiz: Path) -> list:
+    return [nome for nome in interpretadores_dos_ganchos(raiz)
+            if not responde_python_3(nome)]
 
 
 def candidatos_do_lancador(raiz: Path) -> tuple:
@@ -183,6 +235,9 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
                 problemas.append(problema_da_declaracao(
                     tipo, valor, caminho_path))
 
+    for nome in interpretador_do_gancho_que_nao_roda(raiz):
+        problemas.append(PROBLEMA_INTERPRETADOR_DO_GANCHO.format(nome))
+
     if (raiz / ARQUIVO_ANTIGO).is_file():
         problemas.append(PROBLEMA_ENDERECO_ANTIGO.format(
             ARQUIVO_ANTIGO, ARQUIVO_AMBIENTE))
@@ -214,6 +269,12 @@ def main() -> int:
     return SILENCIO
 
 
+def gancho_que_chama(interpretador: str) -> str:
+    comando = interpretador + ' "${CLAUDE_PROJECT_DIR}/.claude/hooks/x.py"'
+    return json.dumps({CHAVE_DOS_GANCHOS: {"PreToolUse": [
+        {CHAVE_DOS_GANCHOS: [{"type": "command",
+                              CHAVE_DO_COMANDO: comando}]}]}})
+
 ACUSA = [
     ("variável do .mcp.json ausente",
      dict(mcp='{"x": "${TAMBOR_MAIOR}"}')),
@@ -234,6 +295,12 @@ ACUSA = [
     ("interpretador que o lançador lista, existe no PATH e não roda — o "
      "atalho da loja",
      dict(declarado={"comando": ["python3"]})),
+    ("o interpretador que a linha de gancho chama DIRETO não roda — sem ele "
+     "nenhuma cerca roda, e o que elas barram passa",
+     dict(settings=gancho_que_chama("python3"))),
+    ("nem o caminho absoluto que apodreceu escapa",
+     dict(settings=gancho_que_chama(
+         "C:/Python-que-mudou-de-lugar/python.exe"))),
 ]
 
 CALA = [
@@ -257,6 +324,14 @@ CALA = [
      dict(declarado={"comando": [], "pasta": [], "variavel": []})),
     ("interpretador que o lançador lista e roda um Python 3",
      dict(declarado={"comando": ["python"]})),
+    ("linha de gancho que chama um Python 3 que responde não acusa nada",
+     dict(settings=gancho_que_chama("python"))),
+    ("linha de gancho pelo LANÇADOR não é cobrada por interpretador — ali "
+     "quem escolhe é o bash, a cada execução",
+     dict(settings=gancho_que_chama(
+         'bash \\"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\\"'))),
+    ("settings.json ilegível não vira acusação de interpretador",
+     dict(settings="{ isto nao e json")),
 ]
 
 
@@ -296,9 +371,11 @@ def testar() -> int:
 
         ambiente = {"SINO_DE_VENTO_TOKEN": "presente"}
 
-        def faltas_do_caso(mcp=None, declarado=None, antigo=None):
+        def faltas_do_caso(mcp=None, declarado=None, antigo=None,
+                           settings=None):
             for nome, conteudo in ((ARQUIVO_MCP, mcp),
                                    (ARQUIVO_AMBIENTE, declarado),
+                                   (ARQUIVO_SETTINGS, settings),
                                    (ARQUIVO_ANTIGO, antigo)):
                 alvo = raiz / nome
                 alvo.parent.mkdir(parents=True, exist_ok=True)

@@ -1,13 +1,18 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 BANDEIRA_DE_TESTE = "--testar"
+BANDEIRA_DA_SAUDE = "--saude"
 USO = ("sobe as duas peças do índice e liga a placa de vídeo quando houver "
        "uma que o docker entregue. Sem placa, sobe igual, em CPU — a decisão "
-       "é medida, nunca perguntada a quem instala")
+       "é medida, nunca perguntada a quem instala. Com --saude ele não sobe "
+       "nada: sonda as duas peças por HTTP e diz o que está de pé")
 
 PASTA_DO_MODULO = ".agents/indice"
 COMPOSE = "docker-compose.yml"
@@ -23,6 +28,17 @@ COMPOR = (DOCKER, "compose")
 TEMPO_DA_SONDA = 120
 TEMPO_DE_SUBIR = 900
 TEMPO_DO_MODELO = 3600
+SEPARADOR_DA_ETIQUETA = ":"
+
+MAQUINA_LOCAL = "127.0.0.1"
+CHAVE_DA_PORTA_DE_SAUDE = "INDICE_PORTA_SAUDE"
+CHAVE_DA_PORTA_DE_EMBEDDINGS = "INDICE_PORTA_OLLAMA"
+PORTA_DE_SAUDE_PADRAO = "9091"
+PORTA_DE_EMBEDDINGS_PADRAO = "11434"
+CAMINHO_DA_SAUDE = "/healthz"
+CAMINHO_DOS_MODELOS = "/api/tags"
+TEMPO_DA_SONDA_HTTP = 10
+LETRAS_DO_ERRO = 120
 
 RECUSA_SEM_COMPOSE = ("não achei {} — instale o módulo antes: "
                       "python montar.py --modulo indice")
@@ -44,6 +60,13 @@ FALHOU_SUBIR = "o docker compose não subiu: {}"
 FALHOU_MODELO = ("o modelo {} não baixou: {}. As peças estão de pé; repita "
                  "o passo do modelo quando resolver")
 ENSAIO = "ENSAIO — nada sobe. A decisão medida seria:"
+VETORES_OK = "vetores ok — {} respondeu"
+VETORES_FORA = "vetores FORA — {} não respondeu: {}"
+EMBEDDINGS_OK = "embeddings ok — {} tem o modelo {}"
+EMBEDDINGS_SEM_MODELO = ("embeddings de pé em {}, SEM o modelo {} — quem "
+                         "indexa falharia depois, longe da causa. Rode "
+                         "subir.py de novo, que ele baixa o modelo")
+EMBEDDINGS_FORA = "embeddings FORA — {} não respondeu: {}"
 
 
 def caminho_do_modulo(cwd: str) -> Path:
@@ -57,8 +80,6 @@ def recusa_da_instalacao(pasta: Path) -> str:
 
 
 def rodar(comando, teto: int):
-    """Devolve (deu_certo, saida). Falha do docker é dado, nunca exceção
-    solta: quem chama decide o que fazer com ela."""
     try:
         pronto = subprocess.run(comando, capture_output=True, text=True,
                                 timeout=teto, encoding="utf-8",
@@ -69,14 +90,60 @@ def rodar(comando, teto: int):
     return pronto.returncode == 0, saida.strip()
 
 
+def uma_linha(texto: str) -> str:
+    return " ".join((texto or "").split())[:LETRAS_DO_ERRO]
+
+
+def nome_do_modelo(modelo: str) -> str:
+    return modelo.split(SEPARADOR_DA_ETIQUETA)[0]
+
+
+def sondar(url: str, tempo: int = TEMPO_DA_SONDA_HTTP) -> tuple:
+    try:
+        with urllib.request.urlopen(url, timeout=tempo) as resposta:
+            return True, resposta.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError, ValueError) as erro:
+        return False, str(erro)
+
+
+def porta_declarada(ambiente: dict, chave: str, padrao: str) -> str:
+    pedida = str((ambiente or {}).get(chave) or padrao)
+    return pedida if pedida.isdigit() else padrao
+
+
+def url_da_peca(ambiente: dict, chave: str, padrao: str,
+                caminho: str) -> str:
+    porta = porta_declarada(ambiente, chave, padrao)
+    return f"http://{MAQUINA_LOCAL}:{porta}{caminho}"
+
+
+def saude(ambiente: dict, modelo: str, sonda=sondar) -> int:
+    vetores = url_da_peca(ambiente, CHAVE_DA_PORTA_DE_SAUDE,
+                          PORTA_DE_SAUDE_PADRAO, CAMINHO_DA_SAUDE)
+    de_pe, dito = sonda(vetores)
+    print(VETORES_OK.format(vetores) if de_pe
+          else VETORES_FORA.format(vetores, uma_linha(dito)))
+    saudaveis = de_pe
+    modelos = url_da_peca(ambiente, CHAVE_DA_PORTA_DE_EMBEDDINGS,
+                          PORTA_DE_EMBEDDINGS_PADRAO, CAMINHO_DOS_MODELOS)
+    de_pe, dito = sonda(modelos)
+    if not de_pe:
+        print(EMBEDDINGS_FORA.format(modelos, uma_linha(dito)))
+        saudaveis = False
+    elif nome_do_modelo(modelo) not in dito:
+        print(EMBEDDINGS_SEM_MODELO.format(modelos, modelo))
+        saudaveis = False
+    else:
+        print(EMBEDDINGS_OK.format(modelos, modelo))
+    return 0 if saudaveis else 1
+
+
 def docker_responde(executor=rodar) -> tuple:
     return executor((DOCKER, "version", "--format", "{{.Server.Version}}"),
                     TEMPO_DA_SONDA)
 
 
 def imagem_de_quem_gera_os_vetores(pasta: Path, executor=rodar) -> str:
-    """Lê a imagem do próprio compose, para sondar a placa com ela em vez de
-    baixar uma imagem só para a sonda."""
     deu, saida = executor(COMPOR + ("-f", str(pasta / COMPOSE),
                                     "config", "--format", "json"),
                           TEMPO_DA_SONDA)
@@ -91,9 +158,6 @@ def imagem_de_quem_gera_os_vetores(pasta: Path, executor=rodar) -> str:
 
 
 def a_placa_chega_no_conteiner(imagem: str, executor=rodar) -> tuple:
-    """A pergunta certa não é se a máquina tem placa, e sim se o docker
-    consegue entregá-la: runtime registrado e driver respondendo são coisas
-    diferentes, e só o contêiner de verdade separa as duas."""
     if not imagem:
         return False, "não consegui ler a imagem do compose"
     return executor((DOCKER, "run", "--rm", "--gpus", "all",
@@ -121,7 +185,7 @@ def comando_de_subir(arquivos: list) -> tuple:
 def modelo_ja_esta(modelo: str, executor=rodar) -> bool:
     deu, saida = executor((DOCKER, "exec", CONTAINER_DA_PLACA,
                            "ollama", "list"), TEMPO_DA_SONDA)
-    return deu and modelo.split(":")[0] in saida
+    return deu and nome_do_modelo(modelo) in saida
 
 
 def baixar_o_modelo(modelo: str, executor=rodar) -> tuple:
@@ -165,6 +229,12 @@ def subir(cwd: str, modelo: str, ensaio: bool, executor=rodar) -> int:
             return 1
     print(PRONTO.format(PASTA_DO_MODULO))
     return 0
+
+
+RESPOSTA_OK = 200
+CORPO_DA_SAUDE_DE_MENTIRA = "OK"
+CORPO_COM_O_MODELO = '{"models": [{"name": "nomic-embed-text:latest"}]}'
+CORPO_SEM_O_MODELO = '{"models": [{"name": "outro-modelo:latest"}]}'
 
 
 def testar() -> int:
@@ -296,6 +366,77 @@ def testar() -> int:
              "nunca e sim",
              a_placa_chega_no_conteiner("")[0] is False)
 
+        import http.server
+        import threading
+
+        def peca_de_mentira(modelos: str):
+            class Peca(http.server.BaseHTTPRequestHandler):
+                def do_GET(atendente) -> None:
+                    corpo = (modelos if atendente.path == CAMINHO_DOS_MODELOS
+                             else CORPO_DA_SAUDE_DE_MENTIRA).encode("utf-8")
+                    atendente.send_response(RESPOSTA_OK)
+                    atendente.send_header("Content-Length", str(len(corpo)))
+                    atendente.end_headers()
+                    atendente.wfile.write(corpo)
+
+                def log_message(atendente, *quaisquer) -> None:
+                    return None
+
+            casa = http.server.HTTPServer((MAQUINA_LOCAL, 0), Peca)
+            threading.Thread(target=casa.serve_forever, daemon=True).start()
+            return casa
+
+        def ambiente_da_porta(casa) -> dict:
+            porta = str(casa.server_address[1])
+            return {CHAVE_DA_PORTA_DE_SAUDE: porta,
+                    CHAVE_DA_PORTA_DE_EMBEDDINGS: porta}
+
+        def o_que_a_saude_diz(ambiente: dict) -> tuple:
+            dito = io.StringIO()
+            with contextlib.redirect_stdout(dito):
+                saida = saude(ambiente, MODELO_PADRAO)
+            return saida, dito.getvalue()
+
+        caso("a sonda fala HTTP pela biblioteca padrao: na maquina desta "
+             "receita o `curl` esta na lista de negacao, e prova que depende "
+             "de binario externo nao roda la",
+             "urlopen" in sondar.__code__.co_names
+             and "subprocess" not in sondar.__code__.co_names)
+        caso("porta declarada por variavel substitui a padrao, como no "
+             "compose; variavel com lixo cai na padrao em vez de estourar",
+             url_da_peca({CHAVE_DA_PORTA_DE_SAUDE: "19091"},
+                         CHAVE_DA_PORTA_DE_SAUDE, PORTA_DE_SAUDE_PADRAO,
+                         CAMINHO_DA_SAUDE).endswith(
+                             f":19091{CAMINHO_DA_SAUDE}")
+             and url_da_peca({CHAVE_DA_PORTA_DE_SAUDE: "abc"},
+                             CHAVE_DA_PORTA_DE_SAUDE, PORTA_DE_SAUDE_PADRAO,
+                             CAMINHO_DA_SAUDE).endswith(
+                                 f":{PORTA_DE_SAUDE_PADRAO}"
+                                 f"{CAMINHO_DA_SAUDE}"))
+
+        de_pe = peca_de_mentira(CORPO_COM_O_MODELO)
+        ambiente_de_pe = ambiente_da_porta(de_pe)
+        saida, dito = o_que_a_saude_diz(ambiente_de_pe)
+        caso("porta que responde com o modelo na lista: as duas pecas "
+             "passam e a saida e 0",
+             saida == 0 and "vetores ok" in dito and "embeddings ok" in dito)
+
+        sem_modelo = peca_de_mentira(CORPO_SEM_O_MODELO)
+        saida, dito = o_que_a_saude_diz(ambiente_da_porta(sem_modelo))
+        caso("embeddings de pe SEM o modelo nao e saude: quem indexa "
+             "falharia depois, longe da causa",
+             saida == 1 and "SEM o modelo" in dito)
+        sem_modelo.shutdown()
+        sem_modelo.server_close()
+
+        de_pe.shutdown()
+        de_pe.server_close()
+        saida, dito = o_que_a_saude_diz(ambiente_de_pe)
+        caso("porta fechada acusa FORA e sai 1 — silencio aqui viraria "
+             "verde de quem nao olhou",
+             saida == 1 and "vetores FORA" in dito
+             and "embeddings FORA" in dito)
+
     print(f"{'OK' if not falhou else 'FALHOU'}: {passou + falhou} casos")
     return 1 if falhou else 0
 
@@ -307,6 +448,9 @@ def montar_parser() -> argparse.ArgumentParser:
                         help="modelo que gera os vetores")
     parser.add_argument("--ensaio", action="store_true",
                         help="mostra a decisão e o comando, sem subir")
+    parser.add_argument(BANDEIRA_DA_SAUDE, action="store_true",
+                        help="sonda as duas peças por HTTP e diz o que está "
+                             "de pé, sem subir nada")
     parser.add_argument(BANDEIRA_DE_TESTE, action="store_true")
     return parser
 
@@ -315,6 +459,8 @@ def main() -> int:
     if BANDEIRA_DE_TESTE in sys.argv[1:]:
         return testar()
     a = montar_parser().parse_args()
+    if a.saude:
+        return saude(os.environ, a.modelo)
     return subir(a.cwd, a.modelo, a.ensaio)
 
 

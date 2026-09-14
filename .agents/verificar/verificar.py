@@ -1,12 +1,15 @@
 import argparse
+import contextlib
 import json
 import os
 import random
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 from pathlib import Path
 
@@ -789,7 +792,8 @@ ACUSA = [
 def _cli(argumentos, entrada=None):
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve())] + argumentos,
-        input=entrada, capture_output=True, text=True, timeout=120)
+        input=entrada, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=120)
 
 
 def _gravar(pasta, nome, dado):
@@ -1266,12 +1270,29 @@ def _o_escopo_do_bloco_recorta_a_cobranca(pasta, caso):
          and str(corpo) in fantasma.stderr)
 
 
+def _a_limpeza_apaga_o_somente_leitura(pasta, caso):
+    como_o_git_escreve = Path(pasta) / "como-o-git-escreve"
+    objetos = como_o_git_escreve / ".git" / "objects" / "12"
+    objetos.mkdir(parents=True)
+    solto = objetos / "987e2091f500d16bb6fe54038eda46ac45a0a4"
+    solto.write_bytes(b"objeto solto")
+    solto.chmod(stat.S_IREAD)
+    caso("a testemunha do cenário: o objeto solto do git nasce sem permissão "
+         "de escrita, e é ele que trava a limpeza aqui",
+         not solto.stat().st_mode & stat.S_IWRITE)
+    apagar_a_pasta_de_teste(como_o_git_escreve)
+    caso("a limpeza da pasta de teste apaga o que é somente-leitura, em vez "
+         "de morrer antes de a suíte imprimir placar",
+         not como_o_git_escreve.exists())
+
+
 def _comportamento(pasta):
     resultados = []
 
     def caso(rotulo, condicao):
         resultados.append((rotulo, bool(condicao)))
 
+    _a_limpeza_apaga_o_somente_leitura(pasta, caso)
     _a_forja_e_acusada_com_exit_4(pasta, caso)
     _o_ensaio_nao_executa_nada(pasta, caso)
     _o_trabalho_inteiro_nomeia_o_forjado(pasta, caso)
@@ -1298,6 +1319,35 @@ def _comportamento(pasta):
     return resultados
 
 
+VOLTAS_DA_LIMPEZA = 3
+PAUSA_ENTRE_AS_VOLTAS_DA_LIMPEZA_S = 1.0
+LIMPEZA_QUE_NAO_FECHOU = ("AVISO: a pasta de teste {pasta} não saiu do disco "
+                          "em {voltas} tentativas ({erro}); o placar abaixo "
+                          "vale, o disco ficou com sobra")
+
+
+def liberar_o_somente_leitura(pasta) -> None:
+    for achado in Path(pasta).rglob("*"):
+        with contextlib.suppress(OSError):
+            achado.chmod(stat.S_IWRITE | stat.S_IREAD)
+
+
+def apagar_a_pasta_de_teste(pasta) -> None:
+    preso = None
+    for volta in range(VOLTAS_DA_LIMPEZA):
+        if volta:
+            time.sleep(PAUSA_ENTRE_AS_VOLTAS_DA_LIMPEZA_S)
+        liberar_o_somente_leitura(pasta)
+        try:
+            shutil.rmtree(pasta)
+            return
+        except OSError as erro:
+            preso = erro
+    shutil.rmtree(pasta, ignore_errors=True)
+    print(LIMPEZA_QUE_NAO_FECHOU.format(
+        pasta=pasta, voltas=VOLTAS_DA_LIMPEZA, erro=preso), file=sys.stderr)
+
+
 def testar() -> int:
     esquema = _evidencia.carregar_esquema()
     falhas = []
@@ -1316,8 +1366,11 @@ def testar() -> int:
         elif not any(trecho in acusacao for acusacao in achadas):
             falhas.append(TESTE_ACUSA_MOTIVO_ERRADO.format(rotulo, achadas[0]))
 
-    with tempfile.TemporaryDirectory(prefix="verificar-teste-") as pasta:
+    pasta = tempfile.mkdtemp(prefix="verificar-teste-")
+    try:
         comportamento = _comportamento(pasta)
+    finally:
+        apagar_a_pasta_de_teste(pasta)
     falhas += [TESTE_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]
 

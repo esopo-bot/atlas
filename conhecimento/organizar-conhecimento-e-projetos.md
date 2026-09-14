@@ -1,7 +1,7 @@
 # Organize `conhecimento/` e `projetos/` pelas regras da camada
 
-Prompt para qualquer agente aberto na raiz de um repositório que instalou a
-camada. Cole inteiro. O objetivo: as duas pastas do workspace passam a ter a
+Receita para qualquer agente aberto na raiz de um repositório que instalou
+a camada; o bootstart aponta para ela quando o pedido é organizar as pastas. O objetivo: as duas pastas do workspace passam a ter a
 forma que as regras pedem, sem perder uma linha do que o dono escreveu.
 
 ## A cerca que vale acima de tudo
@@ -25,10 +25,11 @@ tem instrumento ou dono próprio, e misturar as três é o que faz o agente
 apagar o que era do dono e poupar o que era lixo.
 
 1. **Resto da versão anterior da camada** — página, gancho ou skill que a
-   camada escrevia e deixou de escrever. Não é assunto deste prompt: a
-   receita é o prompt `02` desta pasta, com `python .agents/limpeza/limpeza.py
-   rodar --workspace .` listando antes de apagar. Rode o 02 primeiro, ou
-   marque esses itens como "resto da camada — prompt 02" no inventário.
+   camada escrevia e deixou de escrever. Não é assunto desta página: a
+   receita é [a verificação pós-atualização](verificacao-pos-atualizacao.md),
+   com `python .agents/limpeza/limpeza.py
+   rodar --workspace .` listando antes de apagar. Rode-a primeiro, ou
+   marque esses itens como "resto da camada — pós-atualização" no inventário.
 2. **Resto de sessão** — saída de comando na raiz, arquivo `.err`, prompt
    colado, cópia de teste de outro agente, script de uma vez só. O endereço
    é `tmp/`, que fica fora do git; o que já está em `tmp/` está no lugar e

@@ -18,6 +18,8 @@ primeira linha que casar decide o tipo.
 | `next.config.*`, `angular.json`, `vite.config.*`, `nuxt.*`                                                                            | frontend/ui    | médio, ~70 linhas          |
 | Dockerfile + framework servidor, pasta de rotas, `openapi.*`                                                                          | api/serviço    | cheio, ~120 linhas         |
 | manifesto de publicação sem servidor (`exports`, `*.nuspec`)                                                                          | biblioteca     | médio, ~70 linhas          |
+| `project.godot`, `*.uproject`, `Assets/` com `ProjectSettings/`                                                                       | jogo           | médio, ~70 linhas          |
+| `dados/` ou `entregas/` com relatório, e nenhum manifesto de código na raiz                                                           | dossiê de caso | médio, ~70 linhas          |
 | nenhuma âncora casou                                                                                                                  | indefinido     | 1 linha no mapa + pergunta |
 
 Repositório misto: registre o tipo principal e cite o secundário no perfil.
@@ -30,6 +32,15 @@ Repositório misto: registre o tipo principal e cite o secundário no perfil.
   controllers, contratos (`openapi.*`, DTOs), configuração de build
 - **frontend/ui**: `README.md`, manifesto, configuração de build, pasta de
   rotas ou páginas
+- **jogo**: `README.md`, o arquivo de projeto do motor, a pasta de cenas e a
+  de recursos, e como se roda no aparelho de verdade
+- **dossiê de caso**: `README.md`, a pasta de dados brutos, a de entregas e o
+  relatório mais recente. Repositório de caso guarda o TRABALHO sobre um
+  cliente, não código que roda: o perfil diz onde os dados entram, o que já
+  foi entregue e o que está esperando resposta. Cuidado medido em 10/09/2026:
+  a pasta de dados brutos pode ser junção do sistema de arquivos apontando
+  para fora do repositório, e varredura que desce ali sai da pasta do caso
+  sem avisar.
 - **demais**: `README.md` + manifesto de dependências
 
 ## Perfil cheio (api/serviço) — o template completo

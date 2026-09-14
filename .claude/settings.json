@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
           }
         ]
       },
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-mcp.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-mcp.py\""
           }
         ]
       },
@@ -25,135 +25,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-ambiente.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-ambiente.py\""
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell",
+        "matcher": "Write|Edit|NotebookEdit|MultiEdit|Bash|PowerShell|Read|AskUserQuestion",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-branch-protegida.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell|Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/orientar-credencial.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/vetar-conhecimento-em-codigo.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-andamento-em-arquivo.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-automacao.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-somente-leitura.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "AskUserQuestion",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-pergunta-ja-respondida.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-fora-da-execucao.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-comentario-explicativo.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-copia-gerada.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-politica.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-sessao-paralela.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-caminho-relativo-apos-cd.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/vetar-escrita-em-sessao-de-pesquisa.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/despachar-cercas.py\""
           }
         ]
       }
@@ -163,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-encerramento.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-encerramento.py\""
           }
         ]
       },
@@ -171,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-destino-da-entrega.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-destino-da-entrega.py\""
           }
         ]
       },
@@ -179,7 +62,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\" \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-relato-da-sessao.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-relato-da-sessao.py\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-apresentacao-da-entrega.py\""
           }
         ]
       }

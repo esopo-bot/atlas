@@ -66,6 +66,7 @@ def perguntar_a_ponte(raiz, ferramenta, entrada):
     corrida = subprocess.run(
         [INTERPRETADOR, str(Path(raiz) / PONTE)],
         input=json.dumps(pedido), capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
         cwd=raiz, env=dict(os.environ, **{RAIZ_QUE_A_OUTRA_DA: str(raiz)}),
         timeout=TEMPO_DE_UMA_SONDA_S)
     dito = {}

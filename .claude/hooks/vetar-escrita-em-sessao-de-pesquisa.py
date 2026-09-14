@@ -116,12 +116,11 @@ def alvo_recusado(entrada: dict, raiz: Path, ambiente) -> str:
     return ""
 
 
-def recusar(alvo: str) -> int:
+def recusar(razao: str) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
-        "permissionDecisionReason": RECUSA.format(
-            marca=MARCA_NO_AMBIENTE, alvo=alvo),
+        "permissionDecisionReason": razao,
     }}, ensure_ascii=False))
     return SILENCIO
 
@@ -141,7 +140,8 @@ def decidir() -> int:
     if not isinstance(entrada, dict):
         return SILENCIO
     alvo = alvo_recusado(entrada, raiz_do_projeto_nunca_o_cwd(), os.environ)
-    return recusar(alvo) if alvo else SILENCIO
+    return recusar(RECUSA.format(marca=MARCA_NO_AMBIENTE,
+                                 alvo=alvo)) if alvo else SILENCIO
 
 
 def main() -> int:

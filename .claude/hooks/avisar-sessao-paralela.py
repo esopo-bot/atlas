@@ -161,8 +161,7 @@ def testar() -> int:
                                lar_de_prova).name == "D--um--dois")
     with tempfile.TemporaryDirectory(prefix="aviso-paralela-") as pasta:
         base = Path(pasta)
-        raiz = base / "repo"
-        raiz.mkdir()
+        raiz = Path("Z:/repo") if os.sep == "\\" else Path("/repo")
         lar = base / "lar"
         transcritos = pasta_dos_transcritos(raiz, lar)
         transcritos.mkdir(parents=True)

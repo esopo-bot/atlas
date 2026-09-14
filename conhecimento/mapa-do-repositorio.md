@@ -12,14 +12,18 @@ máquina, fica fora do git.
 
 | Pasta | O que mora ali | Viaja para quem instala? |
 | --- | --- | --- |
-| `conhecimento/` | página que gente lê | sim, só `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json`. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
+| `conhecimento/` | página que gente lê | quatro: `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json` — e as três receitas de quem instala, `verificacao-pos-atualizacao.md`, `prova-de-leitura-do-agente.md` e `organizar-conhecimento-e-projetos.md`. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
 | `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `perfil-de-repositorio` | não: é conteúdo do workspace, fora do git |
-| `.agents/` | instrumentos (Python), as skills (fonte) e os prompts de abertura em `.agents/prompts/` | os instrumentos e as skills, sim; dos prompts, o de verificação pós-atualização, o de abertura de projeto, o que prova que o agente lê a camada e o que organiza `conhecimento/` e `projetos/` pelas regras — o de abertura NA camada e o da auditoria externa ficam, porque só servem a quem melhora o atlas |
+| `.agents/` | instrumentos (Python), as skills (fonte) e um prompt só, `.agents/prompts/bootstart.md`: o briefing de abertura para qualquer agente — o que a sessão vai encontrar, o que os ganchos recusam, e que skill ou receita atende cada pedido | os instrumentos, as skills e o bootstart, sim. Quem tem comando de barra chega nele por `/bootstart`; quem só carrega o arquivo de instruções da raiz chega pelo `AGENTS.md`; e o primeiro comando dele é a saúde da abertura |
 | `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills e a regra por caminho do padrão de código, gerada da skill | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |
 | `modulos/` | peça opcional, que só chega para quem pedir pelo nome | não |
 | `execucoes/` | roteiros do executor, **cópia gerada** de `modulos/encadeador/execucoes/` — edite lá, nunca aqui; o resultado de cada rodada fica fora do git | só com `--modulo encadeador`: os roteiros nomeados chegam pelo módulo, não pela camada base |
 | `tmp/` | rascunho. Apagar não perde nada | não |
+| `projetos/` | os repositórios de código clonados, um por pasta, cada um com o seu próprio git; só o `LEIAME.md` é rastreado aqui | só com `--esqueleto`: o instalador cria a pasta com o `LEIAME.md`, e o conteúdo é do workspace |
+| `recursos/` | material de terceiro — template comprado, kit de design, manual, base de referência — com licença própria e fora do git; só o `LEIAME.md` é rastreado | só com `--esqueleto`: o instalador cria a pasta com o `LEIAME.md` |
+| `.credenciais/` | senhas, chaves e tokens, fora de todo git; rastreados só o `LEIAME.txt` e o `publicar-mcp-env.py`, que publica os nomes do `mcp.env` no ambiente | só com `--esqueleto`: o instalador entrega o `LEIAME.txt` e o publicador |
+| `.devin/` | o que o agente de terminal lê: o `config.json` com o muro de leitura sobre credencial e a pasta de skills | não: chega pela ponte `--devin`, que ajusta o `config.json` de quem instala em vez de copiar esta pasta |
 
 Na raiz ficam as instruções (`AGENTS.md`, `CLAUDE.md`, `README.md`) e os
 instrumentos que agem sobre o repositório inteiro. Destes, só o `montar.py`
@@ -33,9 +37,9 @@ Nem toda verificação protege quem instala. A rotina `camada` — a mais larga
 protege este repositório e mais ninguém. Quem instalou a camada é protegido
 pelo `.agents/camada/camada.py`, que viaja junto. O alcance de cada rotina
 está declarado no catálogo do `verificacoes.py`, campo `alcance`: **fica no
-atlas** ou **viaja com a camada**. No atlas, `python3 verificacoes.py --lista`
+atlas** ou **viaja com a camada**. No atlas, `python verificacoes.py --lista`
 mostra a coluna; onde a camada foi instalada esse arquivo não existe, e o que
-se tem é `python3 .agents/camada/camada.py medir provar`.
+se tem é `python .agents/camada/camada.py medir provar`.
 
 ## Página ou dado?
 
@@ -101,9 +105,28 @@ pasta inteira por padrão. Gancho novo, não. São **cinco pontos**, todos no
 4. A tupla `FONTES`, que diz o que se embute.
 5. A sequência `garantir_ajustes`, que instala.
 
-O gabarito é o commit que estreia um gancho: os cinco pontos aparecem juntos
+**Cerca de `PreToolUse` troca o quinto ponto pelo sexto.** Quem tem linha
+própria no `settings.json` é só o **despachante das cercas**
+(`.claude/hooks/despachar-cercas.py`), com o matcher que é a união de todas;
+cada cerca entra na tupla `CERCAS` dentro dele, com o matcher dela, e **não**
+entra no `garantir_ajustes`. Então o matcher de uma cerca é escrito em dois
+lugares — o `GanchoDeclarado` e a lista do despachante — e isso é de
+propósito: um é o contrato, o outro é a implementação, e a rotina `matricula`
+compara os dois e acusa quem divergir. O `GanchoDeclarado` de uma cerca
+parece morto para quem varre por AST, porque quem o lê o acha por reflexão
+sobre o espaço de nomes do instalador, não pelo nome.
+
+O gabarito é o commit que estreia um gancho: os pontos aparecem juntos
 no mesmo diff. E a prova não é reler o instalador: é montar árvore virgem,
 rodar o `montar.py` nela, e ver o arquivo chegar.
+
+**O despachante é um processo para todas as cercas, e o preço é o
+isolamento.** Antes, cada cerca era uma linha no `settings.json` e um
+processo: uma chamada de `Bash` custava 4.167 ms só de ganchos. Com o
+despachante, 578 ms — medido em 09/09/2026. Em troca, as cercas deixaram de
+ser independentes: se o despachante não sobe, **todas** caem juntas. Ele
+paga isso negando por conta da cerca que estourar, em vez de deixar passar
+sem cerca, e continua avaliando as outras.
 
 Toda linha de gancho começa pelo **lançador**, `.claude/hooks/interpretador.sh`:
 um script de bash que escolhe o interpretador por execução — o primeiro da
@@ -112,7 +135,33 @@ e entrega o gancho a ele. Ele existe porque o nome `python3` não é universal:
 no Windows é o atalho da loja, que está no PATH, não roda, e `which` dá por
 presente. A lista de candidatos mora só nele; a rotina `camada` e o gancho
 `verificar-ambiente` a leem de lá e julgam cada nome executando, nunca por
-`which`. Quando nenhum nome responde, o lançador diz isso no erro do gancho
+`which`. **A ordem dos candidatos sai da plataforma, não de uma lista só:**
+em Windows o lançador tenta `python py python3`, e no resto `python3 python
+py` — porque tentar o atalho da loja primeiro custava 299 ms de mediana por
+gancho para descobrir que ele não roda.
+
+**E ele lembra quem respondeu, senão sonda de novo a cada chamada.** O nome
+escolhido fica num arquivo da pasta privada do usuário — `XDG_RUNTIME_DIR`
+onde existe, `LOCALAPPDATA` no Windows; sem nenhuma das duas não há lembrança
+e ele só sonda —, estado que não viaja, e a chamada seguinte o usa direto.
+A lembrança não é confiada às cegas, porque conteúdo de arquivo é dado, nunca
+ordem: só vale se for arquivo regular, do próprio usuário e não um link; só
+vale se o nome estiver na lista de candidatos do próprio lançador, nunca um
+caminho; e a escrita é atômica, por arquivo próprio movido por cima. Fora
+disso o lançador sonda outra vez e reescreve. O `--testar` dele planta um
+impostor na lembrança e prova que o Python roda no lugar dele. Medido em
+09/09/2026, A/B intercalado, 25 voltas de cada braço
+numa camada de verdade: a chamada de uma ferramenta caiu de **371 ms para
+229 ms** de mediana (p10 de 324 para 199), e o piso restante é o bash mais a
+partida do Python — chamar o Python direto, sem bash, economizaria só 56 ms
+a mais e custaria a portabilidade que o lançador existe para dar.
+
+**Quando nenhum nome responde, o lançador sai 2, que é a única saída que
+barra.** A documentação oficial dos ganchos é explícita: em `PreToolUse` só
+o código 2 impede a chamada, e qualquer outro código diferente de zero é
+erro que **não** barra. O lançador saía 1 — então, numa máquina sem Python,
+as cercas falhavam abertas e só um aviso no erro do gancho denunciava. Cerca
+que não roda não deixa passar. Ele também diz isso no erro do gancho
 em vez de morrer calado. Ele viaja em `FONTES`, sem evento nem matcher, e o
 instalador reescreve no lugar a linha de gancho que ainda nomeia um
 interpretador.
@@ -132,9 +181,8 @@ de dentro da raiz — inclusive `tmp/` e arquivo temporário —, e o
 `cobrar-destino-da-entrega` **cala**, porque não há destino em disco a
 cobrar. Rascunho e medição vão para a pasta temporária da máquina, que o
 sistema limpa sozinho; o que a sessão apurou vai para a issue. Quem abre
-sessão assim cola o prompt
-[07-sessao-de-pesquisa.md](../.agents/prompts/07-sessao-de-pesquisa.md),
-que declara o trato inteiro. Sem a marca nada disso acontece: a sessão é
+sessão assim segue a seção "A sessão que só pesquisa" do
+[bootstart](../.agents/prompts/bootstart.md), que declara o trato inteiro. Sem a marca nada disso acontece: a sessão é
 uma sessão comum.
 
 ## Instrumento novo se matricula em um ponto
@@ -159,7 +207,7 @@ sobreviveu ao arquivo). Rode-a sempre que entrar ou sair instrumento — e
 repare em QUAL comando, porque o `verificacoes.py` **não viaja**:
 
 ```bash
-python3 verificacoes.py matricula              # aqui, no atlas
+python verificacoes.py matricula              # aqui, no atlas
 python .agents/camada/camada.py --matricula    # em quem instalou a camada
 ```
 
@@ -220,8 +268,8 @@ recusar atravessa igual. Essa metade some calada quando ninguém a espera, e
 some sem erro nenhum — foi o que aconteceu na primeira versão da ponte.
 
 ```bash
-python3 .agents/travessia/travessia.py            # as cercas atravessam?
-python3 .agents/travessia/travessia.py --custa "<pedido>"   # e quanto custa
+python .agents/travessia/travessia.py            # as cercas atravessam?
+python .agents/travessia/travessia.py --custa "<pedido>"   # e quanto custa
 ```
 
 A primeira linha **não abre sessão nenhuma**: ela conversa com a ponte no

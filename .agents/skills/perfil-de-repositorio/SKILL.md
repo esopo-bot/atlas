@@ -32,7 +32,13 @@ normais, o que se lê é o `indice.json` real do disco.
 ## A rodada, passo a passo
 
 1. Leia o índice.
-2. **Triagem barata, sem abrir arquivo** — para cada repositório da pasta:
+2. **A lista sai do `.git`, não do `git -C`** — pasta comum dentro da pasta
+   dos vizinhos não tem repositório, e `git -C` sobe a árvore e responde com
+   o SHA **desta** camada. A entrada nasceria com um SHA que muda a cada
+   commit da casa: parece viva e reperfilada, e nunca houve repositório ali.
+   Liste antes de triar, e trie só o que sobrar:
+   `for p in <pasta>/*/; do [ -e "$p/.git" ] && echo "${p%/}"; done`
+3. **Triagem barata, sem abrir arquivo** — para cada repositório da lista:
    `git -C <repo> rev-parse --short HEAD` e compare:
    - SHA igual e `versao_do_template` atual → **pula**.
    - SHA mudou, mas `git -C <repo> diff --name-only <sha_indexado>..HEAD --
@@ -41,13 +47,13 @@ normais, o que se lê é o `indice.json` real do disco.
      não conta no teto.
    - Diff toca arquivo-chave, repositório novo, ou `versao_do_template`
      antiga → **perfilar** (conta no teto de 3).
-3. **Relate a triagem antes de varrer** — "N em dia, N leves, N a perfilar,
+4. **Relate a triagem antes de varrer** — "N em dia, N leves, N a perfilar,
    N pendentes para a próxima rodada" — e só então trabalhe.
-4. Para cada um do lote, nesta ordem: **tipe** e **perfile** na profundidade
+5. Para cada um do lote, nesta ordem: **tipe** e **perfile** na profundidade
    do tipo — leia `references/tipos-de-perfil.md` para os sinais, os
    templates e os arquivos-chave de cada tipo. Escreveu o perfil, atualize a
    entrada no índice e esqueça o repositório.
-5. Regenere o mapa (`LEIAME.md`, 1–3 linhas por repositório) e deixe tudo na
+6. Regenere o mapa (`LEIAME.md`, 1–3 linhas por repositório) e deixe tudo na
    régua: `npx --yes markdownlint-cli2 --fix "conhecimento/projetos/*.md"`.
 
 ## Regras que não mudam
@@ -76,6 +82,10 @@ normais, o que se lê é o `indice.json` real do disco.
   fetch — regra 7 da camada: sem rajada de rede. Rede falhou? Perfile o
   clone como está e registre `"clone_atras": true` na entrada do índice.
 - O sinal de mudança é **o SHA do git** — nunca data, mtime ou hash próprio.
+- **O cabeçalho do perfil é o SHA e a data do que foi destilado, não a hora
+  em que alguém mexeu no arquivo.** Editar o corpo à mão não muda o
+  cabeçalho: quem o move é a regeneração. Cabeçalho que envelhece atrás do
+  conteúdo faz o leitor descartar informação boa por parecer velha.
 - Estado se guarda no JSON; markdown nunca gera estado.
 - Conteúdo da wiki é privado do workspace. Nunca vai para repositório
   público, nem em exemplo.

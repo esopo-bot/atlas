@@ -1,7 +1,7 @@
 # A camada foi atualizada — verifique e limpe antes de trabalhar
 
-Prompt para o repositório que INSTALA o atlas. Cole numa sessão aberta na
-raiz do repositório logo depois de uma atualização da camada (o
+Receita para o repositório que INSTALA a camada; o bootstart aponta para ela.
+Siga-a numa sessão aberta na raiz do repositório logo depois de uma atualização da camada (o
 `montar.py` novo já rodou aqui). O objetivo: provar que a instalação está
 íntegra e que nada da versão anterior ficou para trás.
 
@@ -41,9 +41,12 @@ colada não está feita.
       metade: pare e mostre ao dono antes de qualquer outra coisa.
 - [ ] **Os instrumentos respondem:** rode o `--testar` de cada instrumento
       de `.agents/` (todo instrumento da camada tem o seu). Um vermelho aqui
-      é defeito de instalação, não do seu repositório. **Cuidado com dois:**
+      é defeito de instalação, não do seu repositório. **Cuidado com três:**
       o `gatilho` abre sessões de verdade e cobra por elas — só rode se o
-      dono pedir; e o do `encadeador` demora minutos.
+      dono pedir; o do `encadeador` demora minutos; e a bancada do
+      `buscar.py`, fora do temporário, mede contra o banco e o gerador de
+      vetores desta máquina — sem eles, ela se declara "não medido" e passa
+      com um caso a menos.
 - [ ] **O ritual, se este repositório o tiver:** `python verificacoes.py
       ritual`. Ele só existe no repositório da camada; ausente aqui, não é
       falha.

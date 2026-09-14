@@ -50,9 +50,6 @@ PERGUNTA_DA_VERSAO = "import sys; print(sys.version_info[0])"
 VERSAO_QUE_SERVE = "3"
 TETO_DO_INTERPRETADOR_S = 10
 FONTE_DAS_REGRAS = "nucleo/regras.json"
-FONTE_DO_VOCABULARIO = "nucleo/vocabulario.json"
-FORA_DA_CONTA_DO_VOCABULARIO = ("nucleo/vocabulario.json", "montar.py")
-TITULO_VOCABULARIO = "O VOCABULÁRIO, TERMO A TERMO"
 TITULO_ENTREGA = "A ENTREGA — o que ainda não saiu da máquina"
 TITULO_LARGADA = "A LARGADA — o que toda sessão paga antes de trabalhar"
 TITULO_DAS_MEDIDAS = ("AS MEDIDAS DA VERSÃO — três; a versão nova é melhor "
@@ -90,6 +87,49 @@ SEM_ENTREGA = ("{} não tem para onde entregar — nem upstream declarado, "
                "nem origin/{} no remoto. Nada saiu da máquina, então "
                "não há como provar que nada ficou para trás.")
 FORA_DE_REPOSITORIO = "Sem git aqui — nada a medir."
+COMANDO_DAS_ARVORES = "git worktree list --porcelain"
+MARCA_DA_ARVORE = "worktree "
+UMA_ARVORE_SO = "  Uma árvore de trabalho só — a medida acima vale para ela."
+ARVORES_AO_LADO = (
+    "  {} árvores de trabalho neste repositório, medidas às {}: {}.\n"
+    "  A medida acima é do INSTANTE em que rodou, e só desta árvore: outra\n"
+    "  sessão pode commitar entre a medida e a leitura, então não declare\n"
+    "  estado final de árvore compartilhada — cite a hora.")
+ARVORES_NAO_MEDIDAS = "  Quantas árvores de trabalho existem: não medido."
+CHAVE_DAS_BRANCHES = "branches"
+CHAVE_DA_INTEGRACAO = "integracao"
+CHAVE_DO_NUMERO_DO_PEDIDO = "number"
+TEMPO_DA_REDE = 25
+COMANDO_DA_BUSCA_NO_REMOTO = "git fetch --quiet origin {} {}"
+COMANDO_DO_QUE_A_INCORPORACAO_NAO_TEM = (
+    "git log --oneline --no-decorate {}..{}")
+COMANDO_DO_PEDIDO_ABERTO = ("gh", "pr", "list", "--base", "{0}", "--head",
+                            "{1}", "--state", "open", "--json",
+                            CHAVE_DO_NUMERO_DO_PEDIDO)
+PEDIDO_PULADO_SEM_INCORPORACAO = (
+    "Pedido de incorporação: pulado — {} não declara {}, e sem a branch de "
+    "incorporação não há para onde pedir.")
+PEDIDO_PULADO_NA_INCORPORACAO = (
+    "Pedido de incorporação: pulado — {} é a própria branch de incorporação; "
+    "daqui não se pede, se publica.")
+PEDIDO_PULADO_SEM_INTEGRACAO = (
+    "Pedido de incorporação: pulado — {} não declara {}.{}, e sem a "
+    "integração não dá para dizer o que espera o dono.")
+PEDIDO_BUSCA_NAO_MEDIDA = (
+    "Pedido de incorporação: NÃO MEDIDO — `git fetch origin {} {}` falhou "
+    "({}). Medir contra espelho velho acusaria o que o dono já mesclou.")
+PEDIDO_LIMPO = ("E {} já contém tudo de {}: nenhum commit espera pedido de "
+                "incorporação.")
+PEDIDO_ABERTO = ("{} commit(s) em {} esperam o dono no pedido #{} — o passo "
+                 "seguinte está aberto.")
+PEDIDO_NAO_MEDIDO = (
+    "{} commit(s) em {} fora de {} — e se há pedido aberto, NÃO MEDIDO: "
+    "`gh pr list` não respondeu. Confira à mão: gh pr list --base {} "
+    "--head {} --state open")
+PEDIDO_POR_ABRIR = ("{} commit(s) em {} que NÃO estão em {} e sem pedido de "
+                    "incorporação aberto — entregue não é; só parece pronto:")
+PEDIDO_COMO_ABRIR = ("  abra o pedido de incorporação: gh pr create --base {} "
+                     "--head {}")
 ARQUIVO_DO_EXECUTOR = "nucleo/executor.json"
 CHAVE_DAS_ISSUES = "issues"
 CHAVE_DO_REPOSITORIO_DAS_ISSUES = "repositorio"
@@ -104,6 +144,66 @@ QUADRO_POR_PREENCHER = (
     "  {} ainda não declara o repositório das issues — o campo {}.{} "
     "está\n  vazio ou por preencher.")
 ARQUIVO_DO_EXEMPLO_DO_EXECUTOR = "nucleo/executor.exemplo.json"
+TITULO_DA_ABERTURA = "A ABERTURA — o que a sessão precisa ter em mãos"
+ARQUIVO_DAS_INSTRUCOES = "AGENTS.md"
+ARQUIVO_DA_DECLARACAO_DE_MCP = ".mcp.json"
+CHAVE_DOS_SERVIDORES_DE_MCP = "mcpServers"
+ARQUIVO_DOS_ALVOS_DO_INDICE = ".agents/indice/alvos.json"
+INSTRUMENTO_DO_INDICE = ".agents/indice/indexar.py"
+BUSCADOR_DO_INDICE = ".agents/indice/buscar.py"
+BANDEIRA_DO_ESTADO_DO_INDICE = "--estado"
+TEMPO_DO_ESTADO_DO_INDICE = 60
+TETO_DE_LINHAS_DO_ERRO = 6
+INSTRUCOES_NO_LUGAR = "  {} está aqui — a sessão abriu na raiz."
+INSTRUCOES_AUSENTES = (
+    "  {} não está aqui: esta pasta não é a raiz do repositório, e a sessão\n"
+    "  aberta fora dela não carrega instrução nenhuma (regra 1). Abra a\n"
+    "  sessão na pasta que tem o {}.")
+MCP_DECLARADO = "  {} declara {} servidor(es): {}."
+MCP_SEM_ARQUIVO = (
+    "  {} não existe aqui — nenhum servidor de contexto é declarado, então\n"
+    "  a sessão só tem as ferramentas do próprio agente. Se este repositório\n"
+    "  não usa servidor, a linha é essa mesma; se usa, o arquivo faltou.")
+MCP_ILEGIVEL = "  {} não se deixou ler: {}"
+MCP_SEM_SERVIDOR = "  {} existe e não declara servidor nenhum em {}."
+ARQUIVO_DE_ESTADO_DO_CLIENTE = ".claude.json"
+ARQUIVO_DE_AUTENTICACAO_PENDENTE = ".claude/mcp-needs-auth-cache.json"
+CHAVE_DOS_PROJETOS_DO_CLIENTE = "projects"
+CHAVE_DOS_SERVIDORES_DESLIGADOS = "disabledMcpjsonServers"
+ESTADO_DO_CLIENTE_AUSENTE = (
+    "  o cliente não tem estado gravado sobre esses servidores ({} não\n"
+    "  existe na casa): nada a acrescentar sobre eles antes da primeira\n"
+    "  chamada.")
+ESTADO_DO_CLIENTE_ILEGIVEL = "  o estado do cliente em {} não se deixou ler: {}"
+ESTADO_DO_CLIENTE_DESLIGOU = (
+    "  o cliente desligou {} deste(s) neste projeto: {} — a sessão abre sem\n"
+    "  ele(s); religue no cliente ou peça ao dono.")
+ESTADO_DO_CLIENTE_PEDE_AUTENTICACAO = (
+    "  o cliente marca {} deste(s) pedindo autenticação: {} — a sessão abre\n"
+    "  sem ele(s) até alguém autenticar.")
+ESTADO_DO_CLIENTE_NADA_ACUSA = (
+    "  o cliente não acusa servidor desligado nem pendente de autenticação.")
+ESTADO_DO_CLIENTE_NAO_GUARDA_CONEXAO = (
+    "  Conectado ou falhou o cliente não guarda em disco: servidor que sobe e\n"
+    "  cai só aparece na primeira chamada — se ela falhar, avise na primeira\n"
+    "  resposta.")
+INDICE_NAO_INSTALADO = (
+    "  o módulo do índice não está instalado aqui ({} não existe) — a busca\n"
+    "  por significado não é desta camada, e nada a cobra.")
+INDICE_SEM_ALVOS = (
+    "  {} não existe — o indexador não sabe o que indexar, e a busca\n"
+    "  responde menos do que existe. Declare os alvos.")
+INDICE_DE_PE = (
+    "  o índice responde, e a busca sem servidor de contexto é `python {}`.")
+INDICE_FORA = (
+    "  o índice não respondeu — `python {} {}` saiu {}:\n{}\n"
+    "  Sem ele, a busca por significado não existe nesta sessão; a busca por\n"
+    "  termo exato continua em `python {}`.")
+ABERTURA_INTEGRA = "Abertura íntegra: {} peça(s) de pé."
+ABERTURA_INCOMPLETA = (
+    "Abertura INCOMPLETA: {} peça(s) faltando. A sessão que seguir daqui "
+    "trabalha\ncom menos do que pensa ter — conserte o que está acima antes "
+    "de trabalhar.")
 MARCA_POR_PREENCHER = "${"
 SAIDA_LIMPA = 0
 SAIDA_COM_ACHADO = 1
@@ -147,6 +247,9 @@ NOME_DE_FONTES = "FONTES"
 NOME_DE_MODULOS = "MODULOS"
 NOME_DO_GANCHO_DECLARADO = "GanchoDeclarado"
 CAMINHO_DE_GANCHO = re.compile(r"\.claude/hooks/[^\"'\s]+\.py")
+GANCHO_DO_DESPACHANTE = f"{PASTA_DOS_GANCHOS}/despachar-cercas.py"
+BLOCO_DAS_CERCAS = re.compile(r"^CERCAS = \((.*?)^\)", re.M | re.S)
+CERCA_DECLARADA = re.compile(r'\("([A-Za-z0-9_-]+)",\s*"([^"]*)"')
 CARACTERES_DE_GLOB = "*?["
 INSTRUMENTOS_QUE_FICAM = {
     ".agents/camada/testes.py": (
@@ -195,6 +298,8 @@ SALDO_NAO_VIAJA = "não viaja — rastreado e fora do FONTES"
 SALDO_ORFA = "órfã — matriculada e ausente do disco"
 SALDO_SEM_DECLARACAO = "ligado no settings.json sem GanchoDeclarado"
 SALDO_DESLIGADO = ("declarado no montar.py e desligado no settings.json")
+SALDO_MATCHER_DIVERGENTE = ("matcher diferente no despachante e no "
+                            "instalador — um dos dois mente")
 SALDO_EXCECAO_VELHA = "exceção que envelheceu — declarada e fora do git"
 INTERPRETADOR_QUE_SOME = (
     "  INTERPRETADOR QUE SOME: `{0}` está registrado no comando de gancho e "
@@ -309,32 +414,7 @@ MARKDOWN_CLASSIFICADO = (
 MARKDOWN_NAO_MEDIDO = ("Markdown NÃO MEDIDO: `{}` falhou. Sem a listagem do "
                        "git não existe universo a classificar, e zero aqui "
                        "seria invenção.")
-LINHA_DO_TERMO = "  {:<16} bruto {:>3}  exceção {:>3}  saldo {:>3}  {}"
-TERMO_FECHADO = "ok"
 TERMO_ABERTO = "ABERTO"
-TERMO_NAO_MEDIDO = "NÃO MEDIDO"
-TERMO_COM_FOLGA = "FOLGA {}"
-EXCECAO_SEM_CASO = "exceção sem caso escrito"
-EXCECAO_SEM_REFERENTE = (
-    "  EXCEÇÃO SEM REFERENTE em `{termo}`: {caso} — a exceção diz quantas "
-    "ocorrências perdoa e não diz em QUE ARQUIVOS elas moram, então ela não "
-    "desconta nada. Declare `arquivos` na exceção, em "
-    "nucleo/vocabulario.json, com os caminhos rastreados que carregam as "
-    "ocorrências: número solto já cunhou falso verde uma vez.")
-SEM_MEDIDA = "-"
-TETO_DE_ARGUMENTOS = 100000
-GREP_ERROU_A_PARTIR_DE = 2
-VOCABULARIO_NAO_MEDIDO = ("Vocabulário NÃO MEDIDO em {} termo(s): o grep falhou, "
-                          "e falha não é zero.")
-VOCABULARIO_FECHADO = "Vocabulário fechado: nenhum termo com saldo."
-VOCABULARIO_COM_FOLGA = (
-    "Vocabulário com {} exceção(ões) a mais do que existe no disco — a "
-    "declaração envelheceu, e enquanto ela sobra o termo pode reabrir sem "
-    "ninguém ver: a ocorrência nova entra no lugar da que sumiu. Meça e "
-    "acerte o campo `ocorrencias` do termo.")
-VOCABULARIO_ABERTO = ("Vocabulário com {} ocorrência(s) em aberto — o "
-                      "termo velho voltou, ou a exceção declarada envelheceu.")
-SEM_VOCABULARIO = "Sem {} — nada a medir."
 RASCUNHO = "tmp"
 TETO_DE_DIAS_NO_RASCUNHO = 7
 SEGUNDOS_DO_DIA = 86400
@@ -368,6 +448,59 @@ BANCADA_NAO_VIAJA = (
     MARCA_DE_BANCADA_AUSENTE + ": ela não viaja com a camada, e mora no "
     "repositório onde a camada é construída. Nada a rodar aqui.")
 FORA_DA_PROVA = "FORA"
+MARCA_DE_QUE_PASSOU = "OK  "
+MARCA_DE_QUE_CAIU = "CAIU"
+
+ORCAMENTO_DAS_BANCADAS_TOCADAS = 120
+TEMPO_DE_UMA_BANCADA_TOCADA = 60
+MARCA_DE_QUE_NAO_COUBE = "TETO"
+ARQUIVO_DA_BANCADA_DA_PASTA = "testes.py"
+IMPORTE_DA_BANCADA_DA_PASTA = "from testes import"
+COMANDO_DO_QUE_MUDOU = "git diff --name-only HEAD"
+COMANDO_DO_QUE_NASCEU = "git ls-files --others --exclude-standard"
+COMANDO_DO_QUE_A_BRANCH_TEM = "git diff --name-only {}...HEAD"
+TITULO_DA_BANCADA = "A BANCADA DE CADA INSTRUMENTO QUE A SESSÃO TOCOU"
+BANCADA_SEM_GIT = ("o git não disse o que esta sessão mexeu, e sem essa "
+                   "lista não há como saber que instrumento provar")
+BANCADA_SEM_BASE = (
+    "não há contra o que comparar os commits desta branch — nem upstream "
+    "declarado, nem branch de incorporação que exista no disco ou no "
+    "remoto. A árvore suja até se leria, mas metade da pergunta ficaria "
+    "cega, e meia medida se lê como medida inteira")
+BANCADA_SEM_COMPARACAO = "o git não comparou esta branch com {}"
+BANCADA_NAO_MEDIDA = ("Bancada NÃO MEDIDA: {}. Sair 0 aqui faria a rotina "
+                      "cega passar por rotina verde.")
+BANCADA_O_QUE_TOCOU = ("{} arquivo(s) tocado(s) nesta sessão, contados na "
+                       "árvore suja e nos commits que {} ainda não tem: {} "
+                       "instrumento(s) com bancada e {} sem.")
+BANCADA_NENHUM_TOCADO = ("Nenhum instrumento tocado nesta sessão — não há "
+                         "bancada a rodar, e fica dito.")
+BANCADA_SEM_TESTE = ("{} — instrumento tocado sem --testar próprio: não há "
+                     "bancada para rodar, e a falta dela não reprova esta "
+                     "rotina")
+BANCADA_QUE_NAO_VIAJA = ("{} — bancada de testes ausente: ela não viaja com "
+                         "a camada, e aqui não há o que rodar")
+BANCADA_NAO_COUBE = ("{} — não coube no teto de {}s desta rotina: isto não é "
+                     "reprovação, é orçamento. Rode-a à parte, com o tempo "
+                     "que ela pedir")
+BANCADA_NAO_RODOU = "{} — a bancada não chegou a rodar: {}"
+LINHA_DA_BANCADA = "{} — {:.1f}s — {}"
+BANCADA_FORA_DO_ORCAMENTO = (
+    "Fora do orçamento: {} instrumento(s) tocado(s) NÃO rodaram, porque "
+    "esta rotina se anuncia barata e gasta no máximo {}s — o ritual roda "
+    "várias vezes por sessão. Ficaram de fora: {}.")
+COMO_PROVAR_O_QUE_FICOU_DE_FORA = ("  a bancada inteira sai em: python "
+                                   ".agents/saude/saude.py testes")
+BANCADA_LIMPA = "Bancada em dia: {} instrumento(s) tocado(s), todos verdes."
+BANCADA_VERMELHA = ("Bancada VERMELHA: {} de {} instrumento(s) tocado(s) "
+                    "caíram — {}.")
+BANCADA_QUE_SUJOU = (
+    "Bancada SUJOU a árvore: rodar os testes fez nascer {}. Fixture tem de "
+    "morrer com o temporário que a criou; a que escreve fora dele volta na "
+    "rodada seguinte e, quando o ambiente não declara TEMP, o tempfile do "
+    "Python cai no diretório atual e a sujeira nasce na raiz do "
+    "repositório. Apague o que nasceu e faça a fixture morar dentro do "
+    "TemporaryDirectory.")
 
 FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
 CAMPO_NOME = re.compile(r"^name:\s*(.+)$", re.M)
@@ -379,6 +512,7 @@ MARCA_DA_BANDEIRA_DE_TESTE = "testar"
 LINHA_DO_CATALOGO = "- {}: {}\n"
 
 MODELO_DA_SIMULACAO = "claude-haiku-4-5-20251001"
+TIPO_DO_RESULTADO = "result"
 FERRAMENTAS_DA_SIMULACAO = "Read,Glob,Grep,Write,Bash"
 TEMPO_DA_SIMULACAO = 900
 TEMPO_DE_UM_TESTE = 900
@@ -415,6 +549,13 @@ Sua ÚLTIMA mensagem tem de ser só este JSON, sem cerca de código:
 def corre(comando, tempo=TEMPO_DE_UM_TESTE, cwd=None):
     r = subprocess.run(comando, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
                        timeout=tempo, cwd=cwd)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def corre_a_lista(argumentos: list, tempo=TEMPO_DE_UM_TESTE, cwd=None):
+    r = subprocess.run(argumentos, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=tempo,
+                       cwd=cwd)
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -594,141 +735,6 @@ def bytes_que_os_ganchos_injetam(raiz: Path) -> tuple:
     return total, cegos
 
 
-def lotes_de_caminhos(alvos: list) -> list:
-    lotes, atual, tamanho = [], [], 0
-    for caminho in alvos:
-        if atual and tamanho + len(caminho) > TETO_DE_ARGUMENTOS:
-            lotes.append(atual)
-            atual, tamanho = [], 0
-        atual.append(caminho)
-        tamanho += len(caminho) + 1
-    if atual:
-        lotes.append(atual)
-    return lotes
-
-
-def soma_das_contagens(saida: str):
-    total = 0
-    for linha in saida.split("\n"):
-        if not linha:
-            continue
-        try:
-            total += int(linha.rsplit(":", 1)[1])
-        except (ValueError, IndexError):
-            return None
-    return total
-
-
-SEM_O_GLOB_QUE_COMERIA_A_CONTRABARRA_DO_PADRAO = {"MSYS": "noglob",
-                                                  "CYGWIN": "noglob"}
-
-
-def ambiente_do_grep() -> dict:
-    return {**os.environ, **SEM_O_GLOB_QUE_COMERIA_A_CONTRABARRA_DO_PADRAO}
-
-
-def quantas_linhas_casam(padrao: str, alvos: list, raiz: Path):
-    total = 0
-    for lote in lotes_de_caminhos(alvos):
-        try:
-            pronto = subprocess.run(
-                ["grep", "-cHInP", padrao] + lote, cwd=raiz,
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                timeout=TEMPO_DE_UM_TESTE, env=ambiente_do_grep())
-        except (OSError, subprocess.SubprocessError):
-            return None
-        if pronto.returncode >= GREP_ERROU_A_PARTIR_DE:
-            return None
-        do_lote = soma_das_contagens(pronto.stdout)
-        if do_lote is None:
-            return None
-        total += do_lote
-    return total
-
-
-def perdao_do_termo(termo: dict, alvos: list, raiz: Path) -> tuple:
-    perdoadas, sem_referente = 0, []
-    for excecao in termo.get("excecoes", []):
-        quantas = excecao.get("ocorrencias") or 0
-        if not quantas:
-            continue
-        declarados = excecao.get("arquivos") or []
-        if not declarados:
-            sem_referente.append(excecao.get("caso") or EXCECAO_SEM_CASO)
-            continue
-        referentes = [a for a in declarados if a in alvos]
-        if not referentes:
-            continue
-        no_referente = quantas_linhas_casam(
-            termo["pronto"]["padrao"], referentes, raiz)
-        if no_referente is None:
-            return None, sem_referente
-        perdoadas += min(quantas, no_referente)
-    return perdoadas, sem_referente
-
-
-def saldo_do_vocabulario(raiz: Path) -> list:
-    fonte = raiz / FONTE_DO_VOCABULARIO
-    if not fonte.is_file():
-        return []
-    try:
-        termos = json.loads(fonte.read_text(encoding="utf-8"))["termos"]
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return []
-    listados = corre("git ls-files", cwd=raiz)[1].split("\n")
-    alvos = [c for c in listados
-             if c and c not in FORA_DA_CONTA_DO_VOCABULARIO]
-    if not alvos:
-        return []
-    contas = []
-    for termo in termos:
-        achadas = quantas_linhas_casam(
-            termo["pronto"]["padrao"], alvos, raiz)
-        perdoadas, sem_referente = perdao_do_termo(termo, alvos, raiz)
-        cego = achadas is None or perdoadas is None
-        saldo = None if cego else max(achadas - perdoadas, 0)
-        contas.append((termo["id"], achadas, perdoadas or 0, saldo,
-                       sem_referente))
-    return contas
-
-
-def folga_do_termo(bruto, perdoadas: int) -> int:
-    return 0 if bruto is None else max(perdoadas - bruto, 0)
-
-
-def vocabulario(raiz: Path) -> int:
-    contas = saldo_do_vocabulario(raiz)
-    if not contas:
-        print(SEM_VOCABULARIO.format(FONTE_DO_VOCABULARIO))
-        return 0
-    print(f"\n{TITULO_VOCABULARIO}")
-    orfas = []
-    for nome, bruto, perdoadas, saldo, sem_referente in contas:
-        folga = folga_do_termo(bruto, perdoadas)
-        print(LINHA_DO_TERMO.format(
-            nome, SEM_MEDIDA if bruto is None else bruto, perdoadas,
-            SEM_MEDIDA if saldo is None else saldo,
-            TERMO_NAO_MEDIDO if saldo is None else
-            (TERMO_ABERTO if saldo else
-             (TERMO_COM_FOLGA.format(folga) if folga else TERMO_FECHADO))))
-        orfas += [(nome, caso) for caso in sem_referente]
-    for nome, caso in orfas:
-        print(EXCECAO_SEM_REFERENTE.format(termo=nome, caso=caso))
-    cegos = sum(1 for _, _, _, saldo, _ in contas if saldo is None)
-    aberto = sum(saldo for _, _, _, saldo, _ in contas if saldo is not None)
-    folgas = sum(folga_do_termo(bruto, perdoadas)
-                 for _, bruto, perdoadas, _, _ in contas)
-    if cegos:
-        print(VOCABULARIO_NAO_MEDIDO.format(cegos))
-    elif aberto:
-        print(VOCABULARIO_ABERTO.format(aberto))
-    elif folgas:
-        print(VOCABULARIO_COM_FOLGA.format(folgas))
-    else:
-        print(VOCABULARIO_FECHADO)
-    return 1 if (aberto or cegos or folgas) else 0
-
-
 def branches_de_longa_duracao(raiz: Path) -> set:
     try:
         linhas = (raiz / ARQUIVO_DAS_PROTEGIDAS).read_text(
@@ -855,15 +861,116 @@ def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
     return SAIDA_COM_ACHADO
 
 
-def veredito_da_entrega(faltou: int, sobrou: int) -> int:
-    if SAIDA_COM_ACHADO in (faltou, sobrou):
+def integracao_declarada(raiz: Path) -> str:
+    try:
+        dado = json.loads((raiz / ARQUIVO_DO_EXECUTOR).read_text(
+            encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    branches = dado.get(CHAVE_DAS_BRANCHES) if isinstance(dado, dict) \
+        else None
+    if not isinstance(branches, dict):
+        return ""
+    declarada = branches.get(CHAVE_DA_INTEGRACAO)
+    return str(declarada).strip() if declarada else ""
+
+
+def comando_do_pedido_aberto(base: str, cabeca: str) -> list:
+    return [parte.format(base, cabeca) for parte in COMANDO_DO_PEDIDO_ABERTO]
+
+
+def numeros_dos_pedidos_abertos(raiz: Path, base: str, cabeca: str):
+    try:
+        codigo, saida = corre_a_lista(comando_do_pedido_aberto(base, cabeca),
+                                      tempo=TEMPO_DA_REDE, cwd=raiz)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if codigo != 0:
+        return None
+    try:
+        pedidos = json.loads(saida or "[]")
+    except ValueError:
+        return None
+    if not isinstance(pedidos, list):
+        return None
+    return [p[CHAVE_DO_NUMERO_DO_PEDIDO] for p in pedidos
+            if isinstance(p, dict) and CHAVE_DO_NUMERO_DO_PEDIDO in p]
+
+
+def o_que_espera_incorporacao(raiz: Path, atual: str,
+                              consultar_pedidos=numeros_dos_pedidos_abertos
+                              ) -> int:
+    incorporacao = branch_de_incorporacao(raiz)
+    if not incorporacao:
+        print(PEDIDO_PULADO_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
+                                                    CHAVE_POR_INCORPORACAO))
+        return SAIDA_LIMPA
+    if atual == incorporacao:
+        print(PEDIDO_PULADO_NA_INCORPORACAO.format(atual))
+        return SAIDA_LIMPA
+    integracao = integracao_declarada(raiz)
+    if not integracao:
+        print(PEDIDO_PULADO_SEM_INTEGRACAO.format(
+            ARQUIVO_DO_EXECUTOR, CHAVE_DAS_BRANCHES, CHAVE_DA_INTEGRACAO))
+        return SAIDA_LIMPA
+    codigo, falha = corre(
+        COMANDO_DA_BUSCA_NO_REMOTO.format(integracao, incorporacao),
+        tempo=TEMPO_DA_REDE, cwd=raiz)
+    if codigo != 0:
+        print(PEDIDO_BUSCA_NAO_MEDIDA.format(integracao, incorporacao,
+                                             falha.splitlines()[-1]
+                                             if falha else codigo))
+        return SAIDA_NAO_MEDIDO
+    espelho = f"{PREFIXO_DO_REMOTO}{integracao}"
+    referencia = f"{PREFIXO_DO_REMOTO}{incorporacao}"
+    _, sobra = corre(COMANDO_DO_QUE_A_INCORPORACAO_NAO_TEM.format(
+        referencia, espelho), cwd=raiz)
+    commits = [l for l in sobra.split("\n") if l.strip()]
+    if not commits:
+        print(PEDIDO_LIMPO.format(referencia, espelho))
+        return SAIDA_LIMPA
+    pedidos = consultar_pedidos(raiz, incorporacao, integracao)
+    if pedidos is None:
+        print(PEDIDO_NAO_MEDIDO.format(len(commits), espelho, referencia,
+                                       incorporacao, integracao))
+        return SAIDA_NAO_MEDIDO
+    if pedidos:
+        print(PEDIDO_ABERTO.format(len(commits), espelho, pedidos[0]))
+        return SAIDA_LIMPA
+    print(PEDIDO_POR_ABRIR.format(len(commits), espelho, referencia))
+    for commit in commits:
+        print(f"  {commit}")
+    print(PEDIDO_COMO_ABRIR.format(incorporacao, integracao))
+    return SAIDA_COM_ACHADO
+
+
+def veredito_da_entrega(*pontas: int) -> int:
+    if SAIDA_COM_ACHADO in pontas:
         return SAIDA_COM_ACHADO
-    if SAIDA_NAO_MEDIDO in (faltou, sobrou):
+    if SAIDA_NAO_MEDIDO in pontas:
         return SAIDA_NAO_MEDIDO
     return SAIDA_LIMPA
 
 
-def entrega(raiz: Path) -> int:
+def arvores_de_trabalho(raiz: Path) -> str:
+    try:
+        codigo, saida = corre(COMANDO_DAS_ARVORES, cwd=raiz)
+    except (OSError, subprocess.SubprocessError):
+        return ARVORES_NAO_MEDIDAS
+    if codigo != 0:
+        return ARVORES_NAO_MEDIDAS
+    caminhos = [linha[len(MARCA_DA_ARVORE):].strip()
+                for linha in saida.split("\n")
+                if linha.startswith(MARCA_DA_ARVORE)]
+    if len(caminhos) < 2:
+        return UMA_ARVORE_SO
+    agora = time.strftime("%H:%M:%S")
+    return ARVORES_AO_LADO.format(len(caminhos), agora,
+                                  ", ".join(Path(c).name for c in caminhos))
+
+
+def entrega(raiz: Path,
+            consultar_pedidos=numeros_dos_pedidos_abertos) -> int:
     codigo, atual = corre(COMANDO_DA_BRANCH, cwd=raiz)
     if codigo != 0 or not atual:
         print(FORA_DE_REPOSITORIO)
@@ -871,21 +978,20 @@ def entrega(raiz: Path) -> int:
     print(f"\n{TITULO_ENTREGA}")
     faltou = o_que_ainda_nao_saiu(raiz, atual)
     sobrou = o_que_saiu_e_ficou(raiz, atual)
-    return veredito_da_entrega(faltou, sobrou)
+    espera = o_que_espera_incorporacao(raiz, atual, consultar_pedidos)
+    print(arvores_de_trabalho(raiz))
+    return veredito_da_entrega(faltou, sobrou, espera)
 
 
-def onde_a_issue_nasce(raiz: Path) -> int:
-    print(f"\n{TITULO_DO_QUADRO}")
+def quadro_declarado(raiz: Path) -> tuple:
     caminho = raiz / ARQUIVO_DO_EXECUTOR
     if not caminho.is_file():
-        print(QUADRO_SEM_ARQUIVO.format(ARQUIVO_DO_EXECUTOR,
-                                        ARQUIVO_DO_EXEMPLO_DO_EXECUTOR))
-        return 1
+        return "", QUADRO_SEM_ARQUIVO.format(ARQUIVO_DO_EXECUTOR,
+                                             ARQUIVO_DO_EXEMPLO_DO_EXECUTOR)
     try:
         dado = json.loads(caminho.read_text(encoding="utf-8"))
     except (OSError, ValueError) as falha:
-        print(QUADRO_ILEGIVEL.format(ARQUIVO_DO_EXECUTOR, falha))
-        return 1
+        return "", QUADRO_ILEGIVEL.format(ARQUIVO_DO_EXECUTOR, falha)
     declarado = ""
     if isinstance(dado, dict):
         issues = dado.get(CHAVE_DAS_ISSUES)
@@ -893,12 +999,143 @@ def onde_a_issue_nasce(raiz: Path) -> int:
             declarado = str(
                 issues.get(CHAVE_DO_REPOSITORIO_DAS_ISSUES) or "").strip()
     if not declarado or MARCA_POR_PREENCHER in declarado:
-        print(QUADRO_POR_PREENCHER.format(
+        return "", QUADRO_POR_PREENCHER.format(
             ARQUIVO_DO_EXECUTOR, CHAVE_DAS_ISSUES,
-            CHAVE_DO_REPOSITORIO_DAS_ISSUES))
-        return 1
-    print(QUADRO_DECLARADO.format(declarado))
-    return 0
+            CHAVE_DO_REPOSITORIO_DAS_ISSUES)
+    return declarado, QUADRO_DECLARADO.format(declarado)
+
+
+def instrucoes_da_raiz(raiz: Path) -> tuple:
+    if (raiz / ARQUIVO_DAS_INSTRUCOES).is_file():
+        return True, INSTRUCOES_NO_LUGAR.format(ARQUIVO_DAS_INSTRUCOES)
+    return False, INSTRUCOES_AUSENTES.format(ARQUIVO_DAS_INSTRUCOES,
+                                             ARQUIVO_DAS_INSTRUCOES)
+
+
+def mesma_pasta(um: str, outra: Path) -> bool:
+    try:
+        return Path(um).resolve() == outra.resolve()
+    except (OSError, ValueError):
+        return False
+
+
+def servidores_desligados_no_cliente(raiz: Path, casa: Path) -> set:
+    estado = casa / ARQUIVO_DE_ESTADO_DO_CLIENTE
+    dado = json.loads(estado.read_text(encoding="utf-8"))
+    projetos = dado.get(CHAVE_DOS_PROJETOS_DO_CLIENTE, {})
+    if not isinstance(projetos, dict):
+        return set()
+    desligados = set()
+    for caminho, entrada in projetos.items():
+        if isinstance(entrada, dict) and mesma_pasta(caminho, raiz):
+            desligados.update(entrada.get(CHAVE_DOS_SERVIDORES_DESLIGADOS)
+                              or [])
+    return desligados
+
+
+def servidores_pedindo_autenticacao(casa: Path) -> set:
+    pendencia = casa / ARQUIVO_DE_AUTENTICACAO_PENDENTE
+    if not pendencia.is_file():
+        return set()
+    dado = json.loads(pendencia.read_text(encoding="utf-8"))
+    return set(dado) if isinstance(dado, dict) else set()
+
+
+def estado_do_cliente_sobre_os_servidores(raiz: Path, declarados: list,
+                                          casa: Path = None) -> str:
+    casa = Path.home() if casa is None else casa
+    if not (casa / ARQUIVO_DE_ESTADO_DO_CLIENTE).is_file():
+        return ESTADO_DO_CLIENTE_AUSENTE.format(ARQUIVO_DE_ESTADO_DO_CLIENTE)
+    try:
+        desligados = sorted(
+            set(declarados) & servidores_desligados_no_cliente(raiz, casa))
+        pendentes = sorted(
+            set(declarados) & servidores_pedindo_autenticacao(casa))
+    except (OSError, ValueError) as falha:
+        return ESTADO_DO_CLIENTE_ILEGIVEL.format(ARQUIVO_DE_ESTADO_DO_CLIENTE,
+                                                 falha)
+    linhas = []
+    if desligados:
+        linhas.append(ESTADO_DO_CLIENTE_DESLIGOU.format(
+            len(desligados), ", ".join(desligados)))
+    if pendentes:
+        linhas.append(ESTADO_DO_CLIENTE_PEDE_AUTENTICACAO.format(
+            len(pendentes), ", ".join(pendentes)))
+    if not linhas:
+        linhas.append(ESTADO_DO_CLIENTE_NADA_ACUSA)
+    linhas.append(ESTADO_DO_CLIENTE_NAO_GUARDA_CONEXAO)
+    return "\n".join(linhas)
+
+
+def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
+    alvo = raiz / ARQUIVO_DA_DECLARACAO_DE_MCP
+    if not alvo.is_file():
+        return None, MCP_SEM_ARQUIVO.format(ARQUIVO_DA_DECLARACAO_DE_MCP)
+    try:
+        dado = json.loads(alvo.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as falha:
+        return False, MCP_ILEGIVEL.format(ARQUIVO_DA_DECLARACAO_DE_MCP, falha)
+    declarados = (dado.get(CHAVE_DOS_SERVIDORES_DE_MCP)
+                  if isinstance(dado, dict) else None)
+    if not isinstance(declarados, dict) or not declarados:
+        return False, MCP_SEM_SERVIDOR.format(ARQUIVO_DA_DECLARACAO_DE_MCP,
+                                              CHAVE_DOS_SERVIDORES_DE_MCP)
+    nomes = sorted(declarados)
+    declaracao = MCP_DECLARADO.format(ARQUIVO_DA_DECLARACAO_DE_MCP,
+                                      len(nomes), ", ".join(nomes))
+    estado = estado_do_cliente_sobre_os_servidores(raiz, nomes, casa=casa)
+    return True, f"{declaracao}\n{estado}"
+
+
+def indice_da_abertura(raiz: Path) -> tuple:
+    if not (raiz / INSTRUMENTO_DO_INDICE).is_file():
+        return None, INDICE_NAO_INSTALADO.format(INSTRUMENTO_DO_INDICE)
+    if not (raiz / ARQUIVO_DOS_ALVOS_DO_INDICE).is_file():
+        return False, INDICE_SEM_ALVOS.format(ARQUIVO_DOS_ALVOS_DO_INDICE)
+    try:
+        codigo, saida = corre_a_lista(
+            [INTERPRETADOR, INSTRUMENTO_DO_INDICE,
+             BANDEIRA_DO_ESTADO_DO_INDICE],
+            tempo=TEMPO_DO_ESTADO_DO_INDICE, cwd=raiz)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return False, INDICE_FORA.format(
+            INSTRUMENTO_DO_INDICE, BANDEIRA_DO_ESTADO_DO_INDICE,
+            type(falha).__name__, f"    {falha}", BUSCADOR_DO_INDICE)
+    if codigo != 0:
+        ultimas = saida.splitlines()[-TETO_DE_LINHAS_DO_ERRO:]
+        return False, INDICE_FORA.format(
+            INSTRUMENTO_DO_INDICE, BANDEIRA_DO_ESTADO_DO_INDICE, codigo,
+            "\n".join(f"    {linha}" for linha in ultimas),
+            BUSCADOR_DO_INDICE)
+    return True, INDICE_DE_PE.format(BUSCADOR_DO_INDICE)
+
+
+def pecas_da_abertura(raiz: Path) -> list:
+    declarado, recado = quadro_declarado(raiz)
+    return [instrucoes_da_raiz(raiz),
+            servidores_de_contexto(raiz),
+            (bool(declarado), recado),
+            indice_da_abertura(raiz)]
+
+
+def abertura(raiz: Path) -> int:
+    print(f"\n{TITULO_DA_ABERTURA}")
+    pecas = pecas_da_abertura(raiz)
+    for _, recado in pecas:
+        print(recado)
+    faltam = [ok for ok, _ in pecas if ok is False]
+    if faltam:
+        print(ABERTURA_INCOMPLETA.format(len(faltam)))
+        return SAIDA_COM_ACHADO
+    print(ABERTURA_INTEGRA.format(len([ok for ok, _ in pecas if ok])))
+    return SAIDA_LIMPA
+
+
+def onde_a_issue_nasce(raiz: Path) -> int:
+    print(f"\n{TITULO_DO_QUADRO}")
+    declarado, recado = quadro_declarado(raiz)
+    print(recado)
+    return 0 if declarado else 1
 
 
 def dias_parado(arquivo: Path, agora: float) -> int:
@@ -1246,6 +1483,47 @@ def ganchos_ligados_fora_do_git(raiz: Path, ganchos: list) -> list:
                   if c not in set(ganchos) and (raiz / c).is_file())
 
 
+def cercas_do_despachante(raiz: Path) -> dict:
+    try:
+        texto = (raiz / GANCHO_DO_DESPACHANTE).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    bloco = BLOCO_DAS_CERCAS.search(texto)
+    if bloco is None:
+        return {}
+    return {f"{PASTA_DOS_GANCHOS}/{nome}.py": matcher
+            for nome, matcher in CERCA_DECLARADA.findall(bloco.group(1))}
+
+
+def cercas_que_o_despachante_roda(raiz: Path) -> set:
+    return set(cercas_do_despachante(raiz))
+
+
+def matchers_declarados(raiz: Path) -> dict:
+    escopo, _ = escopo_do_instalador(raiz)
+    if escopo is None:
+        return {}
+    declarado = {}
+    for valor in escopo.values():
+        if type(valor).__name__ == NOME_DO_GANCHO_DECLARADO:
+            for caminho in CAMINHO_DE_GANCHO.findall(valor.comando):
+                declarado[caminho] = valor.matcher
+    return declarado
+
+
+def divergencias_do_despachante(raiz: Path) -> list:
+    do_despachante = cercas_do_despachante(raiz)
+    if not do_despachante:
+        return []
+    declarado = matchers_declarados(raiz)
+    saldos = []
+    for caminho, matcher in sorted(do_despachante.items()):
+        esperado = declarado.get(caminho)
+        if esperado is not None and esperado != matcher:
+            saldos.append((caminho, SALDO_MATCHER_DIVERGENTE))
+    return saldos
+
+
 def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
                         declarados: set) -> list:
     embutidos = embutidos_sob(raiz, fontes, f"{PASTA_DOS_GANCHOS}/")
@@ -1253,6 +1531,8 @@ def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
     for comando in comandos_dos_ganchos(raiz, (ARQUIVO_SETTINGS,),
                                         TODOS_OS_EVENTOS):
         ligados.update(CAMINHO_DE_GANCHO.findall(comando))
+    if GANCHO_DO_DESPACHANTE in ligados:
+        ligados |= cercas_que_o_despachante_roda(raiz)
     saldos = [(c, SALDO_NAO_VIAJA) for c in ganchos
               if c not in embutidos]
     saldos += [(c, SALDO_ORFA)
@@ -1296,6 +1576,7 @@ def matricula(raiz: Path) -> int:
     fontes, declarados, por_modulo = lida
     saldos = saldos_da_matricula(raiz, ganchos, fontes, declarados)
     saldos += saldos_dos_instrumentos(raiz, instrumentos, fontes, por_modulo)
+    saldos += divergencias_do_despachante(raiz)
     for caminho, motivo in saldos:
         print(LINHA_DO_SALDO.format(caminho, motivo))
     fora_do_git = ganchos_ligados_fora_do_git(raiz, ganchos)
@@ -1590,7 +1871,6 @@ def medir(raiz: Path) -> tuple:
             acima_do_teto.append((skill.parent.name, peso))
     paginas = sorted((raiz / PASTA_DO_CONHECIMENTO).glob(GLOB_PAGINA))
     achados_de_subagente, subagentes_sem_coleira = subagentes(raiz)
-    contas_do_vocabulario = saldo_do_vocabulario(raiz)
     injetado_por_gancho, ganchos_cegos = bytes_que_os_ganchos_injetam(
         raiz)
     dados = {
@@ -1607,15 +1887,6 @@ def medir(raiz: Path) -> tuple:
         "bytes_das_paginas": sum(len(p.read_bytes()) for p in paginas),
         "ganchos": len(sorted((raiz / PASTA_DOS_GANCHOS).glob(GLOB_PYTHON))),
         "subagentes": len(achados_de_subagente),
-        "vocabulario_aberto": sum(
-            saldo for _, _, _, saldo, _ in contas_do_vocabulario
-            if saldo is not None),
-        "vocabulario_nao_medido": sum(
-            1 for _, _, _, saldo, _ in contas_do_vocabulario
-            if saldo is None),
-        "excecoes_sem_referente": sum(
-            len(sem_referente)
-            for _, _, _, _, sem_referente in contas_do_vocabulario),
         "subagentes_sem_coleira": len(subagentes_sem_coleira),
         "skills_acima_do_teto": len(acima_do_teto),
         "regras": quantas_regras(raiz),
@@ -1659,12 +1930,20 @@ def resumo_da_suite(saida: str) -> str:
     return resumo[:52]
 
 
-def instrumentos_com_teste(raiz: Path) -> list:
+def pecas_de_instrumento(raiz: Path) -> list:
     alvos = sorted(raiz.glob(GLOB_PYTHON))
     alvos += sorted((raiz / PASTA_DOS_GANCHOS).glob(GLOB_PYTHON))
     alvos += sorted((raiz / PASTA_DOS_INSTRUMENTOS).rglob(GLOB_PYTHON))
-    return [a for a in alvos
-            if BANDEIRA_DE_TESTE in a.read_text(encoding="utf-8", errors="replace")]
+    return alvos
+
+
+def tem_bancada(peca: Path) -> bool:
+    return BANDEIRA_DE_TESTE in peca.read_text(encoding="utf-8",
+                                               errors="replace")
+
+
+def instrumentos_com_teste(raiz: Path) -> list:
+    return [a for a in pecas_de_instrumento(raiz) if tem_bancada(a)]
 
 
 def casos_da_suite(saida: str) -> int:
@@ -1717,6 +1996,140 @@ def provar(raiz: Path) -> tuple:
                     "segundos": round(segundos, 1), "casos": casos}
 
 
+def linhas_do_git(raiz: Path, comando: str):
+    try:
+        codigo, saida = corre(comando, cwd=raiz)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if codigo != 0:
+        return None
+    return [linha.strip() for linha in saida.splitlines() if linha.strip()]
+
+
+def base_dos_commits_da_sessao(raiz: Path) -> str:
+    try:
+        codigo, alvo = corre(COMANDO_DO_UPSTREAM, cwd=raiz)
+        if codigo == 0 and alvo.strip():
+            return alvo.strip()
+        declarada = integracao_declarada(raiz) or branch_de_incorporacao(raiz)
+        return referencia_que_existe(raiz, declarada) if declarada else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def caminhos_que_a_sessao_tocou(raiz: Path) -> tuple:
+    mudados = linhas_do_git(raiz, COMANDO_DO_QUE_MUDOU)
+    nascidos = linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU)
+    if mudados is None or nascidos is None:
+        return None, BANCADA_SEM_GIT
+    base = base_dos_commits_da_sessao(raiz)
+    if not base:
+        return None, BANCADA_SEM_BASE
+    commitados = linhas_do_git(raiz, COMANDO_DO_QUE_A_BRANCH_TEM.format(base))
+    if commitados is None:
+        return None, BANCADA_SEM_COMPARACAO.format(base)
+    return sorted(set(mudados) | set(nascidos) | set(commitados)), base
+
+
+def rodar_uma_bancada(raiz: Path, caminho: str, teto: float,
+                      de_onde: Path = None) -> tuple:
+    partida = time.monotonic()
+    try:
+        codigo, saida = corre_a_lista(
+            [INTERPRETADOR, str(raiz / caminho), BANDEIRA_DE_TESTE],
+            tempo=teto, cwd=de_onde or raiz)
+    except subprocess.TimeoutExpired:
+        return MARCA_DE_QUE_NAO_COUBE, BANCADA_NAO_COUBE.format(caminho, teto)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return MARCA_DE_QUE_CAIU, BANCADA_NAO_RODOU.format(caminho, falha)
+    gasto = time.monotonic() - partida
+    if codigo == 0 and MARCA_DE_BANCADA_AUSENTE in saida:
+        return FORA_DA_PROVA, BANCADA_QUE_NAO_VIAJA.format(caminho)
+    return (MARCA_DE_QUE_PASSOU if codigo == 0 else MARCA_DE_QUE_CAIU,
+            LINHA_DA_BANCADA.format(caminho, gasto, resumo_da_suite(saida)))
+
+
+def delega_a_bancada_da_pasta(peca: Path) -> bool:
+    vizinha = peca.parent / ARQUIVO_DA_BANCADA_DA_PASTA
+    if peca.name == ARQUIVO_DA_BANCADA_DA_PASTA or not vizinha.is_file():
+        return False
+    return IMPORTE_DA_BANCADA_DA_PASTA in peca.read_text(encoding="utf-8",
+                                                         errors="replace")
+
+
+def sem_a_bancada_repetida(raiz: Path, com: list) -> list:
+    pastas_com_bancada = {Path(c).parent.as_posix() for c in com
+                          if Path(c).name == ARQUIVO_DA_BANCADA_DA_PASTA}
+    return [c for c in com
+            if Path(c).parent.as_posix() not in pastas_com_bancada
+            or not delega_a_bancada_da_pasta(raiz / c)]
+
+
+def separar_por_bancada(raiz: Path, tocados: list) -> tuple:
+    pecas = {p.relative_to(raiz).as_posix(): p
+             for p in pecas_de_instrumento(raiz)}
+    escolhidas = sorted(set(tocados) & set(pecas))
+    com = sem_a_bancada_repetida(
+        raiz, [c for c in escolhidas if tem_bancada(pecas[c])])
+    return com, [c for c in escolhidas if c not in com and c not in
+                 [x for x in escolhidas if tem_bancada(pecas[x])]]
+
+
+def anunciar_o_que_ficou_de_fora(fora: list, orcamento: float) -> None:
+    if not fora:
+        return
+    print(BANCADA_FORA_DO_ORCAMENTO.format(len(fora), orcamento,
+                                           ", ".join(fora)))
+    print(COMO_PROVAR_O_QUE_FICOU_DE_FORA)
+
+
+def bancada_dos_tocados(raiz: Path,
+                        orcamento: float = ORCAMENTO_DAS_BANCADAS_TOCADAS,
+                        teto: float = TEMPO_DE_UMA_BANCADA_TOCADA) -> int:
+    print(f"\n{TITULO_DA_BANCADA}")
+    tocados, base = caminhos_que_a_sessao_tocou(raiz)
+    if tocados is None:
+        print(BANCADA_NAO_MEDIDA.format(base))
+        return SAIDA_NAO_MEDIDO
+    com_bancada, sem_bancada = separar_por_bancada(raiz, tocados)
+    print(BANCADA_O_QUE_TOCOU.format(len(tocados), base, len(com_bancada),
+                                     len(sem_bancada)))
+    for caminho in sem_bancada:
+        print(LINHA_DE_CASO.format(FORA_DA_PROVA,
+                                   BANCADA_SEM_TESTE.format(caminho)))
+    if not com_bancada:
+        print(BANCADA_NENHUM_TOCADO)
+        return SAIDA_LIMPA
+    partida = time.monotonic()
+    caidos, nao_couberam, rodadas, fora_do_orcamento = [], [], 0, []
+    nasceu_antes = set(linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU) or [])
+    with tempfile.TemporaryDirectory(prefix="bancada-fora-da-raiz-") as fora:
+        for lugar, caminho in enumerate(com_bancada):
+            if time.monotonic() - partida >= orcamento:
+                fora_do_orcamento = com_bancada[lugar:]
+                break
+            marca, texto = rodar_uma_bancada(raiz, caminho, teto, Path(fora))
+            print(LINHA_DE_CASO.format(marca, texto))
+            rodadas += 1
+            if marca == MARCA_DE_QUE_CAIU:
+                caidos.append(caminho)
+            if marca == MARCA_DE_QUE_NAO_COUBE:
+                nao_couberam.append(caminho)
+    sujou = sorted(set(linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU) or [])
+                   - nasceu_antes)
+    anunciar_o_que_ficou_de_fora(fora_do_orcamento, orcamento)
+    ficou_cego = bool(nao_couberam or fora_do_orcamento)
+    if sujou:
+        print(BANCADA_QUE_SUJOU.format(", ".join(sujou)))
+    if caidos:
+        print(BANCADA_VERMELHA.format(len(caidos), rodadas, ", ".join(caidos)))
+    elif not ficou_cego and not sujou:
+        print(BANCADA_LIMPA.format(rodadas))
+    return veredito_da_entrega(
+        SAIDA_COM_ACHADO if (caidos or sujou) else SAIDA_LIMPA,
+        SAIDA_NAO_MEDIDO if ficou_cego else SAIDA_LIMPA)
+
+
 def _texto(valor):
     return str(valor).lower()
 
@@ -1757,12 +2170,27 @@ def perguntas(quantas_regras):
     )
 
 
+def o_evento_do_resultado(eventos: list) -> dict:
+    for evento in reversed(eventos):
+        if isinstance(evento, dict) and evento.get("type") == TIPO_DO_RESULTADO:
+            return evento
+    for evento in reversed(eventos):
+        if isinstance(evento, dict):
+            return evento
+    return {}
+
+
 def colher_json(texto: str) -> dict:
-    for corte in (texto, texto[texto.find("{"):texto.rfind("}") + 1]):
+    cortes = (texto,
+              texto[texto.find("{"):texto.rfind("}") + 1],
+              texto[texto.find("["):texto.rfind("]") + 1])
+    for corte in cortes:
         with contextlib.suppress(ValueError):
             dado = json.loads(corte)
             if isinstance(dado, dict):
                 return dado
+            if isinstance(dado, list):
+                return o_evento_do_resultado(dado)
     return {}
 
 
@@ -1805,10 +2233,10 @@ def simular(raiz: Path) -> tuple:
         alvo.unlink()
 
     partida = time.monotonic()
-    _, bruto = corre(
-        f'claude -p {json.dumps(PEDIDO.format(arquivo=ARQUIVO_PEDIDO))} '
-        f'--output-format json --model {MODELO_DA_SIMULACAO} '
-        f'--allowedTools "{FERRAMENTAS_DA_SIMULACAO}"',
+    _, bruto = corre_a_lista(
+        ["claude", "-p", PEDIDO.format(arquivo=ARQUIVO_PEDIDO),
+         "--output-format", "json", "--model", MODELO_DA_SIMULACAO,
+         "--allowedTools", FERRAMENTAS_DA_SIMULACAO],
         tempo=TEMPO_DA_SIMULACAO, cwd=raiz)
     parede = time.monotonic() - partida
 
@@ -1870,8 +2298,6 @@ NUMEROS = {
     "paginas": ("medir", "paginas"),
     "ganchos": ("medir", "ganchos"),
     "subagentes": ("medir", "subagentes"),
-    "vocabulario-aberto": ("medir", "vocabulario_aberto"),
-    "vocabulario-nao-medido": ("medir", "vocabulario_nao_medido"),
     "subagentes-sem-coleira": ("medir", "subagentes_sem_coleira"),
     "skills-acima-do-teto": ("medir", "skills_acima_do_teto"),
     "injetado-por-gancho": ("medir", "injetado_por_gancho"),
@@ -1985,12 +2411,16 @@ def main() -> int:
     ap.add_argument("--numero", help="imprime um número só, para virar prova")
     ap.add_argument("--largada", action="store_true",
                     help="cobra o teto de bytes que toda sessão paga")
+    ap.add_argument("--abertura", action="store_true",
+                    help="prova que a sessão tem instruções, servidores de "
+                         "contexto, endereço do quadro e índice de pé")
     ap.add_argument("--entrega", action="store_true",
                     help="prova que nada ficou fora da branch de entrega")
-    ap.add_argument("--vocabulario", action="store_true",
-                    help="mede o fechamento dos termos e sai 1 se algum reabriu")
     ap.add_argument("--matricula", action="store_true",
                     help="cobra que todo gancho rastreado viaje no instalador")
+    ap.add_argument("--bancada", action="store_true",
+                    help="roda a bancada de cada instrumento que a sessão "
+                         "tocou, medida pelo git")
     ap.add_argument("--chaves", action="store_true",
                     help="acusa chave de configuração que ninguém lê")
     ap.add_argument("--declarados", action="store_true",
@@ -2028,14 +2458,17 @@ def main() -> int:
     if a.largada:
         return largada(raiz)
 
+    if a.abertura:
+        return abertura(raiz)
+
     if a.entrega:
         return entrega(raiz)
 
-    if a.vocabulario:
-        return vocabulario(raiz)
-
     if a.matricula:
         return matricula(raiz)
+
+    if a.bancada:
+        return bancada_dos_tocados(raiz)
 
     if a.chaves:
         return chaves(raiz)

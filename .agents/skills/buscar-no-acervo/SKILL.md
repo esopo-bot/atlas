@@ -37,6 +37,10 @@ você não sabe. Achou o alvo, repita a pergunta nele.
   caminho absoluto. Sem ele, busca em tudo que o banco tem.
 - A busca é híbrida: significado mais termo exato, fundidos. `--denso` roda só
   por significado, para comparar; `--medir` compara os dois no seu acervo.
+- **A resposta tem teto.** O total sai cortado no `--teto-total` (30 trechos
+  por padrão), e a última linha avisa quando cortou: `cortado no teto de N:
+  havia M`. Viu essa linha? Você não viu tudo — o certo é estreitar com
+  `--alvo`, não subir o teto.
 
 ## Quando não usar
 

@@ -9,6 +9,7 @@
 # exclude e entraram no git: quem barra a publicação deles é a lista
 # NUNCA_PUBLICADOS do publicar.py, não a ausência no repositório.
 nucleo/executor.json
+nucleo/bancada.json
 
 # Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
 # lado do log quando o verificador roda com --debug-file: artefato dela, não

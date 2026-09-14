@@ -1,6 +1,6 @@
 ---
 name: documentar-processo
-description: Use quando o pedido for escrever, atualizar ou corrigir DOCUMENTAÇÃO de processo — passo a passo, procedimento, manual, guia, fluxo de "como se faz" —, inclusive quando o documento ainda não existe e vai nascer agora. Palavras que a acordam — documenta, documentação, passo a passo, procedimento, fluxo, manual, guia, "não bate mais com a realidade". Documento não é peça de código, então não procure se "já existe" — procurar código é da busca-de-codigo-existente; abrir issue sobre o documento é da trabalho-por-issue. Esta escreve o documento.
+description: Use quando o pedido for escrever, atualizar ou corrigir DOCUMENTAÇÃO de processo — passo a passo, procedimento, manual, guia, fluxo de "como se faz" —, inclusive quando o documento ainda não existe e vai nascer agora. Palavras que a acordam — documenta, documentação, passo a passo, procedimento, fluxo, manual, guia, "não bate mais com a realidade". Esta escreve o documento.
 ---
 
 # Documentar um processo

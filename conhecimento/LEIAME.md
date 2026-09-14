@@ -28,6 +28,9 @@ Acabou de instalar a camada? São **quatro passos**, e nenhum deles é ler tudo.
    disparar, [a skill que dispara](skill-que-dispara.md) traz a receita
    medida.
 
+Sessão nova abre pelo briefing da camada, `.agents/prompts/bootstart.md`:
+o comando de barra `/bootstart` o carrega, e o `AGENTS.md` aponta para ele.
+
 Pronto. **O resto desta página é sob demanda**: são páginas que se abrem
 quando o assunto aparece, não leitura de largada. E a máquina precisa de
 coisas que o instalador não traz — isso está em
@@ -49,6 +52,21 @@ página inexistente manda procurar o que ninguém escreveu.
 - [a rotina que abre issue só para erro novo](rotina-de-erros-novos.md).
 - [a guarda mecânica das regras](guarda-mecanica-das-regras.md) — o que cobra
   cada regra na prática: gancho, rotina, ou nada.
+- [o auditor](auditor.md) — por que quem verifica a execução lê a evidência
+  gravada, e não o comportamento da sessão.
+- [a verificação pós-atualização](verificacao-pos-atualizacao.md) — a
+  camada foi atualizada aqui: prove a instalação e cace o resto da versão
+  anterior.
+- [a prova de leitura do agente](prova-de-leitura-do-agente.md) — o agente
+  mostra, com saída colada, que enxerga as instruções e as skills.
+- [organizar conhecimento e projetos](organizar-conhecimento-e-projetos.md)
+  — as duas pastas do workspace na forma que as regras pedem, sem perder
+  uma linha do dono.
+- [medir o prompt de abertura](medir-o-prompt-de-abertura.md) — a bancada
+  que troca opinião por nota: árvores isoladas, problemas fixos e a régua
+  que separa o que instrumento mede do que juiz julga.
+- [a auditoria externa da camada](auditoria-externa-da-camada.md) — a
+  sessão de fora que existe para derrubar: medir antes de afirmar.
 
 Duas receitas que a camada manda usar e por muito tempo não ensinou: montar
 [um navegador por projeto](navegador-por-projeto.md), para a sessão ganhar

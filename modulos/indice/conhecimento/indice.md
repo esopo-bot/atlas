@@ -497,6 +497,7 @@ A skill `buscar-no-acervo` ensina este comando a qualquer agente que leia
 ```bash
 python .agents/indice/buscar.py "o que fazer quando a cópia diverge da fonte"
 python .agents/indice/buscar.py "vetar-andamento-em-arquivo" --alvo skills --quantos 3
+python .agents/indice/buscar.py "..." --teto-total 60  # teto da resposta inteira
 python .agents/indice/buscar.py "..." --denso      # só significado, para comparar
 python .agents/indice/buscar.py --medir            # denso contra híbrido, no seu acervo
 ```
@@ -507,6 +508,25 @@ lista local de alvos a manter. `--alvo` restringe a um caminho, pelo fim dele
 ou pelo caminho absoluto; alvo que não está no banco é recusado com a lista do
 que existe, nunca devolvido como vazio. O `alvos.json` só entra pelos
 endereços dos serviços, e sem ele valem os padrões locais.
+
+**A resposta tem teto, e o teto se declara.** `--quantos` limita por alvo e,
+sozinho, não limita a resposta: com muitos acervos indexados uma pergunta
+despeja o contexto da sessão sem ninguém pedir. O `--teto-total` é o teto da
+resposta inteira, contado em trechos — a mesma unidade do `--quantos`, que é
+o que a saída imprime. O que passa do teto não é impresso, e a resposta **diz
+que cortou** (`cortado no teto de N: havia M`): silêncio aqui seria pior que o
+despejo, porque a sessão acharia que viu tudo. Teto zero ou negativo é
+recusado com razão, em vez de desligar a conta calado.
+
+Medido em 09/09/2026 num acervo de 13 coleções, contando as linhas de achado
+antes e depois do teto entrar:
+
+```bash
+python .agents/indice/buscar.py "onde se decide o teto de contexto" \
+  | grep -c '^    \['
+```
+
+Sem teto, 65 trechos numa pergunta; com o padrão, 30 e a linha do corte.
 
 **A busca é híbrida, e isso é medido, não gosto.** Cada pergunta corre em duas
 pernas na mesma coleção — o vetor denso, que acha por significado, e o BM25 no
@@ -560,9 +580,18 @@ Reindexar é barato: só o que mudou volta ao banco (árvore de Merkle).
 ## Prova de saúde
 
 ```bash
-curl -sf localhost:${INDICE_PORTA_SAUDE:-9091}/healthz && echo vetores ok
-curl -sf localhost:${INDICE_PORTA_OLLAMA:-11434}/api/tags | grep -q nomic && echo embeddings ok
+python .agents/indice/subir.py --saude
 ```
+
+Ele sonda as duas peças e sai 0 só quando as duas respondem **e** o modelo
+está no contêiner; senão sai 1 nomeando qual faltou e por quê. A sonda fala
+HTTP pela biblioteca padrão do Python, de propósito: `curl` está na lista de
+negação de máquina corporativa, e prova que depende de ferramenta externa não
+viaja. As portas saem das mesmas `${INDICE_PORTA_SAUDE}` e
+`${INDICE_PORTA_OLLAMA}` do compose, com as padrão como reserva.
+
+Medido em 09/09/2026 com `python .agents/indice/subir.py --saude`: as duas
+peças de pé, saída 0.
 
 Os serviços declaram `restart: unless-stopped`: quando o daemon do Docker
 sobe junto com a máquina, os containers voltam sozinhos depois da

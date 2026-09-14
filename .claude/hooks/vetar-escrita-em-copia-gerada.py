@@ -45,17 +45,13 @@ BANDEIRA_LONGA = "--"
 IGUAL = "="
 COMANDO_DD = "dd"
 PREFIXO_DA_SAIDA_DO_DD = "of="
-SUFIXOS_DE_ARQUIVO = (".py", ".md", ".json", ".yml", ".yaml", ".ts",
-                      ".js", ".txt", ".jsonc")
-INTERPRETADORES = ("python", "python3", "node", "nodejs", "ruby",
-                   "perl", "php")
-MARCA_DE_ESCRITA_DENTRO_DO_SCRIPT = re.compile(
-    r"""write|truncate|unlink|remove|rename|\bmkdir\b|['"]w[+bt]*['"]""")
-ENTRE_ASPAS_SIMPLES = re.compile(r"'([^'\n]{3,300})'")
-ENTRE_ASPAS_DUPLAS = re.compile(r'"([^"\n]{3,300})"')
+MODULO_QUE_DESEMBRULHA = "desembrulhar-comando.py"
+CACHE_DO_DESEMBRULHADOR = []
+MARCADORES_DE_EXPANSAO = ("$", "`", "%")
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
 
+MARCA_DE_REPOSITORIO = ".git"
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 
@@ -124,6 +120,19 @@ SEM_INSTALADOR = (
 DIVERGENCIA_COM_O_INSTALADOR = (
     "só o gancho vê: {}; só o {} regenera: {}"
 )
+
+
+def desembrulhador():
+    import importlib.util
+    if CACHE_DO_DESEMBRULHADOR:
+        return CACHE_DO_DESEMBRULHADOR[0]
+    caminho = Path(__file__).resolve().with_name(MODULO_QUE_DESEMBRULHA)
+    origem = importlib.util.spec_from_file_location(
+        "desembrulhar_comando", caminho)
+    modulo = importlib.util.module_from_spec(origem)
+    origem.loader.exec_module(modulo)
+    CACHE_DO_DESEMBRULHADOR.append(modulo)
+    return modulo
 
 
 def e_territorio_do_repositorio(caminho: str) -> bool:
@@ -243,13 +252,13 @@ def cortar_respeitando_aspas(comando: str):
     return segmentos
 
 
-def separar(comando: str) -> list:
+def separar_desembrulhando(comando: str) -> list:
     sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
     segmentos = cortar_respeitando_aspas(sem_documento)
     aspas_nao_fecharam = segmentos is None
     if aspas_nao_fecharam:
-        return SEPARADORES_DE_COMANDO.split(sem_documento)
-    return segmentos
+        segmentos = SEPARADORES_DE_COMANDO.split(sem_documento)
+    return desembrulhador().com_os_corpos_desembrulhados(segmentos, separar_desembrulhando)
 
 
 def sem_o_par_de_aspas_que_envolve(token: str) -> str:
@@ -283,7 +292,8 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
             escritos += posicionais
         escritos += caminhos_escritos_na_opcao(programa, tokens)
         escritos += saida_do_dd(programa, tokens)
-    return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
+    return [sem_o_par_de_aspas_que_envolve(e).strip(ASPAS)
+            for e in escritos if e]
 
 
 def escreve_no_lugar(tokens: list) -> bool:
@@ -336,32 +346,10 @@ def relativo_a_raiz(caminho: str, raiz: Path, onde: str) -> str:
         return SEM_NOME
 
 
-def o_comando_chama_interpretador(comando: str) -> bool:
-    for segmento in separar(comando):
-        tokens = partir_em_tokens(segmento.strip())
-        if not tokens:
-            continue
-        programa = Path(tokens[0].replace("\\", "/")).name.lower()
-        if programa in INTERPRETADORES:
-            return True
-    return False
-
-
-def caminhos_escritos_dentro_do_script(comando: str) -> list:
-    if not o_comando_chama_interpretador(comando):
-        return []
-    if not MARCA_DE_ESCRITA_DENTRO_DO_SCRIPT.search(comando):
-        return []
-    achados = [m.group(1) for m in ENTRE_ASPAS_SIMPLES.finditer(comando)]
-    achados += [m.group(1) for m in ENTRE_ASPAS_DUPLAS.finditer(comando)]
-    return [a for a in achados
-            if "'" not in a and '"' not in a
-            and ("/" in a or a.endswith(SUFIXOS_DE_ARQUIVO))]
-
-
 def caminhos_escritos_pelo_comando(comando: str, onde: str) -> list:
-    escritos = [(c, onde) for c in caminhos_escritos_dentro_do_script(comando)]
-    for segmento in separar(comando):
+    escritos = [(c, onde) for c in
+                desembrulhador().caminhos_escritos_dentro_do_script(comando)]
+    for segmento in separar_desembrulhando(comando):
         tokens = partir_em_tokens(segmento.strip())
         for caminho in caminhos_escritos_pelo_segmento(segmento, tokens):
             escritos.append((caminho, onde))
@@ -387,15 +375,48 @@ def recusa_do_pedido(entrada: dict, raiz: Path, onde: str):
     escritos = caminhos_escritos_pelo_pedido(entrada, onde)
     if not escritos:
         return None
-    geradas = copias_geradas(raiz)
+    por_raiz = {}
     for caminho, daqui in escritos:
-        rel = relativo_a_raiz(caminho, raiz, daqui)
+        dona = raiz_do_alvo(caminho, raiz)
+        if dona not in por_raiz:
+            por_raiz[dona] = copias_geradas(dona)
+        rel = relativo_a_raiz(caminho, dona, daqui)
         if not rel:
             continue
-        fonte = geradas.get(rel) or fonte_nomeada_na_marca(raiz / rel)
+        fonte = por_raiz[dona].get(rel) or fonte_nomeada_na_marca(dona / rel)
         if fonte:
             return rel, fonte
+    return copia_nomeada_no_texto_cru(entrada, escritos, por_raiz)
+
+
+def alvo_que_o_gancho_nao_resolve(caminho: str) -> bool:
+    return any(marca in caminho for marca in MARCADORES_DE_EXPANSAO)
+
+
+def copia_nomeada_no_texto_cru(entrada: dict, escritos: list,
+                               por_raiz: dict):
+    if not any(alvo_que_o_gancho_nao_resolve(c) for c, _ in escritos):
+        return None
+    comando = (entrada.get("tool_input") or {}).get("command", "")
+    for copias in por_raiz.values():
+        for rel, fonte in copias.items():
+            if rel in comando:
+                return rel, fonte
     return None
+
+
+def raiz_do_alvo(caminho: str, declarada: Path) -> Path:
+    alvo = Path(str(caminho).replace("\\", "/"))
+    if not alvo.is_absolute():
+        return declarada
+    try:
+        alvo.resolve().relative_to(declarada.resolve())
+        return declarada
+    except (ValueError, OSError):
+        pass
+    donas = [p for p in alvo.resolve().parents
+             if (p / MARCA_DE_REPOSITORIO).exists()]
+    return donas[-1] if donas else declarada
 
 
 def raiz_do_projeto_nunca_o_cwd() -> Path:
@@ -531,6 +552,21 @@ BARRA = [
      pedido_de_shell(f"cd .agents && echo x > mod/mod.py")),
     ("Write em skill órfã, que só existe na cópia — o --sincronizar a apaga",
      pedido_de_escrita("Write", SKILL_SEM_FONTE)),
+    ("sh -c embrulha o redirecionamento para o espelho",
+     pedido_de_shell(f"sh -c 'echo novo > {ESPELHO_NA_COPIA}'")),
+    ("bash -lc embrulha o sed -i na cópia de módulo",
+     pedido_de_shell(f'bash -lc "sed -i s/a/b/ {INSTRUMENTO_DE_MODULO}"')),
+    ("eval embrulha a escrita",
+     pedido_de_shell(f"eval 'echo x > {CARTAO_DE_EXECUCOES}'")),
+    ("xargs entrega o sh -c que apaga a cópia",
+     pedido_de_shell(f"ls | xargs -I{{}} sh -c 'rm {INSTRUMENTO_DE_MODULO}'")),
+    ("node -e que escreve na cópia",
+     pedido_de_shell(
+         f"node -e \"require('fs').writeFileSync('{INSTRUMENTO_DE_MODULO}', 'x')\"")),
+    ("alvo guardado em variável: o caminho protegido está no texto cru",
+     pedido_de_shell(f"ALVO={ESPELHO_NA_COPIA}; echo x > $ALVO")),
+    ("alvo montado com a raiz em variável",
+     pedido_de_shell(f'echo x > "$RAIZ/{INSTRUMENTO_DE_MODULO}"')),
 ]
 
 DEIXA_PASSAR = [
@@ -557,6 +593,10 @@ DEIXA_PASSAR = [
     ("grep no espelho", pedido_de_shell(f"grep -n x {ESPELHO_NA_COPIA}")),
     ("git log, que não escreve em arquivo nenhum",
      pedido_de_shell("git log --oneline -3")),
+    ("sh -c que só lê a cópia",
+     pedido_de_shell(f"sh -c 'cat {INSTRUMENTO_DE_MODULO}'")),
+    ("alvo em variável sem caminho protegido no texto",
+     pedido_de_shell("echo x > $SAIDA")),
 ]
 
 DESTE_REPOSITORIO_BARRA = [
@@ -593,7 +633,8 @@ def testar() -> int:
     import tempfile
     falhas, comportamento = [], []
     with tempfile.TemporaryDirectory(prefix="veto-copia-gerada-") as tmp:
-        raiz = Path(tmp).resolve()
+        raiz = Path(tmp).resolve() / "arvore"
+        raiz.mkdir()
         montar_arvore_de_mentira(raiz)
         onde = str(raiz)
 
@@ -606,6 +647,49 @@ def testar() -> int:
 
         def caso(rotulo, condicao):
             comportamento.append((rotulo, bool(condicao)))
+
+        ao_lado = raiz.parent / (raiz.name + "-ao-lado")
+        montar_arvore_de_mentira(ao_lado)
+        marca_de_la = ao_lado / MARCA_DE_REPOSITORIO
+        if marca_de_la.is_dir():
+            marca_de_la.rmdir()
+        marca_de_la.write_text("gitdir: /outro/lugar\n",
+                               encoding="utf-8")
+        de_outra_arvore = recusa_do_pedido(
+            pedido_de_escrita("Edit", str(ao_lado / INSTRUMENTO_DE_MODULO)),
+            raiz, onde)
+        caso("escrita em cópia gerada DENTRO de outra árvore de trabalho é "
+             "barrada — a raiz sai do ALVO quando ele cai fora da declarada, "
+             "e antes disso a cerca calava em toda worktree",
+             de_outra_arvore
+             and de_outra_arvore[0] == INSTRUMENTO_DE_MODULO)
+        caso("e a raiz do alvo é a árvore dele, não a declarada",
+             raiz_do_alvo(str(ao_lado / INSTRUMENTO_DE_MODULO), raiz)
+             == ao_lado
+             and raiz_do_alvo(str(raiz / INSTRUMENTO_DE_MODULO), raiz) == raiz)
+        caso("caminho relativo continua julgado pela raiz declarada",
+             raiz_do_alvo(INSTRUMENTO_DE_MODULO, raiz) == raiz)
+        fora_de_tudo = raiz.parent / "sem-repositorio-nenhum"
+        (fora_de_tudo / "app").mkdir(parents=True, exist_ok=True)
+        caso("alvo fora de qualquer repositório cai na raiz declarada, em vez "
+             "de subir até o disco inteiro",
+             raiz_do_alvo(str(fora_de_tudo / "app" / "x.py"), raiz) == raiz)
+
+        menciona = ('python - <<PY\nNOME = "' + INSTRUMENTO_DE_MODULO
+                    + '"\np = Path("tmp/rascunho.txt")\np.write_text(t)\nPY')
+        por_variavel = ('python - <<PY\np = Path("' + INSTRUMENTO_DE_MODULO
+                        + '")\np.write_text(t)\nPY')
+        na_mesma_linha = ('python -c \'Path("' + INSTRUMENTO_DE_MODULO
+                          + '").write_text(t)\'')
+        caso("script que apenas MENCIONA a cópia e escreve em outro arquivo "
+             "PASSA — antes a cerca colhia todo texto entre aspas que "
+             "parecesse caminho e recusava por menção",
+             not recusa_do_pedido(pedido_de_shell(menciona), raiz, onde))
+        caso("script que escreve NA cópia por variável é barrado — o nome que "
+             "guarda o caminho é seguido até a linha que escreve",
+             recusa_do_pedido(pedido_de_shell(por_variavel), raiz, onde))
+        caso("script que escreve NA cópia na mesma linha é barrado",
+             recusa_do_pedido(pedido_de_shell(na_mesma_linha), raiz, onde))
 
         espelho = recusa_do_pedido(
             pedido_de_escrita("Write", ESPELHO_NA_COPIA), raiz, onde)

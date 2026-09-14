@@ -278,19 +278,24 @@ def testar() -> int:
     caso("o idioma da reserva sai da voz do motor",
          idioma_da_voz("pt-BR-FranciscaNeural") == "pt-BR")
 
+    motor_no_disco = Path("/e/edge-tts")
+    audio_no_disco = Path("/t.mp3")
+
     caso("o comando do motor leva voz e ritmo da configuração",
-         comando_do_motor(Path("/e/edge-tts"), PADRAO, "oi", Path("/t.mp3"))
-         == ["/e/edge-tts", "-v", "pt-BR-FranciscaNeural", "--rate=-8%",
-             "--text", "oi", "--write-media", "/t.mp3"])
+         comando_do_motor(motor_no_disco, PADRAO, "oi", audio_no_disco)
+         == [str(motor_no_disco), "-v", "pt-BR-FranciscaNeural",
+             "--rate=-8%", "--text", "oi", "--write-media",
+             str(audio_no_disco)])
 
     caso("o tocador é o primeiro da lista que existe no disco",
-         comando_do_tocador(Path("/t.mp3"),
+         comando_do_tocador(audio_no_disco,
                             achar=lambda n: "/usr/bin/mpv"
                             if n == "mpv" else None)
-         == ["/usr/bin/mpv", "--no-video", "--really-quiet", "/t.mp3"])
+         == ["/usr/bin/mpv", "--no-video", "--really-quiet",
+             str(audio_no_disco)])
 
     caso("sem tocador nenhum, o comando sai vazio, não sai errado",
-         comando_do_tocador(Path("/t.mp3"), achar=lambda n: None) == [])
+         comando_do_tocador(audio_no_disco, achar=lambda n: None) == [])
 
     caso("a reserva do Linux leva o idioma da voz",
          comando_da_reserva("oi", "pt-BR", SISTEMA_LINUX)

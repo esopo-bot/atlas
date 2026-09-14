@@ -4,6 +4,10 @@ As instruções deste repositório estão em:
 
 @AGENTS.md
 
+Sessão nova: leia `.agents/prompts/bootstart.md` inteiro antes de atender o
+pedido, seja ele qual for — é o briefing da camada. `/bootstart <pedido>`
+faz essa leitura por você.
+
 ## O que é só do Claude Code
 
 O que mora em `.claude/` está na árvore do

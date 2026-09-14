@@ -691,7 +691,8 @@ def testar() -> int:
              "PROMOVIDO" not in saida_da_suja.getvalue())
         bandeira = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), str(suja),
-             "--promover"], capture_output=True, text=True)
+             "--promover"], capture_output=True, text=True,
+             encoding="utf-8", errors="replace")
         caso("--promover não existe no auditor: rodar com a bandeira "
              "devolve erro de uso, não promoção desligada",
              bandeira.returncode == RECUSA_DE_USO

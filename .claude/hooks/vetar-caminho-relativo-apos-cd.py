@@ -11,7 +11,9 @@ SILENCIO = 0
 
 COMANDO_CD = "cd"
 SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\n|\r")
-DOCUMENTO_LITERAL = re.compile(r"<<-?\s*['\"]?\w+['\"]?.*\Z", re.S)
+DOCUMENTO_LITERAL = re.compile(
+    r"<<-?\s*(['\"]?)(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
+OPERADOR_DE_REDIRECIONAMENTO = re.compile(r"^\d*(?:>>?|<<?|&>)&?")
 ASPAS = "\"'"
 PREFIXOS_QUE_JA_SAO_ABSOLUTOS = ("/", "~", "$", "%", "\\", "@")
 LETRA_DE_DRIVE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -55,6 +57,12 @@ BARRA_O_COMANDO = [
      "cd /home/x && git checkout main -- nucleo/regras.json"),
     ("verbo de git que NÃO toma referência não ganha isenção nenhuma",
      "cd /tmp/x && git status conhecimento/a.md"),
+    ("comando DEPOIS do documento literal segue sendo julgado",
+     "cd /tmp && cat <<'FIM'\nx\nFIM\ncat conhecimento/a.md"),
+    ("o mesmo com o delimitador sem aspas",
+     "cd /tmp && cat <<FIM\nx\nFIM\ncat conhecimento/a.md"),
+    ("redirecionamento para arquivo relativo é caminho relativo",
+     "cd /tmp && ls > saida.txt"),
 ]
 DEIXA_PASSAR = [
     ("sem cd", "grep -n x /home/x/repo/.agents/a.py"),
@@ -80,6 +88,12 @@ DEIXA_PASSAR = [
      "cd D:/repo && git merge origin/main"),
     ("a referência vale para qualquer verbo que toma referência",
      "cd /tmp/x && git rebase origin/homolog"),
+    ("2>/dev/null é redirecionamento para caminho absoluto, não caminho "
+     "relativo", "cd /tmp/x && git status 2>/dev/null"),
+    ("redirecionamentos encadeados para caminho absoluto",
+     "cd /tmp && ls >/dev/null 2>&1"),
+    ("documento literal com delimitador sem aspas também é dado",
+     "cd /tmp && cat <<FIM\na/b.py\nFIM"),
 ]
 
 
@@ -97,6 +111,7 @@ def tokens_de(segmento: str) -> list:
 
 
 def valor_do_token(token: str) -> str:
+    token = OPERADOR_DE_REDIRECIONAMENTO.sub("", token)
     if token.startswith(MARCA_DE_OPCAO):
         return token.split(IGUAL, 1)[1] if IGUAL in token else ""
     return token
@@ -158,12 +173,11 @@ def sugestao(pasta: str, token: str) -> str:
     return pasta.rstrip(BARRA) + BARRA + valor_do_token(token)
 
 
-def recusar(pasta: str, token: str) -> int:
+def recusar(razao: str) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
-        "permissionDecisionReason": RECUSA.format(
-            pasta=pasta, token=token, sugestao=sugestao(pasta, token)),
+        "permissionDecisionReason": razao,
     }}, ensure_ascii=False))
     return SILENCIO
 
@@ -188,7 +202,8 @@ def decidir() -> int:
     pasta, token = caminho_relativo_apos_cd(comando)
     if not token:
         return SILENCIO
-    return recusar(pasta, token)
+    return recusar(RECUSA.format(pasta=pasta, token=token,
+                                 sugestao=sugestao(pasta, token)))
 
 
 def testar() -> int:

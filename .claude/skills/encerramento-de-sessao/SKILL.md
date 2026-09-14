@@ -33,6 +33,15 @@ O perfil na wiki você atualiza; o resto — camada, regras, automação — voc
 **propõe, não aplica**: a decisão é do dono. O relatório do esfriamento é
 a última coisa da sessão: depois dele, só o resumo final.
 
+**Todo número do relatório vem com o comando que o produziu, medido hoje.**
+Número sem comando ao lado é número velho até prova em contrário: ele
+sobrevive à mudança que o tornou falso e a próxima sessão o cita como se
+fosse de agora (regra 18). O mesmo vale para defeito: relatar um que já foi
+consertado exige o commit que o consertou na mesma linha — senão o relatório
+manda a sessão seguinte caçar o que não existe mais. E não declare estado
+final de árvore compartilhada: entre a medida e o texto, outra sessão pode
+ter commitado.
+
 ## Pedidos de exemplo
 
 - "vou encerrar por hoje, faz o esfriamento da sessão"

@@ -1,6 +1,6 @@
 ---
 name: trabalho-por-issue
-description: Use quando o pedido for pela ISSUE em si — "abre uma issue disso", "registra isso", "deixa anotado onde eu parei" —, ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao retomar trabalho que já tem issue, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela REGISTRA o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da encerramento-de-sessao; procurar o que já existe antes de criar é da busca-de-codigo-existente; escrever ou atualizar documentação é da documentar-processo.
+description: Use quando o pedido for pela ISSUE em si — para ESCREVER ("abre uma issue disso", "registra isso", "deixa anotado onde eu parei") e também para LER ("quantas issues abertas tem", "quais issues estão abertas", "o que está aberto no projeto X", "lista as issues", "tem issue sobre isso?"). Antes de qualquer consulta, leia onde as issues nascem — `nucleo/configuracao.json` aponta o arquivo local, campo `issues.repositorio`; procurar no repositório de código devolve zero, e zero parece resposta. Use também ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela REGISTRA e CONSULTA o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da encerramento-de-sessao; procurar o que já existe antes de criar é da busca-de-codigo-existente; escrever ou atualizar documentação é da documentar-processo.
 ---
 
 # Trabalho por issue
@@ -50,6 +50,27 @@ existem, que etapas de verificação o repositório reconhece, quem encerra —
 O bloco que vai no perfil — os nomes do repositório, nunca os que a skill
 imagina —
 está em `references/moldes.md`; abra só ao preencher pela primeira vez.
+
+## Ler o quadro: o endereço vem antes da pergunta
+
+**Consulta também passa por aqui, e é onde o erro sai mais barato de cometer.**
+Perguntado quantas issues um projeto tem, o caminho errado é medir no
+repositório de CÓDIGO: o comando responde certo, devolve zero, e zero parece
+resposta — a sessão então cruza a contagem para "provar" que mediu, e entrega um
+falso negativo com cara de fato. Nenhuma trava pega isso, porque resposta errada
+não deixa rastro.
+
+A ordem é sempre a mesma, e não se pula nem para uma pergunta simples:
+
+1. Leia o endereço na configuração do repositório — nunca do remoto do
+   repositório aberto, nunca do que "parecia ser".
+2. Meça lá, com o comando que lista.
+3. Se a contagem vier zero, diga onde mediu, com o endereço na frase: zero num
+   lugar não é zero no mundo.
+
+Onde a camada está instalada, o endereço se imprime com
+`python .agents/camada/camada.py --quadro`, e a saúde da abertura inteira com
+`--abertura`.
 
 ## A ferramenta
 
@@ -336,8 +357,17 @@ Feche com motivo explícito (resolvido ou descartado) e pode o corpo — o
 obsoleto continua vivo no comentário. A lição que vale adiante sai para
 `conhecimento/`.
 
+**`Closes #N` no pedido de incorporação só entra quando TODO critério está
+marcado com evidência.** Caixa marcada não fecha issue; critério conferido
+fecha. A mescla que carrega um `Closes` fecha a issue sem ler os critérios, e
+o que ficou pela metade desaparece da fila sem ninguém decidir — a issue
+passa a dizer que está pronta. Na dúvida, cite a issue sem o verbo que fecha
+(`sobre #N`) e feche à mão depois de conferir.
+
 ## Pedidos de exemplo
 
 - "abre uma issue disso: o relatório de fechamento sai com o total errado quando tem estorno"
 - "quero retomar aquele trabalho da issue 142, por onde eu continuo?"
 - "preciso parar agora mas volto amanhã no mesmo assunto, deixa registrado onde eu parei"
+- "quantas issues abertas o projeto tem hoje?"
+- "quais issues estão abertas no atlas? me lista"

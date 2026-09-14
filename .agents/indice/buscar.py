@@ -40,6 +40,8 @@ FUSAO = {"strategy": "rrf", "params": {"k": 100}}
 FUNIL_DA_FUSAO = 3
 TEMPO_DA_CHAMADA = 90
 QUANTOS_POR_PADRAO = 5
+TETO_TOTAL_POR_PADRAO = 30
+TETO_MINIMO = 1
 LETRAS_DO_TRECHO = 160
 
 TETO_DE_TRECHOS_NA_AMOSTRA = 400
@@ -52,6 +54,13 @@ TOPO = 1
 TRES_PRIMEIROS = 3
 
 RECUSA_SEM_PERGUNTA = "sem pergunta: diga o que você quer achar, entre aspas"
+RECUSA_TETO_INVALIDO = ("--teto-total é o teto de trechos na resposta e "
+                        "precisa ser {} ou mais: {} não corta, desliga a "
+                        "conta — e resposta sem teto declarado despeja o "
+                        "contexto da sessão sem ninguém pedir")
+CORTADO_NO_TETO = ("\ncortado no teto de {}: havia {} trecho(s). O resto não "
+                   "foi impresso — peça mais com --teto-total, ou estreite "
+                   "com --alvo e --quantos")
 RECUSA_ALVO_NAO_INDEXADO = ("alvo que não está indexado: {}. O que existe no "
                             "banco:\n{}")
 NADA_INDEXADO = ("nada indexado no banco em {}: rode `indexar.py` antes. "
@@ -206,11 +215,16 @@ def uma_linha(texto: str) -> str:
 
 
 def buscar(pergunta: str, dado: dict, alvo: str = "",
-           quantos: int = QUANTOS_POR_PADRAO, hibrida: bool = True) -> int:
+           quantos: int = QUANTOS_POR_PADRAO, hibrida: bool = True,
+           teto_total: int = TETO_TOTAL_POR_PADRAO, banco=None) -> int:
     if not (pergunta or "").strip():
         print(RECUSA_SEM_PERGUNTA, file=sys.stderr)
         return 2
-    banco = Banco(dado.get(CAMPO_DO_AMBIENTE))
+    if teto_total < TETO_MINIMO:
+        print(RECUSA_TETO_INVALIDO.format(TETO_MINIMO, teto_total),
+              file=sys.stderr)
+        return 2
+    banco = banco or Banco(dado.get(CAMPO_DO_AMBIENTE))
     try:
         indexados = banco.alvos_indexados()
     except (urllib.error.URLError, OSError, ValueError) as erro:
@@ -227,7 +241,7 @@ def buscar(pergunta: str, dado: dict, alvo: str = "",
         return 2
     print(CABECA.format(MODO_HIBRIDO if hibrida else MODO_DENSO, pergunta,
                         len(alvos)))
-    achou = 0
+    achou = mostrados = 0
     for caminho, colecao, _ in alvos:
         try:
             achados = banco.buscar(pergunta, colecao, quantos, hibrida)
@@ -237,13 +251,19 @@ def buscar(pergunta: str, dado: dict, alvo: str = "",
         if not achados:
             print(VAZIA.format(caminho))
             continue
-        print(LINHA_DO_ALVO.format(caminho))
+        if mostrados < teto_total:
+            print(LINHA_DO_ALVO.format(caminho))
         for item in achados:
             achou += 1
+            if mostrados >= teto_total:
+                continue
+            mostrados += 1
             print(LINHA_DO_ACHADO.format(
                 item.get("distance", 0.0), item.get("relativePath", "?"),
                 item.get("startLine", "?")))
             print(LINHA_DO_TRECHO.format(uma_linha(item.get("content"))))
+    if achou > mostrados:
+        print(CORTADO_NO_TETO.format(teto_total, achou))
     if achou:
         print(RODAPE)
     return 0 if achou else 1
@@ -360,6 +380,11 @@ def medir(dado: dict, alvo: str = "") -> tuple:
         HIBRIDO_VENCE_OU_EMPATA if not perdas
         else HIBRIDO_PERDE.format(", ".join(perdas))))
     return total, por_alvo
+
+
+MARCA_DO_TRECHO_DE_MENTIRA = "trecho de mentira"
+RAIZ_DE_MENTIRA = "/acervo"
+DISTANCIA_DE_MENTIRA = 0.9
 
 
 def testar() -> int:
@@ -482,6 +507,64 @@ def testar() -> int:
         caso("híbrido atrás do denso em qualquer medida é perda nomeada",
              hibrido_vence_ou_empata(pior) == ["topo"])
 
+        import contextlib
+        import io
+
+        class BancoDeMentira:
+            def __init__(duble, alvos: int, por_alvo: int):
+                duble.alvos = alvos
+                duble.por_alvo = por_alvo
+
+            def alvos_indexados(duble) -> list:
+                return [(f"{RAIZ_DE_MENTIRA}/{n}", f"c{n}", duble.por_alvo)
+                        for n in range(duble.alvos)]
+
+            def buscar(duble, pergunta, colecao, quantos, hibrida) -> list:
+                return [{"distance": DISTANCIA_DE_MENTIRA,
+                         "relativePath": f"{colecao}.md", "startLine": n,
+                         "content": f"{MARCA_DO_TRECHO_DE_MENTIRA} {n}"}
+                        for n in range(duble.por_alvo)]
+
+        def o_que_a_busca_diz(banco, teto: int) -> tuple:
+            na_tela, no_erro = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(na_tela), \
+                    contextlib.redirect_stderr(no_erro):
+                saida = buscar("pergunta", {}, "", QUANTOS_POR_PADRAO, True,
+                               teto, banco)
+            return saida, na_tela.getvalue(), no_erro.getvalue()
+
+        alvos_curtos, por_alvo_curto = 3, 2
+        saida, dito, _ = o_que_a_busca_diz(
+            BancoDeMentira(alvos_curtos, por_alvo_curto),
+            TETO_TOTAL_POR_PADRAO)
+        caso("resultado menor que o teto passa inteiro, e nenhuma linha de "
+             "corte aparece — aviso de corte que não cortou nada ensina a "
+             "ignorar aviso",
+             saida == 0
+             and dito.count(MARCA_DO_TRECHO_DE_MENTIRA)
+             == alvos_curtos * por_alvo_curto
+             and "cortado no teto" not in dito)
+
+        alvos, por_alvo, teto = 4, 5, 10
+        muitos = BancoDeMentira(alvos, por_alvo)
+        saida, dito, _ = o_que_a_busca_diz(muitos, teto)
+        caso("resultado maior que o teto é cortado NO teto e a resposta diz "
+             "quanto havia: busca com muitos alvos despejava o contexto da "
+             "sessão sem ninguém pedir",
+             saida == 0
+             and dito.count(MARCA_DO_TRECHO_DE_MENTIRA) == teto
+             and f"cortado no teto de {teto}: havia {alvos * por_alvo}"
+             in dito)
+        caso("alvo que ficou inteiro fora do teto não ganha nem cabeça — "
+             "cabeça sem achado embaixo parece alvo vazio",
+             dito.count(RAIZ_DE_MENTIRA) == teto // por_alvo)
+
+        for teto_ruim in (0, -1):
+            saida, dito, no_erro = o_que_a_busca_diz(muitos, teto_ruim)
+            caso(f"teto {teto_ruim} recusa com razão e não imprime achado "
+                 "nenhum: teto que não corta desliga a conta em silêncio",
+                 saida == 2 and not dito and "--teto-total" in no_erro)
+
     total, _ = medir(configuracao("."))
     if total is not None and total["perguntas"]:
         caso("MEDIDO no banco desta máquina: o híbrido vence ou empata o "
@@ -503,6 +586,11 @@ def montar_parser() -> argparse.ArgumentParser:
                              "os que o banco tem)")
     parser.add_argument("--quantos", type=int, default=QUANTOS_POR_PADRAO,
                         help="trechos por alvo")
+    parser.add_argument("--teto-total", type=int,
+                        default=TETO_TOTAL_POR_PADRAO,
+                        help="teto de trechos na resposta inteira, somando "
+                             "os alvos; o que passar do teto não é impresso "
+                             "e a resposta diz quanto havia")
     parser.add_argument("--denso", action="store_true",
                         help="só o vetor denso, sem o termo exato — para "
                              "comparar")
@@ -523,7 +611,8 @@ def main() -> int:
         total, _ = medir(dado, a.alvo)
         return 0 if total is not None and not hibrido_vence_ou_empata(total) \
             else 1
-    return buscar(a.pergunta, dado, a.alvo, a.quantos, not a.denso)
+    return buscar(a.pergunta, dado, a.alvo, a.quantos, not a.denso,
+                  a.teto_total)
 
 
 if __name__ == "__main__":

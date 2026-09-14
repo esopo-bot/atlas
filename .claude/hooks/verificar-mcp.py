@@ -107,20 +107,24 @@ def dentro_de_uma_etapa() -> bool:
     return bool(os.environ.get(MARCA_DE_ETAPA_NO_AMBIENTE))
 
 
-def o_git_ignora(caminho: str, raiz: Path) -> bool:
+def o_git_ignora(raiz: Path, caminho: str):
     try:
         feito = subprocess.run(
-            [*COMANDO_DO_GIT_QUE_IGNORA, caminho.replace("\\", "/")],
+            [*COMANDO_DO_GIT_QUE_IGNORA, "--", caminho.replace("\\", "/")],
             cwd=str(raiz), capture_output=True, timeout=TEMPO_DO_GIT)
     except (OSError, subprocess.SubprocessError):
+        return None
+    if feito.returncode == 0:
+        return True
+    if feito.returncode == 1:
         return False
-    return feito.returncode == 0
+    return None
 
 
 def sem_o_que_e_local_de_propria_declaracao(ausentes: list,
                                             raiz: Path) -> list:
     return [(nome, caminho) for nome, caminho in ausentes
-            if not o_git_ignora(caminho, raiz)]
+            if o_git_ignora(raiz, caminho) is not True]
 
 
 def main() -> int:

@@ -19,13 +19,18 @@ sys.path.insert(0, str(AQUI.parent / "camada"))
 from camada import (
     provar as _provar,
     FERRAMENTAS_DA_SIMULACAO, MODELO_DA_SIMULACAO, PEDIDO,
-    bytes_que_os_ganchos_injetam, colher_json as _colher_json,
-    corre, perguntas as _perguntas,
+    colher_json as _colher_json,
+    corre, corre_a_lista, perguntas as _perguntas,
     teste_toca_o_proprio_codigo as _teste_toca_o_proprio_codigo)
 
 BANDEIRA_DE_TESTE = "--testar"
-USO = ("mede o atlas: comentário, teste, camada, contexto, tamanho e formato. "
-       "A simulação NÃO entra no padrão: ela gasta uma sessão de verdade.")
+PROVAS_DA_INSTALACAO = ("AGENTS.md", "nucleo/regras.json", ".claude/settings.json")
+INSTALOU_EM_OUTRO_LUGAR = (
+    "o instalador saiu 0 e a camada NÃO chegou em {} — falta {}. "
+    "Medir a camada contra árvore vazia dá delta de acaso, então a "
+    "simulação para em vez de devolver número que não mede nada.")
+USO = ("mede o atlas: comentário, tamanho e formato por padrão; teste e "
+       "simulação sob pedido. A simulação gasta uma sessão de verdade.")
 
 MARCA_DE_BLOCO = "# ==="
 TETO_DE_FUNCAO = 40
@@ -35,11 +40,6 @@ TETO_DE_PARAMETROS = 5
 PASTAS_DE_INSTRUMENTO = (".agents", ".claude/hooks")
 GLOB_DE_INSTRUMENTO = "*.py"
 
-CARREGADOS_EM_TODA_SESSAO = ("AGENTS.md", "CLAUDE.md")
-FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n", re.S)
-CAMPO_NOME = re.compile(r"^name:\s*(.+)$", re.M)
-CAMPO_DESCRICAO = re.compile(r"^description:\s*(.+)$", re.M)
-LINHA_DO_CATALOGO = "- {}: {}\n"
 INSTALADOR = "montar.py"
 INTERPRETADOR = sys.executable
 INTERPRETADOR_NO_SHELL = f'"{sys.executable}"'
@@ -47,9 +47,6 @@ CHAVE_DAS_PAGINAS = "PAGINAS"
 
 TITULO_COMENTARIOS = "COMENTÁRIO E DOCSTRING — o alvo é zero"
 TITULO_TESTES = "TESTES — contagem e tempo de parede"
-TITULO_CAMADA = "CAMADA — embutido × disco"
-TITULO_CONTEXTO = "CONTEXTO DE LARGADA — o que toda sessão paga"
-CORPO_SO_AO_DISPARAR = "  (corpos das skills, cobrados só ao disparar)"
 TITULO_TAMANHO = "TAMANHO — candidatos a refatoração"
 TITULO_FORMATO = "FORMATO — o que o montar.py instala, por extensão"
 TITULO_SIMULACAO = ("SIMULAÇÃO DE SESSÃO — acurácia e custo de uma sessão real")
@@ -57,7 +54,6 @@ TITULO_SIMULACAO = ("SIMULAÇÃO DE SESSÃO — acurácia e custo de uma sessão
 LINHA_COMENTARIO = "  {:<52} comentarios={} docstrings={} marcas={}"
 LINHA_TESTE = "  {:<48} {:>7.1f}s  {}"
 LINHA_TOTAL_TESTE = "  {:<48} {:>7.1f}s  {} instrumentos, {} casos"
-LINHA_CONTEXTO = "  {:<52} {:>7} bytes"
 LINHA_FUNCAO = "  {:<52} {:>4} linhas  {}"
 LINHA_ARQUIVO = "  {:<52} {:>4} linhas"
 LINHA_PARAMETROS = "  {:<52} {:>4} parâmetros  {}"
@@ -84,8 +80,6 @@ DELTA_QUE_NAO_ABRE = ("delta da camada: {} de {} casos — a camada NÃO "
 MAIOR_DO_MONTE = ("  o que a régua usa: maior arquivo {} linhas ({}), "
                   "maior função {} linhas ({})")
 SEM_TESTE = "sem --testar"
-
-
 
 
 def arquivos_python():
@@ -148,62 +142,6 @@ def medir_testes():
                     "caem": contas["caem"]}
 
 
-def medir_camada():
-    _, sincronia = corre(f"{INTERPRETADOR_NO_SHELL} montar.py --verificar 2>&1 | tail -1")
-    _, copias = corre(
-        "find modulos -name '*.py' -path '*/.agents/*' | sort | while read -r c; do "
-        "o=\".agents/${c#*/.agents/}\"; [ -f \"$o\" ] || continue; "
-        "cmp -s \"$o\" \"$c\" && echo \"$c: igual\" || echo \"$c: DIVERGE\"; done")
-    linhas = ["  " + sincronia] + ["  " + l for l in copias.splitlines()]
-    em_dia = sincronia.startswith("Tudo em dia") and "DIVERGE" not in copias
-    return linhas, {"em_dia": em_dia}
-
-
-def linha_do_catalogo(skill):
-    texto = skill.read_text(encoding="utf-8")
-    frente = FRONTMATTER.match(texto)
-    if not frente:
-        return "", len(texto)
-    nome = CAMPO_NOME.search(frente.group(1))
-    descricao = CAMPO_DESCRICAO.search(frente.group(1))
-    if not (nome and descricao):
-        return "", len(texto)
-    listada = LINHA_DO_CATALOGO.format(nome.group(1).strip(),
-                                       descricao.group(1).strip())
-    return listada, len(texto.encode()) - len(frente.group(1).encode())
-
-
-
-
-
-
-def medir_contexto():
-    linhas, total, adiado = [], 0, 0
-    for nome in CARREGADOS_EM_TODA_SESSAO:
-        caminho = Path(nome)
-        if caminho.exists():
-            tamanho = len(caminho.read_bytes())
-            total += tamanho
-            linhas.append(LINHA_CONTEXTO.format(nome, tamanho))
-    for skill in sorted(Path(".agents/skills").glob("*/SKILL.md")):
-        listada, corpo = linha_do_catalogo(skill)
-        total += len(listada.encode())
-        adiado += corpo
-        linhas.append(LINHA_CONTEXTO.format(skill.as_posix(),
-                                            len(listada.encode())))
-    injetado_por_gancho, ganchos_cegos = bytes_que_os_ganchos_injetam(
-        Path.cwd())
-    total += injetado_por_gancho
-    linhas.append(LINHA_CONTEXTO.format("ganchos de abertura",
-                                        injetado_por_gancho))
-    linhas.append(LINHA_CONTEXTO.format("TOTAL", total))
-    linhas.append(CORPO_SO_AO_DISPARAR)
-    linhas.append(LINHA_CONTEXTO.format("adiado", adiado))
-    return linhas, {"bytes": total, "adiado": adiado,
-                    "injetado_por_gancho": injetado_por_gancho,
-                    "ganchos_nao_medidos": ganchos_cegos}
-
-
 def medir_tamanho():
     grandes, longas, parrudas = [], [], []
     for caminho in arquivos_python():
@@ -261,27 +199,24 @@ ARQUIVO_PEDIDO = "tmp/somar.py"
 FONTE_DAS_REGRAS = "nucleo/regras.json"
 
 
-
-
-
-
-
-
-
+def _a_camada_chegou(pasta) -> bool:
+    return all((Path(pasta) / prova).exists() for prova in PROVAS_DA_INSTALACAO)
 
 
 def _arvore_com_a_camada(pasta):
-    corre(f'git init -q "{pasta}"')
-    codigo, saida = corre(f'cd "{pasta}" && {INTERPRETADOR_NO_SHELL} "{Path(INSTALADOR).resolve()}" 2>&1')
+    corre_a_lista(["git", "init", "-q", str(pasta)])
+    codigo, saida = corre_a_lista(
+        [sys.executable, str(Path(INSTALADOR).resolve())], cwd=pasta)
+    if codigo == 0 and not _a_camada_chegou(pasta):
+        return False, INSTALOU_EM_OUTRO_LUGAR.format(
+            pasta, ", ".join(PROVAS_DA_INSTALACAO))
     return codigo == 0, saida
 
 
 def _arvore_sem_a_camada(pasta):
-    codigo, saida = corre(f'git init -q "{pasta}"')
+    codigo, saida = corre_a_lista(["git", "init", "-q", str(pasta)])
     Path(pasta, Path(ARQUIVO_PEDIDO).parent).mkdir(parents=True, exist_ok=True)
     return codigo == 0, saida
-
-
 
 
 def guardar_o_artefato_se_reprovou(alvo: Path, acertos: list) -> str:
@@ -299,11 +234,11 @@ def guardar_o_artefato_se_reprovou(alvo: Path, acertos: list) -> str:
 
 def _pontuar_a_sessao(pasta: str, quantas: int) -> dict:
     partida = time.monotonic()
-    _, bruto = corre(
-        f'cd "{pasta}" && claude -p {json.dumps(PEDIDO.format(arquivo=ARQUIVO_PEDIDO))} '
-        f'--output-format json --model {MODELO_DA_SIMULACAO} '
-        f'--allowedTools "{FERRAMENTAS_DA_SIMULACAO}"',
-        tempo=TEMPO_DA_SIMULACAO)
+    _, bruto = corre_a_lista(
+        ["claude", "-p", PEDIDO.format(arquivo=ARQUIVO_PEDIDO),
+         "--output-format", "json", "--model", MODELO_DA_SIMULACAO,
+         "--allowedTools", FERRAMENTAS_DA_SIMULACAO],
+        tempo=TEMPO_DA_SIMULACAO, cwd=pasta)
     parede = time.monotonic() - partida
 
     sessao = _colher_json(bruto)
@@ -314,8 +249,8 @@ def _pontuar_a_sessao(pasta: str, quantas: int) -> dict:
 
     alvo = Path(pasta) / ARQUIVO_PEDIDO
     if alvo.is_file():
-        codigo_do_teste, berro = corre(
-            f'cd "{pasta}" && {INTERPRETADOR_NO_SHELL} "{ARQUIVO_PEDIDO}" --testar')
+        codigo_do_teste, berro = corre_a_lista(
+            [sys.executable, ARQUIVO_PEDIDO, BANDEIRA_DE_TESTE], cwd=pasta)
     else:
         codigo_do_teste, berro = 1, SEM_O_ARQUIVO
     acertos.append((f"entregou {ARQUIVO_PEDIDO} com --testar que passa",
@@ -460,6 +395,19 @@ def testar() -> int:
         caso("comentário comum é contado", comentarios == 1)
         caso("marca de bloco não conta como comentário", marcas == 1)
         caso("docstring é contada à parte", docstrings == 1)
+
+        caso("árvore vazia NÃO passa por árvore com a camada — medido: o "
+             "`cd` do cmd não troca de drive, o instalador rodava no "
+             "repositório de origem, e a simulação comparava vazio com vazio",
+             not _a_camada_chegou(pasta))
+        for prova in PROVAS_DA_INSTALACAO:
+            (Path(pasta) / prova).parent.mkdir(parents=True, exist_ok=True)
+            (Path(pasta) / prova).write_text("x", encoding="utf-8")
+        caso("com as três provas no disco a camada é dada por chegada",
+             _a_camada_chegou(pasta))
+        (Path(pasta) / PROVAS_DA_INSTALACAO[0]).unlink()
+        caso("falta uma das provas e a camada não chegou",
+             not _a_camada_chegou(pasta))
 
         limpo = Path(pasta) / "limpo.py"
         limpo.write_text(LIMPO, encoding="utf-8")

@@ -1,0 +1,14 @@
+# Os documentos que ESTE repositório versiona de propósito.
+#
+# O gancho .claude/hooks/vetar-documento-rastreavel.py recusa gerar documento
+# binário (.pptx, .docx, .xlsx, .pdf e afins) em caminho que o git rastreia:
+# binário não se revisa num diff, então ele entraria no commit às cegas. Quem
+# responde se o caminho é rastreado é o próprio git, por `check-ignore` — a
+# cerca não crava pasta nenhuma.
+#
+# Repositório que versiona documento de propósito — um manual em PDF, uma
+# planilha de fixture — declara o caminho aqui, uma por linha, e a cerca cala.
+# Linha terminada em barra é pasta e pega tudo dentro dela. Linha sem barra
+# pega o caminho que TERMINA nela.
+#
+# Nasce vazia: o padrão é documento gerado cair fora do git.

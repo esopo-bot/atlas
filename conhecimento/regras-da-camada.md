@@ -16,7 +16,6 @@ de consulta, não de sessão.
       pasta o comando lê, e para para perguntar ao dono a cada comando. Escreva
       o caminho absoluto no próprio argumento; o harness devolve o cwd depois
       de todo `cd`, então o prefixo é redundante.
-    - Procedência: [mapa do repositório](mapa-do-repositorio.md).
 
 2. **Só é pronto o que um instrumento provou.**
     - Prova é build, teste ou listagem — "o modelo disse" não é prova, e saída
@@ -37,7 +36,9 @@ de consulta, não de sessão.
     - Prova só vale se re-executa: `grep` e `diff` respondem exit 1 para "não
       achei", e a verificação acusa exit diferente de zero — quando a saída já
       é a prova, encerre com `|| true`. Âncora de git é SHA; `HEAD` e
-      `origin/<branch>` envelhecem entre a prova e a verificação.
+      `origin/<branch>` envelhecem entre a prova e a verificação. E nada de
+      contador depois do `|| true`: o cano cala o exit do comando de verdade, e
+      o zero que sai é do `true`, não da medição.
     - Saída cortada se declara com `(...)` em linha própria: a re-execução
       compara BLOCO de linhas seguidas, e o pedaço que você resumiu no meio de
       uma saída composta vira acusação sem essa marca.
@@ -55,7 +56,10 @@ de consulta, não de sessão.
     - Critério de aceitação se testa quando nasce: rode o comando do critério
       na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha.
       Critério que já falha por motivo que o trabalho nunca remove nasce
-      mentindo, e treina a sessão a marcar a caixa sem prova.
+      mentindo, e treina a sessão a marcar a caixa sem prova. Vale também para
+      cobrança de guarda: a que falha por motivo que a sessão nunca remove
+      ensina a ignorar a cobrança inteira — cale-a com a razão escrita, nunca
+      insista.
     - Estado que se relata se lê na hora: antes de dizer a alguém o que falta
       numa issue, num pedido de incorporação ou num arquivo, abra e leia.
       Resumo de memória envelhece calado, e o que sai dele é dedução vestida de
@@ -82,7 +86,16 @@ de consulta, não de sessão.
     - Uma medição não é medição. Onde a saída varia entre execuções iguais —
       escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e
       desconfie de diferença menor que ele. Rodada única não separa causa de
-      acaso: ela devolve um número, e número sozinho parece fato.
+      acaso: ela devolve um número, e número sozinho parece fato. Medição sob
+      carga não cala o instrumento: faz ele responder por outro instante.
+      Repetir com a máquina livre é parte da prova, e o exit que se declara é o
+      do comando medido, nunca o do cano nem o do `tail`.
+    - Conserto de máquina se faz nas ferramentas que a máquina de destino tem.
+      Onde a camada se instala, o shell nativo do sistema e o subsistema Linux
+      podem estar bloqueados por política: a régua que sobra é o shell POSIX do
+      git e o Python. Receita que depende de ferramenta externa — cliente HTTP
+      de linha de comando, por exemplo — nasce morta lá, e a sonda equivalente
+      em Python viaja.
 
 3. **Antes de criar, procure e cite.**
     - O que o conjunto já oferece não se reimplementa; aplicação nova imita o
@@ -127,7 +140,13 @@ de consulta, não de sessão.
     - Workflow e subagente custam caro e drenam limite rápido: use-os só quando
       a tarefa é grande demais para uma conversa (reconhecimento amplo, dezenas
       de itens em paralelo) — nunca por padrão. Conserto de um item, com
-      vermelho e prova, faz-se direto na sessão.
+      vermelho e prova, faz-se direto na sessão. A exceção é autorização já
+      dada: quando o dono autorizou paralelismo para pesquisa ou execução
+      demorada, não se pergunta de novo na mesma sessão. Quem coordena guarda o
+      contexto, a conversa e as decisões; passa objetivo, contexto e limites em
+      subtarefas que se sustentam sozinhas; acompanha o resultado e avisa a
+      conclusão. Resposta curta fica na conversa, e trabalho em segundo plano
+      só se anuncia depois de começar de verdade.
     - Verificação de ponta a ponta (`--verificar`, `verificacoes.py ritual`)
       roda uma vez, detalhada, antes da entrega final — não a cada arquivo
       mexido. Repetir a mesma verificação sem mudança nova desde a última vez é
@@ -156,6 +175,10 @@ de consulta, não de sessão.
       `--glob '!...'`, `#pasta`, `du -sh`, pathspec `:(exclude)` e a linha que
       escreve só o NOME no `.gitignore` passam calados. Quem decide é o que o
       comando faz com o alvo, não o alvo aparecer no comando.
+    - Saída de comando é tela: despejo largo do ambiente põe credencial no
+      transcript, que não se apaga depois. Ambiente se lê por variável NOMEADA;
+      filtrar por padrão de nome não protege nada, porque o valor vai junto.
+      Quando o que falta é o nome, liste nomes, não valores.
 
 9. **Destrutivo é do dono; commit e push seguem o que o repositório
    autorizou.**
@@ -247,6 +270,13 @@ de consulta, não de sessão.
       é gerada dele.
     - Conhecimento não nasce em pasta de código — lá ninguém o procura, e ele
       viaja por engano no commit do repositório errado.
+    - O nome de uma peça declara a responsabilidade dela, em português comum:
+      quem lê o nome sabe o que ela faz sem abrir o arquivo. Use o nome que
+      este repositório já usa para a coisa; não invente jargão, nem sinônimo
+      novo para o que já tem nome, nem termo em outra língua quando existe o
+      daqui. Não há contagem de ocorrência de termo velho: o julgamento é de
+      quem escreve, na hora de escrever — renomear em massa custa mais do que o
+      nome errado que sobrou num canto.
 
 15. **Editou a fonte, regenere a cópia e prove — antes de entregar.**
     - Onde existe cópia gerada — carga embutida do instalador, espelho de
@@ -275,7 +305,6 @@ de consulta, não de sessão.
     - Cópia gerada não se resolve à mão numa mescla: tome um lado qualquer e
       regenere. O conflito é do gerador, não do texto — e quem edita a cópia no
       meio do conflito entrega um arquivo que a próxima sincronização apaga.
-    - Procedência: [mapa do repositório](mapa-do-repositorio.md).
 
 16. **Ao dar por entregue, prove que nada ficou sem destino — nem commit fora
     da branch, nem entrega sem o passo seguinte.**
@@ -283,7 +312,9 @@ de consulta, não de sessão.
       --entrega`, que lê a branch remota que a local segue e acusa quando não
       há para onde entregar. O comando à mão contra um nome de branch devolve
       zero calado quando a branch não existe no remoto — e zero calado não é
-      prova.
+      prova. E quando o instrumento responde "não medido", a prova se faz à
+      mão, repositório por repositório tocado, com `git for-each-ref` — "não
+      medido" não é "não há".
     - Vale por repositório tocado, não só pelo workspace: a parada que mexe em
       vários prova o destino em cada um, inclusive no vizinho sem camada, onde
       a leitura é `git log HEAD --not --remotes` — vazio é a prova. Fechar um
@@ -324,6 +355,10 @@ de consulta, não de sessão.
       se NOMEIA no relatório e não impede a entrega: commitá-lo é adotar o que
       não é seu, e apagá-lo é destrutivo, que é do dono. O item de cima existe
       contra preguiça; esta exceção existe contra impotência.
+    - Branch e commit de outra sessão na mesma árvore não são seus para
+      entregar nem para podar: relate o nome, o autor e a hora, e deixe.
+      Cobrança sobre trabalho alheio envelhece em horas — meça no instante de
+      escrever, com autor e data do commit, e não pela lista de minutos atrás.
 
 17. **Explique na altura de quem lê, começando por júnior.**
     - Um conceito por vez, conclusão primeiro, exemplo concreto antes do termo

@@ -26,5 +26,4 @@
 .claude/diretivas-de-ferramenta.txt
 .claude/caminhos-de-politica.txt
 nucleo/regras.json
-nucleo/vocabulario.json
 nucleo/configuracao.json

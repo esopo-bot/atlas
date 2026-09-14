@@ -1,40 +1,19 @@
 ---
-description: Abre uma sessão nova no atlas carregando sozinho o que hoje se cola à mão — como trabalhar aqui, onde cada coisa mora, e a receita do executor de roteiros quando couber. O pedido vem como argumento.
+description: Abre uma sessão nova no atlas pelo briefing da camada — o que a sessão vai encontrar, o que os ganchos recusam, onde cada coisa mora e que skill ou receita atende cada pedido. O pedido vem como argumento.
 ---
 
 # Abrir sessão no atlas
 
-## Primeiro decida qual prompt abrir, depois abra UM só
+Leia `.agents/prompts/bootstart.md` inteiro e siga o que está escrito lá. É o
+único prompt de abertura da camada — o briefing que serve a qualquer agente —
+e o único lugar daquele texto: os tropeços, o primeiro comando, a tabela que
+diz que skill ou receita atende cada tipo de pedido, os ganchos, como se prova
+e como se fala com o dono. Não repita o conteúdo dele aqui nem trabalhe de
+memória: abra o arquivo.
 
-O pedido do dono está no fim desta página. Leia-o e escolha, antes de abrir
-arquivo nenhum:
-
-- O pedido nomeia um caminho sob `projetos/`, ou o alvo do trabalho é outro
-  repositório, e o atlas só orquestra?
-  → `.agents/prompts/03-abertura-de-sessao-de-projeto.md`
-- O alvo é o próprio atlas — página, skill, regra, instrumento, gancho,
-  módulo, roteiro?
-  → `.agents/prompts/01-abertura-de-sessao-na-camada.md`
-
-Na dúvida entre os dois, o 01. Diga em uma linha qual escolheu e por quê.
-
-**Abra só o escolhido.** Ler os dois custa contexto de sessão inteira, e foi
-o que aconteceu em 01/09: o pedido dizia `projetos/`, e a sessão leu o 01
-inteiro para descobrir no fim que o certo era o 03.
-
-Leia-o inteiro e siga o que está escrito lá. O prompt é o único lugar
-daquele texto: as leis do atlas, como se prova uma entrega, o que é do dono
-e o que é da sessão. Não repita o conteúdo dele aqui nem trabalhe de
-memória — abra o arquivo.
-
-## Depois de abrir
-
-Se o pedido for disparar trabalho pelo executor de roteiros, a receita do
-disparo e da retomada está em `execucoes/LEIAME.md`, em linhas copiáveis.
-Leia a receita; não invente a linha de comando.
-
-Antes de escrever, mudar ou apagar qualquer coisa da camada, dispare a
-skill `portao`.
+Depois de ler: rode o primeiro comando que ele manda, relate o que faltou, e
+diga em uma linha qual caminho da tabela o pedido abaixo segue. Antes de
+escrever, mudar ou apagar qualquer coisa da camada, dispare a skill `portao`.
 
 O pedido do dono:
 

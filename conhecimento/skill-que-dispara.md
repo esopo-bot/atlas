@@ -8,7 +8,7 @@ escolheu.
 ## A régua, antes de tudo
 
 ```bash
-python3 .agents/gatilho/gatilho.py <nome-da-skill>
+python .agents/gatilho/gatilho.py <nome-da-skill>
 ```
 
 **Uma rodada não vale.** O ruído medido é de cerca de um acerto por skill: a

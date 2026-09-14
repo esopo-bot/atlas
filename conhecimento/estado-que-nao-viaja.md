@@ -59,6 +59,19 @@ A receita, em três passos:
 3. **Backup**: a pasta `~/.claude/projects/` entra na rotina de cópia da
    máquina — a retenção segura o apagador, não o disco.
 
+## Duas contas de assinatura na mesma máquina
+
+Uma variável separa as duas: `CLAUDE_CONFIG_DIR` move credencial,
+configuração, servidores de contexto, transcrições e skills para o diretório
+que ela aponta — um diretório por conta, e a variável definida só no comando
+que abre aquela sessão. Duas ressalvas mordem: o login grava no diretório
+apontado, então entrar **sem** a variável definida sobrescreve o perfil
+principal; e exportá-la no perfil do shell contamina toda sessão futura,
+inclusive a que devia usar o principal. O efeito colateral esperado é a conta
+secundária nascer sem os servidores de contexto e sem as skills do nível de
+usuário, que ficaram no outro diretório — reponha pelo nome os que ela
+precisa.
+
 ## A declaração: `nucleo/ambiente.json`
 
 Este arquivo é **seu**: a atualização da camada nunca o reescreve. Ele lista

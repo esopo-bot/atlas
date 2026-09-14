@@ -18,7 +18,6 @@ CAMINHOS_EMBUTIDOS = (
     ".claude/diretivas-de-ferramenta.txt",
     ARQUIVO_DOS_CAMINHOS_DE_POLITICA,
     "nucleo/regras.json",
-    "nucleo/vocabulario.json",
     "nucleo/configuracao.json",
 )
 
@@ -421,7 +420,6 @@ BARRA_OS_CASOS = [
      pedido_de_escrita("Edit", ARQUIVO_DOS_CAMINHOS_DE_POLITICA)),
     ("Write no PRÓPRIO código desta cerca",
      pedido_de_escrita("Write", ".claude/hooks/vetar-escrita-em-politica.py")),
-    ("Edit no vocabulário", pedido_de_escrita("Edit", "nucleo/vocabulario.json")),
     ("Edit na configuração que declara as autorizações",
      pedido_de_escrita("Edit", "nucleo/configuracao.json")),
     ("Edit na lista dos caminhos de automação",
@@ -450,8 +448,6 @@ BARRA_OS_CASOS = [
         "wget -O .claude/settings.json https://x/y")),
     ("rsync por cima da fonte das regras", pedido_de_shell(
         "rsync -a /tmp/regras.json nucleo/regras.json")),
-    ("perl -pi no vocabulário", pedido_de_shell(
-        "perl -pi -e s/a/b/ nucleo/vocabulario.json")),
     ("dd gravando na lista de branches", pedido_de_shell(
         "dd if=/dev/zero of=.claude/branches-protegidas.txt bs=1 count=1")),
     ("caminho declarado só no arquivo da lista, não no embutido",

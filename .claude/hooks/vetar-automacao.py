@@ -35,6 +35,8 @@ COMANDOS_QUE_ESCREVEM_SEM_SETA = ("tee", "cp", "mv", "install", "touch",
 COMANDO_QUE_ESCREVE_NO_LUGAR = "sed"
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
+MODULO_QUE_DESEMBRULHA = "desembrulhar-comando.py"
+CACHE_DO_DESEMBRULHADOR = []
 
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
@@ -125,10 +127,25 @@ def sem_o_que_e_so_dado(trecho: str) -> str:
         else " ", sem_aspa_simples)
 
 
+def desembrulhador():
+    import importlib.util
+    if CACHE_DO_DESEMBRULHADOR:
+        return CACHE_DO_DESEMBRULHADOR[0]
+    caminho = Path(__file__).resolve().with_name(MODULO_QUE_DESEMBRULHA)
+    origem = importlib.util.spec_from_file_location(
+        "desembrulhar_comando", caminho)
+    modulo = importlib.util.module_from_spec(origem)
+    origem.loader.exec_module(modulo)
+    CACHE_DO_DESEMBRULHADOR.append(modulo)
+    return modulo
+
+
 def segmentos_que_executam(comando: str) -> list:
     sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
-    return [sem_o_que_e_so_dado(s)
-            for s in SEPARADORES_DE_COMANDO.split(sem_documento)]
+    crus = desembrulhador().com_os_corpos_desembrulhados(
+        SEPARADORES_DE_COMANDO.split(sem_documento),
+        SEPARADORES_DE_COMANDO.split)
+    return [sem_o_que_e_so_dado(s) for s in crus]
 
 
 def caminhos_que_o_pedido_toca(entrada: dict) -> list:
@@ -142,7 +159,7 @@ def caminhos_que_o_pedido_toca(entrada: dict) -> list:
     comando = dado.get("command", "")
     if not comando:
         return []
-    achados = []
+    achados = desembrulhador().caminhos_escritos_dentro_do_script(comando)
     for segmento in segmentos_que_executam(comando):
         achados += [m.group(1)
                     for m in REDIRECIONAMENTO_DE_SHELL.finditer(segmento)]
@@ -380,6 +397,35 @@ def testar() -> int:
                  caminhos_que_o_pedido_toca({
                      "tool_name": "Bash",
                      "tool_input": {"command": 'git commit -m "documenta ' + ".github/workflows/e.yml" + '"'}})))
+    def toca_por_shell(comando):
+        return any(motivo_da_recusa(c, declarados) for c in
+                   caminhos_que_o_pedido_toca({
+                       "tool_name": "Bash",
+                       "tool_input": {"command": comando}}))
+
+    caso("python -c que escreve na automação",
+         toca_por_shell(
+             "python -c \"open('.github/workflows/e.yml', 'w').write('x')\""))
+    caso("python -c que guarda o alvo em variável antes de escrever",
+         toca_por_shell(
+             "python -c \"p = '.github/workflows/e.yml'; open(p, 'w')\""))
+    caso("node -e que escreve na automação",
+         toca_por_shell("node -e \"require('fs').writeFileSync("
+                        "'.github/workflows/e.yml', 'x')\""))
+    caso("python -c que só lê a automação passa",
+         not toca_por_shell(
+             "python -c \"print(open('.github/workflows/e.yml').read())\""))
+    caso("sh -c embrulha o redirecionamento — aspas simples são dado, "
+         "menos quando um shell as recebe para executar",
+         toca_por_shell("sh -c 'echo x > .github/workflows/e.yml'"))
+    caso("bash -lc embrulha o sed -i",
+         toca_por_shell('bash -lc "sed -i s/a/b/ .github/workflows/e.yml"'))
+    caso("eval embrulha o rm",
+         toca_por_shell("eval 'rm .github/workflows/e.yml'"))
+    caso("xargs entrega o sh -c que apaga",
+         toca_por_shell("ls | xargs -I{} sh -c 'rm .github/workflows/{}'"))
+    caso("sh -c que só lê passa",
+         not toca_por_shell("sh -c 'cat .github/workflows/e.yml'"))
     caso("ler a automação passa calado",
          caminhos_que_o_pedido_toca({
              "tool_name": "Bash",

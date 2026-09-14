@@ -1,5 +1,6 @@
 import re
 import json
+import re
 import os
 import subprocess
 import sys
@@ -30,6 +31,18 @@ CHAVE_DO_REVISOR = "revisor"
 CAMPO_DO_AUTOR = "author"
 CHAVE_DO_SOMENTE_LEITURA = "somente_leitura"
 CHAVE_DAS_AUTORIZACOES = "autorizacoes"
+CHAVE_DAS_ISSUES = "issues"
+COMANDO_DO_CORPO_DA_ISSUE = [
+    "gh", "issue", "view", "{0}", "--repo", "{1}", "--json", "body,state"]
+CAMPO_DO_CORPO = "body"
+CAMPO_DA_SITUACAO = "state"
+SITUACAO_ABERTA = "OPEN"
+CAIXA_EM_BRANCO = "- [ ]"
+CAIXA_MARCADA = ("- [x]", "- [X]")
+MARCA_DA_ISSUE_NA_BRANCH = re.compile(r"(?:^|/)issue/(\d+)(?:-|$)")
+MARCA_DA_ISSUE_NO_COMMIT = re.compile(r"\(issue (\d+)\)")
+COMANDO_DAS_MENSAGENS = ["git", "log", "--format=%s", "{0}..HEAD"]
+TETO_DE_CRITERIOS_MOSTRADOS = 3
 CHAVE_DO_PUSH = "push"
 COMANDO_DA_INTEGRACAO_NO_REMOTO = ["git", "ls-remote", "--heads", "origin", "{}"]
 COMANDO_DE_BUSCA_DA_INTEGRACAO = ["git", "fetch", "--quiet", "origin", "{}"]
@@ -124,9 +137,15 @@ COBRA_SOBRA_DA_BRANCH = (
 )
 COBRA_SOBRA_NAO_MEDIDO = (
     "Não deu para medir se há commit fora da branch de entrega — `{} {}` "
-    "respondeu que NÃO MEDIU. Sem a medição isto é 'não medido', nunca "
-    "'não há': confira à mão antes de encerrar."
+    "respondeu que NÃO MEDIU, porque {}. Sem a medição isto é 'não medido', "
+    "nunca 'não há': confira à mão antes de encerrar."
 )
+RAZAO_DE_NAO_MEDIR = []
+MOTIVO_TEMPO_ESGOTADO = "o teto de {} s esgotou antes de a resposta chegar"
+MOTIVO_NAO_SUBIU = "o processo não subiu ({})"
+MOTIVO_O_INSTRUMENTO_DISSE = (
+    "o próprio instrumento saiu com o código de não-medido")
+MOTIVO_NAO_DITO = "nada ficou registrado sobre a causa"
 COBRA_INTEGRACAO_SEM_PEDIDO = (
     "A integração {!r} está {} commit(s) à frente de {!r} e NÃO há pedido de "
     "incorporação aberto entre elas:\n{}\n"
@@ -144,6 +163,24 @@ COBRA_DURAVEL_NAO_MEDIDO = (
     "Não deu para medir se a branch de trabalho {!r} chegou ao repositório "
     "durável — o `git ls-remote` não respondeu. Sem a medição isto é 'não "
     "medido', nunca 'chegou': confira à mão antes de fechar a etapa."
+)
+COBRA_CRITERIO_EM_BRANCO = (
+    "A issue {} tem {} critério(s) de pronto EM BRANCO, e o trabalho já está "
+    "na {}:\n{}\n"
+    "Critério que ninguém conferiu não vira pronto por mescla: caixa marcada "
+    "não fecha issue, critério conferido fecha. Rode o comando de cada um, "
+    "cole a saída na issue e marque; ou diga em uma linha por que ele sai do "
+    "escopo. Se o pedido de incorporação carrega o verbo que FECHA a issue, "
+    "tire-o: o fechamento é ato de quem conferiu."
+)
+COBRA_CRITERIO_NAO_MEDIDO = (
+    "A issue {} não se deixou ler ({}), então os critérios de pronto dela não "
+    "foram conferidos — e não conferido não é cumprido. Rode "
+    "`gh issue view {} --repo {}` você mesmo antes de dar por entregue."
+)
+RELATA_CRITERIO_CUMPRIDO = (
+    "A issue {} tem os {} critério(s) de pronto marcados — o destino do "
+    "trabalho está declarado nela."
 )
 COBRA_PEDIDO_NAO_MEDIDO = (
     "A integração {!r} está {} commit(s) à frente de {!r}, e não deu para "
@@ -294,13 +331,29 @@ def branch_de_integracao(raiz: Path) -> str:
     return str(declarada).strip() if declarada else ""
 
 
-def responde(comando: list, raiz: Path, tempo: int):
+def responde_sem_aparar(comando: list, raiz: Path, tempo: int):
     try:
         pronto = subprocess.run(comando, cwd=raiz, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace", timeout=tempo)
-    except (OSError, subprocess.SubprocessError):
+    except subprocess.TimeoutExpired:
+        RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(tempo))
         return NAO_MEDIDO
-    return pronto.returncode, (pronto.stdout or "").strip()
+    except (OSError, subprocess.SubprocessError) as falha:
+        RAZAO_DE_NAO_MEDIR.append(
+            MOTIVO_NAO_SUBIU.format(type(falha).__name__))
+        return NAO_MEDIDO
+    return pronto.returncode, pronto.stdout or ""
+
+
+def responde(comando: list, raiz: Path, tempo: int):
+    resposta = responde_sem_aparar(comando, raiz, tempo)
+    if resposta is NAO_MEDIDO:
+        return NAO_MEDIDO
+    return resposta[0], resposta[1].strip()
+
+
+def porque_nao_mediu() -> str:
+    return RAZAO_DE_NAO_MEDIR[-1] if RAZAO_DE_NAO_MEDIR else MOTIVO_NAO_DITO
 
 
 def a_camada_julga(linha: str) -> bool:
@@ -317,7 +370,7 @@ def linhas_que_a_camada_nao_julga(raiz: Path) -> list:
 
 
 def _toda_a_sujeira(raiz: Path) -> list:
-    resposta = responde(COMANDO_DA_SUJEIRA, raiz, TEMPO_DO_GIT)
+    resposta = responde_sem_aparar(COMANDO_DA_SUJEIRA, raiz, TEMPO_DO_GIT)
     if resposta is NAO_MEDIDO or resposta[0] != 0:
         return []
     return [l for l in resposta[1].split("\n") if l.strip()]
@@ -486,6 +539,7 @@ def sobra_fora_da_branch_de_entrega(raiz: Path):
         return NAO_MEDIDO
     codigo, dito = resposta
     if codigo == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO:
+        RAZAO_DE_NAO_MEDIR.append(MOTIVO_O_INSTRUMENTO_DISSE)
         return NAO_MEDIDO
     if codigo == 0:
         return ""
@@ -519,6 +573,72 @@ def commits_desta_sessao(raiz: Path, principal: str, integracao: str,
     if resposta is NAO_MEDIDO or resposta[0] != 0:
         return list(adiante)
     return [l for l in resposta[1].split("\n") if l.strip()]
+
+
+def repositorio_das_issues(raiz: Path) -> str:
+    try:
+        dado = json.loads((raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    issues = dado.get(CHAVE_DAS_ISSUES) if isinstance(dado, dict) else None
+    if not isinstance(issues, dict):
+        return ""
+    onde = issues.get(CHAVE_DO_REPOSITORIO)
+    return onde.strip() if isinstance(onde, str) else ""
+
+
+def numero_da_issue_do_trabalho(raiz: Path, branch: str, principal: str):
+    achou = MARCA_DA_ISSUE_NA_BRANCH.search(branch or "")
+    if achou:
+        return achou.group(1)
+    if not principal:
+        return ""
+    comando = [parte.format(principal) for parte in COMANDO_DAS_MENSAGENS]
+    resposta = responde(comando, raiz, TEMPO_DO_GIT)
+    if resposta is NAO_MEDIDO or resposta[0] != 0:
+        return ""
+    numeros = MARCA_DA_ISSUE_NO_COMMIT.findall(resposta[1] or "")
+    return numeros[0] if numeros else ""
+
+
+def criterios_do_que_o_gh_respondeu(resposta):
+    if resposta is NAO_MEDIDO or resposta[0] != 0:
+        return NAO_MEDIDO
+    try:
+        dado = json.loads(resposta[1] or "{}")
+    except ValueError:
+        return NAO_MEDIDO
+    if not isinstance(dado, dict) or dado.get(CAMPO_DA_SITUACAO) is None:
+        return NAO_MEDIDO
+    corpo = dado.get(CAMPO_DO_CORPO) or ""
+    linhas = [l.strip() for l in corpo.splitlines()]
+    return {
+        "aberta": dado.get(CAMPO_DA_SITUACAO) == SITUACAO_ABERTA,
+        "em_branco": [l for l in linhas if l.startswith(CAIXA_EM_BRANCO)],
+        "marcados": len([l for l in linhas
+                         if l.startswith(CAIXA_MARCADA)]),
+    }
+
+
+def criterios_da_issue(raiz: Path, numero: str, onde: str):
+    comando = [parte.format(numero, onde)
+               for parte in COMANDO_DO_CORPO_DA_ISSUE]
+    return criterios_do_que_o_gh_respondeu(
+        responde(comando, raiz, TEMPO_DA_REDE))
+
+
+def criterio_do_trabalho(raiz: Path, branch: str, principal: str,
+                         entregue: bool):
+    if not entregue:
+        return {}
+    onde = repositorio_das_issues(raiz)
+    numero = numero_da_issue_do_trabalho(raiz, branch, principal)
+    if not onde or not numero:
+        return {}
+    lido = criterios_da_issue(raiz, numero, onde)
+    if lido is NAO_MEDIDO:
+        return {"issue": numero, "onde": onde, "criterios": NAO_MEDIDO}
+    return {"issue": numero, "onde": onde, "criterios": lido}
 
 
 def pedidos_abertos(raiz: Path, principal: str, integracao: str):
@@ -736,10 +856,17 @@ def medir_vizinho(vizinho: Path, abertura, raiz: Path) -> dict:
             "fora_da_integracao": fora, "pedido": pedido}
 
 
+def nada_a_entregar(medido: dict) -> bool:
+    return not medido["suja"] and medido["sem_remoto"] == []
+
+
 def vizinho_sem_destino(medido: dict) -> bool:
     if medido["suja"] or medido["sem_remoto"] is NAO_MEDIDO or medido["sem_remoto"]:
         return True
     fora = medido.get("fora_da_integracao")
+    if fora == SEM_A_INTEGRACAO and medido.get("somente_leitura") \
+            and nada_a_entregar(medido):
+        return False
     if fora is NAO_MEDIDO or fora == SEM_A_INTEGRACAO:
         return True
     if not fora:
@@ -788,6 +915,9 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
         }
     desta = (commits_desta_sessao(raiz, principal, integracao, abertura, tudo)
              if tudo else [])
+    do_criterio = criterio_do_trabalho(
+        raiz, resposta_limpa(COMANDO_DA_BRANCH_DA_ARVORE, raiz, TEMPO_DO_GIT),
+        principal, bool(desta))
     pedidos = (pedidos_abertos(raiz, principal, integracao)
                if tudo else NAO_MEDIDO)
     revisor = revisor_deste_repositorio(raiz)
@@ -802,6 +932,7 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
         "principal": principal,
         "integracao": integracao,
         "adiante": desta,
+        "criterio": do_criterio,
         "herdados": [l for l in tudo if l not in desta],
         "pedido": (_ha_destino_declarado(raiz, principal, integracao, tudo,
                                          pedidos)
@@ -879,7 +1010,7 @@ def cobrancas(estado: dict) -> list:
         return cobradas
     if estado.get("sobra", "") is NAO_MEDIDO:
         cobradas.append(COBRA_SOBRA_NAO_MEDIDO.format(
-            INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA))
+            INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA, porque_nao_mediu()))
     elif estado.get("sobra"):
         cobradas.append(COBRA_SOBRA_DA_BRANCH.format(
             INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA, estado["sobra"]))
@@ -903,7 +1034,25 @@ def cobrancas(estado: dict) -> list:
                 cobradas.append(COBRA_REVISAO_NAO_MEDIDA.format(
                     estado.get("integracao"), estado.get("principal"),
                     estado.get("revisor")))
+    cobradas += cobranca_do_criterio(estado)
     return cobradas
+
+
+def cobranca_do_criterio(estado: dict) -> list:
+    do_criterio = estado.get("criterio") or {}
+    if "criterios" not in do_criterio:
+        return []
+    lido = do_criterio["criterios"]
+    if lido is NAO_MEDIDO:
+        return [COBRA_CRITERIO_NAO_MEDIDO.format(
+            do_criterio["issue"], porque_nao_mediu(), do_criterio["issue"],
+            do_criterio["onde"])]
+    if not lido.get("em_branco"):
+        return []
+    return [COBRA_CRITERIO_EM_BRANCO.format(
+        do_criterio["issue"], len(lido["em_branco"]),
+        estado.get("integracao"),
+        primeiras_linhas(lido["em_branco"][:TETO_DE_CRITERIOS_MOSTRADOS]))]
 
 
 def relato(estado: dict) -> list:
@@ -911,6 +1060,12 @@ def relato(estado: dict) -> list:
     if estado.get("pedido_aberto") and estado.get("revisor_e_o_autor"):
         dito.append(RELATA_REVISOR_QUE_E_O_AUTOR.format(
             estado.get("revisor")))
+    do_criterio = estado.get("criterio") or {}
+    lido = do_criterio.get("criterios")
+    if isinstance(lido, dict) and lido.get("marcados") \
+            and not lido.get("em_branco"):
+        dito.append(RELATA_CRITERIO_CUMPRIDO.format(
+            do_criterio["issue"], lido["marcados"]))
     herdados = estado.get("herdados")
     if herdados and estado.get("pedido") is not True:
         dito.append(RELATA_HERDADO.format(
@@ -1091,6 +1246,7 @@ def trabalho_de_mentira_com_repositorio_duravel(pasta: Path) -> Path:
     origem.mkdir()
     arvore.mkdir()
     git_de_mentira(origem, "init", "-q", "--bare")
+    git_de_mentira(origem, "config", "core.longpaths", "true")
     git_de_mentira(arvore, "init", "-q", "-b", BRANCH_DE_MENTIRA)
     git_de_mentira(arvore, "config", "user.email", "prova@exemplo")
     git_de_mentira(arvore, "config", "user.name", "Prova")
@@ -1109,7 +1265,8 @@ def o_que_o_gancho_responde(arvore: Path, etapa: str) -> str:
         ambiente.pop(MARCA_DE_ETAPA_NO_AMBIENTE, None)
     pronto = subprocess.run(
         [sys.executable, str(Path(__file__).resolve())],
-        input=ENTRADA_DE_PARADA, capture_output=True, text=True, env=ambiente)
+        input=ENTRADA_DE_PARADA, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=ambiente)
     return pronto.stdout.strip()
 
 
@@ -1186,10 +1343,7 @@ def testar() -> int:
                                lar_de_prova).name == "D--um--dois")
     with tempfile.TemporaryDirectory(prefix="cobra-vizinha-") as pasta:
         base = Path(pasta)
-        raiz_falsa = base / "repo"
-        (raiz_falsa / "sub").mkdir(parents=True)
-        (raiz_falsa / "meu.py").write_text("x", encoding="utf-8")
-        (raiz_falsa / "alheio.py").write_text("y", encoding="utf-8")
+        raiz_falsa = Path("Z:/repo") if os.sep == "\\" else Path("/repo")
         lar = base / "lar"
         transcritos = pasta_dos_transcritos(raiz_falsa, lar)
         transcritos.mkdir(parents=True)
@@ -1285,6 +1439,16 @@ def testar() -> int:
          "que ninguém viu",
          "não medido" in nao_medida
          and COBRA_SOBRA_DA_BRANCH[:24] not in nao_medida)
+    RAZAO_DE_NAO_MEDIR.clear()
+    caso("sem razão registrada a cobrança confessa que não sabe a causa, "
+         "em vez de calar sobre ela",
+         MOTIVO_NAO_DITO in "".join(cobrancas(com(sobra=NAO_MEDIDO))))
+    RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(15))
+    caso("teto de tempo esgotado aparece na cobrança com o número do teto — "
+         "medido: rede lenta e instrumento quebrado davam a MESMA cobrança "
+         "muda, e a causa levou um dia para aparecer",
+         "15 s" in "".join(cobrancas(com(sobra=NAO_MEDIDO))))
+    RAZAO_DE_NAO_MEDIR.clear()
     caso("parada que já é laço de gancho cala",
          decisao({"stop_hook_active": True}, daqui) == ("", ""))
     montado = [parte.format("principal-x", "integracao-y")
@@ -1405,6 +1569,7 @@ def testar() -> int:
         origem, quieta, outra = base / "origem", base / "quieta", base / "outra"
         origem.mkdir()
         git_de_mentira(origem, "init", "-q", "--bare", "-b", "main")
+        git_de_mentira(origem, "config", "core.longpaths", "true")
         git_de_mentira(base, "clone", "-q", str(origem), str(outra))
         git_de_mentira(outra, "config", "user.email", "prova@exemplo")
         git_de_mentira(outra, "config", "user.name", "Prova")
@@ -1451,6 +1616,172 @@ def testar() -> int:
         caso("a cobrança da herdada nomeia o arquivo e diz que não trava",
              "NÃO trava" in "".join(cobrancas(
                  {**ARVORE_LIMPA, "herdada": ["?? velho.txt"]})))
+
+    limpo_e_somente_leitura = {
+        "raiz": "projetos/vizinho", "suja": [], "sem_remoto": [],
+        "branch": "main", "integracao": "homolog", "somente_leitura": True,
+        "pode_empurrar": False, "fora_da_integracao": SEM_A_INTEGRACAO,
+        "pedido": NAO_MEDIDO,
+    }
+    caso("vizinho SOMENTE LEITURA, com árvore limpa e nada por empurrar, não "
+         "é cobrado por não ter a integração declarada: não há o que "
+         "entregar, e o nome de uma branch onde nunca se escreve não é "
+         "pendência — cobrança impossível de resolver ensina a ignorar a "
+         "cobrança inteira",
+         vizinho_sem_destino(limpo_e_somente_leitura) is False)
+    caso("mas o mesmo vizinho COM árvore suja continua cobrado",
+         vizinho_sem_destino(dict(limpo_e_somente_leitura,
+                                  suja=[" M x.py"])) is True)
+    caso("e com commit que não está em remoto nenhum, também",
+         vizinho_sem_destino(dict(limpo_e_somente_leitura,
+                                  sem_remoto=["abc1234 solto"])) is True)
+    caso("vizinho onde SE ESCREVE segue cobrado pela integração que falta — "
+         "ali o nome importa, porque é para lá que a entrega vai",
+         vizinho_sem_destino(dict(limpo_e_somente_leitura,
+                                  somente_leitura=False)) is True)
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-arvore-") as tmp:
+        base = Path(tmp).resolve()
+        principal, ao_lado = base / "principal", base / "ao-lado"
+        principal.mkdir()
+        git_de_mentira(principal, "init", "-q", "-b", "main")
+        git_de_mentira(principal, "config", "user.email", "prova@exemplo")
+        git_de_mentira(principal, "config", "user.name", "Prova")
+        (principal / "a.txt").write_text("um", encoding="utf-8")
+        git_de_mentira(principal, "add", "-A")
+        git_de_mentira(principal, "commit", "-qm", "raiz")
+        git_de_mentira(principal, "worktree", "add", "-q", str(ao_lado),
+                       "-b", "issue/914-medido-de-dentro")
+        caso("a bancada monta uma ÁRVORE DE TRABALHO de verdade, onde o .git "
+             "é ARQUIVO e não pasta — a casa roda com várias, e nenhuma "
+             "fixture exercitava esse terreno",
+             (ao_lado / ".git").is_file()
+             and not (ao_lado / ".git").is_dir())
+        (ao_lado / "b.txt").write_text("dois", encoding="utf-8")
+        git_de_mentira(ao_lado, "add", "-A")
+        git_de_mentira(ao_lado, "commit", "-qm", "de dentro da árvore")
+        (ao_lado / "sujo.txt").write_text("nao commitado", encoding="utf-8")
+        minha, herdada = sujeira_desta_sessao_e_herdada(ao_lado, None)
+        caso("medida de dentro da árvore de trabalho, a sujeira é a DELA — o "
+             "git responde pela árvore em que o comando roda",
+             any("sujo.txt" in linha for linha in minha) and herdada == [])
+        caso("o número da issue sai do nome da branch da árvore de trabalho, "
+             "não da branch da árvore principal",
+             numero_da_issue_do_trabalho(
+                 ao_lado, "issue/914-medido-de-dentro", "main") == "914")
+        caso("e a árvore principal continua limpa e na branch dela: uma "
+             "árvore não vê a sujeira da outra",
+             sujeira_desta_sessao_e_herdada(principal, None) == ([], []))
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-criterio-") as tmp:
+        arvore = Path(tmp).resolve()
+        git_de_mentira(arvore, "init", "-q", "-b", "main")
+        git_de_mentira(arvore, "config", "user.email", "prova@exemplo")
+        git_de_mentira(arvore, "config", "user.name", "Prova")
+        git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m", "raiz")
+        git_de_mentira(arvore, "checkout", "-q", "-b", "issue/142-o-assunto")
+        caso("o número da issue sai do NOME da branch de trabalho",
+             numero_da_issue_do_trabalho(arvore, "issue/142-o-assunto", "main")
+             == "142")
+        git_de_mentira(arvore, "checkout", "-q", "-b", "sem-numero-no-nome")
+        git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m",
+                       "O conserto que faltava (issue 77)")
+        caso("sem número no nome da branch, ele sai da mensagem do commit — "
+             "que é a convenção desta casa",
+             numero_da_issue_do_trabalho(arvore, "sem-numero-no-nome", "main")
+             == "77")
+        caso("sem número em lugar nenhum, a cobrança não tem o que perguntar "
+             "e CALA, em vez de chutar um número",
+             numero_da_issue_do_trabalho(arvore, "outra-coisa", "") == "")
+
+        (arvore / "nucleo").mkdir()
+        (arvore / ARQUIVO_EXECUTOR).write_text(
+            json.dumps({"issues": {"repositorio": "quem-instala/o-quadro"}}),
+            encoding="utf-8")
+        caso("o endereço do quadro sai do arquivo local, campo issues."
+             "repositorio — nunca do remoto do repositório aberto",
+             repositorio_das_issues(arvore) == "quem-instala/o-quadro")
+        (arvore / ARQUIVO_EXECUTOR).write_text("{ isto nao e json",
+                                               encoding="utf-8")
+        caso("arquivo local ilegível não vira endereço inventado",
+             repositorio_das_issues(arvore) == "")
+
+    corpo_com_branco = ("## Pronto quando\n\n"
+                        "- [x] o instrumento roda\n"
+                        "- [ ] a bancada cobre o caso novo\n"
+                        "- [ ] a receita cita o comando\n")
+    corpo_marcado = ("## Pronto quando\n\n"
+                     "- [x] o instrumento roda\n"
+                     "- [X] a bancada cobre o caso novo\n")
+    lido_com_branco = criterios_do_que_o_gh_respondeu(
+        (0, json.dumps({"body": corpo_com_branco, "state": "OPEN"})))
+    lido_marcado = criterios_do_que_o_gh_respondeu(
+        (0, json.dumps({"body": corpo_marcado, "state": "OPEN"})))
+    caso("a leitura conta caixa em branco e caixa marcada, e enxerga o x "
+         "maiúsculo",
+         lido_com_branco["em_branco"] and len(lido_com_branco["em_branco"]) == 2
+         and lido_com_branco["marcados"] == 1
+         and lido_marcado["em_branco"] == []
+         and lido_marcado["marcados"] == 2)
+    caso("issue que não se deixou ler é NÃO MEDIDO, nunca issue sem critério",
+         criterios_do_que_o_gh_respondeu((1, "erro")) is NAO_MEDIDO
+         and criterios_do_que_o_gh_respondeu((0, "isto nao e json"))
+         is NAO_MEDIDO
+         and criterios_do_que_o_gh_respondeu((0, "{}")) is NAO_MEDIDO
+         and criterios_do_que_o_gh_respondeu(NAO_MEDIDO) is NAO_MEDIDO)
+
+    def com_criterio(criterios):
+        return {"integracao": "homolog", "adiante": ["abc1234 trabalho"],
+                "criterio": {"issue": "142", "onde": "quem-instala/o-quadro",
+                             "criterios": criterios}}
+
+    cobradas = cobranca_do_criterio(com_criterio(lido_com_branco))
+    caso("critério em branco com o trabalho entregue COBRA, diz quantos são e "
+         "manda marcar com evidência ou dizer por que sai do escopo",
+         len(cobradas) == 1 and "142" in cobradas[0]
+         and "2 critério" in cobradas[0]
+         and "a bancada cobre o caso novo" in cobradas[0])
+    caso("a cobrança manda tirar o verbo que FECHA a issue do pedido de "
+         "incorporação — é ali que o critério não conferido desaparece",
+         "FECHA" in cobradas[0])
+    caso("critério todo marcado não cobra nada",
+         cobranca_do_criterio(com_criterio(lido_marcado)) == [])
+    caso("critério todo marcado entra no RELATO, com a contagem",
+         any("142" in linha and "2 critério" in linha
+             for linha in relato(com_criterio(lido_marcado))))
+    nao_medido = cobranca_do_criterio(com_criterio(NAO_MEDIDO))
+    caso("issue ilegível COBRA dizendo que não conferiu, e não conferido não "
+         "é cumprido — nem cala, nem inventa que está pronta",
+         len(nao_medido) == 1 and "não se deixou ler" in nao_medido[0]
+         and "gh issue view 142" in nao_medido[0])
+    caso("sem issue no trabalho, a cobrança do critério cala",
+         cobranca_do_criterio({"integracao": "homolog", "criterio": {}}) == []
+         and cobranca_do_criterio({"integracao": "homolog"}) == [])
+    caso("trabalho NÃO entregue não vai à rede nem cobra critério: a issue só "
+         "se lê quando há commit da sessão na integração",
+         criterio_do_trabalho(Path("."), "issue/1-x", "main", False) == {})
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-porcelain-") as tmp:
+        arvore = Path(tmp).resolve()
+        git_de_mentira(arvore, "init", "-q")
+        git_de_mentira(arvore, "config", "user.email", "prova@exemplo")
+        git_de_mentira(arvore, "config", "user.name", "Prova")
+        rastreado = arvore / "a.txt"
+        rastreado.write_text("de antes", encoding="utf-8")
+        git_de_mentira(arvore, "add", "-A")
+        git_de_mentira(arvore, "commit", "-qm", "base")
+        rastreado.write_text("mexido antes da sessão", encoding="utf-8")
+        os.utime(rastreado, (1000, 1000))
+        caso("a PRIMEIRA linha do porcelain guarda o espaço inicial — o strip "
+             "da saída inteira o comia, ` M a.txt` virava `M a.txt`, o corte "
+             "em [3:] perdia três letras do caminho e o stat não achava o "
+             "arquivo",
+             linhas_da_arvore_suja(arvore) == [" M a.txt"])
+        caso("e o primeiro arquivo sujo, mais velho que a abertura, é herdado "
+             "— antes era SEMPRE sujeira desta sessão, e o gancho mandava "
+             "commitar ou apagar trabalho alheio",
+             sujeira_desta_sessao_e_herdada(arvore, time.time() - 60)
+             == ([], [" M a.txt"]))
 
     caso("arquivo que a camada JULGA continua barrando: código solto trava",
          any("árvore está suja" in c
@@ -1518,6 +1849,7 @@ def testar() -> int:
         origem = base / "origem"
         origem.mkdir()
         git_de_mentira(origem, "init", "-q", "--bare", "-b", "main")
+        git_de_mentira(origem, "config", "core.longpaths", "true")
         git_de_mentira(vizinho, "remote", "add", "origin", str(origem))
         git_de_mentira(vizinho, "push", "-q", "-u", "origin", "main")
         caso("vizinho com tudo empurrado cala",

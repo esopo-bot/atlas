@@ -47,6 +47,13 @@ ESTADO_DA_ULTIMA_RONDA = ("última ronda em {quando}: {feitos} indexado(s), "
                           "{pulados} já estava(m), {sem_elegivel} sem arquivo "
                           "elegível, {falharam} falhou(ram), em {duracao}")
 SEM_RONDA_AINDA = "nenhuma ronda registrada ainda"
+CAMPO_DOS_QUE_FALHARAM = "quais_falharam"
+QUAIS_FALHARAM = "  falhou(ram): {quais}"
+SEM_OS_NOMES_DOS_QUE_FALHARAM = ("  registro sem os nomes de quem falhou — "
+                                 "gravado por uma ronda anterior a este "
+                                 "campo; rode a ronda de novo para saber "
+                                 "qual alvo caiu")
+SEPARADOR_DOS_ALVOS_NA_LINHA = ", "
 
 PROTOCOLO = "2024-11-05"
 QUEM_CHAMA = {"name": "indexar", "version": "1"}
@@ -267,6 +274,11 @@ def estado(dado: dict, cwd: str) -> int:
     registro = ultima_ronda(cwd)
     print(ESTADO_DA_ULTIMA_RONDA.format(**registro) if registro
           else SEM_RONDA_AINDA)
+    if registro and registro.get("falharam"):
+        quais = registro.get(CAMPO_DOS_QUE_FALHARAM)
+        print(QUAIS_FALHARAM.format(
+            quais=SEPARADOR_DOS_ALVOS_NA_LINHA.join(quais)) if quais
+            else SEM_OS_NOMES_DOS_QUE_FALHARAM)
     if not esta_ligado(dado):
         return 0
     sondagem = sondagem_das_portas(dado)
@@ -381,10 +393,6 @@ def excesso_de_nao_rastreados(total: int, rastreados: int) -> int:
 
 
 def ambiente_que_nao_atrapalha(ambiente: dict, refazer: bool = False) -> dict:
-    """A sincronização periódica do servidor reindexa por mudança em cima do
-    alvo que está sendo indexado; a ronda a empurra para um dia e deixa só a
-    inicial, que ela espera terminar antes do primeiro disparo. Com
-    `--refazer` não há o que sincronizar: cada alvo é reconstruído."""
     completo = dict(ambiente or {})
     if refazer:
         completo.setdefault(VARIAVEL_DA_SINCRONIZACAO, SINCRONIZACAO_DESLIGADA)
@@ -394,8 +402,6 @@ def ambiente_que_nao_atrapalha(ambiente: dict, refazer: bool = False) -> dict:
 
 
 def veredito_do_registro(linhas: list):
-    """Lê o que o servidor escreveu no stderr desde o disparo: concluiu,
-    falhou, ou ainda nada."""
     for linha in linhas:
         if MARCA_DE_CONCLUSAO_NO_REGISTRO in linha:
             return FEITO, linha.strip()
@@ -405,8 +411,6 @@ def veredito_do_registro(linhas: list):
 
 
 def sincronizacao_terminou(linhas: list):
-    """Lê o registro: a sincronização inicial fechou, foi pulada porque outro
-    servidor segura a trava, ou ainda nada."""
     for linha in linhas:
         if any(marca in linha for marca in MARCAS_DE_SINCRONIZACAO_FEITA):
             return SINCRONIZACAO_FEITA
@@ -415,18 +419,94 @@ def sincronizacao_terminou(linhas: list):
     return None
 
 
-def processo_vivo(pid: int) -> bool:
-    if os.name == "nt":
-        saida = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                               capture_output=True, text=True)
-        return str(pid) in saida.stdout
+ESTA_NO_WINDOWS = os.name == "nt"
+PID_QUE_NUNCA_EXISTIU = 0x7FFFFFF0
+DIREITO_DE_PERGUNTAR_PELO_PROCESSO = 0x1000
+DIREITO_DE_ESPERAR_PELO_PROCESSO = 0x00100000
+O_PROCESSO_AINDA_NAO_SINALIZOU = 0x102
+ACESSO_NEGADO_AO_PROCESSO = 5
+MAIOR_PID_QUE_O_WINDOWS_ENDERECA = 0xFFFFFFFF
+_O_KERNEL_JA_PREPARADO = {}
+
+
+def _janela_para_o_kernel():
+    pronto = _O_KERNEL_JA_PREPARADO.get("kernel32")
+    if pronto is not None:
+        return pronto
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL,
+                                   wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    _O_KERNEL_JA_PREPARADO["kernel32"] = kernel
+    return kernel
+
+
+def _vivo_pelo_objeto_do_windows(pid: int) -> bool:
+    try:
+        import ctypes
+        kernel = _janela_para_o_kernel()
+    except (OSError, AttributeError, ImportError, ValueError):
+        return _vivo_por_quem_ainda_ocupa_o_numero(pid)
+    handle = kernel.OpenProcess(DIREITO_DE_PERGUNTAR_PELO_PROCESSO
+                                | DIREITO_DE_ESPERAR_PELO_PROCESSO,
+                                False, pid)
+    if not handle:
+        return ctypes.get_last_error() == ACESSO_NEGADO_AO_PROCESSO
+    try:
+        return (kernel.WaitForSingleObject(handle, 0)
+                == O_PROCESSO_AINDA_NAO_SINALIZOU)
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _o_filho_ja_terminou(pid: int):
+    espiar = getattr(os, "waitid", None)
+    if espiar is None:
+        return None
+    try:
+        colhido = espiar(os.P_PID, pid,
+                         os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except (ChildProcessError, ValueError, OverflowError, OSError,
+            AttributeError):
+        return None
+    return colhido is not None
+
+
+def _vivo_por_quem_ainda_ocupa_o_numero(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-        return True
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
+    except (OverflowError, OSError):
+        return False
+    return True
+
+
+def _pid_cabe_na_plataforma(pid: int) -> bool:
+    if ESTA_NO_WINDOWS:
+        return pid <= MAIOR_PID_QUE_O_WINDOWS_ENDERECA
+    return pid <= sys.maxsize
+
+
+def processo_vivo(pid) -> bool:
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        return False
+    if not _pid_cabe_na_plataforma(pid):
+        return False
+    if ESTA_NO_WINDOWS:
+        return _vivo_pelo_objeto_do_windows(pid)
+    ja_terminou = _o_filho_ja_terminou(pid)
+    if ja_terminou is not None:
+        return not ja_terminou
+    return _vivo_por_quem_ainda_ocupa_o_numero(pid)
 
 
 def dono_da_trava(trava: Path):
@@ -439,9 +519,6 @@ def dono_da_trava(trava: Path):
 
 def limpar_trava_orfa(trava: Path = TRAVA_DA_SINCRONIZACAO,
                       vivo=processo_vivo) -> str:
-    """Servidor morto de fora deixa a trava global de sincronização, e o
-    próximo só a reclama depois de 10 min — a ronda inicial pula a
-    sincronização e espera por uma marca que nunca vem."""
     if not trava.is_dir():
         return ""
     pid = dono_da_trava(trava)
@@ -534,9 +611,6 @@ class Servidor:
             teto)
 
     def espera_terminar(self, caminho: str, teto: int, intervalo: int):
-        """Espera pelo registro, nunca pela consulta de estado: cada
-        `get_indexing_status` roda a recuperação do servidor, que grava como
-        completo qualquer alvo em curso que já tenha linhas no banco."""
         comeco = time.monotonic()
         while time.monotonic() - comeco < teto:
             dito, linha = veredito_do_registro(self.desde_a_partida())
@@ -577,9 +651,6 @@ def ainda_anda(texto: str) -> bool:
 
 def sincronizar_antes_do_primeiro_disparo(servidor, refazer: bool,
                                           comeco: float) -> str:
-    """A sincronização inicial é quem traz o que mudou nos alvos já
-    indexados; a ronda a espera para não disputar quem gera os vetores com o
-    próprio trabalho. Com `--refazer` ela nem sobe."""
     if refazer:
         print(SEM_SINCRONIZACAO, flush=True)
         return SINCRONIZACAO_DESLIGADA
@@ -598,9 +669,6 @@ def sincronizar_antes_do_primeiro_disparo(servidor, refazer: bool,
 
 
 def desfazer_a_metade(servidor, caminho: str) -> bool:
-    """Alvo que o servidor deu por falho fica com a coleção pela metade, e na
-    subida seguinte ele a chama de completa; apagar agora é o que faz a
-    próxima ronda refazê-lo inteiro."""
     resposta = servidor.desfaz(caminho, TEMPO_DE_HANDSHAKE)
     desfez = veredito(resposta) == FEITO
     print((DESFEITO if desfez else NAO_DESFEZ).format(caminho), flush=True)
@@ -608,7 +676,6 @@ def desfazer_a_metade(servidor, caminho: str) -> bool:
 
 
 def desfazer_o_que_anda(servidor, em_curso: list) -> list:
-    """Apaga a coleção de cada alvo em curso; devolve os que não deu."""
     if not em_curso:
         return []
     print(INTERRUPCAO.format(len(em_curso)), file=sys.stderr, flush=True)
@@ -668,9 +735,6 @@ def ensaiar(alvos: list, extensoes, ignorar=None) -> int:
 
 def disparar_um_alvo(servidor, i: int, total: int, caminho: str, teto: int,
                      refazer: bool, extensoes, ignorar, em_curso: list) -> str:
-    """Dispara um alvo e espera ele terminar pelo registro do servidor, um
-    por vez: alvo em paralelo é o que a recuperação do servidor grava como
-    completo antes da hora. O que não termina no teto é desfeito."""
     print(LINHA_DO_COMECO.format(i, total, caminho), flush=True)
     conta = contagem_do_servidor(caminho, extensoes, ignorar)
     if conta["elegiveis"] == 0:
@@ -725,6 +789,7 @@ def indexar(dado: dict, teto: int, refazer: bool = False,
         print(NAO_RESPONDEU.format(TEMPO_DE_HANDSHAKE), file=sys.stderr)
         return 1
     feitos = pulados = sem_elegivel = 0
+    quem_falhou = []
     comeco_da_rodada = time.monotonic()
     em_curso = []
     try:
@@ -737,19 +802,22 @@ def indexar(dado: dict, teto: int, refazer: bool = False,
             feitos += 1 if dito == FEITO else 0
             pulados += 1 if dito == JA_ESTAVA else 0
             sem_elegivel += 1 if dito == PULADO_SEM_ELEGIVEL else 0
+            if dito == FALHOU:
+                quem_falhou.append(caminho)
     except KeyboardInterrupt:
         desfazer_o_que_anda(servidor, list(em_curso))
         servidor.encerra()
         return CODIGO_DA_INTERRUPCAO
     servidor.encerra()
-    falharam = len(alvos) - feitos - pulados - sem_elegivel
+    falharam = len(quem_falhou)
     gasto = duracao(time.monotonic() - comeco_da_rodada)
     print(RESUMO_COM_PULADOS.format(feitos, pulados, sem_elegivel, falharam,
                                     gasto))
     gravar_ultima_ronda(cwd, {
         "quando": time.strftime("%Y-%m-%dT%H:%M:%S"), "feitos": feitos,
         "pulados": pulados, "sem_elegivel": sem_elegivel,
-        "falharam": falharam, "duracao": gasto})
+        "falharam": falharam, CAMPO_DOS_QUE_FALHARAM: quem_falhou,
+        "duracao": gasto})
     return 0 if not falharam else 1
 
 
@@ -1039,6 +1107,17 @@ def testar() -> int:
              "4242" in dito and not trava.exists())
         caso("sem trava nao ha o que limpar",
              limpar_trava_orfa(trava, vivo=lambda pid: False) == "")
+        caso("a prova de vida acha o proprio processo desta bancada",
+             processo_vivo(os.getpid()) is True)
+        caso("e nao acha o numero que nunca existiu",
+             processo_vivo(PID_QUE_NUNCA_EXISTIU) is False)
+        caso("pid grande demais para a plataforma nao responde pelo processo "
+             "que o resto em 32 bits acerta",
+             all(processo_vivo(2 ** potencia + os.getpid()) is False
+                 for potencia in (32, 33, 64)))
+        caso("pid imprestavel nao e vida",
+             all(processo_vivo(imprestavel) is False
+                 for imprestavel in (None, 0, -1, True, "123", 1.0)))
         caso("a ronda empurra a sincronizacao periodica para um dia, sem "
              "sobrescrever o que o dono declarou",
              ambiente_que_nao_atrapalha({})[VARIAVEL_DO_INTERVALO_DE_SYNC]
@@ -1130,6 +1209,26 @@ def testar() -> int:
              codigo == 1 and ("desfaz", alvo_real) in fingido.chamadas
              and "não terminou" in dito and "1 falhou" in dito
              and ordem[-1] == "encerra")
+
+        caso("a ronda grava QUAL alvo falhou, não só quantos — com o total "
+             "sozinho ninguém sabe o que reindexar",
+             ultima_ronda(cwd).get(CAMPO_DOS_QUE_FALHARAM) == [alvo_real])
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            estado(configuracao_de_prova, cwd)
+        caso("e o --estado imprime o nome do alvo que caiu",
+             QUAIS_FALHARAM.format(quais=alvo_real) in saida.getvalue())
+
+        gravar_ultima_ronda(cwd, {"quando": "2026-09-03T06:00:00",
+                                  "feitos": 0, "pulados": 0,
+                                  "sem_elegivel": 0, "falharam": 1,
+                                  "duracao": "12s"})
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            estado(configuracao_de_prova, cwd)
+        caso("registro gravado antes deste campo confessa que não tem os "
+             "nomes, em vez de calar e parecer completo",
+             SEM_OS_NOMES_DOS_QUE_FALHARAM in saida.getvalue())
 
         fingido = ServidorFingido(espera=(FEITO, concluiu.strip()))
         saida = io.StringIO()

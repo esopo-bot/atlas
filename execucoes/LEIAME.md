@@ -135,6 +135,34 @@ touch /tmp/issue-<n>/aprovacoes/entrega.ok
 - **`aguardando-resposta` quer dizer processo MORTO.** Tocar o arquivo de
   aprovação sozinho não continua nada — quem continua é `--retomar`.
 
+### Os pedágios que a sessão paga ao operar o motor
+
+Medidos em rodadas anteriores; cada um custou um turno a quem não sabia.
+
+- **Arme um vigia em segundo plano no `estado.json` do trabalho**: motor
+  parado é auditoria na hora, não no fim do dia.
+- **A pergunta do motor tem dois caminhos, e os dois valem.** Ele a posta na
+  issue sozinho — é o registro, e é por onde o dono responde longe do
+  computador. Com o dono na conversa, encurte: leia a pergunta na evidência
+  da etapa, faça-a como pergunta de uma escolha com recomendação, e devolva
+  a resposta com `--retomar --resposta "..."`. O que é mecânica, e não
+  decisão — aplicar um patch que a cerca impediu, por exemplo —, resolva você
+  e só relate.
+- **O auditor à mão roda SEM `PROJETO` na frente**: a execução gravou o
+  ambiente em `ambiente.json`, ao lado do `estado.json`, e o auditor o repõe;
+  a variável no shell é ignorada onde esse arquivo existe. Para apontar as
+  provas a outro alvo, edite o `ambiente.json` da pasta.
+- **A branch de trabalho JÁ ESTÁ no remoto quando você vai integrar**: a
+  etapa `trabalho-empurrado` a empurrou da árvore descartável assim que o
+  commit existiu. Não busque à mão — confira com `git rev-parse <branch>` e
+  mescle `--no-ff` na integração, depois o push. Rode o ritual DEPOIS da
+  mescla, porque o que veio da integração entra na conta. Depois: critérios
+  com saída colada na issue, feche-a, pode a linha da caixa com o commit,
+  apague a branch entregue.
+- **A sessão do motor que gasta o teto sem commitar declara `segue` vazio**,
+  e a retomada a pula: preserve a trilha, deixe o mapa no ponto de retomada
+  da issue (arquivos, ordem, "commite cedo") e recomece a execução.
+
 ## Onde mora o SEU roteiro
 
 Na `execucoes/` da raiz do seu repositório. Lá o conteúdo não entra no git,

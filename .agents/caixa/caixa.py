@@ -19,6 +19,12 @@ BANDEIRA_DE_TESTE = "--testar"
 
 MARCA_ABRE = "<!-- escrito pelo executor de roteiros -->"
 MARCA_FECHA = "<!-- /escrito pelo executor de roteiros -->"
+MARCA_ABRE_FECHAMENTOS = "<!-- fechamentos do executor de roteiros -->"
+MARCA_FECHA_FECHAMENTOS = "<!-- /fechamentos do executor de roteiros -->"
+TETO_DE_FECHAMENTOS = 20
+TITULO_DOS_FECHAMENTOS = ("## Fechamentos — os últimos {}, o executor "
+                          "apaga o mais velho").format(TETO_DE_FECHAMENTOS)
+MARCA_DO_RELATORIO = "<!-- relatorio de rodada do executor de roteiros -->"
 
 DEFEITO = "defeito"
 MELHORIA = "melhoria"
@@ -98,11 +104,8 @@ RECUSA_SEM_REPOSITORIO = (
     "em que repositório a caixa mora")
 FALHA_AO_LER = "erro de ambiente: não li a caixa {issue} — {motivo}"
 FALHA_AO_GRAVAR = "erro de ambiente: não gravei na caixa {issue} — {motivo}"
-FALHA_AO_COMENTAR = (
-    "erro de ambiente: não comentei na caixa {issue} — {motivo}. A linha "
-    "{id} continua no quadro: sem o registro do fechamento, não podo")
 FALHA_AO_RELATAR = (
-    "erro de ambiente: não comentei o relatório na caixa {issue} — {motivo}. "
+    "erro de ambiente: não gravei o relatório na caixa {issue} — {motivo}. "
     "Nada foi escrito: o quadro não mudou")
 NAO_ESTA_LA = (
     "erro de ambiente: gravei na caixa {issue} e reli, e a linha {id} NÃO "
@@ -111,27 +114,27 @@ NAO_ESTA_LA = (
     "evidência")
 AINDA_ESTA_LA = (
     "erro de ambiente: podei na caixa {issue} e reli, e a linha {id} AINDA "
-    "está lá. O comentário do fechamento já subiu: rode de novo e confesse "
-    "isto na evidência")
+    "está lá. Rode de novo e confesse isto na evidência")
 
 RECADO_POSTO = "posto na caixa {issue}: {id}"
 RECADO_ATUALIZADO = "atualizado na caixa {issue}: {id}"
 RECADO_JA_ESTAVA = "já estava igual na caixa {issue}: {id} — não regravei"
 RECADO_DO_ENSAIO = "ensaio — o bloco da caixa {issue} ficaria assim:{miolo}"
 RECADO_PODADO = (
-    "podado do quadro da caixa {issue}: {id} — o fechamento ficou em "
-    "comentário")
+    "podado do quadro da caixa {issue}: {id} — o fechamento ficou na seção "
+    "de fechamentos do próprio corpo")
 RECADO_DO_ENSAIO_DA_PODA = (
-    "ensaio — a linha {id} sairia do quadro da caixa {issue}, e o comentário "
-    "seria:\n{registro}")
-RECADO_RELATADO = "relatório em comentário novo na caixa {issue}"
+    "ensaio — a linha {id} sairia do quadro da caixa {issue}, e a linha de "
+    "fechamento no corpo seria:\n{registro}")
+RECADO_RELATADO = "relatório reescrito no comentário fixo da caixa {issue}"
+RECADO_RELATADO_NOVO = ("relatório abriu o comentário fixo da caixa {issue} "
+                        "— as rodadas seguintes reescrevem esse mesmo")
 RECADO_DO_ENSAIO_DO_RELATO = (
-    "ensaio — o relatório entraria como comentário novo na caixa {issue}, e "
-    "seria:\n{corpo}")
+    "ensaio — o relatório reescreveria o comentário fixo da caixa {issue}, "
+    "e seria:\n{corpo}")
 
-REGISTRO_DA_PODA = ("Podado do quadro em {quando} — a linha, como estava:"
-                    "\n\n{linha}\n")
-MOTIVO_DA_PODA = "\nMotivo: {motivo}\n"
+REGISTRO_DA_PODA = "- {quando} · podado: **{id}** `{tipo}`"
+MOTIVO_DA_PODA = " · motivo: {motivo}"
 
 AJUDA_ACAO = ("em que caixa a linha entra, `" + PODA + "` para tirar a "
               "linha do quadro, ou `" + RELATO + "` para escrever o "
@@ -326,6 +329,34 @@ def gravar_corpo(endereco: dict, corpo: str) -> str:
     return ""
 
 
+def comentario_fixo_do_relatorio(endereco: dict) -> tuple:
+    feito = gh.na_conta(endereco["conta"],
+                        ["api", "repos/{}/issues/{}/comments".format(
+                            endereco["repositorio"], endereco["issue"])])
+    if feito is None or feito.returncode != 0:
+        return None, gh.berro(feito)
+    try:
+        comentarios = json.loads(feito.stdout)
+    except ValueError as erro:
+        return None, str(erro)
+    for comentario in comentarios:
+        if MARCA_DO_RELATORIO in (comentario.get("body") or ""):
+            return comentario.get("id"), ""
+    return None, ""
+
+
+def reescrever_comentario(endereco: dict, identidade, texto: str) -> str:
+    feito = gh.na_conta(endereco["conta"],
+                        ["api", "-X", "PATCH",
+                         "repos/{}/issues/comments/{}".format(
+                             endereco["repositorio"], identidade),
+                         "--input", "-"],
+                        entrada=json.dumps({"body": texto}))
+    if feito is None or feito.returncode != 0:
+        return gh.berro(feito)
+    return ""
+
+
 def comentar(endereco: dict, texto: str) -> str:
     feito = gh.na_conta(endereco["conta"],
                          ["issue", "comment", str(endereco["issue"]),
@@ -446,10 +477,40 @@ def achar_a_linha(enderecos: list, identidade: str) -> tuple:
 
 
 def registro_da_poda(alvo: dict, quando: str, motivo: str) -> str:
-    escrito = REGISTRO_DA_PODA.format(quando=quando,
-                                      linha=LINHA_DO_ACHADO.format(**alvo))
+    escrito = REGISTRO_DA_PODA.format(quando=quando, id=alvo["id"],
+                                      tipo=alvo["tipo"])
     limpo = na_linha(motivo)
     return escrito + (MOTIVO_DA_PODA.format(motivo=limpo) if limpo else "")
+
+
+def partes_dos_fechamentos(corpo: str) -> tuple:
+    abre = corpo.find(MARCA_ABRE_FECHAMENTOS)
+    fecha = corpo.find(MARCA_FECHA_FECHAMENTOS)
+    if abre < 0 or fecha < 0 or fecha < abre:
+        return ()
+    return (corpo[:abre + len(MARCA_ABRE_FECHAMENTOS)],
+            corpo[abre + len(MARCA_ABRE_FECHAMENTOS):fecha],
+            corpo[fecha:])
+
+
+def fechamentos_do_miolo(miolo: str) -> list:
+    return [linha.strip() for linha in miolo.splitlines() if linha.strip()]
+
+
+def secao_de_fechamentos_nova(corpo: str) -> tuple:
+    antes = (corpo.rstrip("\n") + "\n\n" + TITULO_DOS_FECHAMENTOS + "\n\n"
+             + MARCA_ABRE_FECHAMENTOS)
+    return antes, "", MARCA_FECHA_FECHAMENTOS + "\n"
+
+
+def corpo_com_fechamento(corpo: str, registro: str) -> str:
+    antes, miolo, depois = (partes_dos_fechamentos(corpo)
+                            or secao_de_fechamentos_nova(corpo))
+    linhas = fechamentos_do_miolo(miolo)
+    if registro in linhas:
+        return corpo
+    linhas = (linhas + [registro])[-TETO_DE_FECHAMENTOS:]
+    return antes + "\n" + "\n".join(linhas) + "\n" + depois
 
 
 def podar_da_caixa(endereco: dict, corpo: str, identidade: str,
@@ -458,11 +519,11 @@ def podar_da_caixa(endereco: dict, corpo: str, identidade: str,
         return 0, RECADO_DO_ENSAIO_DA_PODA.format(issue=endereco["issue"],
                                                   id=identidade,
                                                   registro=registro)
-    berro = comentar(endereco, registro)
-    if berro:
-        return 2, FALHA_AO_COMENTAR.format(issue=endereco["issue"],
-                                           id=identidade, motivo=berro)
-    _, divergentes, erro = gravar_relendo(endereco, corpo, corpo_sem,
+
+    def podar_e_registrar(atual: str, quem: str) -> str:
+        return corpo_com_fechamento(corpo_sem(atual, quem), registro)
+
+    _, divergentes, erro = gravar_relendo(endereco, corpo, podar_e_registrar,
                                           identidade)
     if erro:
         return 2, erro
@@ -512,11 +573,16 @@ def relatar(corpo: str, cwd: str = "", ensaio: bool = False,
     if ensaio:
         return 0, aviso + RECADO_DO_ENSAIO_DO_RELATO.format(
             issue=endereco["issue"], corpo=corpo)
-    berro = comentar(endereco, corpo)
+    texto = MARCA_DO_RELATORIO + "\n" + corpo
+    fixo, berro = comentario_fixo_do_relatorio(endereco)
+    if not berro:
+        berro = (reescrever_comentario(endereco, fixo, texto) if fixo
+                 else comentar(endereco, texto))
     if berro:
         return 2, FALHA_AO_RELATAR.format(issue=endereco["issue"],
                                           motivo=berro)
-    return 0, aviso + RECADO_RELATADO.format(issue=endereco["issue"])
+    recado = RECADO_RELATADO if fixo else RECADO_RELATADO_NOVO
+    return 0, aviso + recado.format(issue=endereco["issue"])
 
 
 FALSO_GH = """import json
@@ -537,6 +603,14 @@ elif "comment" in sys.argv:
         sys.exit(2)
     with COMENTARIOS.open("a", encoding="utf-8") as escrito:
         escrito.write(sys.stdin.read() + chr(10))
+elif "api" in sys.argv and "PATCH" in sys.argv:
+    if os.environ.get("CAIXA_TESTE_RECUSA_COMENTARIO"):
+        sys.exit(2)
+    COMENTARIOS.write_text(json.loads(sys.stdin.read())["body"] + chr(10),
+                           encoding="utf-8")
+elif "api" in sys.argv:
+    texto = COMENTARIOS.read_text(encoding="utf-8")
+    print(json.dumps([{"id": 1, "body": texto}] if texto.strip() else []))
 elif "edit" in sys.argv and not os.environ.get("CAIXA_TESTE_ENGOLE"):
     CORPO.write_text(sys.stdin.read(), encoding="utf-8")
 """
@@ -686,12 +760,38 @@ def testar() -> int:
          and lidos[0]["assunto"].endswith("no meio"))
 
     escrito = registro_da_poda(um, amanha, "entregue na rodada de hoje")
-    caso("o registro da poda guarda a linha inteira, como ela estava",
-         LINHA_DO_ACHADO.format(**um) in escrito and amanha in escrito)
+    caso("o registro da poda guarda só identidade, tipo e data — o assunto "
+         "inteiro faria o corpo crescer como os comentários cresciam",
+         um["id"] in escrito and um["tipo"] in escrito and amanha in escrito
+         and um["assunto"] not in escrito)
     caso("e guarda o motivo quando alguém deu um",
          "entregue na rodada de hoje" in escrito)
     caso("sem motivo, o registro não inventa um",
-         "Motivo" not in registro_da_poda(um, amanha, ""))
+         "motivo" not in registro_da_poda(um, amanha, ""))
+    caso("o registro da poda cabe numa linha — ele vai para o corpo, e "
+         "corpo cresce por linha",
+         "\n" not in registro_da_poda(um, amanha, "motivo com\nquebra"))
+    com_um = corpo_com_fechamento(molde, "- 2026-09-12 · podado: um")
+    caso("o primeiro fechamento abre a seção marcada no fim do corpo, "
+         "depois da prosa de gente",
+         com_um.startswith(molde.rstrip("\n"))
+         and fechamentos_do_miolo(partes_dos_fechamentos(com_um)[1])
+         == ["- 2026-09-12 · podado: um"])
+    caso("o mesmo registro duas vezes não duplica — a releitura da "
+         "gravação reaplica a poda",
+         corpo_com_fechamento(com_um, "- 2026-09-12 · podado: um") == com_um)
+    cheio = molde
+    for n in range(TETO_DE_FECHAMENTOS + 5):
+        cheio = corpo_com_fechamento(cheio, f"- 2026-09-12 · podado: {n:02d}")
+    guardados = fechamentos_do_miolo(partes_dos_fechamentos(cheio)[1])
+    caso("a seção de fechamentos tem teto: fica o mais novo e sai o mais "
+         "velho — decisão do dono de 12/09/2026, quadro fixo com 1 corpo e "
+         "no máximo 3 comentários",
+         len(guardados) == TETO_DE_FECHAMENTOS
+         and guardados[0].endswith("05")
+         and guardados[-1].endswith(f"{TETO_DE_FECHAMENTOS + 4:02d}"))
+    caso("a seção de fechamentos não vira linha do quadro",
+         not _achados_do_corpo(cheio))
 
     with tempfile.TemporaryDirectory(prefix="caixa-teste-") as pasta:
         base = Path(pasta)
@@ -848,17 +948,20 @@ def testar() -> int:
                  codigo == 0 and not no_quadro("caixa-aprende-a-podar"))
             caso("e a poda não leva junto a linha da vizinha",
                  no_quadro("prova-nao-reproduz"))
-            caso("o fechamento fica em comentário na caixa, com a linha "
-                 "inteira e o motivo",
-                 chamadas("comment") == 1
-                 and "caixa-aprende-a-podar" in escrito
-                 and "a poda entra" in escrito
-                 and "entregue na #7" in escrito)
+            no_corpo = corpo.read_text(encoding="utf-8")
+            caso("o fechamento fica no PRÓPRIO corpo, na seção de "
+                 "fechamentos, com identidade e motivo — e sem "
+                 "comentário novo, porque o quadro fixo tem teto",
+                 chamadas("issue comment") == 0 and escrito == ""
+                 and partes_dos_fechamentos(no_corpo)
+                 and "caixa-aprende-a-podar" in no_corpo
+                 and "a poda entra" not in no_corpo
+                 and "entregue na #7" in no_corpo)
 
             codigo, recado = podar("nunca-esteve-no-quadro", amanha,
                                    cwd=str(base))
             caso("podar linha que não está no quadro é recusa, sem escrita",
-                 codigo != 0 and chamadas("comment") == 1
+                 codigo != 0 and chamadas("issue comment") == 0
                  and chamadas("edit") == 3)
 
             do_zero()
@@ -871,42 +974,44 @@ def testar() -> int:
                  and chamadas("comment") == 0 and chamadas("edit") == 1
                  and no_quadro("caixa-aprende-a-podar"))
 
-            os.environ["CAIXA_TESTE_RECUSA_COMENTARIO"] = "1"
-            codigo, recado = podar("caixa-aprende-a-podar", amanha,
-                                   cwd=str(base))
-            del os.environ["CAIXA_TESTE_RECUSA_COMENTARIO"]
-            caso("comentário que não subiu impede a poda — a linha fica",
-                 codigo != 0 and chamadas("edit") == 1
-                 and no_quadro("caixa-aprende-a-podar"))
-
             do_zero()
             relatorio = "# A rodada\n\nO que ela mediu.\n"
             codigo, recado = relatar(relatorio, cwd=str(base), ensaio=True)
             caso("o ensaio do relatório mostra o corpo e não escreve na "
                  "caixa",
                  codigo == 0 and relatorio in recado
-                 and chamadas("comment") == 0 and chamadas("edit") == 0)
+                 and chamadas("issue comment") == 0
+                 and chamadas("api") == 0 and chamadas("edit") == 0)
 
             codigo, recado = relatar(relatorio, cwd=str(base))
-            caso("o relatório entra como comentário novo, nunca como linha "
-                 "no quadro",
-                 codigo == 0 and chamadas("comment") == 1
+            caso("o primeiro relatório abre o comentário fixo, marcado, "
+                 "nunca como linha no quadro",
+                 codigo == 0 and chamadas("issue comment") == 1
                  and chamadas("edit") == 0
                  and relatorio in comentarios.read_text(encoding="utf-8")
+                 and MARCA_DO_RELATORIO
+                 in comentarios.read_text(encoding="utf-8")
                  and not _achados_do_corpo(
                      corpo.read_text(encoding="utf-8")))
 
-            codigo, recado = relatar(relatorio, cwd=str(base))
-            caso("relatar de novo abre OUTRO comentário — cada rodada tem o "
-                 "seu",
-                 codigo == 0 and chamadas("comment") == 2)
+            outro = "# Outra rodada\n\nO que mudou.\n"
+            codigo, recado = relatar(outro, cwd=str(base))
+            escrito = comentarios.read_text(encoding="utf-8")
+            caso("relatar de novo REESCREVE o comentário fixo, em vez de "
+                 "abrir outro — o quadro fixo tem 1 corpo e no máximo 3 "
+                 "comentários, decisão do dono de 12/09/2026",
+                 codigo == 0 and chamadas("issue comment") == 1
+                 and chamadas("PATCH") == 1
+                 and escrito.count(MARCA_DO_RELATORIO) == 1
+                 and outro in escrito and relatorio not in escrito)
 
             for vazio in ("", "   \n\t "):
                 codigo, recado = relatar(vazio, cwd=str(base))
                 caso(f"corpo vazio ({vazio!r}) é recusado com recado, sem "
                      "chamar o GitHub",
                      codigo == 2 and recado == RECUSA_SEM_CORPO
-                     and chamadas("comment") == 2)
+                     and chamadas("issue comment") == 1
+                     and chamadas("PATCH") == 1)
 
             os.environ["CAIXA_TESTE_RECUSA_COMENTARIO"] = "1"
             codigo, recado = relatar(relatorio, cwd=str(base))

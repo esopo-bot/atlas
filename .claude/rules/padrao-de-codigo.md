@@ -36,6 +36,13 @@ paths:
   transforma falha em número — e o zero que sai parece um fato. Falha vira
   "não medido", nunca zero. Vale também para código de saída: a
   ferramenta que sai 2 errou, e errar não é achar nada.
+- **`except` que devolve verdadeiro dentro de teste ou de guarda aprova o
+  que não mediu.** A falha ao medir não é a ausência do problema: quem cai no
+  `except` e responde "passou" transforma instrumento quebrado em verde. O
+  ramo de erro devolve "não medido" e diz o que falhou. Vale igual para
+  asserção NEGATIVA — provar que algo não aparece exige que o mesmo
+  instrumento, na mesma janela, ache alguma outra coisa; senão o vazio pode
+  ser do instrumento, não do mundo.
 - **Erro escondido ainda avisa.** Onde suprimir é legítimo — em volta de um
   efeito colateral —, esconder a EXCEÇÃO é uma coisa e parar de AVISAR é
   outra. O aviso sobrevive: uma linha dizendo o que falhou e o que se perdeu

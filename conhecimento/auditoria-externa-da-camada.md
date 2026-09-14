@@ -1,14 +1,14 @@
 # Auditoria externa da camada — prove que ela merece existir
 
-Prompt para uma sessão **de fora**: outro modelo, outra conta, contexto
-limpo. Cole inteiro numa sessão aberta na raiz do repositório da camada.
+Receita para uma sessão **de fora**: outro modelo, outra conta, contexto
+limpo. Peça que ela a siga inteira, aberta na raiz do repositório da camada.
 
 Seu papel não é ajudar. É **derrubar**. A camada tem de se provar diante de
 você, não o contrário.
 
 ## Por que uma sessão de fora
 
-O ritual do repositório tem treze rotinas e elas passam verdes com defeito
+O ritual do repositório tem as suas rotinas e elas passam verdes com defeito
 grave dentro. Já aconteceu: um instrumento nunca conseguiu mover o cartão do
 quadro por falta de permissão e a recusa aparecia como "não achei" — semanas
 assim, ritual verde o tempo todo. Ritual verifica o que alguém pensou em
@@ -30,14 +30,14 @@ mediu.
 ### 1. Entenda antes de julgar
 
 - [ ] `cat AGENTS.md` e `cat CLAUDE.md` — as instruções que toda sessão paga.
-- [ ] `python3 verificacoes.py` — a lista das rotinas e o que cada uma prova.
-- [ ] `python3 verificacoes.py ritual` — rode e leia a saída inteira. Ela passa
+- [ ] `python verificacoes.py` — a lista das rotinas e o que cada uma prova.
+- [ ] `python verificacoes.py ritual` — rode e leia a saída inteira. Ela passa
       de 100 KB: leia por seção, com `grep` ou `awk`, em vez de abrir tudo de
       uma vez — leitor que estoura o teto de saída perde o fim, que é onde
       mora o veredito.
-- [ ] `python3 verificacoes.py instalada` — **esta não está no ritual** e é a
+- [ ] `python verificacoes.py instalada` — **esta não está no ritual** e é a
       que roda o `--testar` de cada gancho e instrumento. Rode sempre.
-- [ ] `python3 .agents/camada/camada.py --largada` — o que toda sessão paga
+- [ ] `python .agents/camada/camada.py --largada` — o que toda sessão paga
       antes de trabalhar, e o teto declarado.
 
 ### 2. Ataque a premissa, não a implementação
@@ -88,8 +88,8 @@ melhor, isso é achado de primeira ordem.
 **Achado vira linha no quadro, não arquivo:**
 
 ```bash
-python3 .agents/caixa/caixa.py defeito --id <kebab-minusculo> --assunto "<o achado inteiro, com a medição e o comando que a replica>"
-python3 .agents/caixa/caixa.py melhoria --id <kebab-minusculo> --assunto "<idem>"
+python .agents/caixa/caixa.py defeito --id <kebab-minusculo> --assunto "<o achado inteiro, com a medição e o comando que a replica>"
+python .agents/caixa/caixa.py melhoria --id <kebab-minusculo> --assunto "<idem>"
 ```
 
 Uma linha por achado, com o comando que o reproduz. Sem isso, quem ler não
@@ -104,7 +104,11 @@ linha no quadro vira comentário nela, não linha nova.
 
 ## Onde você NÃO manda
 
-- **Publicar é do dono.** Seu teto é `python3 publicar.py --ensaio`.
+- **Publicar é do dono.** Seu teto é `python publicar.py --ensaio` — e ele
+  clona o espelho e exige conta ativa no `gh`. Para varrer só o conteúdo do
+  que o git rastreia, sem rede, sem clone e sem conta:
+  `python publicar.py --varredura`, que sai 1 nomeando o arquivo quando acha
+  nome próprio, credencial ou caminho de máquina.
 - **Destrutivo é do dono.** Não apague nada; proponha, com a razão.
 - **Não edite cópia gerada.** A fonte é a que viaja; a cópia se regenera.
 - **Nada de segredo, nome de pessoa, de empresa ou caminho de máquina** em

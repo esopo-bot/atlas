@@ -72,6 +72,10 @@ COMANDO_DD = "dd"
 PREFIXO_DA_SAIDA_DO_DD = "of="
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
+MODULO_QUE_DESEMBRULHA = "desembrulhar-comando.py"
+CACHE_DO_DESEMBRULHADOR = []
+MARCADORES_DE_EXPANSAO = ("$", "`", "%")
+NOME_COMO_PASTA_NO_TEXTO = r"(?:^|[\s\"'=/\\]){}(?=[/\\\s\"';]|$)"
 
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
@@ -126,6 +130,19 @@ RESUMO_OK = "OK: {} casos — {} barrados, {} liberados, {} de comportamento"
 
 CHAVE_DO_REVISOR = "revisor"
 SEM_REVISOR = "quem cuida daquele território"
+
+
+def desembrulhador():
+    import importlib.util
+    if CACHE_DO_DESEMBRULHADOR:
+        return CACHE_DO_DESEMBRULHADOR[0]
+    caminho = Path(__file__).resolve().with_name(MODULO_QUE_DESEMBRULHA)
+    origem = importlib.util.spec_from_file_location(
+        "desembrulhar_comando", caminho)
+    modulo = importlib.util.module_from_spec(origem)
+    origem.loader.exec_module(modulo)
+    CACHE_DO_DESEMBRULHADOR.append(modulo)
+    return modulo
 
 
 def revisor_de(raiz: Path, repositorio: str) -> str:
@@ -202,13 +219,13 @@ def cortar_respeitando_aspas(comando: str):
     return segmentos
 
 
-def separar(comando: str) -> list:
+def separar_desembrulhando(comando: str) -> list:
     sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
     segmentos = cortar_respeitando_aspas(sem_documento)
     aspas_nao_fecharam = segmentos is None
     if aspas_nao_fecharam:
-        return SEPARADORES_DE_COMANDO.split(sem_documento)
-    return segmentos
+        segmentos = SEPARADORES_DE_COMANDO.split(sem_documento)
+    return desembrulhador().com_os_corpos_desembrulhados(segmentos, separar_desembrulhando)
 
 
 def sem_o_par_de_aspas_que_envolve(token: str) -> str:
@@ -354,7 +371,8 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
         escritos += posicionais
     escritos += caminhos_escritos_na_opcao(programa, tokens)
     escritos += saida_do_dd(programa, tokens)
-    return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
+    return [sem_o_par_de_aspas_que_envolve(e).strip(ASPAS)
+            for e in escritos if e]
 
 
 def escreve_no_lugar(tokens: list) -> bool:
@@ -386,8 +404,11 @@ def saida_do_dd(programa: str, tokens: list) -> list:
 
 
 def acoes_do_comando(comando: str, onde: str) -> list:
-    acoes = []
-    for segmento in separar(comando):
+    acoes = [(ACAO_ESCREVER_EM.format(caminho),
+              repositorio_do_caminho(caminho, onde))
+             for caminho in
+             desembrulhador().caminhos_escritos_dentro_do_script(comando)]
+    for segmento in separar_desembrulhando(comando):
         tokens = partir_em_tokens(segmento.strip())
         for caminho in caminhos_escritos_pelo_segmento(segmento, tokens):
             acoes.append((ACAO_ESCREVER_EM.format(caminho),
@@ -430,9 +451,27 @@ def acoes_do_pedido(entrada: dict, onde: str) -> list:
 def recusa_do_pedido(entrada: dict, nomes, onde: str):
     if not nomes:
         return None
-    for acao, repositorio in acoes_do_pedido(entrada, onde):
+    acoes = acoes_do_pedido(entrada, onde)
+    for acao, repositorio in acoes:
         if repositorio and repositorio in nomes:
             return acao, repositorio
+    return protegido_nomeado_no_texto_cru(entrada, acoes, nomes)
+
+
+def alvo_que_o_gancho_nao_resolve(caminho: str) -> bool:
+    return any(marca in caminho for marca in MARCADORES_DE_EXPANSAO)
+
+
+def protegido_nomeado_no_texto_cru(entrada: dict, acoes: list, nomes):
+    sem_resolver = [acao for acao, _ in acoes
+                    if alvo_que_o_gancho_nao_resolve(acao)]
+    if not sem_resolver:
+        return None
+    comando = (entrada.get("tool_input") or {}).get("command", "")
+    for nome in nomes:
+        if re.search(NOME_COMO_PASTA_NO_TEXTO.format(re.escape(nome)),
+                     comando, re.I | re.M):
+            return sem_resolver[0], nome
     return None
 
 
@@ -553,6 +592,26 @@ BARRA = [
         "sed -i 's/a/b/' projetos/so-leitura/x.py")),
     ("copiar PARA dentro", pedido_de_shell(
         "cp projetos/pode-escrever/x.py projetos/so-leitura/x.py")),
+    ("python -c que escreve lá dentro", pedido_de_shell(
+        "python -c \"open('projetos/so-leitura/x.py', 'w').write('x')\"")),
+    ("python -c que guarda o alvo em variável antes de escrever",
+     pedido_de_shell(
+         "python -c \"p = 'projetos/so-leitura/x.py'; open(p, 'w')\"")),
+    ("node -e que escreve lá dentro", pedido_de_shell(
+        "node -e \"require('fs').writeFileSync('projetos/so-leitura/x.py', "
+        "'x')\"")),
+    ("sh -c embrulha o redirecionamento", pedido_de_shell(
+        "sh -c 'echo oi > projetos/so-leitura/x.txt'")),
+    ("bash -lc embrulha o git push", pedido_de_shell(
+        'bash -lc "git -C projetos/so-leitura push"')),
+    ("eval embrulha o rm", pedido_de_shell(
+        "eval 'rm -rf projetos/so-leitura/src'")),
+    ("xargs entrega o sh -c que escreve", pedido_de_shell(
+        "ls | xargs -I{} sh -c 'touch projetos/so-leitura/{}'")),
+    ("alvo guardado em variável: o repositório está no texto cru",
+     pedido_de_shell("ALVO=projetos/so-leitura/x.txt; echo oi > $ALVO")),
+    ("alvo montado com a raiz em variável", pedido_de_shell(
+        'echo oi > "$RAIZ/projetos/so-leitura/x.txt"')),
 ]
 
 DEIXA_PASSAR = [
@@ -594,6 +653,15 @@ DEIXA_PASSAR = [
         "git -C projetos/pode-escrever push")),
     ("Write no próprio workspace",
      pedido_de_escrita("Write", "conhecimento/nota.md")),
+    ("python -c que só lê lá dentro", pedido_de_shell(
+        "python -c \"print(open('projetos/so-leitura/x.py').read())\"")),
+    ("node -e que só lê lá dentro", pedido_de_shell(
+        "node -e \"console.log(require('fs').readFileSync("
+        "'projetos/so-leitura/x.py', 'utf8'))\"")),
+    ("sh -c que só lê", pedido_de_shell(
+        "sh -c 'cat projetos/so-leitura/x.py'")),
+    ("alvo em variável sem repositório protegido no texto",
+     pedido_de_shell("echo oi > $SAIDA")),
 ]
 
 

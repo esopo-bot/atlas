@@ -78,7 +78,7 @@ Sem a bandeira nada é escrito para ela — quem não usa não ganha pasta que n
 pediu. Para verificar que atravessaram, sem abrir sessão nenhuma:
 
 ```bash
-python3 .agents/travessia/travessia.py
+python .agents/travessia/travessia.py
 ```
 
 ## Atualizar uma máquina que já tem a camada

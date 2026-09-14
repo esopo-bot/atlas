@@ -81,8 +81,9 @@ tarefa.
 
 Tudo medido, sem exceção: o ritual verde, todo `--testar` em OK e **nenhum
 piso abaixo** da última medição registrada, o instalador dizendo que está tudo
-em dia, o ensaio de publicação sem achado, e `git status --short` mostrando só
-o que se quis mudar.
+em dia, e `git status --short` mostrando só o que se quis mudar. Onde o
+repositório publicar para fora, o ensaio da publicação entra na conta — e
+quem não publica não tem esse passo.
 
 A medida que **varia sozinha** é a sessão simulada, porque é uma sessão de
 verdade. A regra dela: caiu, rode de novo antes de chamar de achado; caiu duas

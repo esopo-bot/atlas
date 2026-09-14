@@ -11,7 +11,25 @@ from pathlib import Path
 BANDEIRA_DE_TESTE = "--testar"
 USO = ("mede se a descrição de cada skill dispara: abre uma sessão por "
        "pedido de exemplo declarado na skill e verifica qual skill ela "
-       "escolheu")
+       "escolheu. A escolha VARIA entre rodadas — a mesma descrição não dá "
+       "o mesmo placar duas vezes —, então uma volta não prova diferença "
+       "nenhuma: peça --voltas e compare medianas, não rodadas. E a "
+       "DERIVA entre blocos medidos em momentos diferentes é maior que a "
+       "amplitude dentro de um bloco: medido em 10/09/2026, o mesmo texto "
+       "deu mediana 2, 1 e 1 em três blocos de cinco voltas. Antes e "
+       "depois medidos em horas diferentes não se comparam — meça os dois "
+       "braços na mesma sessão de medição, ou agrupe as voltas dos dois. "
+       "Quando o ganho na mediana tem o tamanho do piso do ruído, o que "
+       "prova o efeito é o TETO que se rompeu: zero de quinze voltas "
+       "chegando ao placar cheio contra seis de quinze é prova; mediana "
+       "um ponto acima, sozinha, não é. E ANTES de tudo isso: o placar é do "
+       "MODELO que mediu. As mesmas descrições deram mediana 1 de 3 no "
+       "modelo padrão, que é o barato, e 3 de 3 com amplitude ZERO num "
+       "modelo grande, na mesma tarde; um pedido que perdeu 54 voltas no "
+       "padrão ganhou as 6 do grande. Placar baixo é hipótese sobre o "
+       "roteador antes de ser sobre o texto — cinco consertos de descrição "
+       "foram medidos e refutados em 10/09/2026 por não se ter repetido "
+       "com o modelo da sessão de verdade primeiro")
 
 PASTA_ESPELHADA = ".claude/skills"
 PASTA_FONTE = ".agents/skills"
@@ -31,9 +49,25 @@ FALA_DE_GENTE = "user"
 BLOCO_DE_TEXTO = "text"
 TEMPO_DE_UMA_SESSAO = 180
 
+VOLTAS = 1
+VOLTA_MINIMA = 1
+AJUDA_DAS_VOLTAS = ("quantas vezes repetir a medição inteira (padrão: {}); "
+                    "acima de uma, o placar de cada skill sai por mediana e "
+                    "a amplitude entre as voltas diz o piso do ruído — "
+                    "diferença menor que ela não está provada")
+VOLTAS_INVALIDAS = ("--voltas pede pelo menos {}: zero volta não mede, e o "
+                    "que não foi medido não é zero.")
+
 TITULO = "O GATILHO DAS DESCRIÇÕES — que skill cada pedido acordou"
 LINHA_DO_PLACAR = "  {:<22} {}/{}"
+LINHA_DAS_VOLTAS = "  {:<22} {}/{} na mediana — voltas {}, amplitude {}"
 LINHA_DA_COLISAO = "      veio {:<18} {}"
+LINHA_DA_COLISAO_EM_VOLTAS = "      veio {:<18} {} de {} voltas  {}"
+LINHA_NAO_MEDIDO_EM_VOLTAS = "      NÃO MEDIDO         {} de {} voltas  {}"
+MAIOR_AMPLITUDE = ("  piso do ruído: a maior amplitude foi {} (em {}) — com "
+                   "{} voltas, diferença menor que essa não se prova.")
+SEM_AMPLITUDE = ("  piso do ruído: nenhuma skill variou nas {} voltas — o "
+                 "placar repetiu.")
 SEM_NOME = ("  {}: o frontmatter não declara `name` — a skill não carrega, e "
             "medi-la devolveria zero por um motivo que não é a descrição")
 NOME_DIVERGE = ("  {}: a pasta e o campo `name` divergem (`{}`) — a skill não "
@@ -48,6 +82,13 @@ LINHA_NAO_MEDIDO = "      NÃO MEDIDO             {}"
 LINHA_DAS_COLISOES = "  colisões: {}"
 SEM_COLISAO = "  colisões: nenhuma"
 LINHA_DO_TEMPO = "  tempo de parede: {:.1f} s"
+SUSPEITE_DO_ROTEADOR = (
+    "  placar abaixo do teto NO MODELO PADRÃO, que é o barato: repita com "
+    "--modelo\n  <o da sua sessão> antes de mexer em descrição. Medido em 10/09/2026,\n"
+    "  as MESMAS descrições deram mediana 1 de 3 no padrão e 3 de 3 com "
+    "amplitude\n  ZERO num modelo grande — e o pedido que perdeu 54 voltas no padrão\n"
+    "  ganhou as 6 do grande. Placar baixo aqui é hipótese sobre o "
+    "ROTEADOR, não\n  sobre o texto: cinco consertos de descrição foram medidos e refutados\n  por não se ter olhado isto primeiro")
 LINHA_DO_MODELO = "  modelo: {}"
 UMA_COLISAO = "{}→{} ({})"
 NENHUMA = "nenhuma"
@@ -186,17 +227,64 @@ def acordaram(medidas: list) -> int:
     return sum(1 for m in medidas if m["medida"] and m["veio"] == m["skill"])
 
 
-def linhas_de_uma_skill(nome: str, pedidos: list, medidas: list) -> list:
+def mediana(valores: list) -> float:
+    ordenados = sorted(valores)
+    meio = len(ordenados) // 2
+    if len(ordenados) % 2:
+        return float(ordenados[meio])
+    return (ordenados[meio - 1] + ordenados[meio]) / 2
+
+
+def amplitude(valores: list) -> int:
+    return max(valores) - min(valores)
+
+
+def placar_legivel(valor: float) -> str:
+    return str(int(valor)) if valor == int(valor) else f"{valor:.1f}"
+
+
+def linha_do_placar(nome: str, placares: list, quantos: int) -> str:
+    if len(placares) == 1:
+        return LINHA_DO_PLACAR.format(nome, placares[0], quantos)
+    return LINHA_DAS_VOLTAS.format(
+        nome, placar_legivel(mediana(placares)), quantos,
+        " ".join(str(placar) for placar in placares), amplitude(placares))
+
+
+def detalhes_de_uma_skill(nome: str, por_volta: list) -> list:
+    contagem = {}
+    for medidas in por_volta:
+        for medida in medidas:
+            if medida["medida"] and medida["veio"] == nome:
+                continue
+            chave = (medida["veio"] if medida["medida"] else "",
+                     medida["pedido"])
+            contagem[chave] = contagem.get(chave, 0) + 1
+    voltas = len(por_volta)
+    ordem = [medida["pedido"] for medida in (por_volta[0] if por_volta else [])]
+    linhas = []
+    for (veio, pedido), quantas in sorted(
+            contagem.items(),
+            key=lambda par: (ordem.index(par[0][1]) if par[0][1] in ordem
+                             else len(ordem), -par[1], par[0][0])):
+        if voltas == 1:
+            linhas.append(LINHA_DA_COLISAO.format(veio, pedido) if veio
+                          else LINHA_NAO_MEDIDO.format(pedido))
+        elif veio:
+            linhas.append(LINHA_DA_COLISAO_EM_VOLTAS.format(
+                veio, quantas, voltas, pedido))
+        else:
+            linhas.append(LINHA_NAO_MEDIDO_EM_VOLTAS.format(
+                quantas, voltas, pedido))
+    return linhas
+
+
+def linhas_de_uma_skill(nome: str, pedidos: list, por_volta: list) -> list:
     if not pedidos:
         return [LINHA_SEM_PEDIDO.format(nome)]
-    linhas = [LINHA_DO_PLACAR.format(nome, acordaram(medidas), len(pedidos))]
-    for medida in medidas:
-        if not medida["medida"]:
-            linhas.append(LINHA_NAO_MEDIDO.format(medida["pedido"]))
-        elif medida["veio"] != nome:
-            linhas.append(LINHA_DA_COLISAO.format(medida["veio"],
-                                                  medida["pedido"]))
-    return linhas
+    placares = [acordaram(medidas) for medidas in por_volta]
+    return [linha_do_placar(nome, placares, len(pedidos))] \
+        + detalhes_de_uma_skill(nome, por_volta)
 
 
 def colisoes(medidas: list) -> list:
@@ -214,15 +302,35 @@ def nao_medidos(medidas: list) -> int:
     return sum(1 for m in medidas if not m["medida"])
 
 
-def linhas_do_fecho(medidas: list, parede: float) -> list:
-    achadas = colisoes(medidas)
-    return [LINHA_DO_PLACAR.format("TOTAL", acordaram(medidas), len(medidas)),
-            LINHA_DAS_COLISOES.format(", ".join(achadas)) if achadas
-            else SEM_COLISAO,
-            LINHA_DO_TEMPO.format(parede)]
+def linha_do_ruido(amplitudes: dict, voltas: int) -> str:
+    maior = max(amplitudes.items(), key=lambda par: par[1], default=("", 0))
+    if not maior[1]:
+        return SEM_AMPLITUDE.format(voltas)
+    return MAIOR_AMPLITUDE.format(maior[1], maior[0], voltas)
 
 
-def relatorio(raiz: Path, escolhidas: set, modelo: str = MODELO) -> int:
+def desconfie_do_modelo(placares: list, quantos: int, modelo: str) -> bool:
+    return bool(placares) and modelo == MODELO and mediana(placares) < quantos
+
+
+def linhas_do_fecho(por_volta: list, quantos: int, amplitudes: dict,
+                    parede: float, modelo: str = MODELO) -> list:
+    todas = [m for medidas in por_volta for m in medidas]
+    achadas = colisoes(todas)
+    placares = [acordaram(medidas) for medidas in por_volta]
+    linhas = [linha_do_placar("TOTAL", placares, quantos),
+              LINHA_DAS_COLISOES.format(", ".join(achadas)) if achadas
+              else SEM_COLISAO]
+    if len(por_volta) > 1:
+        linhas.append(linha_do_ruido(amplitudes, len(por_volta)))
+    linhas.append(LINHA_DO_TEMPO.format(parede))
+    if desconfie_do_modelo(placares, quantos, modelo):
+        linhas.append(SUSPEITE_DO_ROTEADOR)
+    return linhas
+
+
+def relatorio(raiz: Path, escolhidas: set, modelo: str = MODELO,
+              voltas: int = VOLTAS) -> int:
     declaradas = [(n, p) for n, p in skills_declaradas(raiz)
                   if not escolhidas or n in escolhidas]
     if not declaradas:
@@ -230,14 +338,22 @@ def relatorio(raiz: Path, escolhidas: set, modelo: str = MODELO) -> int:
     print(f"\n{TITULO}")
     print(LINHA_DO_MODELO.format(modelo))
     partida = time.monotonic()
-    todas = []
+    geral = [[] for _ in range(voltas)]
+    amplitudes = {}
     sem_pedido = sum(1 for _, pedidos in declaradas if not pedidos)
     for nome, pedidos in declaradas:
-        medidas = medir_uma_skill(raiz, nome, pedidos, modelo)
-        todas += medidas
-        for linha in linhas_de_uma_skill(nome, pedidos, medidas):
+        por_volta = [medir_uma_skill(raiz, nome, pedidos, modelo)
+                     for _ in range(voltas)]
+        for indice, medidas in enumerate(por_volta):
+            geral[indice] += medidas
+        if pedidos:
+            amplitudes[nome] = amplitude([acordaram(m) for m in por_volta])
+        for linha in linhas_de_uma_skill(nome, pedidos, por_volta):
             print(linha, flush=True)
-    for linha in linhas_do_fecho(todas, time.monotonic() - partida):
+    todas = [m for medidas in geral for m in medidas]
+    for linha in linhas_do_fecho(geral, sum(len(p) for _, p in declaradas),
+                                 amplitudes, time.monotonic() - partida,
+                                 modelo):
         print(linha)
     if nao_medidos(todas):
         print(ACUSA_NAO_MEDIDO.format(nao_medidos(todas),
@@ -369,7 +485,8 @@ def testar() -> int:
          colisoes([morreu]) == [])
     caso("pedido não medido é contado à parte", nao_medidos([morreu]) == 1)
 
-    linhas = linhas_de_uma_skill("verificacao-adversarial", ["p", "q"], [acertou, colidiu])
+    linhas = linhas_de_uma_skill("verificacao-adversarial", ["p", "q"],
+                                 [[acertou, colidiu]])
     caso("o placar da skill sai em acertos por pedidos",
          linhas[0].split()[-1] == "1/2")
     caso("a linha da colisão diz qual skill veio no lugar",
@@ -377,11 +494,99 @@ def testar() -> int:
     caso("skill sem pedido declarado é acusada, não somada",
          "NÃO MEDIDA" in linhas_de_uma_skill("pelada", [], [])[0])
 
-    fecho = linhas_do_fecho([acertou, colidiu], 1.0)
+    caso("a mediana de voltas ímpares é o valor do meio, não a média — "
+         "média deixa uma volta atípica mexer no veredito",
+         mediana([1, 3, 1, 3, 2]) == 2.0)
+    caso("a mediana de voltas pares fica entre as duas do meio",
+         mediana([0, 1, 2, 3]) == 1.5)
+    caso("mediana de uma volta só é a própria volta", mediana([2]) == 2.0)
+    caso("a amplitude é o piso do ruído — quanto o mesmo texto variou sem "
+         "ninguém mexer nele",
+         amplitude([1, 3, 1, 3, 2]) == 2)
+    caso("placar redondo sai sem casa decimal", placar_legivel(2.0) == "2")
+    caso("placar de mediana par mostra a meia unidade",
+         placar_legivel(1.5) == "1.5")
+
+    voltas_iguais = [[acertou, acertou], [acertou, acertou]]
+    voltas_tortas = [[acertou, acertou], [acertou, colidiu]]
+    caso("uma volta só imprime o placar cru, sem mediana nem amplitude — "
+         "mediana de uma medição é a própria medição, e anunciá-la mentiria "
+         "sobre ter repetido",
+         "mediana" not in linha_do_placar("x", [1], 2))
+    caso("acima de uma volta o placar sai por mediana",
+         "1/2 na mediana" in linha_do_placar("x", [1, 1, 2], 2))
+    caso("o placar de cada volta aparece ao lado da mediana, para ninguém "
+         "ter de confiar nela às cegas",
+         "voltas 1 1 2" in linha_do_placar("x", [1, 1, 2], 2))
+    caso("a amplitude entra na linha do placar",
+         "amplitude 1" in linha_do_placar("x", [1, 1, 2], 2))
+    caso("colisão que se repete em todas as voltas conta quantas foram",
+         any("2 de 2 voltas" in linha for linha
+             in detalhes_de_uma_skill("verificacao-adversarial",
+                                      [[colidiu], [colidiu]])))
+    caso("colisão que só apareceu numa volta é contada como uma, não como "
+         "regra — é assim que se separa achado de ruído",
+         any("1 de 2 voltas" in linha for linha
+             in detalhes_de_uma_skill("verificacao-adversarial",
+                                      voltas_tortas)))
+    caso("pedido não medido em voltas também diz em quantas",
+         any("1 de 2 voltas" in linha for linha
+             in detalhes_de_uma_skill("verificacao-adversarial",
+                                      [[morreu], [acertou]])))
+    caso("volta em que a skill acordou não vira linha de detalhe",
+         detalhes_de_uma_skill("verificacao-adversarial", voltas_iguais) == [])
+    outra_ladra = {"skill": "verificacao-adversarial", "pedido": "q",
+                   "veio": "buscar-no-acervo", "medida": True}
+    terceiro = {"skill": "verificacao-adversarial", "pedido": "r",
+                "veio": "portao", "medida": True}
+    detalhes = detalhes_de_uma_skill(
+        "verificacao-adversarial",
+        [[colidiu, terceiro], [colidiu, terceiro], [outra_ladra, terceiro]])
+    caso("as linhas do mesmo pedido saem juntas, na ordem em que a skill "
+         "declarou os pedidos — pedido espalhado pela lista esconde quem o "
+         "rouba",
+         [linha.split()[-1] for linha in detalhes] == ["q", "q", "r"])
+    caso("dentro de um pedido, a skill que mais roubou vem primeiro",
+         "padrao-de-codigo" in detalhes[0]
+         and "buscar-no-acervo" in detalhes[1])
+
+    fecho = linhas_do_fecho([[acertou, colidiu]], 2, {}, 1.0)
     caso("o fecho conta o total de pedidos", "1/2" in fecho[0])
     caso("o fecho lista a colisão achada", "verificacao-adversarial→padrao-de-codigo (1)" in fecho[1])
     caso("sem colisão o fecho diz nenhuma",
-         SEM_COLISAO == linhas_do_fecho([acertou], 1.0)[1])
+         SEM_COLISAO == linhas_do_fecho([[acertou]], 1, {}, 1.0)[1])
+    caso("com uma volta o fecho não fala de ruído — não houve repetição que "
+         "medisse ruído nenhum",
+         not any("piso do ruído" in linha for linha in fecho))
+    em_voltas = linhas_do_fecho(voltas_tortas, 2, {"a": 0, "b": 1}, 1.0)
+    caso("acima de uma volta o fecho anuncia o piso do ruído, com a skill "
+         "que mais variou",
+         "amplitude foi 1 (em b)" in em_voltas[2])
+    caso("placar que repetiu em todas as voltas é dito como tal, e não "
+         "vira amplitude inventada",
+         SEM_AMPLITUDE.format(2)
+         == linhas_do_fecho(voltas_iguais, 2, {"a": 0}, 1.0)[2])
+
+    caso("a bandeira das voltas nasce em uma — quem não pediu repetição "
+         "recebe a medição de sempre",
+         VOLTAS == 1 and VOLTA_MINIMA == 1)
+    caso("o uso do instrumento avisa que uma volta não prova diferença",
+         "--voltas" in USO)
+
+    abaixo = linhas_do_fecho(voltas_tortas, 2, {"a": 0, "b": 1}, 1.0)
+    caso("placar abaixo do teto no modelo padrão manda repetir com o modelo "
+         "da sessão antes de mexer em texto",
+         abaixo[-1] == SUSPEITE_DO_ROTEADOR)
+    caso("no teto, o fecho não desconfia do roteador — não há o que explicar",
+         not any(linha == SUSPEITE_DO_ROTEADOR
+                 for linha in linhas_do_fecho(voltas_iguais, 1, {"a": 0}, 1.0)))
+    caso("modelo declarado pela mão não recebe o aviso: quem escolheu o "
+         "modelo já sabe qual roteador está medindo",
+         not any(linha == SUSPEITE_DO_ROTEADOR
+                 for linha in linhas_do_fecho(voltas_tortas, 2, {"a": 0}, 1.0,
+                                              "claude-sonnet-5")))
+    caso("o uso do instrumento diz que o placar é do modelo que mediu",
+         "roteador antes de ser sobre o texto" in USO)
 
     total = len(casos)
     if falhas:
@@ -399,7 +604,11 @@ def main() -> int:
                     help="quais skills medir (padrão: todas)")
     ap.add_argument("--modelo", default=MODELO,
                     help=AJUDA_DO_MODELO.format(MODELO))
+    ap.add_argument("--voltas", type=int, default=VOLTAS,
+                    help=AJUDA_DAS_VOLTAS.format(VOLTAS))
     a = ap.parse_args()
+    if a.voltas < VOLTA_MINIMA:
+        sys.exit(VOLTAS_INVALIDAS.format(VOLTA_MINIMA))
     raiz = Path.cwd()
     if (quebradas := skills_que_nao_carregam(raiz)):
         for linha in quebradas:
@@ -413,7 +622,7 @@ def main() -> int:
     if not shutil.which("claude"):
         print(SEM_CLAUDE, file=sys.stderr)
         return 1
-    return relatorio(raiz, set(a.skill), a.modelo)
+    return relatorio(raiz, set(a.skill), a.modelo, a.voltas)
 
 
 if __name__ == "__main__":

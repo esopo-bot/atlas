@@ -2500,18 +2500,92 @@ def gravar_ambiente_da_execucao(pasta, ambiente) -> None:
     tmp.replace(alvo)
 
 
-def processo_vivo(pid) -> bool:
-    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
-        return False
+DIREITO_DE_PERGUNTAR_PELO_PROCESSO = 0x1000
+DIREITO_DE_ESPERAR_PELO_PROCESSO = 0x00100000
+O_PROCESSO_AINDA_NAO_SINALIZOU = 0x102
+ACESSO_NEGADO_AO_PROCESSO = 5
+MAIOR_PID_QUE_O_WINDOWS_ENDERECA = 0xFFFFFFFF
+_O_KERNEL_JA_PREPARADO = {}
+
+
+def _janela_para_o_kernel():
+    pronto = _O_KERNEL_JA_PREPARADO.get("kernel32")
+    if pronto is not None:
+        return pronto
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL,
+                                   wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    _O_KERNEL_JA_PREPARADO["kernel32"] = kernel
+    return kernel
+
+
+def _vivo_pelo_objeto_do_windows(pid: int) -> bool:
+    try:
+        import ctypes
+        kernel = _janela_para_o_kernel()
+    except (OSError, AttributeError, ImportError, ValueError):
+        return _vivo_por_quem_ainda_ocupa_o_numero(pid)
+    handle = kernel.OpenProcess(DIREITO_DE_PERGUNTAR_PELO_PROCESSO
+                                | DIREITO_DE_ESPERAR_PELO_PROCESSO,
+                                False, pid)
+    if not handle:
+        return ctypes.get_last_error() == ACESSO_NEGADO_AO_PROCESSO
+    try:
+        return (kernel.WaitForSingleObject(handle, 0)
+                == O_PROCESSO_AINDA_NAO_SINALIZOU)
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _o_filho_ja_terminou(pid: int):
+    espiar = getattr(os, "waitid", None)
+    if espiar is None:
+        return None
+    try:
+        colhido = espiar(os.P_PID, pid,
+                         os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except (ChildProcessError, ValueError, OverflowError, OSError,
+            AttributeError):
+        return None
+    return colhido is not None
+
+
+def _vivo_por_quem_ainda_ocupa_o_numero(pid: int) -> bool:
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
-    except OSError:
+    except (OverflowError, OSError):
         return False
     return True
+
+
+def _pid_cabe_na_plataforma(pid: int) -> bool:
+    if ESTA_NO_WINDOWS:
+        return pid <= MAIOR_PID_QUE_O_WINDOWS_ENDERECA
+    return pid <= sys.maxsize
+
+
+def processo_vivo(pid) -> bool:
+    if isinstance(pid, bool) or not isinstance(pid, int) or pid <= 0:
+        return False
+    if not _pid_cabe_na_plataforma(pid):
+        return False
+    if ESTA_NO_WINDOWS:
+        return _vivo_pelo_objeto_do_windows(pid)
+    ja_terminou = _o_filho_ja_terminou(pid)
+    if ja_terminou is not None:
+        return not ja_terminou
+    return _vivo_por_quem_ainda_ocupa_o_numero(pid)
 
 
 def ultima_escrita_do_trabalho(dir_base, trabalho):
@@ -2946,7 +3020,8 @@ def postar_na_issue(configuracao, issue, texto, *raizes):
                   "--body-file", "-"],
             input=CORPO_DO_COMENTARIO.format(texto=texto,
                                              marca=MARCA_DO_MOTOR),
-            capture_output=True, text=True, timeout=TEMPO_DO_GH,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
             env=_ambiente_da_conta(_conta_das_issues(configuracao)))
     except (OSError, subprocess.SubprocessError) as falha:
         return False, RECADO_FALHA_AO_POSTAR.format(issue=issue, motivo=falha)
@@ -3161,6 +3236,7 @@ def resposta_na_issue(configuracao, issue):
         feito = subprocess.run(
             GH + ["issue", "view", str(issue), "--repo", repositorio,
                   "--json", "comments"], capture_output=True, text=True,
+                  encoding="utf-8", errors="replace",
             timeout=TEMPO_DO_GH,
             env=_ambiente_da_conta(_conta_das_issues(configuracao)))
         comentarios = json.loads(feito.stdout)["comments"] if \

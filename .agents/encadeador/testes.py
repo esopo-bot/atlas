@@ -6,10 +6,12 @@ import json
 import os
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 from string import Formatter
@@ -71,7 +73,8 @@ from encadeador import (
     _bandeira_de_turnos, _porque_morreu, _prompt_da_sessao, _resumo_do_evento, _roteiro,
     avisos_do_alvo, branch_fora_do_lugar, branch_que_a_issue_pede,
     carregar_executor, foto_das_etapas, gravar_estado,
-    ler_estado, resumo_da_etapa, sem_caminho_de_maquina, validar_roteiro)
+    ler_estado, processo_vivo, resumo_da_etapa, sem_caminho_de_maquina,
+    validar_roteiro)
 
 
 MARCA_DO_RELATORIO_DO_AUDITOR = "AUDITORIA DO TRABALHO"
@@ -84,6 +87,13 @@ PADRAO_DA_BRANCH_DA_ISSUE = "issue/<numero>-<assunto-em-kebab>"
 ASSUNTO_DO_ALVO_GRAVADO = "conserto-do-alvo"
 BRANCH_DO_ALVO_GRAVADO = "issue/68-conserto-do-alvo"
 TOKEN_QUE_NAO_PODE_VAZAR = "ghp_segredo-de-teste"
+SEM_O_ARQUIVO_QUE_O_CASO_MEDE = ("o arquivo que o caso seguinte mede não foi "
+                                 "materializado: {falta}")
+EXECUCAO_QUE_NAO_FECHOU = ("a execução que devia materializar o arquivo do "
+                           "caso seguinte não fechou completa: exit {exit}, "
+                           "stderr {berro}")
+TEMA_QUE_ESTOUROU = ("o tema {tema} estourou em {onde} — {erro}; os casos "
+                     "dele não foram medidos")
 
 
 RECUSA = [
@@ -185,6 +195,8 @@ CAMINHO_DO_LANCADOR = Path(".claude") / "hooks" / "interpretador.sh"
 TETO_DO_ENVELOPE = TETO_DO_DUBLE * FOLGA_DO_TETO
 SEM_PID_MORTO = ("nao consegui um pid morto em {} tentativas — o sistema reciclou\ntodos eles, e sem isso a fixture nao modela processo morto nenhum")
 VOLTAS_ATE_O_PID_MORRER = 20
+PID_QUE_NUNCA_EXISTIU = 0x7FFFFFF0
+NAO_MEDIDO_SEM_O_PID = " (não medido: o dorminhoco não deixou o pid)"
 
 
 def _pid_de_quem_ja_morreu() -> int:
@@ -208,18 +220,21 @@ def _com_o_lancador_da_camada(raiz) -> Path:
     return copia
 
 
-def _ha_processo_vivo_com(marca) -> bool:
-    if os.name == "nt":
-        listagem = subprocess.run(
-            ["wmic", "process", "get", "commandline"],
-            capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=TETO_DO_ENVELOPE)
-        pedacos_da_marca = marca.split()
-        return any(all(pedaco in linha for pedaco in pedacos_da_marca)
-                   for linha in (listagem.stdout or "").splitlines())
-    achados = subprocess.run(["pgrep", "-f", marca], capture_output=True,
-                             text=True, encoding="utf-8", errors="replace")
-    return achados.returncode == 0
+def _dorminhoco_que_deixa_o_pid(sono, arquivo_do_pid) -> str:
+    return f"{sono} & echo $! > {no_shell(arquivo_do_pid)}; wait"
+
+
+def _pid_que_o_dorminhoco_deixou(arquivo_do_pid):
+    try:
+        return int(Path(arquivo_do_pid).read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _ha_processo_vivo_com(pid):
+    if pid is None:
+        return None
+    return encadeador.processo_vivo(pid)
 
 
 class Bancada:
@@ -238,6 +253,21 @@ class Bancada:
 
     def caso(self, rotulo, condicao) -> None:
         self.resultados.append((rotulo, bool(condicao)))
+
+    def texto_de(self, caminho) -> str:
+        try:
+            return Path(caminho).read_text(encoding="utf-8")
+        except OSError as falta:
+            self.caso(SEM_O_ARQUIVO_QUE_O_CASO_MEDE.format(falta=falta), False)
+            return ""
+
+    def execucao_que_fechou(self, resposta):
+        if resposta.returncode != EXIT_COMPLETA:
+            self.caso(EXECUCAO_QUE_NAO_FECHOU.format(
+                exit=resposta.returncode,
+                berro=resposta.stderr.strip()[:LIMITE_DO_STDERR_NA_FALHA]),
+                False)
+        return resposta
 
     def configurar(self, destino, **troca):
         dado = {
@@ -439,17 +469,18 @@ def _sobre_a_conta_que_age(b) -> None:
              "comando": f'printf "%s" "$GH_TOKEN" > '
                         f'{no_shell(token_do_trabalho)} && '
                         + FANTOCHE_OK}]})
-    b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
-                 "t-duas-contas", "--dir", b.evidencias, "--cwd",
-                 str(sem_remoto), "--configuracao", str(configuracao)])
+    b.execucao_que_fechou(b.cli_dublê(
+        ["executar", "--roteiro", roteiro, "--trabalho",
+         "t-duas-contas", "--dir", b.evidencias, "--cwd",
+         str(sem_remoto), "--configuracao", str(configuracao)]))
     na_issue = [linha for linha
-                in (b.caixa / "chamadas.txt").read_text().splitlines()
+                in b.texto_de(b.caixa / "chamadas.txt").splitlines()
                 if linha.startswith("issue comment 77")]
     b.caso("o comentário na issue sai com o token de issues.conta_gh",
            na_issue and all(linha.endswith("\ttoken-de-das-issues")
                             for linha in na_issue))
     b.caso("e o trabalho no --cwd roda com o token de remoto.conta_gh",
-           token_do_trabalho.read_text() == "token-de-do-remoto")
+           b.texto_de(token_do_trabalho) == "token-de-do-remoto")
 
     (b.caixa / "sem-acesso.txt").write_text("repos/dono/repo",
                                             encoding="utf-8")
@@ -1416,7 +1447,10 @@ def _sobre_a_sessao(b) -> None:
 
 
 def _sobre_o_tempo_limite(b) -> None:
-    dorminhoco = SONO_DO_TESTE_DE_ORFAO.format(abs(hash(b.pasta)) % 1000000)
+    pid_do_dorminhoco = Path(b.pasta) / "pid-do-dorminhoco"
+    dorminhoco = _dorminhoco_que_deixa_o_pid(
+        SONO_DO_TESTE_DE_ORFAO.format(abs(hash(b.pasta)) % 1000000),
+        pid_do_dorminhoco)
     roteiro = _roteiro(b.pasta, "m-tempo.json", {"etapas": [
         {"nome": "trava", "tipo": "codigo", "comando": dorminhoco,
          "tempo-limite": 1},
@@ -1431,8 +1465,9 @@ def _sobre_o_tempo_limite(b) -> None:
          resposta.returncode == 5 and evidencia_tempo["motivo"] == "morta"
          and "tempo-limite" in evidencia_tempo["faltas"][0]
          and (Path(b.evidencias) / "t-tempo" / "01-trava-c1.log").exists())
-    b.caso("o grupo do processo morre junto — nenhum órfão",
-         not _ha_processo_vivo_com(dorminhoco))
+    vivo = _ha_processo_vivo_com(_pid_que_o_dorminhoco_deixou(pid_do_dorminhoco))
+    b.caso("o grupo do processo morre junto — nenhum órfão"
+         + (NAO_MEDIDO_SEM_O_PID if vivo is None else ""), not vivo)
 
     fingido = Path(b.pasta) / "cli-meia-linha.sh"
     fingido.write_text(CLAUDE_QUE_PARA_NA_METADE, encoding="utf-8")
@@ -3240,6 +3275,58 @@ def _sobre_a_prova_de_vida_do_estado(b) -> None:
            bool(lido.get("escrita_em")))
 
 
+def _sobre_o_processo_que_ja_morreu_mas_alguem_segura(b) -> None:
+    zumbi = subprocess.Popen([sys.executable, "-c", "pass"])
+    zumbi.wait()
+    try:
+        b.caso("a testemunha confirma o cenário: o processo terminou e o "
+               "objeto que segura o handle continua de pé",
+               zumbi.poll() is not None)
+        b.caso("processo encerrado com o handle preso é visto como MORTO",
+               processo_vivo(zumbi.pid) is False)
+
+        vivo = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(120)"])
+        try:
+            b.caso("e quem está mesmo rodando continua sendo visto como vivo",
+                   vivo.poll() is None and processo_vivo(vivo.pid) is True)
+        finally:
+            vivo.kill()
+            vivo.wait()
+
+        estado = Path(b.evidencias) / "t-zumbi"
+        estado.mkdir(parents=True, exist_ok=True)
+        (estado / ARQUIVO_ESTADO).write_text(json.dumps(
+            {"situacao": "rodando", "desde": "2026-09-08T10:00:00-03:00",
+             "pid": zumbi.pid}), encoding="utf-8")
+        b.caso("e a leitura do estado não deixa uma execução morta passar por "
+               "rodando só porque o handle dela não foi solto",
+               (ler_estado(b.evidencias, "t-zumbi") or {}).get("situacao")
+               == "parada")
+    finally:
+        del zumbi
+
+    b.caso("pid que nunca existiu é morto",
+           processo_vivo(PID_QUE_NUNCA_EXISTIU) is False)
+    b.caso("e o próprio processo desta bancada é o caso trivial de vivo",
+           processo_vivo(os.getpid()) is True)
+    for imprestavel in (None, 0, -1, True, "123", 1.0):
+        b.caso("pid imprestável (%r) não é vida" % (imprestavel,),
+               processo_vivo(imprestavel) is False)
+
+
+def _sobre_o_pid_grande_demais_para_a_plataforma(b) -> None:
+    meu = os.getpid()
+    b.caso("a testemunha do cenário: o processo desta bancada está vivo, "
+           "então quem truncar o pid vai responder vivo por ele",
+           processo_vivo(meu) is True)
+    for potencia in (32, 33, 64):
+        grande = 2 ** potencia + meu
+        b.caso("pid de 2**%d + o meu não responde pelo processo que o resto "
+               "em 32 bits acerta" % potencia,
+               processo_vivo(grande) is False)
+
+
 def _sobre_os_campos_duraveis_do_estado(b) -> None:
     alvo = Path(b.evidencias) / "t-duravel" / ARQUIVO_ESTADO
 
@@ -3289,6 +3376,20 @@ def _sobre_a_entrada_da_suite(b) -> None:
            "suíte no bloco __main__, em vez de sair 0 mudo",
            any(isinstance(no, ast.If) and "__main__" in ast.dump(no.test)
                for no in arvore.body))
+
+    como_o_git_escreve = Path(b.pasta) / "como-o-git-escreve"
+    objetos = como_o_git_escreve / ".git" / "objects" / "12"
+    objetos.mkdir(parents=True)
+    solto = objetos / "987e2091f500d16bb6fe54038eda46ac45a0a4"
+    solto.write_bytes(b"objeto solto")
+    solto.chmod(stat.S_IREAD)
+    b.caso("a testemunha do cenário: o objeto solto do git nasce sem "
+           "permissão de escrita, e é ele que trava a limpeza aqui",
+           not solto.stat().st_mode & stat.S_IWRITE)
+    apagar_a_pasta_de_teste(como_o_git_escreve)
+    b.caso("a limpeza da pasta de teste apaga o que é somente-leitura, em "
+           "vez de morrer antes de a suíte imprimir placar",
+           not como_o_git_escreve.exists())
 
 
 def _sobre_a_issue_de_politica(b) -> None:
@@ -3523,23 +3624,68 @@ TEMAS = (
     _sobre_a_verificacao_retomada,
     _sobre_a_sessao_que_a_acusacao_reabre,
     _sobre_a_prova_de_vida_do_estado,
+    _sobre_o_processo_que_ja_morreu_mas_alguem_segura,
+    _sobre_o_pid_grande_demais_para_a_plataforma,
     _sobre_os_campos_duraveis_do_estado,
     _sobre_a_auditoria_ao_fim,
     _sobre_a_notificacao_nos_marcos,
 )
 
 
+def _onde_estourou(estouro) -> str:
+    quadros = traceback.extract_tb(estouro.__traceback__)
+    daqui = [quadro for quadro in quadros
+             if Path(quadro.filename).name == Path(__file__).name]
+    ultimo = (daqui or quadros)[-1]
+    return f"{Path(ultimo.filename).name}:{ultimo.lineno}"
+
+
 def _comportamento(pasta):
     bancada = Bancada(pasta)
     bancada.forjar_o_dublê()
     for tema in TEMAS:
-        tema(bancada)
+        try:
+            tema(bancada)
+        except Exception as estouro:
+            bancada.caso(TEMA_QUE_ESTOUROU.format(
+                tema=tema.__name__, onde=_onde_estourou(estouro),
+                erro=f"{type(estouro).__name__}: {estouro}"), False)
     return bancada.resultados
+
+
+VOLTAS_DA_LIMPEZA = 3
+PAUSA_ENTRE_AS_VOLTAS_DA_LIMPEZA_S = 1.0
+LIMPEZA_QUE_NAO_FECHOU = ("AVISO: a pasta de teste {pasta} não saiu do disco "
+                          "em {voltas} tentativas ({erro}); o placar abaixo "
+                          "vale, o disco ficou com sobra")
+
+
+def liberar_o_somente_leitura(pasta) -> None:
+    for achado in Path(pasta).rglob("*"):
+        with contextlib.suppress(OSError):
+            achado.chmod(stat.S_IWRITE | stat.S_IREAD)
+
+
+def apagar_a_pasta_de_teste(pasta) -> None:
+    preso = None
+    for volta in range(VOLTAS_DA_LIMPEZA):
+        if volta:
+            time.sleep(PAUSA_ENTRE_AS_VOLTAS_DA_LIMPEZA_S)
+        liberar_o_somente_leitura(pasta)
+        try:
+            shutil.rmtree(pasta)
+            return
+        except OSError as erro:
+            preso = erro
+    shutil.rmtree(pasta, ignore_errors=True)
+    print(LIMPEZA_QUE_NAO_FECHOU.format(
+        pasta=pasta, voltas=VOLTAS_DA_LIMPEZA, erro=preso), file=sys.stderr)
 
 
 def testar() -> int:
     falhas = []
-    with tempfile.TemporaryDirectory(prefix="encadeador-teste-") as pasta:
+    pasta = tempfile.mkdtemp(prefix="encadeador-teste-")
+    try:
         for rotulo, conteudo, trecho in RECUSA:
             roteiro = _roteiro(pasta, "m-recusa.json", conteudo)
             resposta = _cli(["ensaio", "--roteiro", roteiro,
@@ -3553,6 +3699,8 @@ def testar() -> int:
                     rotulo=rotulo,
                     stderr=berro[:LIMITE_DO_STDERR_NA_FALHA]))
         comportamento = _comportamento(pasta)
+    finally:
+        apagar_a_pasta_de_teste(pasta)
     falhas += [FALHA_DE_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]
 

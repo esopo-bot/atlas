@@ -636,7 +636,7 @@ EXEMPLO_DA_ISSUE = r'''
   "veredito": "para",
   "provado": [
     { "afirmacao": "o endpoint responde 200 no ambiente de teste",
-      "comando": "curl -s -o /dev/null -w '%{http_code}' \"$URL_HOMOLOG/relatorio\"",
+      "comando": "python -c \"import os, urllib.request; print(urllib.request.urlopen(os.environ['URL_HOMOLOG'] + '/relatorio').status)\"",
       "saida": "200" }
   ],
   "suposto": [],
@@ -755,7 +755,8 @@ ETAPA_DESLIGADA = None
 def _cli(argumentos, entrada=None):
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve())] + argumentos,
-        input=entrada, capture_output=True, text=True, timeout=60)
+        input=entrada, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=60)
 
 
 def _rodar_fantoche(pasta, nome, script):
@@ -1126,7 +1127,8 @@ def _o_stdout_quebrado_depois_da_escrita(pasta, caso):
             [sys.executable, str(Path(__file__).resolve()), "sintetico",
              "--dir", pasta, "--trabalho", "t-ralo", "--etapa", "alfa",
              "--ordem", "1", "--teto", "3", "--motivo", "desligada"],
-            stdout=ralo, stderr=subprocess.PIPE, text=True, timeout=60)
+            stdout=ralo, stderr=subprocess.PIPE, text=True,
+            encoding="utf-8", errors="replace", timeout=60)
     caso("stdout quebrado pós-escrita: exit 2 e o stderr diz o caminho",
          resposta.returncode == 2
          and "evidência escrita em" in resposta.stderr

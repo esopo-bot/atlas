@@ -17,6 +17,7 @@ CAMPOS_DE_CAMINHO = ("file_path", "notebook_path")
 REDIRECIONAMENTO_DE_SHELL = re.compile(r">>?\s*([^\s;|&]+)")
 COMANDOS_QUE_ESCREVEM_SEM_SETA = ("tee", "cp", "mv", "install", "touch")
 
+MARCA_DE_REPOSITORIO = ".git"
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 
@@ -147,6 +148,20 @@ def caminhos_que_o_pedido_criaria(entrada: dict) -> list:
     return [a.strip("\"'") for a in achados if a and not a.startswith("-")]
 
 
+def raiz_do_alvo(caminho: str, declarada: Path) -> Path:
+    alvo = Path(str(caminho).replace("\\", "/"))
+    if not alvo.is_absolute():
+        return declarada
+    try:
+        alvo.resolve().relative_to(declarada.resolve())
+        return declarada
+    except (ValueError, OSError):
+        pass
+    donas = [p for p in alvo.resolve().parents
+             if (p / MARCA_DE_REPOSITORIO).exists()]
+    return donas[-1] if donas else declarada
+
+
 def raiz_do_projeto_nunca_o_cwd() -> Path:
     declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
     if declarada:
@@ -192,7 +207,8 @@ def decidir() -> int:
         return SILENCIO
 
     for caminho in caminhos_que_o_pedido_criaria(entrada):
-        motivo = motivo_da_recusa(caminho, raiz, configuracao)
+        motivo = motivo_da_recusa(caminho, raiz_do_alvo(caminho, raiz),
+                                  configuracao)
         if motivo:
             return vetar(entrada, RECUSA.format(motivo, ARQUIVO_EXECUTOR)
                          + MANDA_GRAVAR.format(APRENDIZADO))
@@ -236,7 +252,8 @@ def testar() -> int:
     import tempfile
     falhas = []
     with tempfile.TemporaryDirectory(prefix="veto-conhecimento-") as tmp:
-        raiz = Path(tmp)
+        raiz = Path(tmp) / "arvore"
+        raiz.mkdir()
         configuracao = montar_workspace_de_mentira(raiz)
         for rotulo, caminho in BARRA:
             if not motivo_da_recusa(caminho, raiz, configuracao):
@@ -250,6 +267,45 @@ def testar() -> int:
 
         def caso(rotulo, condicao):
             comportamento.append((rotulo, bool(condicao)))
+
+        ao_lado = raiz.parent / "conhecimento-ao-lado"
+        (ao_lado / "projetos").mkdir(parents=True, exist_ok=True)
+        marca = ao_lado / MARCA_DE_REPOSITORIO
+        if not marca.exists():
+            marca.mkdir()
+        de_la = str(ao_lado / "projetos" / "nota.md")
+        def veredito_do_gancho(caminho: str) -> bool:
+            import contextlib
+            import io
+            pedido = json.dumps({
+                "tool_name": "Write",
+                "tool_input": {"file_path": caminho},
+                CAMPO_DO_MODO_DE_PERMISSAO: MODO_SEM_QUEM_RESPONDA,
+            })
+            saida = io.StringIO()
+            guardado, sys.stdin = sys.stdin, io.StringIO(pedido)
+            ambiente = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
+            os.environ[VARIAVEL_DA_RAIZ_DO_PROJETO] = str(raiz)
+            try:
+                with contextlib.redirect_stdout(saida):
+                    decidir()
+            finally:
+                sys.stdin = guardado
+                if ambiente is None:
+                    os.environ.pop(VARIAVEL_DA_RAIZ_DO_PROJETO, None)
+                else:
+                    os.environ[VARIAVEL_DA_RAIZ_DO_PROJETO] = ambiente
+            return DECISAO_DE_NEGAR in saida.getvalue()
+
+        caso("nota nascendo em pasta de código de OUTRA árvore de trabalho é "
+             "barrada PELO GANCHO — o território sai da árvore do ALVO, e "
+             "antes disso a cerca calava em toda worktree",
+             veredito_do_gancho(de_la))
+        caso("e o gancho continua barrando na árvore declarada",
+             veredito_do_gancho(str(raiz / "projetos" / "nota.md")))
+        caso("e a raiz do alvo é a árvore dele, não a declarada",
+             raiz_do_alvo(de_la, raiz) == ao_lado
+             and raiz_do_alvo("projetos/nota.md", raiz) == raiz)
 
         caso("gancho que veta e não entende o pedido RECUSA, e nomeia a "
              "falha — quem não consegue julgar não pode dizer sim",

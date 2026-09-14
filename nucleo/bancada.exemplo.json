@@ -1,0 +1,39 @@
+{
+  "comentario": "Os casos da bancada: um braço por tipo de trabalho que o texto de abertura precisa atender. Este arquivo é o EXEMPLO, versionado. O seu mora ao lado, em nucleo/bancada.json, e fica FORA do git — ele nomeia repositório e commit, e nome de repositório não entra em texto rastreado. Copie, troque os valores, e rode a bancada apontando para ele.",
+  "raiz": "${CAMINHO DA RAIZ DA CAMADA NESTA MÁQUINA}",
+  "integracao": "${BRANCH DE INTEGRAÇÃO DA CAMADA}",
+  "gh_de_verdade": "${CAMINHO DO CLIENTE DE LINHA DE COMANDO DO RASTREADOR}",
+  "notas": [
+    "`raiz` é de onde a bancada clona a camada para cada árvore de teste; ela nunca escreve lá.",
+    "`gh_de_verdade` é o binário que o dublê chama quando a sessão de teste LÊ o rastreador. Escrita nunca chega nele.",
+    "Cada braço declara: o pedido que a sessão recebe, a prova que diz se ele foi resolvido, e — quando o trabalho é num repositório vizinho — o nome da pasta dele, o commit onde o defeito ainda existe, e a branch de integração dele.",
+    "A `prova` é um dicionário de rótulo para comando de shell. Cada comando roda na raiz do alvo e sai ZERO quando o problema está resolvido. Um comando que conta e devolve zero é o formato mais honesto: `! grep -rq <o defeito> src`.",
+    "`com_executor` diz se a árvore de teste nasce com a configuração local do executor. Deixe falso num braço para medir se a sessão RELATA o que falta em vez de chutar.",
+    "`prova_no_transcript` são trechos que a sessão deveria ter digitado no terminal ao provar o próprio trabalho; a bancada procura cada um nos comandos que ela rodou."
+  ],
+  "bracos": {
+    "${NOME DO BRAÇO DA PRÓPRIA CAMADA}": {
+      "vizinho": null,
+      "integracao": "${BRANCH DE INTEGRAÇÃO DA CAMADA}",
+      "com_executor": false,
+      "pedido": "${O PEDIDO, ESCRITO COMO A PESSOA O DIGITARIA}",
+      "prova": {
+        "o defeito sumiu": "${COMANDO QUE SAI ZERO QUANDO RESOLVIDO}",
+        "a camada continua em dia": "python montar.py --verificar"
+      },
+      "prova_no_transcript": ["${TRECHO QUE A SESSÃO DEVERIA TER DIGITADO}"]
+    },
+    "${NOME DO BRAÇO DE UM REPOSITÓRIO VIZINHO}": {
+      "vizinho": "${NOME DA PASTA EM projetos/}",
+      "sha": "${COMMIT ONDE O DEFEITO AINDA EXISTE}",
+      "integracao": "${BRANCH DE INTEGRAÇÃO DO VIZINHO}",
+      "com_executor": true,
+      "pedido": "${O PEDIDO, ESCRITO COMO A PESSOA O DIGITARIA}",
+      "prova": {
+        "o defeito sumiu": "${COMANDO QUE SAI ZERO QUANDO RESOLVIDO}",
+        "a suíte do vizinho passa": "${O COMANDO DE TESTE QUE O VIZINHO JÁ TEM}"
+      },
+      "prova_no_transcript": ["${TRECHO QUE A SESSÃO DEVERIA TER DIGITADO}"]
+    }
+  }
+}

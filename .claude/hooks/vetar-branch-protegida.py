@@ -69,6 +69,14 @@ BANDEIRA_DA_PASTA = "-C"
 NOME_DO_GH = "gh"
 EXTENSAO_EXE = ".exe"
 PROGRAMAS_QUE_ACIONAM = ("git", "gh")
+PREFIXOS_TRANSPARENTES = ("command", "builtin", "exec", "sudo", "nohup",
+                          "time", "env", "timeout", "nice", "stdbuf")
+PREFIXO_COM_ARGUMENTO_PROPRIO = "timeout"
+OPCOES_DE_PREFIXO_QUE_COMEM_O_SEGUINTE = ("-n", "-u", "-s", "-k", "-o",
+                                          "-C")
+ATRIBUICAO_DE_AMBIENTE = re.compile(r"^[A-Za-z_]\w*=")
+MODULO_QUE_DESEMBRULHA = "desembrulhar-comando.py"
+CACHE_DO_DESEMBRULHADOR = []
 COMANDO_CD = "cd"
 COMANDO_DA_BRANCH_ATUAL = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
 TEMPO_LIMITE_DO_GIT = 5
@@ -205,13 +213,45 @@ def cortar_respeitando_aspas(comando: str):
     return segmentos
 
 
-def separar(comando: str) -> list:
+def separar_desembrulhando(comando: str) -> list:
     sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
     segmentos = cortar_respeitando_aspas(sem_documento)
     aspas_nao_fecharam = segmentos is None
     if aspas_nao_fecharam:
-        return SEPARADORES_DE_COMANDO.split(sem_documento)
-    return segmentos
+        segmentos = SEPARADORES_DE_COMANDO.split(sem_documento)
+    return desembrulhador().com_os_corpos_desembrulhados(segmentos, separar_desembrulhando)
+
+
+def desembrulhador():
+    import importlib.util
+    if CACHE_DO_DESEMBRULHADOR:
+        return CACHE_DO_DESEMBRULHADOR[0]
+    caminho = Path(__file__).resolve().with_name(MODULO_QUE_DESEMBRULHA)
+    origem = importlib.util.spec_from_file_location(
+        "desembrulhar_comando", caminho)
+    modulo = importlib.util.module_from_spec(origem)
+    origem.loader.exec_module(modulo)
+    CACHE_DO_DESEMBRULHADOR.append(modulo)
+    return modulo
+
+
+def sem_os_prefixos_transparentes(tokens: list) -> list:
+    restantes = list(tokens)
+    while restantes:
+        if ATRIBUICAO_DE_AMBIENTE.match(restantes[0]):
+            restantes.pop(0)
+            continue
+        prefixo = Path(restantes[0]).name.lower()
+        if prefixo not in PREFIXOS_TRANSPARENTES:
+            break
+        restantes.pop(0)
+        while restantes and restantes[0].startswith(FIM_DAS_BANDEIRAS[0]):
+            opcao = restantes.pop(0)
+            if opcao in OPCOES_DE_PREFIXO_QUE_COMEM_O_SEGUINTE and restantes:
+                restantes.pop(0)
+        if prefixo == PREFIXO_COM_ARGUMENTO_PROPRIO and restantes:
+            restantes.pop(0)
+    return restantes
 
 
 def nomes_protegidos(raiz: Path) -> set:
@@ -248,13 +288,14 @@ def sem_o_par_de_aspas_que_envolve(token: str) -> str:
     return token
 
 
-def partir_em_tokens(segmento: str) -> list:
+def tokens_sem_prefixos_transparentes(segmento: str) -> list:
     try:
         import shlex
         tokens = shlex.split(segmento, posix=False)
     except ValueError:
         tokens = segmento.split()
-    return [sem_o_par_de_aspas_que_envolve(t) for t in tokens]
+    return sem_os_prefixos_transparentes(
+        [sem_o_par_de_aspas_que_envolve(t) for t in tokens])
 
 
 def indice_do_verbo(tokens: list) -> int:
@@ -342,17 +383,17 @@ def branch_depois_do_segmento(tokens: list, aqui: str, conhecidas: set) -> str:
 
 
 def cd_que_abre_o_comando(comando: str) -> str:
-    segmentos = separar(comando)
+    segmentos = separar_desembrulhando(comando)
     primeiro = segmentos[0].strip() if segmentos else ""
-    tokens = partir_em_tokens(primeiro)
+    tokens = tokens_sem_prefixos_transparentes(primeiro)
     if len(tokens) >= 2 and Path(tokens[0]).name == COMANDO_CD:
         return tokens[1]
     return ""
 
 
 def pasta_que_a_bandeira_c_aponta(comando: str) -> str:
-    for segmento in separar(comando):
-        tokens = partir_em_tokens(segmento.strip())
+    for segmento in separar_desembrulhando(comando):
+        tokens = tokens_sem_prefixos_transparentes(segmento.strip())
         if not tokens or not e_git(tokens[0]):
             continue
         for i, token in enumerate(tokens[1:], start=1):
@@ -365,8 +406,8 @@ def pasta_que_a_bandeira_c_aponta(comando: str) -> str:
 
 
 def comando_traz_git_init(comando: str) -> bool:
-    for segmento in separar(comando):
-        tokens = partir_em_tokens(segmento.strip())
+    for segmento in separar_desembrulhando(comando):
+        tokens = tokens_sem_prefixos_transparentes(segmento.strip())
         if not tokens or not e_git(tokens[0]):
             continue
         i = indice_do_verbo(tokens)
@@ -539,8 +580,8 @@ def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
                   else conhecidas)
     recusa_por_autorizacao_pendente = SEM_RECUSA
     segue_a_branch = a_linha_so_encadeia(comando)
-    for segmento in separar(comando):
-        tokens = partir_em_tokens(segmento.strip())
+    for segmento in separar_desembrulhando(comando):
+        tokens = tokens_sem_prefixos_transparentes(segmento.strip())
         if not tokens or not (e_git(tokens[0]) or e_gh(tokens[0])):
             continue
         if segue_a_branch:
@@ -716,6 +757,19 @@ BARRA = [
      'git status "$(git push --force origin main)"'),
     ("documento que expande ainda executa",
      "cat <<FIM\n$(git push --force origin main)\nFIM"),
+    ("env na frente não disfarça", "env git push --force origin main"),
+    ("env com variável própria na frente",
+     "env GIT_TRACE=1 git push --force origin main"),
+    ("timeout com o prazo na frente",
+     "timeout 30 git push --force origin main"),
+    ("nice na frente", "nice git push --force origin main"),
+    ("nice com prioridade na frente", "nice -n 10 git push --force origin main"),
+    ("stdbuf com opção na frente", "stdbuf -oL git push --force origin main"),
+    ("sh -c embrulha o push", "sh -c 'git push --force origin main'"),
+    ("bash -lc embrulha o push", 'bash -lc "git push --force origin main"'),
+    ("eval embrulha o push", "eval 'git push --force origin main'"),
+    ("xargs entrega o sh -c que apaga",
+     "ls | xargs -I{} sh -c 'git branch -D homolog'"),
 ]
 
 SO_PEDEM = [
@@ -759,6 +813,9 @@ DEIXA_PASSAR = [
     ("documento literal é dado, não comando",
      "gh issue comment 13 --body-file - <<'FIM'\ngit push --force origin main"
      "\nFIM"),
+    ("timeout na frente de trabalho comum", "timeout 30 git fetch origin main"),
+    ("env -i não come o programa", "env -i git status"),
+    ("sh -c que só lê", "sh -c 'git status'"),
 ]
 
 GIT_MERGE_NAO_E_PUBLICAR = [
@@ -946,6 +1003,7 @@ def _o_init_encadeado_e_julgado_no_bercario(falhas):
         r = _subprocess.run(
             [sys.executable, str(Path(__file__).resolve())],
             input=entrada, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
             env={**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(projeto_dir)})
         return r.stdout
 
@@ -988,6 +1046,7 @@ def _a_branch_julgada_e_a_do_alvo(falhas):
         r = _subprocess.run(
             [sys.executable, str(Path(__file__).resolve())],
             input=entrada, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
             env={**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(projeto_dir)})
         return r.stdout
 

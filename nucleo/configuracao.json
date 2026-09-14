@@ -1,6 +1,6 @@
 {
   "comentario": "A configuração DESTE repositório: onde a issue nasce, com que nome e em que fila. O arquivo é seu — a camada o cria uma vez e a atualização nunca o sobrescreve. Troque os ${...} pelos valores do seu repositório. O que se executa: skill trabalho-por-issue. Onde a automação lê o repositório de issues: nucleo/executor.json, que é local e não viaja — um fato, um lugar. `enderecos_do_onde_esta` é a lista das páginas que situam quem chega: a que existir no cwd entra no bloco onde-está pelo ENDEREÇO, nunca pelo conteúdo; a que não existir não aparece, e a lista não é cobrada de novo neste bloco.",
-  "repositorio_das_issues": "ver nucleo/executor.json",
+  "repositorio_das_issues": "ver nucleo/executor.json, campo issues.repositorio",
   "padrao_de_nome": "<projeto>[_<classe>] - <assunto>",
   "enderecos_do_onde_esta": [
     "conhecimento/mapa-do-repositorio.md",
@@ -26,6 +26,10 @@
     {
       "caminho": "nucleo/executor.json",
       "motivo": "a configuração local do executor de roteiros carrega nome de conta e de repositório, e por isso nunca entra em git nenhum. Quem instala recebe o nucleo/executor.exemplo.json."
+    },
+    {
+      "caminho": "nucleo/bancada.json",
+      "motivo": "os casos da bancada nomeiam repositorio e commit, e nome de repositorio nao entra em texto rastreado. Quem instala o modulo recebe o nucleo/bancada.exemplo.json e declara os seus."
     },
     {
       "caminho": "conhecimento/projetos/",
@@ -69,6 +73,11 @@
       "motivo": "a prosa que explica cada chave para quem copia o exemplo. Instrumento nenhum a lê de propósito: ela existe para o arquivo se explicar sozinho, já que o exemplo é a única declaração que quem instala recebe."
     },
     {
+      "arquivo": "nucleo/bancada.exemplo.json",
+      "chave": "notas",
+      "motivo": "a prosa que explica cada chave para quem copia o exemplo da bancada. Instrumento nenhum a lê de propósito, pelo mesmo motivo do exemplo do executor."
+    },
+    {
       "arquivo": "nucleo/regras.json",
       "chave": "introducao",
       "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
@@ -82,16 +91,6 @@
       "arquivo": "nucleo/regras.json",
       "chave": "rodape",
       "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
-    },
-    {
-      "arquivo": "nucleo/vocabulario.json",
-      "chave": "criterio",
-      "motivo": "quem a lê é o montar.py, que gera a página a partir desta fonte; o instalador não conta como leitor porque a carga embutida dele cita toda chave."
-    },
-    {
-      "arquivo": "nucleo/vocabulario.json",
-      "chave": "intocaveis",
-      "motivo": "a decisão de quais nomes ninguém renomeia, escrita para gente. Instrumento nenhum a lê, e é isso mesmo: quem a lê é quem for propor uma renomeação."
     }
   ],
   "modelo_por_etapa": {
