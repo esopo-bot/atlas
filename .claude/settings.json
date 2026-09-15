@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/avisar-indice-fora.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/avisar-indice-fora.py"
           }
         ]
       },
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-mcp.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-mcp.py"
           }
         ]
       },
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verificar-ambiente.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-ambiente.py"
           }
         ]
       }
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/despachar-cercas.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/despachar-cercas.py"
           }
         ]
       }
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lembrar-encerramento.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/lembrar-encerramento.py"
           }
         ]
       },
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-destino-da-entrega.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-destino-da-entrega.py"
           }
         ]
       },
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-relato-da-sessao.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-relato-da-sessao.py"
           }
         ]
       },
@@ -70,7 +70,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cobrar-apresentacao-da-entrega.py\""
+            "command": "python -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-apresentacao-da-entrega.py"
           }
         ]
       }

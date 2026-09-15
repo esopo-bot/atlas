@@ -1,0 +1,12 @@
+{
+  "PreToolUse": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash \"$DEVIN_PROJECT_DIR/.claude/hooks/interpretador.sh\" \"$DEVIN_PROJECT_DIR/.agents/travessia/ponte.py\""
+        }
+      ]
+    }
+  ]
+}

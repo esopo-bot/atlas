@@ -773,7 +773,7 @@ def testar_a_evidencia_materializada(caso, falhas: list) -> None:
         caso("a prova do provado re-executa igual",
              prova.stdout.strip() == r1["provado"][0]["saida"])
         caso("a prova re-executa pelo bash que mora ao lado do git, que é "
-             "onde o lançador do settings.json vai parar — antes ela pedia "
+             "onde o lançador de reserva vai parar — antes ela pedia "
              "um python3 que nesta máquina é o atalho da loja",
              prova.returncode == 0
              and prova.stdout.strip() == r1["provado"][0]["saida"])

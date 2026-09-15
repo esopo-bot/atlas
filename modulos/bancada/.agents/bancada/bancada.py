@@ -38,6 +38,13 @@ BRANCH_DE_TRABALHO = re.compile(r"^(issue|frente)/\d+-")
 NASCIMENTO_DA_BRANCH = re.compile(r"(?:checkout\s+-b|switch\s+-c)\s+[\"']?((?:issue|frente)/\S+)")
 
 ARROBA = chr(64)
+ARQUIVO_DO_BRIEFING = ".agents/prompts/bootstart.md"
+SKILL_DO_BRIEFING = "bootstart"
+BANDEIRA_DE_TESTE = "--testar"
+FERRAMENTAS_DE_SHELL = ("Bash", "PowerShell")
+LEITORES_INTEIROS = ("cat", "type", "get-content", "gc")
+OPCOES_QUE_CORTAM = ("-totalcount", "-head", "-tail", "-first", "-last")
+SEPARADORES_SEM_PIPE = re.compile(r"&&|\|\||;|\n")
 ENDERECO_DE_MENTIRA = "sessao{}invalido.local"
 
 GITCONFIG = """[user]
@@ -500,10 +507,8 @@ def medir(versao: str, braco: str) -> dict:
         fonte_nao_copia = None
         so_no_alvo = int(not da_camada.get("sujeira") and not da_camada.get("commits_novos"))
 
-    leu_o_briefing = any(
-        marca in json.dumps(f.get("entrada") or {}, ensure_ascii=False).replace("\\\\", "/")
-        for f in transcript["ferramentas"]
-        for marca in ("prompts/bootstart", '"skill": "bootstart"', '"skill":"bootstart"'))
+    leu_o_briefing = leu_o_briefing_inteiro_antes_de_outro_arquivo(
+        transcript["ferramentas"], linhas_do_briefing(arvore))
     itens = {
         "00_leu_o_briefing": int(leu_o_briefing),
         "01_abertura_rodou": int("camada.py" in juntos and ("--abertura" in juntos or "medir provar" in juntos)),
@@ -665,5 +670,154 @@ def main() -> int:
     return 0
 
 
+def linhas_do_briefing(arvore: Path) -> float:
+    try:
+        return len((arvore / ARQUIVO_DO_BRIEFING).read_text(
+            encoding="utf-8", errors="replace").splitlines())
+    except OSError:
+        return float("inf")
+
+
+def caminho_por_barra(texto) -> str:
+    return str(texto or "").replace("\\", "/")
+
+
+def e_o_briefing(caminho: str) -> bool:
+    caminho = caminho_por_barra(caminho).strip("\"'")
+    return caminho == ARQUIVO_DO_BRIEFING or caminho.endswith(
+        "/" + ARQUIVO_DO_BRIEFING)
+
+
+def leitura_inteira_pela_ferramenta(entrada: dict, linhas: float) -> bool:
+    if not e_o_briefing(entrada.get("file_path")):
+        return False
+    comeco = int(entrada.get("offset") or 1)
+    limite = entrada.get("limit")
+    return comeco <= 1 and (limite is None or int(limite) >= linhas)
+
+
+def leitura_inteira_no_shell(comando: str) -> bool:
+    for trecho in SEPARADORES_SEM_PIPE.split(caminho_por_barra(comando)):
+        palavras = trecho.split()
+        if (len(palavras) >= 2 and palavras[0].lower() in LEITORES_INTEIROS
+                and "|" not in trecho
+                and not any(p.lower() in OPCOES_QUE_CORTAM for p in palavras)
+                and any(e_o_briefing(p) for p in palavras[1:])):
+            return True
+    return False
+
+
+def leitura_inteira_do_briefing(ferramenta: dict, linhas: float) -> bool:
+    nome = ferramenta.get("nome")
+    entrada = ferramenta.get("entrada") or {}
+    if nome == "Skill":
+        return entrada.get("skill") == SKILL_DO_BRIEFING
+    if nome == "Read":
+        return leitura_inteira_pela_ferramenta(entrada, linhas)
+    if nome in FERRAMENTAS_DE_SHELL:
+        return leitura_inteira_no_shell(entrada.get("command"))
+    return False
+
+
+def abre_outro_arquivo(ferramenta: dict) -> bool:
+    entrada = ferramenta.get("entrada") or {}
+    return (ferramenta.get("nome") == "Read"
+            and not e_o_briefing(entrada.get("file_path")))
+
+
+def leu_o_briefing_inteiro_antes_de_outro_arquivo(ferramentas: list,
+                                                  linhas: float) -> bool:
+    for ferramenta in ferramentas:
+        if leitura_inteira_do_briefing(ferramenta, linhas):
+            return True
+        if abre_outro_arquivo(ferramenta):
+            return False
+    return False
+
+
+def pedido_de_leitura(caminho: str, **opcoes) -> dict:
+    return {"nome": "Read", "entrada": {"file_path": caminho, **opcoes}}
+
+
+def pedido_de_shell(comando: str, nome: str = "Bash") -> dict:
+    return {"nome": nome, "entrada": {"command": comando}}
+
+
+BRIEFING_POR_EXTENSO = "D:\\raiz\\.agents\\prompts\\bootstart.md"
+LINHAS_DE_MENTIRA = 300
+LEITURAS_QUE_VALEM = (
+    ("Read sem limite", pedido_de_leitura(BRIEFING_POR_EXTENSO)),
+    ("Read com limite que cobre o arquivo inteiro",
+     pedido_de_leitura(ARQUIVO_DO_BRIEFING, offset=1, limit=2000)),
+    ("cat sozinho", pedido_de_shell("cat .agents/prompts/bootstart.md")),
+    ("cat seguido de outro comando por &&",
+     pedido_de_shell("cat .agents/prompts/bootstart.md && git status")),
+    ("Get-Content -Raw no PowerShell",
+     pedido_de_shell("Get-Content -Raw D:\\raiz\\.agents\\prompts\\bootstart.md",
+                     "PowerShell")),
+    ("a skill do briefing", {"nome": "Skill",
+                             "entrada": {"skill": SKILL_DO_BRIEFING}}),
+)
+TOQUES_QUE_NAO_VALEM = (
+    ("Read com limite curto", pedido_de_leitura(ARQUIVO_DO_BRIEFING, limit=40)),
+    ("Read a partir do meio",
+     pedido_de_leitura(ARQUIVO_DO_BRIEFING, offset=120)),
+    ("Grep no briefing", {"nome": "Grep", "entrada": {
+        "pattern": "gancho", "path": ARQUIVO_DO_BRIEFING}}),
+    ("head", pedido_de_shell("head -50 .agents/prompts/bootstart.md")),
+    ("grep", pedido_de_shell("grep -n regra .agents/prompts/bootstart.md")),
+    ("cat cortado por pipe",
+     pedido_de_shell("cat .agents/prompts/bootstart.md | head -80")),
+    ("sed com trecho", pedido_de_shell("sed -n 1,60p .agents/prompts/bootstart.md")),
+    ("Get-Content -TotalCount",
+     pedido_de_shell("Get-Content .agents\\prompts\\bootstart.md -TotalCount 40",
+                     "PowerShell")),
+    ("outro arquivo com nome parecido",
+     pedido_de_leitura(".agents/prompts/bootstart-antigo.md")),
+)
+
+
+def testar() -> int:
+    resultados = []
+
+    def caso(rotulo: str, passou: bool) -> None:
+        resultados.append((rotulo, bool(passou)))
+
+    for rotulo, pedido in LEITURAS_QUE_VALEM:
+        caso(f"vale como leitura inteira: {rotulo}",
+             leitura_inteira_do_briefing(pedido, LINHAS_DE_MENTIRA))
+    for rotulo, pedido in TOQUES_QUE_NAO_VALEM:
+        caso(f"toque que não vale como leitura: {rotulo}",
+             not leitura_inteira_do_briefing(pedido, LINHAS_DE_MENTIRA))
+    inteira = pedido_de_leitura(ARQUIVO_DO_BRIEFING)
+    outro = pedido_de_leitura("conhecimento/mapa-do-repositorio.md")
+    caso("briefing inteiro antes de outro arquivo conta",
+         leu_o_briefing_inteiro_antes_de_outro_arquivo([inteira, outro],
+                                                       LINHAS_DE_MENTIRA))
+    caso("outro arquivo aberto antes do briefing não conta — o AGENTS.md "
+         "manda ler o briefing antes de abrir arquivo",
+         not leu_o_briefing_inteiro_antes_de_outro_arquivo(
+             [outro, inteira], LINHAS_DE_MENTIRA))
+    caso("toque parcial seguido de outro arquivo não conta",
+         not leu_o_briefing_inteiro_antes_de_outro_arquivo(
+             [TOQUES_QUE_NAO_VALEM[3][1], outro], LINHAS_DE_MENTIRA))
+    caso("sem o briefing na árvore, só a leitura sem limite vale",
+         leitura_inteira_do_briefing(inteira, float("inf"))
+         and not leitura_inteira_do_briefing(
+             pedido_de_leitura(ARQUIVO_DO_BRIEFING, limit=2000),
+             float("inf")))
+
+    falhas = [rotulo for rotulo, passou in resultados if not passou]
+    for rotulo in falhas:
+        print(f"  falhou: {rotulo}")
+    if falhas:
+        print(f"FALHOU: {len(falhas)} de {len(resultados)} casos")
+        return 1
+    print(f"OK: {len(resultados)} casos")
+    return 0
+
+
 if __name__ == "__main__":
+    if BANDEIRA_DE_TESTE in sys.argv[1:]:
+        sys.exit(testar())
     sys.exit(main())

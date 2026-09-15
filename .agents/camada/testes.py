@@ -2,6 +2,8 @@ import contextlib
 import io
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -49,6 +51,9 @@ from camada import (
     GANCHO_DO_DESPACHANTE,
     PASTA_DOS_GANCHOS,
     SALDO_MATCHER_DIVERGENTE,
+    SALDO_FORA_DO_BRIEFING,
+    BRIEFING_DA_SESSAO,
+    cercas_fora_da_tabela_do_briefing,
     divergencias_do_despachante,
     PASTA_DOS_INSTRUMENTOS,
     PASTA_DOS_MODULOS,
@@ -316,6 +321,32 @@ def testar() -> int:
         caso("gancho que CAI não derruba a medida, e conta como cego",
              medir(raiz)[1]["injetado_por_gancho"] == 0
              and medir(raiz)[1]["ganchos_nao_medidos"] == 1)
+        pasta_dos_ganchos = raiz / ".claude" / "hooks"
+        a_pasta_ja_existia = pasta_dos_ganchos.is_dir()
+        pasta_dos_ganchos.mkdir(parents=True, exist_ok=True)
+        (pasta_dos_ganchos / "gancho-sem-variavel.py").write_text(
+            "import json\n"
+            "print(json.dumps({'hookSpecificOutput': "
+            "{'additionalContext': %r}}))\n" % injecao,
+            encoding="utf-8")
+        so_pelo_ambiente = (
+            "import os,sys,runpy;"
+            "a=os.path.join(os.environ['CLAUDE_PROJECT_DIR'],sys.argv[1]);"
+            "sys.argv=[a];runpy.run_path(a,run_name='__main__')")
+        (raiz / ".claude" / "settings.json").write_text(
+            json.dumps({"hooks": {"SessionStart": [{"hooks": [
+                {"type": "command", "command":
+                 f'{INTERPRETADOR_NO_SHELL} -c "{so_pelo_ambiente}" '
+                 '.claude/hooks/gancho-sem-variavel.py'}]}]}}),
+            encoding="utf-8")
+        sem_variavel = medir(raiz)[1]
+        caso("gancho sem variável no texto do comando recebe a raiz pelo "
+             "ambiente e entra na conta da largada",
+             sem_variavel["injetado_por_gancho"] == len(injecao.encode())
+             and sem_variavel["ganchos_nao_medidos"] == 0)
+        (pasta_dos_ganchos / "gancho-sem-variavel.py").unlink()
+        if not a_pasta_ja_existia:
+            shutil.rmtree(pasta_dos_ganchos)
         (raiz / ".claude" / "settings.json").write_text(
             json.dumps({"hooks": {"SessionStart": [{"hooks": [
                 {"type": "command",
@@ -779,6 +810,30 @@ def testar() -> int:
              "autenticação vai nomeado; o que não é deste repositório não",
              "primeiro" in dito and "autentica" in dito
              and "de-fora" not in dito)
+        (casa / ".claude" / "remote-settings.json").write_text(json.dumps(
+            {"allowedMcpServers": [{"serverName": "github"}]}), encoding="utf-8")
+        (onde / ".claude").mkdir(exist_ok=True)
+        (onde / ".claude" / "settings.local.json").write_text(json.dumps(
+            {"allowedMcpServers": [{"serverCommand": ["python", "s.py"]}]}),
+            encoding="utf-8")
+        alvo_do_mcp.write_text(json.dumps({"mcpServers": {
+            "absoluto": {"command": "python", "args": ["D:/a/s.py"]},
+            "relativo": {"command": "python", "args": ["s.py"]}}}),
+            encoding="utf-8")
+        _, com_lista = servidores_de_contexto(onde, casa=casa)
+        caso("a lista permitida casa o comando exato: servidor cujo comando não "
+             "casa é acusado como barrado, e o que casa não — medido em 15/09, "
+             "o caminho absoluto sumiu em silêncio contra o relativo da lista",
+             "barra" in com_lista and "absoluto" in com_lista
+             and "relativo" not in com_lista.split("barra", 1)[1].split("\n", 1)[0])
+        (onde / ".claude" / "settings.local.json").unlink()
+        (casa / ".claude" / "remote-settings.json").unlink()
+        _, sem_lista = servidores_de_contexto(onde, casa=casa)
+        caso("sem lista permitida em fonte nenhuma, nada é acusado como barrado",
+             "barra" not in sem_lista)
+        alvo_do_mcp.write_text(
+            json.dumps({"mcpServers": {"segundo": {}, "primeiro": {}}}),
+            encoding="utf-8")
         caso("o cliente não guarda conectado nem falhou, e a abertura diz "
              "isso em vez de fingir que mediu a conexão",
              "conectado" in dito.lower())
@@ -1017,6 +1072,38 @@ def testar() -> int:
         caso("a pergunta ao gh leva a incorporação como base e a integração "
              "como cabeça",
              perguntas_ao_gh == [("main", "homolog")])
+        do_camada = __import__("camada")
+        ja_buscou = getattr(do_camada, "quem_chamou_ja_buscou", None)
+        caso("existe a marca pela qual quem chama avisa que acabou de buscar",
+             callable(ja_buscou))
+        if callable(ja_buscou):
+            marca = do_camada.MARCA_DA_BUSCA_FEITA_POR_QUEM_CHAMOU
+            agora = time.time()
+            caso("marca de agora com as duas branches dispensa outra busca",
+                 ja_buscou(("homolog", "main"),
+                           {marca: f"{agora}|main,homolog"}, agora) is True)
+            caso("marca que não trouxe uma das branches não dispensa nada",
+                 ja_buscou(("homolog", "main"), {marca: f"{agora}|main"},
+                           agora) is False)
+            caso("marca velha não dispensa nada: vale só dentro da mesma parada",
+                 ja_buscou(("homolog", "main"),
+                           {marca: f"{agora - 3600}|main,homolog"}, agora) is False)
+            caso("sem marca, ou com marca torta, a ponta busca como sempre",
+                 ja_buscou(("homolog", "main"), {}, agora) is False
+                 and ja_buscou(("homolog", "main"), {marca: "torta"}, agora) is False)
+            corre('git fetch -q origin homolog main', cwd=repositorio)
+            corre('git remote set-url origin "D:/remoto-que-nao-existe.git"',
+                  cwd=repositorio)
+            os.environ[marca] = f"{time.time()}|main,homolog"
+            try:
+                saida, dito = ponta("homolog", gh_sem_pedido)
+            finally:
+                os.environ.pop(marca, None)
+            caso("com a marca de quem chamou, a ponta mede pelo espelho que "
+                 "ele acabou de buscar, sem ir à rede de novo",
+                 saida != SAIDA_NAO_MEDIDO and "NÃO MEDIDO" not in dito)
+            corre(f'git remote set-url origin "{remoto}"', cwd=repositorio)
+            perguntas_ao_gh.clear()
         montado = comando_do_pedido_aberto("main", "homolog")
         caso("o comando montado para o gh põe a base depois de --base e a "
              "cabeça depois de --head — formatar cada pedaço sozinho punha a "
@@ -1101,6 +1188,18 @@ def testar() -> int:
         corre('git init -q && git add -A', cwd=raiz)
         caso("gancho rastreado, embutido e declarado não vira saldo",
              matricula(raiz) == 0)
+        (raiz / ARQUIVO_SETTINGS).write_text(json.dumps({CHAVE_DOS_GANCHOS: {
+            EVENTO_DE_ABERTURA: [{CHAVE_DOS_GANCHOS: [{
+                "type": "command",
+                CHAVE_DO_COMANDO: 'python -c "import os,runpy" '
+                                  f'{PASTA_DOS_GANCHOS}/bom.py'}]}]}}),
+            encoding="utf-8")
+        corre('git add -A', cwd=raiz)
+        caso("gancho ligado sem variável no texto do comando, com o caminho "
+             "como argumento, também é reconhecido pela matrícula",
+             matricula(raiz) == 0)
+        ligar_ganchos(raiz, [f"{PASTA_DOS_GANCHOS}/bom.py"])
+        corre('git add -A', cwd=raiz)
 
         instrumento = raiz / INSTRUMENTO_DE_MODULO_DE_MENTIRA
         instrumento.parent.mkdir(parents=True)
@@ -1112,6 +1211,17 @@ def testar() -> int:
         corre('git add -A', cwd=raiz)
         caso("instrumento rastreado fora do FONTES é acusado de não viajar",
              matricula(raiz) == 1)
+        privado = raiz / "modulos" / "segredo"
+        (privado / PASTA_DOS_INSTRUMENTOS / "mod").mkdir(parents=True)
+        (privado / PASTA_DOS_INSTRUMENTOS / "mod" / "fora.py").write_text(
+            "", encoding="utf-8")
+        caso("sem a marca, o instrumento do módulo continua acusado",
+             matricula(raiz) == 1)
+        (privado / "MODULO_PRIVADO").write_text("privado", encoding="utf-8")
+        caso("com a marca de módulo privado, o instrumento dele fica de "
+             "propósito e não vira saldo",
+             matricula(raiz) == 0)
+        shutil.rmtree(raiz / "modulos")
         corre(f'git rm -q --cached "{PASTA_DOS_INSTRUMENTOS}/mod/fora.py"',
               cwd=raiz)
         instrumento.with_name("fora.py").unlink()
@@ -1176,6 +1286,20 @@ def testar() -> int:
             'CERCAS = (\n    ("bom", ""),\n)\n', encoding="utf-8")
         caso("matcher igual nos dois lugares não é acusado",
              divergencias_do_despachante(raiz) == [])
+        caso("sem briefing no disco, a tabela não tem o que cobrar",
+             cercas_fora_da_tabela_do_briefing(raiz) == [])
+        briefing = raiz / BRIEFING_DA_SESSAO
+        briefing.parent.mkdir(parents=True, exist_ok=True)
+        briefing.write_text("| Gancho | Morde quando | O caminho |\n"
+                            "| `outra` | x | y |\n", encoding="utf-8")
+        caso("cerca que o despachante roda e a tabela do briefing não traz "
+             "é acusada",
+             cercas_fora_da_tabela_do_briefing(raiz)
+             == [(f"{PASTA_DOS_GANCHOS}/bom.py", SALDO_FORA_DO_BRIEFING)])
+        briefing.write_text("| `bom` | morde | caminho |\n", encoding="utf-8")
+        caso("cerca com linha na tabela do briefing não é acusada",
+             cercas_fora_da_tabela_do_briefing(raiz) == [])
+        briefing.unlink()
         (raiz / GANCHO_DO_DESPACHANTE).unlink()
         caso("sem despachante no disco não há divergência a acusar",
              divergencias_do_despachante(raiz) == [])
@@ -1576,12 +1700,25 @@ def testar() -> int:
          "exigir 'OK' fazia tres instrumentos SADIOS serem acusados de "
          "caidos, e acusacao falsa e pior que nao acusar",
          casos_da_suite("OK: 45 casos") == 45
-         and casos_da_suite("higiene: 10 de 10 casos") == 10)
+         and casos_da_suite("placar: 10 de 10 casos") == 10)
     caso("saida que nao fala de caso nenhum nao vira contagem — senao "
          "'Pronto. 3 arquivos escritos' passaria por tres casos provados",
          casos_da_suite("Pronto. 3 arquivos escritos") == 0)
     caso("saida vazia nao conta nada",
          casos_da_suite("") == 0 and casos_da_suite("   ") == 0)
+
+    with tempfile.TemporaryDirectory() as longe,             tempfile.TemporaryDirectory() as pedida:
+        (Path(pedida) / PASTA_DO_CONHECIMENTO).mkdir()
+        rodada = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("camada.py")),
+             "--quadro", "--raiz", pedida],
+            cwd=longe, capture_output=True, text=True, encoding="utf-8",
+            errors="replace")
+        caso("--raiz mede a pasta pedida com o processo parado em outro "
+             "diretório — o briefing manda rodar a abertura com a raiz por "
+             "extenso, e a cerca recusa cd seguido de caminho relativo",
+             rodada.returncode in (0, 1)
+             and "Rode na raiz" not in rodada.stdout + rodada.stderr)
 
     total = len(casos)
     if falhas:

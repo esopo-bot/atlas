@@ -22,6 +22,7 @@ SAIDA_QUE_BARRA = 2
 FERRAMENTA = "devin"
 ONDE_A_OUTRA_LE_GANCHO = ".devin/hooks.v1.json"
 BANDEIRA = f"--{FERRAMENTA}"
+BANDEIRA_QUE_ESCREVE = "--escrever"
 RAIZ_QUE_A_OUTRA_DA = "DEVIN_PROJECT_DIR"
 
 BARRA = "barra"
@@ -147,8 +148,8 @@ def medir_o_custo(raiz, pedido):
 
 def preparar(raiz, alvo):
     subprocess.run(["git", "init", "-q", "."], cwd=alvo, check=False)
-    subprocess.run([INTERPRETADOR, str(Path(raiz) / "montar.py"), BANDEIRA],
-                   cwd=alvo, capture_output=True, check=False)
+    subprocess.run([INTERPRETADOR, str(Path(raiz) / "montar.py"), BANDEIRA,
+                    BANDEIRA_QUE_ESCREVE], cwd=alvo, capture_output=True, check=False)
     (Path(alvo) / ARQUIVO_EXECUTOR).write_text(
         json.dumps(CONFIGURACAO_MINIMA), encoding="utf-8")
     print(f"camada instalada e ponte ligada em {alvo}")

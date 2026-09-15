@@ -1,6 +1,9 @@
 # A cópia em .claude/skills/ ENTRA no git de propósito: sessão na nuvem só
-# enxerga o que está commitado. O .claude/.gitignore esconde só o
-# settings.local.json.
+# enxerga o que está commitado. A configuração pessoal de cada agente fica
+# fora, pelas duas linhas abaixo; quem instala a camada recebe o mesmo por um
+# .gitignore dentro de cada pasta.
+.claude/settings.local.json
+.devin/mcp_config.local.json
 #
 # Os arquivos que existem só neste disco (PORTAO.md, o gancho que o injeta,
 # os roteiros locais do dono) estão no .git/info/exclude — que é LOCAL e não
@@ -36,6 +39,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+/.tmp.driveupload/
 
 # A pasta do editor é de cada máquina: o launch.json nasce no primeiro F5 e
 # não é o mesmo em duas. A exceção que a verificação de referências órfãs
@@ -100,3 +104,5 @@ aprovacoes/
 conhecimento/observabilidade.md
 conhecimento/observabilidade/
 references/ingestao.md
+.agents/skills/observabilidade/
+.claude/skills/observabilidade/

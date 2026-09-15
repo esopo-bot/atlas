@@ -50,6 +50,14 @@
     {
       "caminho": "references/ingestao.md",
       "motivo": "as páginas do módulo observabilidade citam o anexo pelo caminho de dentro da skill, que é como ele aparece para quem instalou o módulo."
+    },
+    {
+      "caminho": ".agents/skills/observabilidade/",
+      "motivo": "cópia em uso da skill do módulo observabilidade, que vem ligado e chega por `python montar.py`; a fonte mora em modulos/observabilidade/, e o instalador não a embute como skill da camada."
+    },
+    {
+      "caminho": ".claude/skills/observabilidade/",
+      "motivo": "espelho da cópia em uso da skill do módulo observabilidade, gerado por `python montar.py --sincronizar`; fica fora do git pelo mesmo motivo da cópia."
     }
   ],
   "autorizacoes": {

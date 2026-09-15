@@ -275,6 +275,15 @@ def gancho_que_chama(interpretador: str) -> str:
         {CHAVE_DOS_GANCHOS: [{"type": "command",
                               CHAVE_DO_COMANDO: comando}]}]}})
 
+
+def gancho_sem_variavel_que_chama(interpretador: str) -> str:
+    comando = (interpretador + ' -c "import os,sys,runpy;'
+               "runpy.run_path(os.path.join(os.environ['CLAUDE_PROJECT_DIR'],"
+               "sys.argv[1]),run_name='__main__')\" .claude/hooks/x.py")
+    return json.dumps({CHAVE_DOS_GANCHOS: {"PreToolUse": [
+        {CHAVE_DOS_GANCHOS: [{"type": "command",
+                              CHAVE_DO_COMANDO: comando}]}]}})
+
 ACUSA = [
     ("variável do .mcp.json ausente",
      dict(mcp='{"x": "${TAMBOR_MAIOR}"}')),
@@ -301,6 +310,9 @@ ACUSA = [
     ("nem o caminho absoluto que apodreceu escapa",
      dict(settings=gancho_que_chama(
          "C:/Python-que-mudou-de-lugar/python.exe"))),
+    ("a linha sem variável no texto, que roda em qualquer concha, também "
+     "acusa o interpretador que não roda",
+     dict(settings=gancho_sem_variavel_que_chama("python3"))),
 ]
 
 CALA = [
@@ -326,6 +338,9 @@ CALA = [
      dict(declarado={"comando": ["python"]})),
     ("linha de gancho que chama um Python 3 que responde não acusa nada",
      dict(settings=gancho_que_chama("python"))),
+    ("a linha sem variável no texto com um Python 3 que responde não acusa "
+     "nada",
+     dict(settings=gancho_sem_variavel_que_chama("python"))),
     ("linha de gancho pelo LANÇADOR não é cobrada por interpretador — ali "
      "quem escolhe é o bash, a cada execução",
      dict(settings=gancho_que_chama(

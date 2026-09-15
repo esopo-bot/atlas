@@ -6,15 +6,19 @@ Para qualquer agente de IA neste repositório.
 
 ## Antes de qualquer pedido
 
+- O checklist de partida, `.agents/prompts/partida.md`, roda sob demanda, em
+  qualquer agente: quando o dono pedir, ou quando o `--abertura` acusar peça em
+  falta. Ele custa minutos e muitos tokens por sessão, então não é o primeiro
+  ato de toda sessão. No Claude Code ele é `/partida`.
 - Leia `.agents/prompts/bootstart.md` INTEIRO antes de escolher skill, abrir
   arquivo ou responder: é o briefing da camada para qualquer agente — o que a
   sessão vai encontrar, o que os ganchos recusam, e a tabela que diz o que
   atende cada tipo de pedido. Pedido que já nomeia uma skill, um vizinho ou uma
   issue não dispensa a leitura.
-- Depois rode `python .agents/camada/camada.py --abertura`, com a raiz por
-  extenso, e relate na primeira resposta o que ele acusou em falta — instrução,
-  servidor de contexto, endereço do quadro ou índice. Sessão que abre sem eles
-  trabalha com menos do que pensa ter.
+- Depois rode `python .agents/camada/camada.py --abertura`, com `--raiz` e o
+  caminho por extenso, e relate na primeira resposta o que ele acusou em falta
+  — instrução, servidor de contexto, endereço do quadro ou índice. Sessão que
+  abre sem eles trabalha com menos do que pensa ter.
 
 ## O repositório
 

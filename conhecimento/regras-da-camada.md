@@ -80,9 +80,9 @@ de consulta, não de sessão.
       `which` o dá por presente — receita que manda rodar `python3` ali ensina
       a sessão nova a concluir que a camada inteira não funciona. Julgue
       executando: `python -c "import sys; print(sys.version_info[0])"` tem de
-      responder `3`. Gancho não passa por isso porque vai pelo lançador
-      `.claude/hooks/interpretador.sh`, que escolhe o interpretador por
-      execução.
+      responder `3`. Gancho do Claude Code também depende disso: a linha chama
+      o Python pelo nome medido na instalação, e sem Python que responda volta
+      ao lançador `.claude/hooks/interpretador.sh`.
     - Uma medição não é medição. Onde a saída varia entre execuções iguais —
       escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e
       desconfie de diferença menor que ele. Rodada única não separa causa de

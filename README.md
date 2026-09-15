@@ -73,7 +73,7 @@ Se a pasta for a raiz de um workspace — a que abriga os repositórios —, use
 `.credenciais/` e `recursos/`.
 
 Se você trabalha noutra ferramenta de agente além do Claude Code, use
-`python montar.py --devin` ou `--copilot`: as cercas passam a valer lá também, pela ponte, no dialeto de cada agente.
+`python montar.py --devin --escrever` para o Devin, ou `python montar.py --codex --escrever` para o Codex; sem `--escrever`, as duas bandeiras só mostram o que gravariam: as cercas passam a valer lá também, pela ponte, no dialeto de cada agente. O Copilot não precisa de bandeira: com a pasta confiada, ele roda direto as cercas do `.claude/settings.json`.
 Sem a bandeira nada é escrito para ela — quem não usa não ganha pasta que não
 pediu. Para verificar que atravessaram, sem abrir sessão nenhuma:
 

@@ -1,6 +1,7 @@
 import argparse
 import ast
 import contextlib
+import fnmatch
 import functools
 import io
 import json
@@ -30,6 +31,7 @@ CHAVE_DA_SAIDA_DO_GANCHO = "hookSpecificOutput"
 CHAVE_DO_CONTEXTO_INJETADO = "additionalContext"
 RAIZ_NO_COMANDO = "${CLAUDE_PROJECT_DIR}"
 RAIZ_NO_COMANDO_SEM_CHAVES = "$CLAUDE_PROJECT_DIR"
+VARIAVEL_DA_RAIZ_NO_AMBIENTE = "CLAUDE_PROJECT_DIR"
 ENTRADA_VAZIA_DO_GANCHO = "{}"
 TEMPO_DE_UM_GANCHO = 30
 PASTA_DAS_SKILLS = ".claude/skills"
@@ -250,6 +252,8 @@ CAMINHO_DE_GANCHO = re.compile(r"\.claude/hooks/[^\"'\s]+\.py")
 GANCHO_DO_DESPACHANTE = f"{PASTA_DOS_GANCHOS}/despachar-cercas.py"
 BLOCO_DAS_CERCAS = re.compile(r"^CERCAS = \((.*?)^\)", re.M | re.S)
 CERCA_DECLARADA = re.compile(r'\("([A-Za-z0-9_-]+)",\s*"([^"]*)"')
+BRIEFING_DA_SESSAO = ".agents/prompts/bootstart.md"
+LINHA_DA_CERCA_NA_TABELA = "| `{}` |"
 CARACTERES_DE_GLOB = "*?["
 INSTRUMENTOS_QUE_FICAM = {
     ".agents/camada/testes.py": (
@@ -268,11 +272,6 @@ INSTRUMENTOS_QUE_FICAM = {
         "modulos/, execucoes/, os instrumentos da raiz — não existem em "
         "quem instala, e o manual gerado lá descreveria o que não está no "
         "disco"),
-    ".agents/auditor/promover.py": (
-        "põe no quadro o achado que o auditor nomeou: é a colheita de "
-        "melhoria deste repositório. Quem instala recebe o auditor que "
-        "verifica e acusa, sem bandeira para ligar a promoção — bandeira "
-        "que existe alguém liga"),
 }
 INSTRUMENTO_DE_MODULO_DE_MENTIRA = ".agents/mod/mod.py"
 INSTALADOR_DE_MENTIRA = (
@@ -295,11 +294,16 @@ INSTALADOR_ILEGIVEL = ("Matrícula NÃO MEDIDA: {} não se deixou ler — {}. A 
                        "medida.")
 LINHA_DO_SALDO = "  {:<52} {}"
 SALDO_NAO_VIAJA = "não viaja — rastreado e fora do FONTES"
+PASTA_DOS_MODULOS_DA_MATRICULA = "modulos"
+MARCA_DE_MODULO_PRIVADO = "MODULO_PRIVADO"
 SALDO_ORFA = "órfã — matriculada e ausente do disco"
 SALDO_SEM_DECLARACAO = "ligado no settings.json sem GanchoDeclarado"
 SALDO_DESLIGADO = ("declarado no montar.py e desligado no settings.json")
 SALDO_MATCHER_DIVERGENTE = ("matcher diferente no despachante e no "
                             "instalador — um dos dois mente")
+SALDO_FORA_DO_BRIEFING = ("cerca que o despachante roda sem linha na tabela "
+                          "de ganchos do briefing — a sessão leva a recusa "
+                          "sem saber que ela existe")
 SALDO_EXCECAO_VELHA = "exceção que envelheceu — declarada e fora do git"
 INTERPRETADOR_QUE_SOME = (
     "  INTERPRETADOR QUE SOME: `{0}` está registrado no comando de gancho e "
@@ -713,11 +717,12 @@ def bytes_que_os_ganchos_injetam(raiz: Path) -> tuple:
     for comando in comandos_de_abertura(raiz):
         real = comando.replace(RAIZ_NO_COMANDO, str(raiz)).replace(
             RAIZ_NO_COMANDO_SEM_CHAVES, str(raiz))
+        ambiente = dict(os.environ, **{VARIAVEL_DA_RAIZ_NO_AMBIENTE: str(raiz)})
         try:
             pronto = subprocess.run(
                 real, shell=True, input=ENTRADA_VAZIA_DO_GANCHO,
                 capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz,
-                timeout=TEMPO_DE_UM_GANCHO)
+                env=ambiente, timeout=TEMPO_DE_UM_GANCHO)
         except (OSError, subprocess.SubprocessError):
             cegos += 1
             continue
@@ -897,6 +902,22 @@ def numeros_dos_pedidos_abertos(raiz: Path, base: str, cabeca: str):
             if isinstance(p, dict) and CHAVE_DO_NUMERO_DO_PEDIDO in p]
 
 
+MARCA_DA_BUSCA_FEITA_POR_QUEM_CHAMOU = "ATLAS_BUSCA_FEITA"
+VALIDADE_DA_MARCA_DA_BUSCA_S = 30
+
+
+def quem_chamou_ja_buscou(branches, ambiente=None, agora=None) -> bool:
+    marca = (os.environ if ambiente is None else ambiente).get(
+        MARCA_DA_BUSCA_FEITA_POR_QUEM_CHAMOU, "")
+    instante, _, buscadas = marca.partition("|")
+    try:
+        idade = (time.time() if agora is None else agora) - float(instante)
+    except ValueError:
+        return False
+    return (0 <= idade <= VALIDADE_DA_MARCA_DA_BUSCA_S
+            and set(branches) <= set(buscadas.split(",")))
+
+
 def o_que_espera_incorporacao(raiz: Path, atual: str,
                               consultar_pedidos=numeros_dos_pedidos_abertos
                               ) -> int:
@@ -913,9 +934,10 @@ def o_que_espera_incorporacao(raiz: Path, atual: str,
         print(PEDIDO_PULADO_SEM_INTEGRACAO.format(
             ARQUIVO_DO_EXECUTOR, CHAVE_DAS_BRANCHES, CHAVE_DA_INTEGRACAO))
         return SAIDA_LIMPA
-    codigo, falha = corre(
+    codigo, falha = ((0, "") if quem_chamou_ja_buscou(
+        (integracao, incorporacao)) else corre(
         COMANDO_DA_BUSCA_NO_REMOTO.format(integracao, incorporacao),
-        tempo=TEMPO_DA_REDE, cwd=raiz)
+        tempo=TEMPO_DA_REDE, cwd=raiz))
     if codigo != 0:
         print(PEDIDO_BUSCA_NAO_MEDIDA.format(integracao, incorporacao,
                                              falha.splitlines()[-1]
@@ -1067,6 +1089,53 @@ def estado_do_cliente_sobre_os_servidores(raiz: Path, declarados: list,
     return "\n".join(linhas)
 
 
+CHAVE_DA_LISTA_PERMITIDA = "allowedMcpServers"
+FONTES_DA_LISTA_PERMITIDA_NA_CASA = (".claude/remote-settings.json", ".claude/settings.json")
+FONTES_DA_LISTA_PERMITIDA_NO_PROJETO = (".claude/settings.local.json", ".claude/settings.json")
+MCP_BARRADO_PELA_LISTA = (
+    "  a lista permitida barra {} deste(s): {} — o cliente nem tenta subir e\n"
+    "  não avisa; o comando ou o endereço declarado tem de casar exato com uma\n"
+    "  entrada de allowedMcpServers, e só vale em sessão aberta depois.")
+
+
+def entradas_da_lista_permitida(raiz: Path, casa: Path):
+    entradas, achou = [], False
+    candidatos = ([casa / f for f in FONTES_DA_LISTA_PERMITIDA_NA_CASA]
+                  + [raiz / f for f in FONTES_DA_LISTA_PERMITIDA_NO_PROJETO])
+    for arquivo in candidatos:
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        lista = dado.get(CHAVE_DA_LISTA_PERMITIDA) if isinstance(dado, dict) else None
+        if isinstance(lista, list):
+            achou = True
+            entradas.extend(e for e in lista if isinstance(e, dict))
+    return entradas if achou else None
+
+
+def servidor_passa_pela_lista(nome: str, declaracao: dict, entradas: list) -> bool:
+    comandos = [e["serverCommand"] for e in entradas if "serverCommand" in e]
+    enderecos = [e["serverUrl"] for e in entradas if "serverUrl" in e]
+    nomes = {e.get("serverName") for e in entradas if "serverName" in e}
+    if "command" in declaracao:
+        linha = [declaracao["command"], *declaracao.get("args", [])]
+        return linha in comandos if comandos else nome in nomes
+    if "url" in declaracao:
+        return (any(fnmatch.fnmatchcase(declaracao["url"], padrao) for padrao in enderecos)
+                if enderecos else nome in nomes)
+    return nome in nomes
+
+
+def servidores_barrados_pela_lista(raiz: Path, declarados: dict, casa: Path) -> list:
+    entradas = entradas_da_lista_permitida(raiz, casa)
+    if entradas is None:
+        return []
+    return sorted(nome for nome, declaracao in declarados.items()
+                  if isinstance(declaracao, dict)
+                  and not servidor_passa_pela_lista(nome, declaracao, entradas))
+
+
 def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
     alvo = raiz / ARQUIVO_DA_DECLARACAO_DE_MCP
     if not alvo.is_file():
@@ -1084,6 +1153,10 @@ def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
     declaracao = MCP_DECLARADO.format(ARQUIVO_DA_DECLARACAO_DE_MCP,
                                       len(nomes), ", ".join(nomes))
     estado = estado_do_cliente_sobre_os_servidores(raiz, nomes, casa=casa)
+    barrados = servidores_barrados_pela_lista(
+        raiz, declarados, Path.home() if casa is None else casa)
+    if barrados:
+        estado = MCP_BARRADO_PELA_LISTA.format(len(barrados), ", ".join(barrados)) + "\n" + estado
     return True, f"{declaracao}\n{estado}"
 
 
@@ -1524,6 +1597,17 @@ def divergencias_do_despachante(raiz: Path) -> list:
     return saldos
 
 
+def cercas_fora_da_tabela_do_briefing(raiz: Path) -> list:
+    try:
+        tabela = (raiz / BRIEFING_DA_SESSAO).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return [(caminho, SALDO_FORA_DO_BRIEFING)
+            for caminho in sorted(cercas_do_despachante(raiz))
+            if LINHA_DA_CERCA_NA_TABELA.format(Path(caminho).stem)
+            not in tabela]
+
+
 def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
                         declarados: set) -> list:
     embutidos = embutidos_sob(raiz, fontes, f"{PASTA_DOS_GANCHOS}/")
@@ -1545,10 +1629,21 @@ def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
     return saldos
 
 
+def instrumentos_de_modulo_privado(raiz: Path) -> set:
+    base = raiz / PASTA_DOS_MODULOS_DA_MATRICULA
+    if not base.is_dir():
+        return set()
+    return {arquivo.relative_to(pasta).as_posix()
+            for pasta in base.iterdir()
+            if pasta.is_dir() and (pasta / MARCA_DE_MODULO_PRIVADO).is_file()
+            for arquivo in pasta.rglob("*.py") if arquivo.is_file()}
+
+
 def saldos_dos_instrumentos(raiz: Path, instrumentos: list, fontes: tuple,
                             por_modulo: set) -> list:
     viajam = (embutidos_sob(raiz, fontes, f"{PASTA_DOS_INSTRUMENTOS}/")
-              | por_modulo | set(INSTRUMENTOS_QUE_FICAM))
+              | por_modulo | set(INSTRUMENTOS_QUE_FICAM)
+              | instrumentos_de_modulo_privado(raiz))
     saldos = [(c, SALDO_NAO_VIAJA) for c in instrumentos if c not in viajam]
     saldos += [(c, SALDO_EXCECAO_VELHA)
                for c in sorted(INSTRUMENTOS_QUE_FICAM)
@@ -1577,6 +1672,7 @@ def matricula(raiz: Path) -> int:
     saldos = saldos_da_matricula(raiz, ganchos, fontes, declarados)
     saldos += saldos_dos_instrumentos(raiz, instrumentos, fontes, por_modulo)
     saldos += divergencias_do_despachante(raiz)
+    saldos += cercas_fora_da_tabela_do_briefing(raiz)
     for caminho, motivo in saldos:
         print(LINHA_DO_SALDO.format(caminho, motivo))
     fora_do_git = ganchos_ligados_fora_do_git(raiz, ganchos)
@@ -2439,6 +2535,9 @@ def main() -> int:
                          "entrega e acerto de rota, para comparar versões")
     ap.add_argument("--resumo", action="store_true",
                     help="só o JSON, para comparar entre rodadas")
+    ap.add_argument("--raiz", default=None,
+                    help="a raiz a medir, por extenso; sem ela, o diretório "
+                         "atual")
     ap.add_argument(BANDEIRA_DE_TESTE, action="store_true",
                     dest="testar", help="roda os casos deste instrumento")
     a = ap.parse_args()
@@ -2451,7 +2550,7 @@ def main() -> int:
             return 0
         return testar()
 
-    raiz = Path.cwd()
+    raiz = Path(a.raiz).resolve() if a.raiz else Path.cwd()
     if not (raiz / PASTA_DO_CONHECIMENTO).is_dir():
         sys.exit(FORA_DA_RAIZ.format(PASTA_DO_CONHECIMENTO))
 

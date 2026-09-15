@@ -24,9 +24,7 @@ Acabou de instalar a camada? São **quatro passos**, e nenhum deles é ler tudo.
    `medir` diz quanto a camada cobra de contexto em toda sessão; `provar`
    roda o teste de cada gancho e instrumento.
 4. **Veja o que você ganhou em skills**: elas se listam sozinhas na
-   sessão, pela `description` de cada uma. Para escrever a sua e fazê-la
-   disparar, [a skill que dispara](skill-que-dispara.md) traz a receita
-   medida.
+   sessão, pela `description` de cada uma.
 
 Sessão nova abre pelo briefing da camada, `.agents/prompts/bootstart.md`:
 o comando de barra `/bootstart` o carrega, e o `AGENTS.md` aponta para ele.
@@ -42,36 +40,30 @@ Outras páginas foram escritas e saíram para serem refeitas uma a uma;
 enquanto não voltarem, elas não são citadas aqui, porque sumário que nomeia
 página inexistente manda procurar o que ninguém escreveu.
 
-- [investigação de incidente](investigacao-de-incidente.md) — a ordem dos nove
-  passos, e as armadilhas de medição que fazem conclusão errada passar por
-  prova.
 - [o estado que não viaja](estado-que-nao-viaja.md) — o que a máquina precisa
   ter e o instalador não traz.
 - [um navegador por projeto](navegador-por-projeto.md) — como a sessão ganha
   navegação assistida.
-- [a rotina que abre issue só para erro novo](rotina-de-erros-novos.md).
 - [a guarda mecânica das regras](guarda-mecanica-das-regras.md) — o que cobra
   cada regra na prática: gancho, rotina, ou nada.
-- [o auditor](auditor.md) — por que quem verifica a execução lê a evidência
-  gravada, e não o comportamento da sessão.
 - [a verificação pós-atualização](verificacao-pos-atualizacao.md) — a
   camada foi atualizada aqui: prove a instalação e cace o resto da versão
   anterior.
-- [a prova de leitura do agente](prova-de-leitura-do-agente.md) — o agente
-  mostra, com saída colada, que enxerga as instruções e as skills.
 - [organizar conhecimento e projetos](organizar-conhecimento-e-projetos.md)
   — as duas pastas do workspace na forma que as regras pedem, sem perder
   uma linha do dono.
-- [medir o prompt de abertura](medir-o-prompt-de-abertura.md) — a bancada
-  que troca opinião por nota: árvores isoladas, problemas fixos e a régua
-  que separa o que instrumento mede do que juiz julga.
-- [a auditoria externa da camada](auditoria-externa-da-camada.md) — a
-  sessão de fora que existe para derrubar: medir antes de afirmar.
 
-Duas receitas que a camada manda usar e por muito tempo não ensinou: montar
-[um navegador por projeto](navegador-por-projeto.md), para a sessão ganhar
-navegação assistida, e
-[a rotina que abre issue só para erro novo](rotina-de-erros-novos.md).
+Receitas que moram fora desta pasta, junto da peça que as usa:
+
+- a prova de que o agente lê a camada, no
+  [checklist de partida](../.agents/prompts/partida.md);
+- os roteiros do executor, a revisão da camada e a auditoria externa, no
+  [LEIAME das execuções](../execucoes/LEIAME.md);
+- medir o prompt de abertura, no
+  [cartão da bancada](../modulos/bancada/LEIAME.md);
+- o auditor de evidências, no [cartão do auditor](../modulos/auditor/LEIAME.md);
+- a investigação de incidente, na
+  [página do módulo de observabilidade](../modulos/observabilidade/conhecimento/observabilidade.md).
 
 O que segura cada regra na prática — gancho, rotina ou nada:
 [a guarda mecânica das regras](guarda-mecanica-das-regras.md).

@@ -1,4 +1,4 @@
-VERSAO = "0.856"
+VERSAO = "0.879"
 
 import functools
 import datetime
@@ -100,8 +100,8 @@ LOG_CRIADO_NA_ATUALIZACAO = "  criado : {}"
 LOG_GANCHO_PULADO = "  pulado:  {} (o gancho não está no disco)"
 LOG_GANCHO_EM_DIA = "  em dia:  {} no settings.json"
 LOG_GANCHO_LIGADO = "  ligado:  {} no settings.json"
-LOG_GANCHO_REESCRITO = ("  reescrito: {} no settings.json — a linha passa a "
-                        "chamar o lançador")
+LOG_GANCHO_REESCRITO = ("  reescrito: {} no settings.json — a linha passa ao "
+                        "formato que roda em qualquer concha")
 
 LOG_DEVIN_EM_DIA = "  em dia:  configuração do Devin (ponte desligada)"
 LOG_DEVIN_AJUSTADO = ("  ajustado: .devin/config.json (ponte desligada, "
@@ -429,7 +429,6 @@ BANDEIRA_SINCRONIZAR = "--sincronizar"
 BANDEIRA_ATUALIZAR = "--atualizar"
 BANDEIRA_ESQUELETO = "--esqueleto"
 BANDEIRA_DEVIN = "--devin"
-BANDEIRA_COPILOT = "--copilot"
 BANDEIRA_CODEX = "--codex"
 BANDEIRA_ESCREVER = "--escrever"
 BANDEIRA_DO_QUADRO = "--repositorio-das-issues"
@@ -438,7 +437,7 @@ BANDEIRAS_CONHECIDAS = (BANDEIRA_TESTAR, BANDEIRA_VERSAO,
                         BANDEIRA_MODULOS, BANDEIRA_MODULO,
                         BANDEIRA_VERIFICAR, BANDEIRA_SINCRONIZAR,
                         BANDEIRA_ATUALIZAR, BANDEIRA_ESQUELETO,
-                        BANDEIRA_DEVIN, BANDEIRA_COPILOT,
+                        BANDEIRA_DEVIN,
                         BANDEIRA_CODEX, BANDEIRA_ESCREVER,
                         BANDEIRA_DO_QUADRO)
 
@@ -474,16 +473,38 @@ ESPELHO_PEDE_VARIAVEL = (
 ESPELHO_ESCRITO = (
     "\nEscrito em {}: {} servidor(es). A cópia de antes ficou em {}.")
 ESPELHO_EM_DIA = "\nJá estava em dia: {} servidor(es), nada a reescrever."
-ARQUIVO_DOS_GANCHOS_DO_EDITOR = ".github/hooks/atlas.json"
-GANCHOS_DO_EDITOR = {
-    "version": 1,
-    "hooks": {"preToolUse": [{
-        "type": "command",
-        "bash": f"{SHELL_DO_LANCADOR} {ARQUIVO_DO_LANCADOR} {ARQUIVO_DA_PONTE}",
-        "powershell": f"python {ARQUIVO_DA_PONTE}",
-        "timeoutSec": 30}]}}
-LOG_PONTE_DO_EDITOR = ("  ponte para o assistente do editor declarada em {}: as "
-                       "mesmas cercas valem lá")
+ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA = ".codex/hooks.json"
+COMANDO_DA_PONTE_SEM_BARRA = (f"{SHELL_DO_LANCADOR} {ARQUIVO_DO_LANCADOR} "
+                              f"{ARQUIVO_DA_PONTE} --codex")
+EVENTOS_DA_PONTE_SEM_BARRA = ("PreToolUse", "SessionStart", "Stop")
+TEMPO_DA_PONTE_SEM_BARRA_S = 60
+GANCHOS_DO_AGENTE_SEM_BARRA = {
+    "hooks": {evento: [{"hooks": [{"type": "command",
+                                   "command": COMANDO_DA_PONTE_SEM_BARRA,
+                                   "timeout": TEMPO_DA_PONTE_SEM_BARRA_S}]}]
+              for evento in EVENTOS_DA_PONTE_SEM_BARRA}}
+LOG_PONTE_SEM_BARRA = ("  ponte para o agente que lê {} declarada: as mesmas "
+                       "cercas, a abertura e a parada valem lá")
+LOG_PONTE_SEM_BARRA_PEDE_CONFIANCA = (
+    "  o agente IGNORA em silêncio gancho que o dono ainda não revisou: abra "
+    "uma sessão dele nesta pasta, rode `/hooks` e marque os três como "
+    "confiáveis, uma vez; gancho que muda pede revisão de novo. Sem isso a "
+    "ponte existe e não roda.")
+LOG_PONTE_SEM_BARRA_EM_DIA = "  em dia:  {} já declara a ponte"
+ENSAIO_DA_PONTE_SEM_BARRA = ("  ensaio: {} receberia a ponte das cercas "
+                             "(`{} {}` escreve)")
+ENSAIO_DA_PONTE_DO_DEVIN = ("  ensaio: nada foi escrito. {} receberia a ponte das "
+                            "cercas, e a camada seria montada nesta pasta, com os "
+                            "módulos que vêm ligados (`{} {}` escreve)")
+SECAO_DOS_RECURSOS_NO_TOML = "[features]"
+LINHA_QUE_LIGA_OS_GANCHOS_NO_TOML = "hooks = true"
+CHAVE_DOS_CABECALHOS_DO_MCP = "headers"
+CABECALHO_DE_AUTORIZACAO = "Authorization"
+PREFIXO_DO_PORTADOR = "Bearer "
+CHAVE_DO_PORTADOR_NO_TOML = "bearer_token_env_var"
+SECAO_DOS_CABECALHOS_NO_TOML = "[mcp_servers.{}.http_headers]"
+SECAO_DOS_CABECALHOS_POR_VARIAVEL_NO_TOML = "[mcp_servers.{}.env_http_headers]"
+CHAVE_DAS_VARIAVEIS_LIBERADAS_NO_TOML = "env_vars"
 COMANDO_DA_PONTE = (f'{SHELL_DO_LANCADOR} "$DEVIN_PROJECT_DIR/{ARQUIVO_DO_LANCADOR}" '
                     f'"$DEVIN_PROJECT_DIR/{ARQUIVO_DA_PONTE}"')
 EVENTO_DA_OUTRA = "PreToolUse"
@@ -571,7 +592,19 @@ VERSAO_QUE_SERVE = "3"
 TETO_DO_INTERPRETADOR_S = 10
 
 RAIZ_DO_PROJETO_NO_GANCHO = "${CLAUDE_PROJECT_DIR}"
-RAIZ_DO_PROJETO_NO_GANCHO_SEM_CHAVES = "$CLAUDE_PROJECT_DIR"
+PROGRAMA_QUE_RODA_O_GANCHO = (
+    "import os,sys,runpy;"
+    "r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();"
+    "a=os.path.join(r,sys.argv[1]);"
+    "os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);"
+    "sys.argv=[a];sys.path[0]=os.path.dirname(a);"
+    "runpy.run_path(a,run_name='__main__')")
+
+
+def comando_do_gancho(arquivo: str) -> str:
+    return f'{MARCADOR_DO_INTERPRETADOR} -c "{PROGRAMA_QUE_RODA_O_GANCHO}" {arquivo}'
+
+
 LANCADOR_NO_GANCHO = (
     f'{SHELL_DO_LANCADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_LANCADOR}"')
 LINHA_DOS_CANDIDATOS = re.compile(r'^CANDIDATOS="([^"]*)"', re.M)
@@ -605,6 +638,7 @@ ARQUIVO_DO_GANCHO_DE_COPIA_GERADA = ".claude/hooks/vetar-escrita-em-copia-gerada
 ARQUIVO_DO_GANCHO_DE_DESTINO = ".claude/hooks/cobrar-destino-da-entrega.py"
 ARQUIVO_DO_DESPACHANTE_DE_CERCAS = ".claude/hooks/despachar-cercas.py"
 ARQUIVO_DO_COMANDO_DE_ABERTURA = ".claude/commands/bootstart.md"
+ARQUIVO_DO_COMANDO_DE_PARTIDA = ".claude/commands/partida.md"
 ARQUIVO_DO_GANCHO_DE_DOCUMENTO = ".claude/hooks/vetar-documento-rastreavel.py"
 ARQUIVO_DOS_DOCUMENTOS_VERSIONADOS = ".claude/documentos-versionados.txt"
 ARQUIVO_DOS_TRECHOS_PERDOADOS = ".claude/trechos-que-a-varredura-perdoa.txt"
@@ -621,65 +655,31 @@ ARQUIVO_DO_GANCHO_DE_PESQUISA = (
 ARQUIVO_DO_GANCHO_DE_DESPEJO = ".claude/hooks/vetar-despejo-de-ambiente.py"
 ARQUIVO_DO_DESEMBRULHADOR_DE_COMANDO = ".claude/hooks/desembrulhar-comando.py"
 
-COMANDO_DO_VETO_DE_BRANCH = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_BRANCH}"')
-COMANDO_DO_VETO_DE_CONHECIMENTO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO_SEM_CHAVES}/'
-    f'{ARQUIVO_DO_GANCHO_DE_CONHECIMENTO}"')
-COMANDO_DO_VETO_DE_ANDAMENTO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_ANDAMENTO}"')
-COMANDO_DO_VETO_DE_AUTOMACAO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_AUTOMACAO}"')
-COMANDO_DO_VETO_DE_SOMENTE_LEITURA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_SOMENTE_LEITURA}"')
-COMANDO_DO_VETO_DE_FORA_DA_EXECUCAO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_FORA_DA_EXECUCAO}"')
-COMANDO_DO_VETO_DE_PERGUNTA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_PERGUNTA}"')
-COMANDO_DO_VETO_DE_COMENTARIO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_COMENTARIO}"')
-COMANDO_DA_ORIENTACAO_DE_CREDENCIAL = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_CREDENCIAL}"')
-COMANDO_DA_VERIFICACAO_DE_MCP = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_MCP}"')
-COMANDO_DA_VERIFICACAO_DE_AMBIENTE = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_AMBIENTE}"')
-COMANDO_DO_LEMBRETE_DE_ESFRIAMENTO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_ENCERRAMENTO}"')
-COMANDO_DO_VETO_DE_COPIA_GERADA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_COPIA_GERADA}"')
-COMANDO_DA_COBRANCA_DE_DESTINO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_DESTINO}"')
-COMANDO_DA_COBRANCA_DE_RELATO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_RELATO}"')
-COMANDO_DA_COBRANCA_DE_APRESENTACAO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_APRESENTACAO}"')
-COMANDO_DO_VETO_DE_POLITICA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_POLITICA}"')
-COMANDO_DO_AVISO_DE_SESSAO_PARALELA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA}"')
-COMANDO_DO_AVISO_DE_INDICE_FORA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_INDICE_FORA}"')
-COMANDO_DO_VETO_DE_CD = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_CD}"')
-COMANDO_DO_VETO_DE_PESQUISA = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_PESQUISA}"')
+COMANDO_DO_VETO_DE_BRANCH = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_BRANCH)
+COMANDO_DO_VETO_DE_CONHECIMENTO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_CONHECIMENTO)
+COMANDO_DO_VETO_DE_ANDAMENTO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_ANDAMENTO)
+COMANDO_DO_VETO_DE_AUTOMACAO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_AUTOMACAO)
+COMANDO_DO_VETO_DE_SOMENTE_LEITURA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_SOMENTE_LEITURA)
+COMANDO_DO_VETO_DE_FORA_DA_EXECUCAO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_FORA_DA_EXECUCAO)
+COMANDO_DO_VETO_DE_PERGUNTA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_PERGUNTA)
+COMANDO_DO_VETO_DE_COMENTARIO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_COMENTARIO)
+COMANDO_DA_ORIENTACAO_DE_CREDENCIAL = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_CREDENCIAL)
+COMANDO_DA_VERIFICACAO_DE_MCP = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_MCP)
+COMANDO_DA_VERIFICACAO_DE_AMBIENTE = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_AMBIENTE)
+COMANDO_DO_LEMBRETE_DE_ESFRIAMENTO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_ENCERRAMENTO)
+COMANDO_DO_VETO_DE_COPIA_GERADA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_COPIA_GERADA)
+COMANDO_DA_COBRANCA_DE_DESTINO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DESTINO)
+COMANDO_DA_COBRANCA_DE_RELATO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_RELATO)
+COMANDO_DA_COBRANCA_DE_APRESENTACAO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_APRESENTACAO)
+COMANDO_DO_VETO_DE_POLITICA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_POLITICA)
+COMANDO_DO_AVISO_DE_SESSAO_PARALELA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA)
+COMANDO_DO_AVISO_DE_INDICE_FORA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_INDICE_FORA)
+COMANDO_DO_VETO_DE_CD = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_CD)
+COMANDO_DO_VETO_DE_PESQUISA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_PESQUISA)
 
-COMANDO_DO_DESPACHANTE_DE_CERCAS = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_DESPACHANTE_DE_CERCAS}"')
-COMANDO_DO_VETO_DE_DOCUMENTO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_GANCHO_DE_DOCUMENTO}"')
-COMANDO_DO_VETO_DE_DESPEJO = (
-    f'{MARCADOR_DO_INTERPRETADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/'
-    f'{ARQUIVO_DO_GANCHO_DE_DESPEJO}"')
+COMANDO_DO_DESPACHANTE_DE_CERCAS = comando_do_gancho(ARQUIVO_DO_DESPACHANTE_DE_CERCAS)
+COMANDO_DO_VETO_DE_DOCUMENTO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DOCUMENTO)
+COMANDO_DO_VETO_DE_DESPEJO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DESPEJO)
 
 CERCAS_QUE_O_DESPACHANTE_ASSUMIU = (
     ARQUIVO_DO_GANCHO_DE_BRANCH,
@@ -1164,8 +1164,8 @@ FONTES = (PAGINA_REGRAS,
           "nucleo/bancada.exemplo.json",
           ".agents/skills/**/*",
           ".agents/prompts/bootstart.md",
+          ".agents/prompts/partida.md",
           "conhecimento/verificacao-pos-atualizacao.md",
-          "conhecimento/prova-de-leitura-do-agente.md",
           "conhecimento/organizar-conhecimento-e-projetos.md",
           ".agents/evidencia/evidencia.py",
           ".agents/evidencia/recibo.schema.json",
@@ -1178,7 +1178,6 @@ FONTES = (PAGINA_REGRAS,
           ".agents/gatilho/gatilho.py",
           ".agents/travessia/travessia.py",
           ".agents/travessia/ponte.py",
-          ".agents/higiene/higiene.py",
           ARQUIVO_DO_DESPACHANTE_DE_CERCAS,
           ARQUIVO_DO_GANCHO_DE_DOCUMENTO,
           ARQUIVO_DO_GANCHO_DE_BRANCH,
@@ -1207,11 +1206,12 @@ FONTES = (PAGINA_REGRAS,
           ARQUIVO_DO_DESEMBRULHADOR_DE_COMANDO,
           ARQUIVO_DO_LANCADOR,
           ARQUIVO_DO_COMANDO_DE_ABERTURA,
+          ARQUIVO_DO_COMANDO_DE_PARTIDA,
           ".markdownlint.jsonc")
 
 IGNORAR_LIXO = ("/tmp/*", "!/tmp/LEIAME.md", "__pycache__/", "*.pyc",
                 ".pytest_cache/", ".ruff_cache/", ".mypy_cache/",
-                ".playwright-mcp/")
+                ".playwright-mcp/", "/.tmp.driveupload/")
 MOTIVO_LIXO = "# Descartáveis: rascunho e cache de ferramenta. Apagar não perde nada."
 
 ARQUIVO_DO_EXECUTOR_LOCAL = "nucleo/executor.json"
@@ -1280,13 +1280,18 @@ TEXTO_DOS_NOMES = ("O nome de uma peça declara a responsabilidade dela, em "
 
 SECOES_INSTRUCOES = [
     ("Antes de qualquer pedido", [
+        "O checklist de partida, `.agents/prompts/partida.md`, roda sob "
+        "demanda, em qualquer agente: quando o dono pedir, ou quando o "
+        "`--abertura` acusar peça em falta. Ele custa minutos e muitos tokens "
+        "por sessão, então não é o primeiro ato de toda sessão. No Claude Code "
+        "ele é `/partida`.",
         "Leia `.agents/prompts/bootstart.md` INTEIRO antes de escolher skill, "
         "abrir arquivo ou responder: é o briefing da camada para qualquer "
         "agente — o que a sessão vai encontrar, o que os ganchos recusam, e a "
         "tabela que diz o que atende cada tipo de pedido. Pedido que já nomeia "
         "uma skill, um vizinho ou uma issue não dispensa a leitura.",
-        "Depois rode `python .agents/camada/camada.py --abertura`, com a raiz "
-        "por extenso, e relate na primeira resposta o que ele acusou em falta "
+        "Depois rode `python .agents/camada/camada.py --abertura`, com "
+        "`--raiz` e o caminho por extenso, e relate na primeira resposta o que ele acusou em falta "
         "— instrução, servidor de contexto, endereço do quadro ou índice. "
         "Sessão que abre sem eles trabalha com menos do que pensa ter.",
     ]),
@@ -1405,17 +1410,23 @@ def comandos_do_bloco(bloco: dict) -> list:
             for gancho in ganchos if isinstance(gancho, dict)]
 
 
-def cauda_do_comando(comando: str) -> str:
-    return comando.split(MARCADOR_DO_INTERPRETADOR, 1)[-1].strip()
+CAMINHO_DO_GANCHO_NO_COMANDO = re.compile(r"\.claude/hooks/[^\"'\s]+\.py")
+
+
+def arquivo_do_gancho_no_comando(comando: str) -> str:
+    achados = CAMINHO_DO_GANCHO_NO_COMANDO.findall(comando or "")
+    return achados[-1] if achados else ""
 
 
 def gancho_declarado_com_a_cauda(blocos: list, comando: str):
-    cauda = cauda_do_comando(comando)
+    alvo = arquivo_do_gancho_no_comando(comando)
+    if not alvo:
+        return None
     for bloco in blocos:
         ganchos = bloco.get(CHAVE_DOS_GANCHOS, []) if isinstance(bloco, dict) else []
         for gancho in ganchos:
-            if isinstance(gancho, dict) and \
-                    gancho.get(CHAVE_DO_COMANDO, "").strip().endswith(cauda):
+            if isinstance(gancho, dict) and arquivo_do_gancho_no_comando(
+                    gancho.get(CHAVE_DO_COMANDO, "")) == alvo:
                 return gancho
     return None
 
@@ -1426,6 +1437,7 @@ def tem_comando_declarado(blocos: list, comando: str) -> bool:
 
 def paginas_no_disco(raiz: Path) -> dict:
     achados = {}
+    em_uso_de_modulo = caminhos_em_uso_dos_modulos(raiz)
     for padrao in FONTES:
         for caminho in sorted(raiz.glob(padrao)):
             if not caminho.is_file() or caminho.name == ARQUIVO_DE_PASTA_VAZIA:
@@ -1433,6 +1445,8 @@ def paginas_no_disco(raiz: Path) -> dict:
             if e_cache_de_execucao(caminho):
                 continue
             rotulo = caminho.relative_to(raiz).as_posix()
+            if rotulo in em_uso_de_modulo:
+                continue
             achados[rotulo] = texto_ou_bytes(caminho)
     return achados
 
@@ -1450,7 +1464,7 @@ def arquivos_de_um_modulo(pasta: Path) -> dict:
         if e_cache_de_execucao(caminho):
             continue
         rotulo = caminho.relative_to(pasta).as_posix()
-        if rotulo == CARTAO_DO_MODULO:
+        if rotulo in (CARTAO_DO_MODULO, MARCA_DE_MODULO_PRIVADO):
             continue
         arquivos[rotulo] = texto_ou_bytes(caminho)
     return arquivos
@@ -1459,12 +1473,46 @@ def arquivos_de_um_modulo(pasta: Path) -> dict:
 MODULOS_QUE_JA_VEM_LIGADOS = ("encadeador", "indice", "observabilidade",
                               "insights", "auditor")
 MODULOS_QUE_NAO_VIAJAM = ()
+MARCA_DE_MODULO_PRIVADO = "MODULO_PRIVADO"
+
+
+def e_modulo_privado(pasta: Path) -> bool:
+    return (pasta / MARCA_DE_MODULO_PRIVADO).is_file()
+
+
+def espelho_da_skill(rotulo: str) -> str:
+    prefixo = ORIGEM_SKILLS + "/"
+    return COPIA_SKILLS + "/" + rotulo[len(prefixo):] \
+        if rotulo.startswith(prefixo) else ""
+
+
+def qualquer_modulo(pasta: Path) -> bool:
+    return True
+
+
+def caminhos_em_uso_dos_modulos(raiz: Path, escolhe=qualquer_modulo) -> set:
+    caminhos = set()
+    origem = raiz / PASTA_MODULOS
+    if not origem.is_dir():
+        return caminhos
+    for pasta in sorted(p for p in origem.iterdir()
+                        if p.is_dir() and escolhe(p)):
+        for rotulo in arquivos_de_um_modulo(pasta):
+            caminhos.add(rotulo)
+            if espelho_da_skill(rotulo):
+                caminhos.add(espelho_da_skill(rotulo))
+    return caminhos
+
+
+def caminhos_de_modulos_privados(raiz: Path) -> set:
+    return caminhos_em_uso_dos_modulos(raiz, e_modulo_privado)
 
 
 def modulos_que_viajam(raiz: Path) -> dict:
     viajam = {}
     for nome, arquivos in modulos_no_disco(raiz).items():
-        if nome in MODULOS_QUE_NAO_VIAJAM:
+        if nome in MODULOS_QUE_NAO_VIAJAM or \
+                e_modulo_privado(raiz / PASTA_MODULOS / nome):
             continue
         sem_bancada = {rotulo: conteudo
                        for rotulo, conteudo in arquivos.items()
@@ -2070,7 +2118,10 @@ def linhas_do_servidor_no_toml(nome: str, servidor: dict) -> list:
         if isinstance(valor, (dict, type(None))):
             continue
         linhas.append(f"{chave} = {valor_de_toml(valor)}")
-    literais, _ = ambiente_sem_o_que_e_segredo(servidor)
+    literais, por_variavel = ambiente_sem_o_que_e_segredo(servidor)
+    if por_variavel:
+        linhas.append(f"{CHAVE_DAS_VARIAVEIS_LIBERADAS_NO_TOML} = "
+                      f"{valor_de_toml(por_variavel)}")
     if literais:
         linhas.append("")
         linhas.append(SECAO_DO_AMBIENTE_NO_TOML.format(nome))
@@ -2079,11 +2130,66 @@ def linhas_do_servidor_no_toml(nome: str, servidor: dict) -> list:
     return linhas + [""]
 
 
+def nome_da_variavel_por_preencher(valor: str) -> str:
+    dentro = valor[valor.index(MARCA_DE_VARIAVEL_POR_PREENCHER) + 2:]
+    return dentro.split("}", 1)[0].strip()
+
+
+def cabecalhos_sem_o_que_e_segredo(servidor: dict) -> tuple:
+    declarados = servidor.get(CHAVE_DOS_CABECALHOS_DO_MCP) or {}
+    if not isinstance(declarados, dict):
+        return {}, {}, None
+    literais, por_variavel, portador = {}, {}, None
+    for nome, valor in declarados.items():
+        valor = str(valor)
+        if MARCA_DE_VARIAVEL_POR_PREENCHER not in valor:
+            literais[nome] = valor
+        elif nome == CABECALHO_DE_AUTORIZACAO and \
+                valor.startswith(PREFIXO_DO_PORTADOR):
+            portador = nome_da_variavel_por_preencher(valor)
+        else:
+            por_variavel[nome] = nome_da_variavel_por_preencher(valor)
+    return literais, por_variavel, portador
+
+
+def linhas_do_servidor_http_no_toml(nome: str, servidor: dict) -> list:
+    linhas = [SECAO_DO_SERVIDOR_NO_TOML.format(nome),
+              f"{CHAVE_DA_URL_DO_MCP} = "
+              f"{valor_de_toml(servidor[CHAVE_DA_URL_DO_MCP])}"]
+    literais, por_variavel, portador = cabecalhos_sem_o_que_e_segredo(servidor)
+    if portador:
+        linhas.append(f"{CHAVE_DO_PORTADOR_NO_TOML} = {valor_de_toml(portador)}")
+    for secao, cabecalhos in ((SECAO_DOS_CABECALHOS_NO_TOML, literais),
+                              (SECAO_DOS_CABECALHOS_POR_VARIAVEL_NO_TOML,
+                               por_variavel)):
+        if cabecalhos:
+            linhas.append("")
+            linhas.append(secao.format(nome))
+            for chave, valor in cabecalhos.items():
+                linhas.append(f"{valor_de_toml(chave)} = {valor_de_toml(valor)}")
+    return linhas + [""]
+
+
+def variaveis_que_o_servidor_http_espera(servidor: dict) -> list:
+    _, por_variavel, portador = cabecalhos_sem_o_que_e_segredo(servidor)
+    return sorted(set(por_variavel.values()) | ({portador} if portador
+                                                 else set()))
+
+
 def espelho_para_o_agente_sem_barra(servidores: dict) -> tuple:
     linhas, recados = [], []
     espelhados = []
     for nome in sorted(servidores):
         servidor = servidores[nome]
+        if isinstance(servidor, dict) and servidor.get(CHAVE_DA_URL_DO_MCP) \
+                and not servidor.get(CHAVE_DO_COMANDO_DO_MCP):
+            linhas += linhas_do_servidor_http_no_toml(nome, servidor)
+            espelhados.append(nome)
+            esperadas = variaveis_que_o_servidor_http_espera(servidor)
+            if esperadas:
+                recados.append(ESPELHO_PEDE_VARIAVEL.format(
+                    nome, ", ".join(esperadas)))
+            continue
         if not isinstance(servidor, dict) or \
                 not servidor.get(CHAVE_DO_COMANDO_DO_MCP):
             recados.append(ESPELHO_FORA_POR_FALTA_DE_COMANDO.format(nome))
@@ -2097,17 +2203,48 @@ def espelho_para_o_agente_sem_barra(servidores: dict) -> tuple:
     return espelhados, linhas, recados
 
 
-def secoes_de_servidor_fora(texto: str) -> str:
+def nome_do_servidor_da_secao(enxuta: str) -> str:
+    prefixo = SECAO_DO_SERVIDOR_NO_TOML.split("{", 1)[0]
+    if not enxuta.startswith(prefixo):
+        return ""
+    return enxuta[len(prefixo):].split("]", 1)[0].split(".", 1)[0].strip("'\"")
+
+
+def secoes_de_servidor_fora(texto: str, nomes=None) -> str:
     guardadas, dentro = [], False
     for linha in texto.splitlines():
         enxuta = linha.strip()
         if enxuta.startswith("["):
-            dentro = enxuta.startswith(SECAO_DO_SERVIDOR_NO_TOML.split("{", 1)[0])
+            nome = nome_do_servidor_da_secao(enxuta)
+            dentro = bool(nome) and (nomes is None or nome in nomes)
         if not dentro:
             guardadas.append(linha)
     while guardadas and not guardadas[-1].strip():
         guardadas.pop()
     return "\n".join(guardadas)
+
+
+def com_os_ganchos_ligados(texto: str) -> str:
+    linhas = texto.splitlines()
+    dentro, ja_dito, onde = False, False, None
+    for indice, linha in enumerate(linhas):
+        enxuta = linha.strip()
+        if enxuta.startswith("["):
+            dentro = enxuta == SECAO_DOS_RECURSOS_NO_TOML
+            if dentro:
+                onde = indice
+            continue
+        if dentro and enxuta.split("=", 1)[0].strip() == "hooks":
+            ja_dito = True
+            if enxuta != LINHA_QUE_LIGA_OS_GANCHOS_NO_TOML:
+                linhas[indice] = LINHA_QUE_LIGA_OS_GANCHOS_NO_TOML
+    if ja_dito:
+        return "\n".join(linhas)
+    if onde is None:
+        return "\n".join(linhas + ["", SECAO_DOS_RECURSOS_NO_TOML,
+                                   LINHA_QUE_LIGA_OS_GANCHOS_NO_TOML])
+    linhas.insert(onde + 1, LINHA_QUE_LIGA_OS_GANCHOS_NO_TOML)
+    return "\n".join(linhas)
 
 
 def caminho_da_configuracao_do_agente_sem_barra(lar: Path) -> Path:
@@ -2124,7 +2261,7 @@ def casos_do_espelho_sem_barra(caso) -> None:
     import tempfile
 
     servidores = {
-        "sem_comando": {"url": "https://exemplo.invalido/mcp"},
+        "sem_comando": {"type": "sse"},
         "com_credencial": {"command": "python", "args": ["servidor.py"],
                            "env": {"SENHA": "${SENHA_DO_BANCO}",
                                    "ENDERECO": "127.0.0.1:5432"}},
@@ -2152,6 +2289,66 @@ def casos_do_espelho_sem_barra(caso) -> None:
          "[mcp_servers.com_credencial.env]" in texto
          and 'ENDERECO = "127.0.0.1:5432"' in texto)
 
+    caso("servidor com variável de segredo ganha a lista branca env_vars com "
+         "os NOMES, para o agente repassar o que o dono exportou",
+         'env_vars = ["SENHA"]' in texto)
+    http = {"github": {"type": "http", "url": "https://x.invalido/mcp/",
+                       "headers": {"Authorization": "Bearer ${TOKEN_X}",
+                                   "X-Leitura": "true",
+                                   "X-Chave": "${OUTRA}"}}}
+    espelhados_http, linhas_http, recados_http = \
+        espelho_para_o_agente_sem_barra(http)
+    texto_http = "\n".join(linhas_http)
+    caso("servidor HTTP entra pela url, com o portador pelo NOME da variável "
+         "e nunca pelo valor",
+         "github" in espelhados_http
+         and 'url = "https://x.invalido/mcp/"' in texto_http
+         and 'bearer_token_env_var = "TOKEN_X"' in texto_http
+         and "${" not in texto_http)
+    caso("cabeçalho literal vai em http_headers e cabeçalho por variável em "
+         "env_http_headers",
+         "[mcp_servers.github.http_headers]" in texto_http
+         and '"X-Leitura" = "true"' in texto_http
+         and "[mcp_servers.github.env_http_headers]" in texto_http
+         and '"X-Chave" = "OUTRA"' in texto_http)
+    caso("o recado do servidor HTTP nomeia as variáveis que ele espera",
+         any("github" in r and "OUTRA" in r and "TOKEN_X" in r
+             for r in recados_http))
+    caso("[features] sem hooks ganha a linha que liga os ganchos",
+         com_os_ganchos_ligados("a = 1\n\n[features]\nmemories = true")
+         == "a = 1\n\n[features]\nhooks = true\nmemories = true")
+    caso("sem [features], a seção nasce no fim com os ganchos ligados",
+         com_os_ganchos_ligados("a = 1").endswith("[features]\nhooks = true"))
+    caso("hooks = false vira true, e hooks = true fica como está",
+         com_os_ganchos_ligados("[features]\nhooks = false")
+         == "[features]\nhooks = true"
+         and com_os_ganchos_ligados("[features]\nhooks = true")
+         == "[features]\nhooks = true")
+
+    with tempfile.TemporaryDirectory(prefix="montar-ponte-") as pasta:
+        raiz_da_ponte = Path(pasta)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            garantir_ponte_para_o_agente_sem_barra(raiz_da_ponte, False)
+        caso("a ponte dos ganchos em ensaio só anuncia e não escreve",
+             not (raiz_da_ponte / ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA
+                  ).exists() and "ensaio" in dito.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()):
+            garantir_ponte_para_o_agente_sem_barra(raiz_da_ponte, True)
+        escrito = json.loads((raiz_da_ponte
+                              / ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA
+                              ).read_text(encoding="utf-8"))
+        caso("a ponte escrita cobre cerca, abertura e parada, todas pela "
+             "mesma ponte no dialeto do agente",
+             set(escrito["hooks"]) == set(EVENTOS_DA_PONTE_SEM_BARRA)
+             and all(g["hooks"][0]["command"].endswith("--codex")
+                     for grupos in escrito["hooks"].values() for g in grupos))
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            garantir_ponte_para_o_agente_sem_barra(raiz_da_ponte, True)
+        caso("ponte já escrita é dada como em dia, sem reescrever",
+             "em dia" in dito.getvalue())
+
     guardado = """model = "o-modelo"
 
 [mcp_servers.velho]
@@ -2160,11 +2357,15 @@ command = "sai"
 [projects.'d:\\algum']
 trust_level = "trusted"
 """
-    caso("as seções de servidor do arquivo de antes saem, e o RESTO do arquivo "
-         "fica de pé — espelho não é atropelo",
-         "[mcp_servers.velho]" not in secoes_de_servidor_fora(guardado)
-         and 'model = "o-modelo"' in secoes_de_servidor_fora(guardado)
-         and "trust_level" in secoes_de_servidor_fora(guardado))
+    caso("só a seção do servidor DECLARADO sai do arquivo de antes; servidor "
+         "que é do próprio agente e o resto do arquivo ficam de pé — espelho "
+         "não é atropelo",
+         "[mcp_servers.velho]" in secoes_de_servidor_fora(guardado, ["simples"])
+         and "[mcp_servers.simples]" not in secoes_de_servidor_fora(
+             guardado + "\n[mcp_servers.simples]\ncommand = \"x\"\n"
+             "[mcp_servers.simples.env]\nA = \"1\"\n", ["simples"])
+         and 'model = "o-modelo"' in secoes_de_servidor_fora(guardado, [])
+         and "trust_level" in secoes_de_servidor_fora(guardado, []))
 
     with tempfile.TemporaryDirectory(prefix="montar-espelho-") as pasta:
         lar = Path(pasta)
@@ -2204,11 +2405,13 @@ trust_level = "trusted"
                 raiz, escrevendo=True, lar=lar, hoje="2026-09-09")
         agora = destino.read_text(encoding="utf-8")
         caso("com a bandeira de escrever, o espelho entra, o resto do arquivo "
-             "sobrevive e a cópia de antes fica guardada com a data",
+             "sobrevive — inclusive servidor que não é do atlas —, os ganchos "
+             "ficam ligados e a cópia de antes fica guardada com a data",
              escreveu == 0
              and "[mcp_servers.simples]" in agora
              and 'model = "o-modelo"' in agora
-             and "[mcp_servers.velho]" not in agora
+             and "[mcp_servers.velho]" in agora
+             and "hooks = true" in agora
              and (destino.parent / (
                  destino.name + SUFIXO_DA_COPIA_DE_SEGURANCA
                  + "-2026-09-09")).is_file())
@@ -2245,7 +2448,8 @@ def espelhar_mcp_para_o_agente_sem_barra(raiz: Path, escrevendo: bool,
         print(ESPELHO_SEM_ARQUIVO_DE_DESTINO.format(destino))
         return 1
     antes = destino.read_text(encoding="utf-8", errors="replace")
-    novo = secoes_de_servidor_fora(antes) + "\n\n" + "\n".join(linhas)
+    novo = (com_os_ganchos_ligados(secoes_de_servidor_fora(antes, espelhados))
+            + "\n\n" + "\n".join(linhas))
     if antes.strip() == novo.strip():
         print(ESPELHO_EM_DIA.format(len(espelhados)))
         return 0
@@ -2909,6 +3113,169 @@ BANCADA_SO_NA_CASA = ("bancada de testes ausente: os casos do instalador só "
                       "fontes existem. Nada a rodar aqui.")
 
 
+SONDA_DO_GANCHO = (
+    "import json, os, sys\n"
+    "json.dump({'argv0': sys.argv[0], 'arquivo': __file__, 'caminho0': sys.path[0], "
+    "'resto': sys.argv[1:]}, open(os.path.join(os.path.dirname(__file__), 'visto.json'), 'w'))\n"
+    "sys.exit(2)\n")
+ARQUIVO_DA_SONDA_DO_GANCHO = ".claude/hooks/sonda-da-concha.py"
+
+
+def rodar_linha_de_gancho(linha: str, raiz: Path, cwd: Path, com_a_raiz: bool):
+    import subprocess
+    ambiente = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    if com_a_raiz:
+        ambiente["CLAUDE_PROJECT_DIR"] = str(raiz)
+    return subprocess.run(linha, shell=True, cwd=str(cwd), env=ambiente,
+                          capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=60)
+
+
+def casos_da_ponte_do_devin_com_ensaio(caso) -> None:
+    import subprocess
+    import tempfile
+
+    instalador = str(Path(__file__).resolve())
+    with tempfile.TemporaryDirectory(prefix="montar-devin-") as pasta:
+        raiz = Path(pasta)
+        subprocess.run(["git", "init", "-q", "."], cwd=raiz, capture_output=True)
+        ensaio = subprocess.run([sys.executable, instalador, BANDEIRA_DEVIN], cwd=raiz,
+                                capture_output=True, text=True, encoding="utf-8",
+                                errors="replace", timeout=300)
+        escrito = sorted(p.relative_to(raiz).as_posix() for p in raiz.rglob("*")
+                         if ".git" not in p.relative_to(raiz).parts)
+        caso("--devin sem --escrever não grava nada e diz o que gravaria — medido "
+             "em 15/09, um agente rodou a bandeira achando que ensaiava e "
+             "instalou a ponte e um módulo na raiz",
+             ensaio.returncode == 0 and escrito == []
+             and ARQUIVO_DOS_GANCHOS_DA_OUTRA in ensaio.stdout
+             and BANDEIRA_ESCREVER in ensaio.stdout)
+        gravado = subprocess.run([sys.executable, instalador, BANDEIRA_DEVIN,
+                                  BANDEIRA_ESCREVER], cwd=raiz, capture_output=True,
+                                 text=True, encoding="utf-8", errors="replace", timeout=300)
+        caso("--devin --escrever instala a camada e liga a ponte, como a "
+             "travessia espera",
+             gravado.returncode == 0
+             and (raiz / ARQUIVO_DOS_GANCHOS_DA_OUTRA).is_file()
+             and (raiz / "AGENTS.md").is_file())
+
+
+def casos_do_gancho_em_qualquer_concha(caso) -> None:
+    import contextlib
+    import io
+    import tempfile
+
+    molde = globals().get("comando_do_gancho")
+    caso("todo gancho declarado sai sem variável de concha no texto do comando",
+         all("$" not in comando_com_o_interpretador(g.comando, sys.executable)
+             for g in ganchos_declarados()))
+    caso("existe um molde só para o comando de gancho", callable(molde))
+    if not callable(molde):
+        return
+    linha = comando_com_o_interpretador(molde(ARQUIVO_DA_SONDA_DO_GANCHO),
+                                        sys.executable)
+    with tempfile.TemporaryDirectory(prefix="montar-concha-") as pasta, \
+            tempfile.TemporaryDirectory(prefix="montar-outro-cwd-") as outro:
+        raiz = Path(pasta)
+        sonda = raiz / ARQUIVO_DA_SONDA_DO_GANCHO
+        sonda.parent.mkdir(parents=True)
+        sonda.write_text(SONDA_DO_GANCHO, encoding="utf-8")
+        visto = sonda.parent / "visto.json"
+        corrida = rodar_linha_de_gancho(linha, raiz, Path(outro), True)
+        leitura = (json.loads(visto.read_text(encoding="utf-8"))
+                   if visto.is_file() else {})
+        caso("a linha acha o gancho pela raiz do ambiente, mesmo com outro "
+             "diretório atual, e devolve a saída 2 do gancho",
+             corrida.returncode == 2
+             and Path(leitura.get("arquivo", "")).resolve() == sonda.resolve())
+        caso("o gancho vê a si mesmo em sys.argv[0], sem argumento sobrando",
+             Path(leitura.get("argv0", "")).resolve() == sonda.resolve()
+             and leitura.get("resto") == [])
+        caso("a pasta dos ganchos entra no lugar do diretório atual no caminho "
+             "de importação, e a biblioteca padrão não é sombreada por ele",
+             Path(leitura.get("caminho0", "")).resolve()
+             == sonda.parent.resolve())
+        visto.unlink(missing_ok=True)
+        sem_variavel = rodar_linha_de_gancho(linha, raiz, raiz, False)
+        caso("sem a variável, a linha acha a raiz pelo diretório atual",
+             sem_variavel.returncode == 2 and visto.is_file())
+        ausente = rodar_linha_de_gancho(
+            comando_com_o_interpretador(molde(".claude/hooks/nao-existe.py"),
+                                        sys.executable), raiz, raiz, True)
+        caso("gancho ausente sai 2, que barra, e diz qual arquivo faltou",
+             ausente.returncode == 2 and "nao-existe.py" in ausente.stderr)
+        antiga = ('python "${CLAUDE_PROJECT_DIR}/'
+                  + ARQUIVO_DO_GANCHO_DE_BRANCH + '"')
+        gancho_no_disco = raiz / ARQUIVO_DO_GANCHO_DE_BRANCH
+        gancho_no_disco.write_text("", encoding="utf-8")
+        evento = GANCHO_DO_VETO_DE_BRANCH.evento
+        gravar_configuracao_json(raiz / ARQUIVO_SETTINGS, {CHAVE_DOS_GANCHOS: {
+            evento: [{"matcher": GANCHO_DO_VETO_DE_BRANCH.matcher,
+                      CHAVE_DOS_GANCHOS: [{"type": TIPO_DE_COMANDO,
+                                           CHAVE_DO_COMANDO: antiga}]}]}})
+        with contextlib.redirect_stdout(io.StringIO()):
+            garantir_gancho_declarado(raiz, GANCHO_DO_VETO_DE_BRANCH)
+        blocos = json.loads((raiz / ARQUIVO_SETTINGS).read_text(
+            encoding="utf-8"))[CHAVE_DOS_GANCHOS][evento]
+        caso("a linha antiga, com a variável no texto, é reescrita no lugar "
+             "para o formato novo, sem duplicar o gancho",
+             len(blocos) == 1
+             and blocos[0][CHAVE_DOS_GANCHOS][0][CHAVE_DO_COMANDO]
+             == comando_com_o_interpretador(COMANDO_DO_VETO_DE_BRANCH))
+
+
+def casos_do_modulo_privado(caso) -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="montar-privado-") as pasta:
+        raiz = Path(pasta)
+        fonte = raiz / PASTA_MODULOS / "segredo" / ".agents" / "skills" / "s"
+        fonte.mkdir(parents=True)
+        (fonte / "SKILL.md").write_text("x", encoding="utf-8")
+        publico = raiz / PASTA_MODULOS / "aberto" / ".agents" / "aberto"
+        publico.mkdir(parents=True)
+        (publico / "a.py").write_text("y", encoding="utf-8")
+        em_uso = raiz / ORIGEM_SKILLS / "s"
+        em_uso.mkdir(parents=True)
+        (em_uso / "SKILL.md").write_text("x", encoding="utf-8")
+        outra = raiz / ORIGEM_SKILLS / "livre"
+        outra.mkdir(parents=True)
+        (outra / "SKILL.md").write_text("z", encoding="utf-8")
+        antes = sorted(modulos_que_viajam(raiz))
+        (raiz / PASTA_MODULOS / "segredo" / MARCA_DE_MODULO_PRIVADO
+         ).write_text("privado", encoding="utf-8")
+        caso("sem a marca, o módulo viaja como qualquer outro",
+             antes == ["aberto", "segredo"])
+        caso("com a marca, o módulo privado não viaja, e o aberto continua",
+             sorted(modulos_que_viajam(raiz)) == ["aberto"])
+        caso("a marca não é instalada: ela é da pasta do módulo, não do "
+             "destino",
+             MARCA_DE_MODULO_PRIVADO not in arquivos_de_um_modulo(
+                 raiz / PASTA_MODULOS / "segredo"))
+        caso("a cópia em uso e o espelho da skill privada saem da lista do "
+             "que é privado",
+             caminhos_de_modulos_privados(raiz)
+             == {".agents/skills/s/SKILL.md", ".claude/skills/s/SKILL.md"})
+        embutidas = paginas_no_disco(raiz)
+        caso("o instalador não embute a cópia em uso da skill privada, e "
+             "embute a skill que não é de módulo privado",
+             ".agents/skills/s/SKILL.md" not in embutidas
+             and ".agents/skills/livre/SKILL.md" in embutidas)
+        skill_aberta = raiz / PASTA_MODULOS / "aberto" / ".agents" / "skills" / "a"
+        skill_aberta.mkdir(parents=True)
+        (skill_aberta / "SKILL.md").write_text("w", encoding="utf-8")
+        copia_aberta = raiz / ORIGEM_SKILLS / "a"
+        copia_aberta.mkdir(parents=True)
+        (copia_aberta / "SKILL.md").write_text("w", encoding="utf-8")
+        caso("o instalador não embute a cópia em uso da skill de módulo "
+             "aberto: ela chega pelo módulo, e só a quem o liga",
+             ".agents/skills/a/SKILL.md" not in paginas_no_disco(raiz)
+             and ".agents/skills/livre/SKILL.md" in paginas_no_disco(raiz))
+    caso("o ignore gerado trata como lixo o temporário do Google Drive "
+         "para desktop, que nasce na raiz de pasta sincronizada",
+         "/.tmp.driveupload/" in IGNORAR_LIXO)
+
+
 def testar() -> int:
     if not e_a_casa_do_desenvolvimento(casa_do_instalador()):
         print(BANCADA_SO_NA_CASA)
@@ -2935,6 +3302,9 @@ def testar() -> int:
         molde = {}
     caso(CASO_MOLDE_E_JSON, isinstance(molde, dict) and molde)
     casos_do_espelho_sem_barra(caso)
+    casos_do_modulo_privado(caso)
+    casos_do_gancho_em_qualquer_concha(caso)
+    casos_da_ponte_do_devin_com_ensaio(caso)
     caso(CASO_MOLDE_POR_PREENCHER,
          "${" in str(molde.get("repositorio_das_issues", "")))
     caso(CASO_MOLDE_MANDA_PERGUNTAR,
@@ -3559,20 +3929,26 @@ def montar(raiz: Path) -> int:
     return 0
 
 
-def garantir_ponte_para_o_editor(raiz: Path) -> None:
-    if not pediram(BANDEIRA_COPILOT):
+def garantir_ponte_para_o_agente_sem_barra(raiz: Path,
+                                           escrevendo: bool) -> None:
+    destino = raiz / ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA
+    if destino.exists() and ler_json_ou_avisar(destino) == \
+            GANCHOS_DO_AGENTE_SEM_BARRA:
+        print(LOG_PONTE_SEM_BARRA_EM_DIA.format(
+            ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA))
         return
-    destino = raiz / ARQUIVO_DOS_GANCHOS_DO_EDITOR
-    if destino.exists() and json.loads(
-            destino.read_text(encoding="utf-8")) == GANCHOS_DO_EDITOR:
+    if not escrevendo:
+        print(ENSAIO_DA_PONTE_SEM_BARRA.format(
+            ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA, BANDEIRA_CODEX,
+            BANDEIRA_ESCREVER))
         return
     destino.parent.mkdir(parents=True, exist_ok=True)
-    gravar_configuracao_json(destino, GANCHOS_DO_EDITOR)
-    print(LOG_PONTE_DO_EDITOR.format(ARQUIVO_DOS_GANCHOS_DO_EDITOR))
+    gravar_configuracao_json(destino, GANCHOS_DO_AGENTE_SEM_BARRA)
+    print(LOG_PONTE_SEM_BARRA.format(ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA))
+    print(LOG_PONTE_SEM_BARRA_PEDE_CONFIANCA)
 
 
 def garantir_ponte_para_a_outra_ferramenta(raiz: Path) -> None:
-    garantir_ponte_para_o_editor(raiz)
     if not pediram(BANDEIRA_DEVIN):
         return
     arquivo = raiz / ARQUIVO_DOS_GANCHOS_DA_OUTRA
@@ -3626,8 +4002,15 @@ def main() -> int:
         return atualizar(raiz)
 
     if pediram(BANDEIRA_CODEX):
+        garantir_ponte_para_o_agente_sem_barra(
+            raiz, escrevendo=pediram(BANDEIRA_ESCREVER))
         return espelhar_mcp_para_o_agente_sem_barra(
             raiz, escrevendo=pediram(BANDEIRA_ESCREVER))
+
+    if pediram(BANDEIRA_DEVIN) and not pediram(BANDEIRA_ESCREVER):
+        print(ENSAIO_DA_PONTE_DO_DEVIN.format(
+            ARQUIVO_DOS_GANCHOS_DA_OUTRA, BANDEIRA_DEVIN, BANDEIRA_ESCREVER))
+        return 0
 
     return montar(raiz)
 
@@ -3717,9 +4100,9 @@ de consulta, não de sessão.
       `which` o dá por presente — receita que manda rodar `python3` ali ensina
       a sessão nova a concluir que a camada inteira não funciona. Julgue
       executando: `python -c "import sys; print(sys.version_info[0])"` tem de
-      responder `3`. Gancho não passa por isso porque vai pelo lançador
-      `.claude/hooks/interpretador.sh`, que escolhe o interpretador por
-      execução.
+      responder `3`. Gancho do Claude Code também depende disso: a linha chama
+      o Python pelo nome medido na instalação, e sem Python que responda volta
+      ao lançador `.claude/hooks/interpretador.sh`.
     - Uma medição não é medição. Onde a saída varia entre execuções iguais —
       escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e
       desconfie de diferença menor que ele. Rodada única não separa causa de
@@ -4095,7 +4478,7 @@ sessão; não há servidor nem API — o arquivo é o contrato.
         "Critério de aceitação se testa quando nasce: rode o comando do critério na hora de escrevê-lo e cole na issue a saída de partida, ainda vermelha. Critério que já falha por motivo que o trabalho nunca remove nasce mentindo, e treina a sessão a marcar a caixa sem prova. Vale também para cobrança de guarda: a que falha por motivo que a sessão nunca remove ensina a ignorar a cobrança inteira — cale-a com a razão escrita, nunca insista.",
         "Estado que se relata se lê na hora: antes de dizer a alguém o que falta numa issue, num pedido de incorporação ou num arquivo, abra e leia. Resumo de memória envelhece calado, e o que sai dele é dedução vestida de fato.",
         "Prova feita aqui não vale lá. Proposta que depende de ferramenta — instalar pacote, subir container, baixar modelo, registrar servidor MCP — vem com o comando de UMA linha que a pessoa roda no ambiente dela ANTES de tentar, e com o contorno quando ele já é conhecido. Ambiente corporativo trancado é a regra em empresa grande, não a exceção: proxy que reassina TLS com autoridade interna, política que barra comando de linha, registro de pacote bloqueado por categoria, proxy autenticado que derruba download de binário nativo. Quem propõe sem o teste do ambiente empurra a descoberta para quem instala, e ela custa o dobro lá.",
-        "O NOME do interpretador não é fato do mundo, é fato da máquina. As receitas desta camada escrevem `python`; onde esse nome não existir, use o Python 3 da máquina. Nunca julgue pelo `which`: em Windows `python3` é o atalho da loja de aplicativos, que está no PATH, sai sem rodar e o `which` o dá por presente — receita que manda rodar `python3` ali ensina a sessão nova a concluir que a camada inteira não funciona. Julgue executando: `python -c \\"import sys; print(sys.version_info[0])\\"` tem de responder `3`. Gancho não passa por isso porque vai pelo lançador `.claude/hooks/interpretador.sh`, que escolhe o interpretador por execução.",
+        "O NOME do interpretador não é fato do mundo, é fato da máquina. As receitas desta camada escrevem `python`; onde esse nome não existir, use o Python 3 da máquina. Nunca julgue pelo `which`: em Windows `python3` é o atalho da loja de aplicativos, que está no PATH, sai sem rodar e o `which` o dá por presente — receita que manda rodar `python3` ali ensina a sessão nova a concluir que a camada inteira não funciona. Julgue executando: `python -c \\"import sys; print(sys.version_info[0])\\"` tem de responder `3`. Gancho do Claude Code também depende disso: a linha chama o Python pelo nome medido na instalação, e sem Python que responda volta ao lançador `.claude/hooks/interpretador.sh`.",
         "Uma medição não é medição. Onde a saída varia entre execuções iguais — escolha de modelo, relógio, custo —, meça o ruído antes de comparar, e desconfie de diferença menor que ele. Rodada única não separa causa de acaso: ela devolve um número, e número sozinho parece fato. Medição sob carga não cala o instrumento: faz ele responder por outro instante. Repetir com a máquina livre é parte da prova, e o exit que se declara é o do comando medido, nunca o do cano nem o do `tail`.",
         "Conserto de máquina se faz nas ferramentas que a máquina de destino tem. Onde a camada se instala, o shell nativo do sistema e o subsistema Linux podem estar bloqueados por política: a régua que sobra é o shell POSIX do git e o Python. Receita que depende de ferramenta externa — cliente HTTP de linha de comando, por exemplo — nasce morta lá, e a sonda equivalente em Python viaja."
       ]
@@ -5132,119 +5515,6 @@ commita, empurra e publica está escrito no `AGENTS.md`, e só lá.
 - "vou apagar uma página do conhecimento que ninguém usa mais, pode?"
 - "pensei numa skill nova pra camada. me diz se ela passa ou não"
 ''',
-    '.agents/skills/reuniao-diaria/SKILL.md': '''\
----
-name: reuniao-diaria
-description: Reunião diária de 30 minutos entre o dono e a sessão — abre com o que mudou, tira impedimentos, decide o pacote da noite e fecha com minuta escrita no quadro. Use quando pedirem a daily, a reunião do dia, o planejamento da noite ou "o que entra hoje". Escopo — A REUNIÃO. Executar o pacote é do executor de roteiros, pela trabalho-por-issue; colher o que a sessão ensinou é da encerramento-de-sessao. Palavras que a acordam — "vamos fazer a daily", "reunião do dia", "o que roda hoje à noite".
----
-
-# Reunião diária
-
-Trinta minutos é a régua, não o gatilho de parada: **a reunião fecha quando o
-plano do dia existe.** Passou da hora sem plano, ela continua; saiu o plano
-antes, ela acaba antes. A reunião é conversa; o que fica dela é a
-**minuta**, escrita no quadro. Sem minuta não houve reunião.
-
-Se o repositório tiver voz, a sessão fala a abertura e cada pergunta — e escreve
-tudo, porque o texto é a minuta. O dono responde como quiser, inclusive só
-por texto. A voz é do repositório, não da camada: o comando mora onde o repositório guarda
-os scripts dela, e o dono o informa uma vez, no arquivo de instruções de
-usuário dele.
-
-## Antes de falar, meça
-
-Tudo por instrumento, nada de cabeça, e o resultado cabe em cinco linhas.
-Despejar a saída dos comandos é o erro caro desta etapa.
-
-- **Projetos.** A lista única é o campo `projetos` de `nucleo/executor.json`
-  — não existe outra. Ativo hoje é o que se moveu: commit nos últimos sete
-  dias no repositório dele (`git -C projetos/<repositorio> log
-  --since='7 days ago' --oneline`) ou linha aberta no quadro com a etiqueta
-  dele. Os demais ficam calados.
-- **O que espera pelo dono.** Cartão parado nele, sempre com o link — ele
-  decide do celular.
-- **A última minuta.** O comentário mais recente do quadro que começa por
-  "Minuta": o que ficou combinado é o ponto de partida, não a memória.
-- **Os canais onde o dono já conversa — onde ele abrir, e só.** Caixa de
-  entrada e mensageiro do trabalho, filtrados pelos assuntos que estão
-  abertos. **Espera de terceiro morre no canal onde foi feita:** o quadro só
-  sabe o que alguém digitou nele, e resposta que chegou por mensagem não
-  vira linha sozinha. Cada achado vira comentário na issue correspondente na
-  hora, com a data em que a resposta chegou — nunca fica só na conversa;
-  nome de pessoa de fora não atravessa para issue pública. **Onde a leitura
-  não couber — política da empresa, volume, canal corporativo —, quem filtra
-  é o dono:** ele traz o recorte na abertura e a sessão não vai atrás. Não é
-  perda; é a mesma fonte com outro portador. A minuta registra qual dos dois
-  caminhos valeu no dia.
-- **Os dois contadores da semana, lado a lado.** Entregas vistas por quem
-  recebe (PR mesclado nos últimos sete dias em cada repositório de projeto)
-  e mudanças na camada. **A camada não se conta pelo total do `git log`:**
-  esse número infla sozinho, porque artefato gerado obriga a regravar o
-  mesmo arquivo a cada parada, e mesclagem conta como trabalho sem ser.
-  Conte os commits que **não** revisitam arquivo já tocado na mesma semana:
-  é o que separa construção de retrabalho. A camada é meio; o termômetro é a
-  entrega. Os dois lado a lado é o que impede a ferramenta de virar o
-  trabalho.
-
-## A pauta, nesta ordem
-
-1. **Abertura, 5 min.** As cinco linhas da medição. A sessão diz a hora de
-   acabar.
-2. **Impedimentos, 5 min.** O que trava o dono. Uma pergunta por vez, e a
-   resposta vira linha no quadro ou item com link para ele — nunca fica só na
-   conversa.
-3. **O que entra, 15 min.** Para cada candidato, três perguntas, sempre as
-   mesmas: *o que quem recebe vê no fim?* — *qual a menor mudança que prova a
-   hipótese?* — *qual verificação diz que está pronto?* Candidato sem as três
-   respostas não entra hoje.
-4. **Fechamento, 5 min.** A minuta, lida e gravada.
-
-A sessão avisa na metade do tempo e quando a régua estoura — avisar não é
-encerrar. **Sem plano do dia não há fechamento**, e o aviso vira uma pergunta:
-o que falta decidir para termos o plano? O dono encurta dizendo; a sessão, não.
-
-## O pacote da noite
-
-Cada item que entra é uma issue com as três respostas escritas, no repositório
-que `nucleo/configuracao.json` declara — a receita é a skill
-`trabalho-por-issue`. O pacote são esses números, na minuta. Disparar o
-executor de roteiros é o passo seguinte e é decisão do dono na reunião.
-
-Nada roda sozinho. Reunião pulada é fila parada, e está certo assim: a
-próxima parte da última minuta.
-
-## Onde já há quem decida
-
-Onde o repositório tem quem prioriza e quem lidera a técnica, a reunião é a
-preparação do dono: a sessão é o par sênior que traduz o pedido recebido nas
-três respostas, e a minuta é o que ele leva.
-
-## A minuta
-
-Comentário novo no quadro, pelo instrumento que já existe:
-`python .agents/caixa/caixa.py relatar --corpo "..."`. Até quinze linhas:
-
-- Minuta de `<data>`
-- Impedimentos: um por linha, cada um com o destino que ganhou
-- Entra hoje: uma linha por issue, com a verificação que diz pronto
-- Espera pelo dono: o link
-- Contadores da semana: entregas vistas × mudanças na camada
-- A correção do dia: uma linha — o que o dono pediu de um jeito caro e como
-  sairia mais barato. É o item 4 da `encerramento-de-sessao`, em uma linha,
-  todo dia.
-- Próxima reunião: quando
-
-Ensaie antes de gravar, com `--ensaio`: o instrumento avisa palavra com
-dígito colado a letra, o erro mais comum de quem escreve número no meio da
-frase. Corrija e só então grave. Depois de gravar, releia o comentário no
-quadro: só é minuta o que está lá como você escreveu — regra 2.
-
-## Pedidos de exemplo
-
-- "vamos fazer a daily"
-- "reunião do dia: o que entra hoje à noite?"
-- "abre a reunião, tenho trinta minutos"
-''',
     '.agents/skills/trabalho-por-issue/references/moldes.md': '''\
 # Moldes do trabalho por issue
 
@@ -6105,8 +6375,8 @@ pedido do dono vem no fim.
    da loja de aplicativos: está no PATH, não roda, e `which` o dá por
    presente. Julgue executando
    (`python -c "import sys; print(sys.version_info[0])"`), nunca pelo nome.
-   Os ganchos não dependem disso: passam pelo lançador
-   `.claude/hooks/interpretador.sh`.
+   Os ganchos chamam o Python pelo nome medido na instalação, e voltam ao
+   lançador `.claude/hooks/interpretador.sh` só quando nenhum respondeu.
 8. **A árvore pode ser compartilhada.** Mais de uma sessão trabalha na mesma
    raiz: `git worktree list`, `git status --short` e
    `git branch --show-current` antes de qualquer `git`. Nunca `checkout`,
@@ -6133,7 +6403,7 @@ pedido do dono vem no fim.
 python .agents/camada/camada.py --abertura
 ```
 
-Com a raiz por extenso quando você não estiver nela. Ele prova quatro peças e falha alto nomeando a que falta: o arquivo de
+Fora da raiz, acrescente `--raiz` com o caminho por extenso. Ele prova quatro peças e falha alto nomeando a que falta: o arquivo de
 instruções na raiz (regra 1), a declaração dos servidores de contexto
 (`.mcp.json`), o endereço do quadro de issues (`nucleo/executor.json`) e o
 índice de pé (`.agents/indice/alvos.json` mais as duas portas). Peça que
@@ -6181,12 +6451,11 @@ precisa abrir dois.
 | indexar um projeto, criar ou atualizar o perfil de um vizinho | skill `perfil-de-repositorio` | o perfil mora em `conhecimento/projetos/`, fora do git |
 | só pesquisar, sem escrever no repositório | a marca `ATLAS_SO_LEITURA` no ambiente (seção abaixo) | a cerca fecha a escrita e a cobrança de destino cala; entrega na issue |
 | a camada foi atualizada aqui | página `conhecimento/verificacao-pos-atualizacao.md` | prova a instalação e caça o resto da versão anterior |
-| provar que o agente lê a camada | página `conhecimento/prova-de-leitura-do-agente.md` | tabela com saída colada, em comentário de issue |
+| provar que o agente lê a camada | seção "Prova de leitura" do checklist `.agents/prompts/partida.md` | tabela com saída colada, em comentário de issue |
 | organizar `conhecimento/` e `projetos/` | página `conhecimento/organizar-conhecimento-e-projetos.md` | lista antes de mover; apagar é do dono |
-| auditar a camada de fora, para derrubar | página `conhecimento/auditoria-externa-da-camada.md` | medir antes de afirmar; achado vira linha do quadro |
+| auditar a camada de fora, para derrubar | seção "A auditoria externa" de `execucoes/LEIAME.md` | medir antes de afirmar; achado vira linha do quadro |
 | fechar uma conclusão antes de agir sobre ela | skill `verificacao-adversarial` | provado / provável / não provado |
 | dar um trabalho por pronto | skill `analise-de-promocao` | o que dele vira genérico |
-| a reunião do dia | skill `reuniao-diaria` | minuta no quadro |
 | encerrar o dia | skill `encerramento-de-sessao` | colhe o que a sessão ensinou |
 
 Cinco hábitos que a bancada mediu faltarem, qualquer que seja o caminho:
@@ -6204,7 +6473,7 @@ Cinco hábitos que a bancada mediu faltarem, qualquer que seja o caminho:
 - **Duas tentativas no mesmo obstáculo e pare**: leia a receita ou pergunte,
   em vez de trocar de ferramenta. Trocar de ferramenta seis vezes é sinal de
   que a receita existe e não foi lida.
-- **Trabalho em vizinho tem receita escrita**, `execucoes/mexida-em-vizinho.md`
+- **Trabalho em vizinho tem receita escrita**, na seção "Mexida em repositório vizinho" de `execucoes/LEIAME.md`
   — instrumento da camada não se descobre por `--help` nem lendo o fonte.
 - **Edite só as linhas pedidas, com a ferramenta de edição** — nunca
   `sed -i`, nunca script próprio que reescreve o arquivo. Se o diff mostrar o
@@ -6322,6 +6591,7 @@ inventário vivo é `conhecimento/guarda-mecanica-das-regras.md`.
 | `avisar-sessao-paralela` | outra sessão viva na mesma raiz | aviso, uma vez: `git add` por caminho, e diga à outra o que vai tocar |
 | `vetar-caminho-relativo-apos-cd` | `cd <pasta>` seguido de caminho relativo | caminho absoluto, ou `git -C` |
 | `vetar-escrita-em-sessao-de-pesquisa` | com `ATLAS_SO_LEITURA` posta, qualquer escrita dentro da raiz | pasta temporária da máquina; o que vale vai para a issue |
+| `vetar-despejo-de-ambiente` | comando que despeja o ambiente sem nomear a variável (`env`, `printenv`, `set`, `export -p`, `os.environ` inteiro, `gci env:`); pergunta com gente na sessão e recusa quando não há quem responda | leia a variável pelo nome; faltando o nome, liste só nomes: `compgen -e`, `(gci env:).Name`, `sorted(os.environ)` |
 | `vetar-documento-rastreavel` | `.pdf`, `.docx`, `.pptx`, `.xlsx`… nascendo onde o git rastrearia | pasta fora do git; ou declare em `.claude/documentos-versionados.txt` |
 | `cobrar-apresentacao-da-entrega` | na parada, vizinho com `apresentacao` no cadastro recebeu mescla desta sessão e o transcript não mostra, depois dela, navegação ao endereço declarado pelo navegador do dono (e voz, se pedida) | abra a integração no navegador dele, troque para o perfil que a prova pede, percorra o entregue narrando, defenda produção; só então o relato |
 
@@ -6512,6 +6782,347 @@ O pedido do dono vem a seguir — como argumento do comando de barra, ou colado
 aqui, no fim. Antes de agir: o primeiro comando, a leitura do que faltou, e a
 escolha do caminho na tabela acima, dita em uma linha.
 ''',
+    '.agents/prompts/partida.md': '''\
+---
+description: O checklist de partida da camada — roda ANTES do briefing, prova item por item que a sessão tem instruções, interpretador, cercas, servidores de contexto, índice, skills e a caixa de ferramentas dos projetos, e devolve como primeira resposta o relatório padronizado de GO, GO DEGRADADO ou NO-GO.
+---
+
+# Partida — o checklist antes do briefing
+
+Este é o checklist de partida. Ele vem **antes** do bootstart: o briefing
+ensina como se trabalha aqui; a partida prova que a máquina que vai trabalhar
+está inteira. Ele não ensina nada e não conserta nada — mede, e devolve um
+veredito. Ela roda **sob demanda**, em qualquer agente: quando o dono pede,
+ou quando a abertura acusa peça em falta. Não é o primeiro ato de toda
+sessão, porque custa caro: medido em 15/09/2026 no Codex, a partida inteira
+levou quase três minutos e dezenas de milhares de tokens antes de o pedido
+começar. Os ganchos de abertura e as cercas já guardam o dia a dia; a partida
+serve para provar a máquina quando há dúvida, depois de mudar a camada ou ao
+estrear um agente. No Claude Code ela é `/partida`.
+
+A forma vem da cabine e do box. Da aviação: fluxo antes, checklist depois;
+desafio e resposta; itens que matam primeiro; lista de equipamento mínimo; e
+o poll de GO ou NO-GO, uma palavra por posto. Da telemetria de corrida: um
+carimbo de tempo só para todas as medições; cada canal com o momento em que
+se mede; referência declarada em vez de sensação; alarme com dono; e o rádio
+curto, no mesmo formato em toda sessão. O que não foi medido não aconteceu.
+
+## Como se responde
+
+- **Fluxo antes, checklist depois.** O fluxo já existe: a saúde da abertura
+  (`camada.py --abertura`), os ganchos de abertura onde há, o `git status`.
+  Nenhum item manda executar por executar; cada item confirma que o fluxo
+  saiu certo, com o comando rodado e a saída colada.
+- **Desafio e resposta.** O desafio é o nome do item, em maiúsculas. A
+  resposta é o valor observado, em vocabulário fechado de quatro palavras:
+  `PRESENTE <valor>`, `AUSENTE`, `NÃO MEDIDO <motivo>`, `INOPERANTE <desde
+  quando, o que fica sem, alternativa, limite>`. "ok", "feito" e
+  "confirmado" não são resposta: a linha conta como não respondida.
+- **Um item por vez, em ordem, uma chamada de cada vez.** "Itens 1 a 5 ok"
+  é bloco, e bloco reprova a fase; script que junta vários itens numa
+  chamada só engana a cerca e esconde qual saída é de qual item (medido).
+  Chamada em paralelo também reprova: o carimbo tem de vir antes de tudo.
+  Item com dois comandos roda os dois em chamadas seguidas; o que reprova é
+  juntar itens, não separar comandos.
+  Sem saída colada não aconteceu (regra 2). Item que dá negativo pede a
+  contraprova na mesma linha: a busca que acha, a recusa com a mensagem.
+- **O checklist só lê.** Nenhum item grava, instala ou liga peça. Comando
+  que você não achou aqui e parece ensaio pode gravar: medido, as bandeiras
+  das pontes do instalador gravam na hora. Na dúvida, não rode, e responda
+  NÃO MEDIDO.
+- **Os comandos rodam em qualquer shell.** São `git`, `python` e `ls`. O
+  `ls` só mostra; toda contagem é em `python`, porque no PowerShell o `ls`
+  conta arquivo de ponto e muda o número (medido). Se o seu shell não tiver
+  um deles, traduza e diga na linha que traduziu. **A sonda do item 7 nunca
+  se traduz:** `cd` e `cat` existem em toda concha, também como apelidos no
+  PowerShell, e a cerca só conhece a forma literal. Traduzida para
+  `Set-Location` e `Get-Content`, ela passa pela cerca e mede nada (medido).
+- **NÃO MEDIDO nunca vira GO.** Em item que mata, NÃO MEDIDO é NO-GO. Em
+  item da lista de equipamento mínimo, entra no GO DEGRADADO pelo nome e
+  pelo motivo. Sessão sem cabeça, sem comando de barra ou sem gente no
+  terminal mede pelo efeito: todo item abaixo tem uma prova que não depende
+  de comando de barra. Responder de cor é o erro que este checklist existe
+  para impedir.
+- **Que sessão é esta.** Sessão que escreve é a que vai mudar arquivo,
+  commitar, mesclar ou postar. Sessão de pesquisa tem a marca
+  `ATLAS_SO_LEITURA`, ou um pedido que só lê, como pedir só este checklist.
+  O tipo sai do pedido e vai na linha 1 do relatório.
+- **Itens que matam.** Raiz errada, interpretador que não é 3, autorizações
+  não lidas, cercas mortas em sessão que vai escrever, endereço das issues
+  ausente em sessão que vai postar, branch de longa duração como alvo de
+  commit. Qualquer um deles é NO-GO: a sessão para no passo que a falta
+  impede e escreve a razão.
+- **Lista de equipamento mínimo.** Índice, servidor de contexto opcional,
+  conector do cliente, perfil de navegador, postagem no rastreador e ponte
+  por agente podem seguir INOPERANTES — só com as quatro coisas na linha:
+  desde quando, o que fica sem (a skill ou o passo que dependia), a
+  alternativa nomeada, e o limite (esta sessão). Faltou uma, é NO-GO.
+- **Veredito em uma linha**, vocabulário fechado: `GO`; `GO DEGRADADO em
+  <n> item(ns): <nomes>`; `NO-GO em <item>: <o passo que a falta impede>`.
+- **Quem age no vermelho** vem na linha: a sessão conserta e prova; o dono
+  decide, e o item vira a pergunta única no começo da resposta, com o link
+  do que espera por ele; ou o gancho recusa, e a recusa é a prova.
+- **Interrupção.** Interrompido no item N, a resposta é "partida parada no
+  item N"; atende, e retoma repetindo o N. Perdeu o lugar (contexto
+  comprimido): refaz a fase inteira. Toda sonda daqui é repetível sem custo.
+- **O vocabulário e a lista dos que matam só mudam por decisão do dono**,
+  com data e motivo (regra 20). Item novo entra só se for crítico, costumar
+  ser esquecido, não ter gancho que já o cubra e ter resposta específica.
+
+## Fase 1 — PARTIDA: o motor
+
+Roda uma vez, antes de qualquer outro comando. Os comandos supõem a raiz (a
+pasta com o `AGENTS.md`) como diretório atual, como o briefing supõe.
+
+| n | desafio | comando | resposta esperada | se falhar, quem age |
+| --- | --- | --- | --- | --- |
+| 1 | CARIMBO | `python -c "import datetime, os; print(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'SO_LEITURA=' + os.environ.get('ATLAS_SO_LEITURA', ''), 'ETAPA=' + os.environ.get('ENCADEADOR_ETAPA', ''))"` | um carimbo só, que vai na linha 1 do relatório. Marca vazia liga o conjunto comum; `ATLAS_SO_LEITURA` liga o de pesquisa (escrita fechada); `ENCADEADOR_ETAPA` liga o de etapa do executor (política fechada) | informativo: linha sem carimbo não se compara com nada |
+| 2 | INTERPRETADOR | `python -c "import sys; print(sys.version_info[0])"` | `3`. `which` e o nome `python3` não são prova: no Windows `python3` pode ser o atalho da loja, que está no PATH e não roda | NO-GO: nenhum instrumento abaixo vale; a sessão conserta antes |
+| 3 | RAIZ | `git rev-parse --show-toplevel` e `ls AGENTS.md` | a raiz do git igual ao diretório atual, e o `AGENTS.md` listado. Em subpasta a sessão roda sem skill nem gancho da raiz e nada avisa (regra 1) | NO-GO: reabra na raiz |
+| 4 | ABERTURA | `python .agents/camada/camada.py --abertura` | `Abertura íntegra: 4 peça(s) de pé.` As quatro peças, cada uma PRESENTE ou AUSENTE: instruções, servidores declarados, endereço do quadro, índice. Duas ausências não são falta: repositório sem servidor e sem módulo do índice abrem íntegros | peça AUSENTE vai na primeira resposta, sem chute; as três últimas se destrincham nos itens 6, 10 e 13 |
+| 5 | AUTORIZAÇÕES | `python -c "import json; print(json.load(open('nucleo/configuracao.json', encoding='utf-8'))['autorizacoes'])"` | os três valores citados: commit, push, publicar. Omissão não é permissão (regra 9) | NO-GO para sessão que vai commitar ou publicar sem os ter lido |
+| 6 | QUADRO | `python .agents/camada/camada.py --quadro` | o endereço `dono/repositório` onde toda issue nasce, mesmo a de código que mora em outro lugar. Em relatório que vai para arquivo rastreado, `PRESENTE <quadro>` sem o valor: o repositório da camada é público | `nucleo/executor.json` é local e não viaja para worktree nem nuvem: AUSENTE, declarado. NO-GO só no passo que posta: issue, relato, linha do quadro |
+| 7 | CERCA VIVA | `cd nucleo; cat regras.json`, literal, sozinho, numa chamada só | RECUSADO, com a mensagem da regra 1 inteira. Passou e imprimiu o arquivo: as cercas não estão nesta sessão. Só a recusa prova que a linha do gancho achou o Python e a raiz, que o despachante subiu e que a cerca carregou; a sonda enterrada num script com outros itens passa sem ser vista | NO-GO para sessão que escreve, commita ou mescla (regra 9 sem guarda); informativo na sessão que só pesquisa |
+| 8 | GANCHOS DESTA SESSÃO | `git log -1 --format='%cI %h' -- .claude/settings.json .claude/hooks .codex .devin` | data anterior ao carimbo do item 1. Gancho novo só carrega em sessão nova, e nada avisa | data posterior: NÃO MEDIDO, reabra a sessão |
+| 9 | ÁRVORE | `git status --short; git branch --show-current; git worktree list` | os três valores citados. Sujeira que você não fez é outra sessão viva: não commite, não apague, não conserte. Repete-se antes de todo `git` | NO-GO para commit se a branch atual for de longa duração (`branches_por_incorporacao`); na partida é informativo |
+
+Última linha da fase, literal: `PARTIDA COMPLETA`. Sem ela a fase não vale.
+
+## Fase 2 — CAIXA: as ferramentas
+
+Roda antes de abrir o primeiro arquivo do pedido. É o inventário do que a
+sessão tem à mão, provado peça a peça: nascer sabendo o que há na caixa é o
+que evita procurar um navegador que já está declarado, ou prometer um
+conector que não existe neste agente.
+
+| n | desafio | comando | resposta esperada | se falhar, quem age |
+| --- | --- | --- | --- | --- |
+| 10 | SERVIDORES | para cada servidor que o `.mcp.json` declara, uma chamada barata que só lê: quem sou, listar abas, estado de um alvo do índice (o caminho do alvo, não a raiz: pela raiz ele responde "não indexado" e mente) | declarado é o que o item 4 listou; vivo é o prefixo do servidor na sua lista de ferramentas mais a primeira linha da resposta colada. Sem chamada, NÃO MEDIDO: o cliente não guarda em disco quem conectou, e token vencido lista ferramentas e falha na primeira chamada | `INOPERANTE <nome> desde <hora>, sem <o que dependia>, alternativa <busca sem servidor, gh, túnel>, limite esta sessão`. NO-GO só quando o pedido depende dele |
+| 11 | CONECTORES | a lista de ferramentas do cliente: e-mail, arquivos, notas, agenda; e uma chamada barata que só lê em cada um que aparecer (listar etiquetas, listar calendários) | conector conta só com a chamada respondida, em qualquer agente. No Claude Code a ferramenta de estado dos conectores da sessão já traz cada um com estado. Agente sem conector nenhum: `AUSENTE (não existe neste agente)`, dito na primeira resposta, antes de o dono pedir. Conector que aparece na lista e não foi chamado é NÃO MEDIDO, nunca PRESENTE: medido, uma sessão afirmou "presentes" sem chamar nenhum | vira INOPERANTE só quando o pedido nomeia o conector: `alternativa: o dono envia ou cola` |
+| 12 | NAVEGADOR | o servidor de navegador do `.mcp.json` e os perfis salvos: `ls .credenciais/playwright` | o servidor vivo por uma chamada que lista abas, e os NOMES dos perfis, nunca o conteúdo. A receita de tela de cada vizinho mora no perfil dele em `conhecimento/projetos/`. A pasta de perfis é local e não viaja para worktree nem nuvem: lá, AUSENTE declarado | pedido de tela com navegador INOPERANTE ou perfil ausente: NO-GO para dar por pronto, porque a régua do pronto inclui abrir a tela |
+| 13 | ÍNDICE | `python .agents/indice/indexar.py --estado`, depois a contraprova `python .agents/indice/buscar.py "<termo do pedido>" --alvo <alvo do pedido> --quantos 3`; sem pedido ainda, `--alvo conhecimento` e um termo que existe na camada, como `regra 16` | `LIGADO`, as duas portas respondendo, a linha de falhas, e três trechos com caminho e linha. O alvo é uma chave de `.agents/indice/alvos.json`, nunca `.`: vizinho fora da lista devolve vazio, e vazio não é ausência. Em worktree o alvo resolve para a pasta da worktree, que a ronda não indexou: INOPERANTE esperado, e a busca vale na raiz principal. Não busque durante a ronda | `INOPERANTE índice para <alvo>, sem a busca por significado, alternativa grep -rn, limite esta sessão`; alvo que falhou na ronda ou está fora da lista vai ao dono com a linha do `--estado` |
+| 14 | SKILLS | `python -c "import os; pastas = lambda p: sorted(d for d in os.listdir(p) if os.path.isdir(os.path.join(p, d))); print(pastas('.agents/skills')); print(pastas('.claude/skills'))"`, contra a lista que o seu agente carregou | as duas listas iguais, só pastas, e a sua lista com todas as da pasta que o seu agente lê (seção por aeronave). Dois-pontos na descrição invalida a skill em silêncio | falta uma: degradado, nomeando qual. Lista vazia: raiz errada, volte ao item 3 |
+| 15 | CÓPIA | `python montar.py --verificar` | `Tudo em dia — nada a sincronizar.` Editou a fonte, regenere e prove (regra 15) | degradado na partida; obrigatório verde antes de entregar |
+| 16 | AMBIENTE | `python -c "import json, shutil; d = json.load(open('nucleo/ambiente.json', encoding='utf-8')); print({c: bool(shutil.which(c)) for c in d['comando'] + ['python', 'npx', 'docker']})"` e `python -c "import os, re; t = open('.mcp.json', encoding='utf-8').read(); print({v: v in os.environ for v in sorted(set(re.findall('[$][{]([A-Za-z0-9_]+)[}]', t)))})"` | só `True` nos dois: cada comando que `nucleo/ambiente.json` declara, mais os três de que índice e navegador dependem, para o ambiente que ainda não os declara, e cada variável que o `.mcp.json` pede, por NOME. Nome se verifica; valor nunca se imprime | peça `False`: INOPERANTE no item que dela depende; sem `git` em sessão que commita é NO-GO |
+| 17 | REGRA POR CAMINHO | `ls .claude/rules` | a regra do padrão de código, que o Claude Code carrega ao abrir arquivo de código. Nos outros agentes, `AUSENTE (não existe neste agente)`: lá o padrão chega pela skill `padrao-de-codigo`, invocada | informativo |
+
+Última linha da fase, literal: `CAIXA COMPLETA`.
+
+## Por aeronave
+
+Cada agente mede os mesmos 17 itens; muda o instrumento e a armadilha. A
+seção do seu agente substitui só o que ela nomeia.
+
+### Claude Code
+
+- Chegada: `/partida`, quando o dono pede. Os ganchos de abertura já rodaram
+  o fluxo: os avisos de ambiente, servidor e índice aparecem no transcript,
+  ou o silêncio deles.
+- Item 3: os ganchos leem a raiz por `CLAUDE_PROJECT_DIR`, que existe só no
+  ambiente deles, não no terminal da sessão; `echo` dele vazio não é falta.
+  A prova de que gancho e sessão olham a mesma raiz é a recusa do item 7.
+- Item 7: `/hooks` lista as matrículas; `claude doctor` nomeia arquivo de
+  configuração rejeitado. A prova continua sendo a recusa.
+- Itens 10 e 11: no aplicativo, a ferramenta de estado dos conectores da
+  sessão; no terminal, os prefixos `mcp__` na lista de ferramentas, com
+  conector como `mcp__claude_ai_<nome>__`.
+- Item 14: `/skills` contra a lista de `.claude/skills` do item 14; comando
+  de barra aparece como skill a mais. Sem cabeça (`claude -p`, subagente) não há barra: vale
+  o efeito.
+- Item 17: `/context` mostra a regra depois de abrir um arquivo de código.
+
+### Codex
+
+- Chegada: quando o dono pede, pelo nome do arquivo. Prompt customizado está descontinuado
+  na ferramenta; a forma de chegar é instruções mais skills. No Windows os
+  comandos rodam em PowerShell: por isso o checklist só usa `git`, `python`
+  e `ls`, e a sonda do item 7 vai sozinha, nunca dentro de um script.
+- Item 7: a recusa da sonda, quando vem, prova tudo de uma vez: raiz
+  confiada, ponte carregada, cerca viva. Só quando a sonda PASSA a suspeita
+  tem ordem: primeiro `grep -B1 -A1 trust_level ~/.codex/config.toml`, que
+  tem de mostrar esta raiz como `trusted`, porque projeto não confiado ignora
+  a pasta `.codex/` inteira, configuração e ganchos, em silêncio; depois a
+  confiança dos três ganchos de `.codex/hooks.json`, porque gancho que o dono
+  não revisou é ignorado sem linha de log. Ela se dá só pelo `/hooks` do Codex
+  de terminal: o aplicativo de mesa não tem esse comando. Fica em
+  `~/.codex/config.toml`, uma entrada por gancho em `[hooks.state]` com o
+  hash do arquivo, e vale também para o aplicativo de mesa (medido em
+  15/09/2026). Mudou o `.codex/hooks.json`, a confiança se dá de novo. Só o
+  dono confia.
+- Item 8 soma `python montar.py --codex` (ensaio): o espelho do `.mcp.json`
+  em `~/.codex/config.toml` tem de estar em dia. `codex mcp list` mostra
+  declaração; vivo é a chamada do item 10.
+- Item 14: `/skills` contra a lista de `.agents/skills` do item 14: o Codex
+  lê a fonte, não a cópia.
+- Item 10: no aplicativo de mesa, os comandos passam por uma ferramenta de
+  execução, e os servidores ficam no objeto `tools` dela, com nomes
+  `mcp__<servidor_com_sublinhado>__<ferramenta>`. Procure ali antes de dizer
+  que servidor nenhum está disponível: medido em 15/09/2026, a sessão disse
+  "nenhum" com os cinco vivos. Sem cabeça, `codex exec` só chama ferramenta
+  de servidor aprovada: `-c 'mcp_servers.<nome>.tools.<ferramenta>.approval_mode="approve"'`
+  libera uma só, sem soltar shell nem escrita.
+- Item 11: o aplicativo pode trazer conectores próprios como ferramenta;
+  conta só o que respondeu a uma chamada barata, e sem chamada é NÃO MEDIDO. Item 12: navegador e voz: `codex features list` mostra
+  `browser_use` e `in_app_dictation` com `stable true`; a conversa por voz
+  existe só no aplicativo de mesa, é outra peça, e o ditado só transcreve o
+  pedido.
+
+### Devin
+
+- Chegada: quando o dono pede, pelo nome do arquivo. Na nuvem `nucleo/executor.json` não
+  existe, porque não entra no git: item 6 AUSENTE, declarado.
+- `devin rules list`, `devin skills list` e `devin mcp list` são inventário
+  do disco, não prova de carga; a prova é o efeito, nos itens 7, 10 e 14.
+- Item 7: `.devin/hooks.v1.json` presente é ponte ligada; ausente, as
+  cercas não valem aqui, e escrita segue só com o dono no terminal. Ligar a
+  ponte é decisão do dono: `python montar.py --devin` só ensaia, e com
+  `--escrever` monta a camada na pasta e liga a ponte. Na nuvem os ganchos
+  falham abertos por desenho: nunca contam como muro.
+- Sem cabeça (`devin -p`), a recusa do item 7 encerra a sessão antes do
+  relatório (medido). Ali não rode a sonda: responda NÃO MEDIDO, e a prova
+  de fora é `python .agents/travessia/travessia.py`, que manda as sondas à
+  ponte sem abrir sessão. No plano gratuito o `devin -p` só roda comando sem
+  aprovação com `--permission-mode dangerous`, que também libera escrita:
+  ali a ponte é a única guarda.
+- Item 14: lê `.agents/skills` e `.devin/skills`, não `.claude/`.
+- Item 11: conector só com chamada respondida; sem nenhum na lista, AUSENTE.
+  Item 12: o navegador é o do próprio agente, e a prova é a captura de tela
+  com a URL visível.
+
+### Copilot, no editor e no terminal
+
+- Chegada: quando o dono pede, pelo nome do arquivo; o `AGENTS.md` só a
+  aponta. No editor a leitura do `AGENTS.md` depende da configuração
+  `chat.useAgentsMdFile`; a lista de instruções do chat mostra o arquivo
+  carregado. No terminal, `/instructions`.
+- Item 7: com a pasta confiada, o Copilot roda direto as cercas do
+  `.claude/settings.json`, sem ponte: ele entrega `CLAUDE_PROJECT_DIR` no
+  ambiente e a entrada no formato do Claude (medido no CLI oficial em
+  15/09/2026). A recusa da sonda prova tudo. Sem recusa, a primeira suspeita
+  é a pasta fora de `trustedFolders` em `~/.copilot/config.json`: pasta não
+  confiada não carrega gancho nenhum do repositório, em silêncio, e o item é
+  INOPERANTE, com escrita só com o dono no terminal.
+- Item 10: o Copilot traz um servidor próprio do GitHub embutido, que não é
+  o `github` declarado: chamada nele não prova o declarado. Medido no
+  `copilot -p` sem a pasta confiada: os servidores do `.mcp.json` não
+  subiram, então cada um é NÃO MEDIDO. No editor ele lê `.vscode/mcp.json`, que a camada não gera: pode
+  abrir sem servidor nenhum, AUSENTE, declarado.
+- Item 14: lê `.github/skills`, `.claude/skills` e `.agents/skills`: contagem
+  em dobro é skill duplicada, achado para o dono, não falta. Comando de barra
+  de `.claude/commands/` pode aparecer como skill a mais: também não é falta.
+- Item 11: conector só com chamada respondida; sem nenhum na lista, AUSENTE.
+
+## O relatório
+
+É a primeira resposta da sessão, no lugar do molde "A primeira resposta da
+sessão" do briefing, que ele estende. Rádio curto: mesmo formato em toda
+sessão, número só ao lado do comando que o produziu. `cabeça` é `sim` quando
+há gente no terminal para responder a uma pergunta; é `não` em `claude -p`,
+`codex exec`, `devin -p`, `copilot -p`, subagente e roteiro do executor.
+
+```
+PARTIDA <carimbo> · agente <claude|codex|devin|copilot> · cabeça <sim|não> · conjunto <comum|pesquisa|etapa> · sessão <escreve|pesquisa>
+| n | desafio | comando | saída colada | resposta | quem age |
+| 1 | CARIMBO | date -u ... | 2026-09-15T12:00:00Z | PRESENTE | ninguém |
+| ... | | | | | |
+PARTIDA COMPLETA
+| 10 | SERVIDORES | ... | ... | PRESENTE 4 de 5; INOPERANTE <nome> desde <hora>, sem <o que dependia>, alternativa <...>, limite esta sessão | dono |
+| ... | | | | | |
+CAIXA COMPLETA
+Veredito: GO DEGRADADO em 1 item: SERVIDORES
+O que faltou: <prova que não rodou, cerca que barrou, peça ausente; ou "nada">
+Espera por você: <o item cuja decisão é do dono, com o link; ou "nada">
+```
+
+Depois do veredito vem o briefing: leia `.agents/prompts/bootstart.md`
+inteiro e diga, em uma linha, qual caminho da tabela dele o pedido segue. O
+relatório e essa linha abrem a primeira resposta, e **não a encerram**: com
+GO ou GO DEGRADADO, o pedido do dono é atendido na mesma vez, logo abaixo.
+Parar no relatório deixa o dono sem o que pediu (medido). Relatório colado em
+issue ou comentário leva a mesma tabela; em arquivo rastreado, sem o valor
+do quadro nem nome de conta.
+
+## Depois da partida
+
+- `GO` ou `GO DEGRADADO`: siga para o briefing e atenda o pedido na mesma
+  resposta, sem esperar o dono dizer "continue".
+- `NO-GO`: pare no passo que a falta impede, escreva a razão, e faça o que
+  não depende dela. Item que é do dono vira a pergunta única no começo da
+  resposta, com o link. Relatar não é pedir licença (regra 19).
+- Defeito da camada que a partida revelou não se conserta na sessão: vira
+  linha do quadro por `python .agents/caixa/caixa.py defeito --id <kebab>
+  --assunto "..."`, com o número citado no relato.
+
+## Prova de leitura: quando o pedido é provar que o agente lê a camada
+
+A partida prova que as peças estão de pé. Quando o dono pede mais — que o
+agente mostre que **lê** as instruções e as skills —, a sessão segue estes
+passos depois do relatório, com saída colada, ou diz exatamente o que não
+enxerga.
+
+1. **Skills.** O item 14 já comparou a sua lista com a pasta que o seu agente
+   lê. O que está na pasta e não apareceu na sua lista é skill que você NÃO
+   lê. Se a cópia e a fonte divergem, é defeito de sincronização, não de
+   leitura: o item 15 acusa.
+2. **Responda sem abrir arquivo:** quais são as nove barreiras do portão da
+   camada, na ordem? Só depois abra `.agents/skills/portao/SKILL.md` e
+   confira. Acertou os nove nomes na ordem: você leu a skill. Inventou ou
+   pulou: não leu. Diga qual foi.
+3. **Responda sem abrir arquivo:** o que este repositório manda fazer antes
+   de criar algo novo, e quem pode publicar? Depois abra `AGENTS.md` e
+   confira. "Procurar e citar o que já existe" e "publicar é do dono" são as
+   respostas que provam a leitura.
+4. **Diga de onde você lê instrução e skill** — o nome exato dos arquivos e
+   pastas que o seu agente carrega neste repositório, pela seção do seu
+   agente acima. Se você não sabe, diga "não sei", nunca chute.
+5. **Repita 2 e 3 numa conversa nova**, porque uma medição não é medição: a
+   escolha de skill varia entre conversas.
+
+A entrega é uma tabela, colada num comentário da issue que pediu a prova:
+
+| passo | resultado | prova colada |
+| --- | --- | --- |
+| skills que enxergo | N de M da pasta | as duas listas do item 14 |
+| barreiras do portão | acertei / errei em ... | a resposta antes de abrir |
+| ordem do AGENTS.md | acertei / errei em ... | a resposta antes de abrir |
+| de onde leio | arquivos e pastas | a lista, ou "não sei" |
+| repetição | igual / diferente em ... | a segunda rodada |
+
+E um veredito em uma linha: **leio os dois**, **leio só as skills**, **leio só
+o AGENTS.md** ou **não leio nenhum**. Onde não ler, o que faltou, com nome:
+arquivo que o agente não carrega, configuração que falta, política que barra.
+Nada de suposição. A prova não instala nada, não muda configuração e não edita
+a camada: o que barrar é achado para o dono, com a mensagem exata.
+
+## De onde vem a forma
+
+Resumo próprio; o texto de cada fonte fica no endereço.
+
+- Fluxo antes e checklist depois, desafio e resposta, itens críticos
+  primeiro, a frase que fecha a fase e a lista dos erros clássicos: FAA,
+  Advisory Circular 120-71B
+  (<https://www.faa.gov/documentlibrary/media/advisory_circular/ac_120-71b.pdf>),
+  e Degani e Wiener para a NASA, "Human Factors of Flight-Deck Checklists"
+  (<https://www.faa.gov/sites/faa.gov/files/2022-11/NASA%20Ames%20Rpt%20CR%20177549%20.pdf>).
+- Chamadas padronizadas com vocabulário fechado, e a interrupção que retoma
+  pelo item: Flight Safety Foundation, ALAR Briefing Notes 1.4 e 1.5
+  (<https://flightsafety.org/wp-content/uploads/2016/09/alar_bn1-5-checklists.pdf>).
+- Lista de equipamento mínimo, que despacha com item inoperante declarado, e
+  o que nunca pode estar inoperante: 14 CFR 91.213
+  (<https://www.law.cornell.edu/cfr/text/14/91.213>) e AC 91-67A.
+- O poll de GO ou NO-GO, uma palavra por posto, e a lista de parâmetros com
+  limite amarelo e vermelho: NASA, controle de lançamento da Artemis
+  (<https://www.nasa.gov/wp-content/uploads/2024/06/ops-cept-001-mod-ii-go-nogo-rev-508.pdf>).
+- Tabelas de registro por canal, carimbo de tempo único e sincronização de
+  fontes: especificação técnica da unidade de controle padrão da FIA
+  (<https://legal.fia.com/web/appeloffre.nsf/2A59DE0C92F81BE5C12587E6004401A6/$FILE/Appendix1_TechnicalSpecifications.pdf>).
+- Declaração assinada antes da primeira sessão de pista, e a volta de
+  instalação que atravessa tudo de ponta a ponta antes do trabalho real:
+  regulamento esportivo da Fórmula 1 de 2026, artigo B3.1
+  (<https://www.fia.com/system/files/documents/fia_2026_f1_regulations_-_section_b_sporting_-_iss_05_-_2026-02-27.pdf>),
+  e o glossário oficial dos testes de pré-temporada
+  (<https://www.formula1.com/en/latest/article/from-aero-rakes-to-flow-vis-5-key-terms-you-need-to-know-for-f1-pre-season-testing.7gcryzPYiJAm1FqJGIrC9u>).
+''',
     'conhecimento/verificacao-pos-atualizacao.md': '''\
 # A camada foi atualizada — verifique e limpe antes de trabalhar
 
@@ -6577,9 +7188,11 @@ chama não precisa existir — e instalar por precaução é sujeira futura.
       sai sem rodar e engana o `which`; em Linux enxuto `python` pode não
       existir. Julgue executando, nunca pelo nome:
       `python -c "import sys; print(sys.version_info[0])"` — e se esse nome
-      não responder `3`, tente `python3`. Os ganchos não dependem disso:
-      eles passam pelo lançador `.claude/hooks/interpretador.sh`, que
-      escolhe o interpretador por execução.
+      não responder `3`, tente `python3`. Os ganchos do Claude Code dependem
+      disso: a linha de cada um chama o Python pelo nome medido na
+      instalação; sem Python que responda, ela volta ao lançador
+      `.claude/hooks/interpretador.sh`, que escolhe o interpretador por
+      execução.
 - [ ] `gh auth status` — necessário se o repositório abre issue, comenta ou
       mexe no quadro. Se a camada aqui move cartão de projeto, a linha de
       escopos precisa trazer `project`; só `repo` comenta e etiqueta, mas
@@ -6657,59 +7270,6 @@ repositório da camada, não aqui). Não apaga nada fora da lista do
 instrumento sem perguntar. Não commita sem o repositório autorizar em
 `nucleo/configuracao.json`, campo `autorizacoes` — omissão não é
 permissão.
-''',
-    'conhecimento/prova-de-leitura-do-agente.md': '''\
-# Prove que você lê a camada — antes de trabalhar
-
-Receita para QUALQUER agente de IA aberto na raiz de um repositório que
-instalou a camada: peça ao agente que a siga inteira e responda. Serve para o
-agente de terminal, o assistente do editor e o Claude Code. O objetivo é um
-só: o agente prova, com saída colada, que enxerga as instruções e as skills
-que este repositório carrega — ou diz exatamente o que não enxerga.
-
-## O que você faz, nesta ordem
-
-1. **Liste as skills que você enxerga agora**, pelo nome, sem abrir pasta
-   nenhuma. Depois rode `ls .claude/skills` — a cópia que o runtime carrega,
-   não a fonte em `.agents/skills` — e compare: o que está na pasta e não
-   apareceu na sua lista é skill que você NÃO lê. Cole as duas listas. Se a
-   cópia e a fonte divergem, isso é defeito de sincronização, não de
-   leitura: rode `python montar.py --sincronizar` antes de julgar.
-2. **Responda sem abrir arquivo:** quais são as nove barreiras do portão da
-   camada, na ordem? Só depois abra `.agents/skills/portao/SKILL.md` e
-   confira. Acertou os nove nomes na ordem: você leu a skill. Inventou ou
-   pulou: não leu. Diga qual foi.
-3. **Responda sem abrir arquivo:** o que este repositório manda fazer antes
-   de criar algo novo, e quem pode publicar? Depois abra `AGENTS.md` e
-   confira. "Procurar e citar o que já existe" e "publicar é do dono" são as
-   respostas que provam a leitura.
-4. **Diga de onde você lê instrução e skill** — o nome exato dos arquivos e
-   pastas que o seu runtime carrega neste repositório. Se você não sabe,
-   diga "não sei", nunca chute.
-5. **Repita 1 a 3 numa conversa nova**, porque uma medição não é medição: a
-   escolha de skill varia entre conversas.
-
-## O que você entrega
-
-Uma tabela, colada num comentário da issue que pediu esta prova:
-
-| passo | resultado | prova colada |
-| --- | --- | --- |
-| skills que enxergo | N de M da pasta | as duas listas |
-| barreiras do portão | acertei / errei em ... | a resposta antes de abrir |
-| ordem do AGENTS.md | acertei / errei em ... | a resposta antes de abrir |
-| de onde leio | arquivos e pastas | a lista, ou "não sei" |
-| repetição | igual / diferente em ... | a segunda rodada |
-
-E um veredito em uma linha: **leio os dois**, **leio só as skills**, **leio só
-o AGENTS.md** ou **não leio nenhum**. Onde não ler, o que faltou, com nome:
-arquivo que o runtime não carrega, configuração que falta, política que barra.
-Nada de suposição.
-
-## O que você NÃO faz
-
-Não instale nada, não mude configuração, não edite a camada. Se algo barrar,
-isso é achado para o dono, com a mensagem exata — não conserto seu.
 ''',
     'conhecimento/organizar-conhecimento-e-projetos.md': '''\
 # Organize `conhecimento/` e `projetos/` pelas regras da camada
@@ -10083,6 +10643,7 @@ if __name__ == "__main__":
 import argparse
 import ast
 import contextlib
+import fnmatch
 import functools
 import io
 import json
@@ -10112,6 +10673,7 @@ CHAVE_DA_SAIDA_DO_GANCHO = "hookSpecificOutput"
 CHAVE_DO_CONTEXTO_INJETADO = "additionalContext"
 RAIZ_NO_COMANDO = "${CLAUDE_PROJECT_DIR}"
 RAIZ_NO_COMANDO_SEM_CHAVES = "$CLAUDE_PROJECT_DIR"
+VARIAVEL_DA_RAIZ_NO_AMBIENTE = "CLAUDE_PROJECT_DIR"
 ENTRADA_VAZIA_DO_GANCHO = "{}"
 TEMPO_DE_UM_GANCHO = 30
 PASTA_DAS_SKILLS = ".claude/skills"
@@ -10332,6 +10894,8 @@ CAMINHO_DE_GANCHO = re.compile(r"\\.claude/hooks/[^\\"'\\s]+\\.py")
 GANCHO_DO_DESPACHANTE = f"{PASTA_DOS_GANCHOS}/despachar-cercas.py"
 BLOCO_DAS_CERCAS = re.compile(r"^CERCAS = \\((.*?)^\\)", re.M | re.S)
 CERCA_DECLARADA = re.compile(r'\\("([A-Za-z0-9_-]+)",\\s*"([^"]*)"')
+BRIEFING_DA_SESSAO = ".agents/prompts/bootstart.md"
+LINHA_DA_CERCA_NA_TABELA = "| `{}` |"
 CARACTERES_DE_GLOB = "*?["
 INSTRUMENTOS_QUE_FICAM = {
     ".agents/camada/testes.py": (
@@ -10350,11 +10914,6 @@ INSTRUMENTOS_QUE_FICAM = {
         "modulos/, execucoes/, os instrumentos da raiz — não existem em "
         "quem instala, e o manual gerado lá descreveria o que não está no "
         "disco"),
-    ".agents/auditor/promover.py": (
-        "põe no quadro o achado que o auditor nomeou: é a colheita de "
-        "melhoria deste repositório. Quem instala recebe o auditor que "
-        "verifica e acusa, sem bandeira para ligar a promoção — bandeira "
-        "que existe alguém liga"),
 }
 INSTRUMENTO_DE_MODULO_DE_MENTIRA = ".agents/mod/mod.py"
 INSTALADOR_DE_MENTIRA = (
@@ -10377,11 +10936,16 @@ INSTALADOR_ILEGIVEL = ("Matrícula NÃO MEDIDA: {} não se deixou ler — {}. A 
                        "medida.")
 LINHA_DO_SALDO = "  {:<52} {}"
 SALDO_NAO_VIAJA = "não viaja — rastreado e fora do FONTES"
+PASTA_DOS_MODULOS_DA_MATRICULA = "modulos"
+MARCA_DE_MODULO_PRIVADO = "MODULO_PRIVADO"
 SALDO_ORFA = "órfã — matriculada e ausente do disco"
 SALDO_SEM_DECLARACAO = "ligado no settings.json sem GanchoDeclarado"
 SALDO_DESLIGADO = ("declarado no montar.py e desligado no settings.json")
 SALDO_MATCHER_DIVERGENTE = ("matcher diferente no despachante e no "
                             "instalador — um dos dois mente")
+SALDO_FORA_DO_BRIEFING = ("cerca que o despachante roda sem linha na tabela "
+                          "de ganchos do briefing — a sessão leva a recusa "
+                          "sem saber que ela existe")
 SALDO_EXCECAO_VELHA = "exceção que envelheceu — declarada e fora do git"
 INTERPRETADOR_QUE_SOME = (
     "  INTERPRETADOR QUE SOME: `{0}` está registrado no comando de gancho e "
@@ -10795,11 +11359,12 @@ def bytes_que_os_ganchos_injetam(raiz: Path) -> tuple:
     for comando in comandos_de_abertura(raiz):
         real = comando.replace(RAIZ_NO_COMANDO, str(raiz)).replace(
             RAIZ_NO_COMANDO_SEM_CHAVES, str(raiz))
+        ambiente = dict(os.environ, **{VARIAVEL_DA_RAIZ_NO_AMBIENTE: str(raiz)})
         try:
             pronto = subprocess.run(
                 real, shell=True, input=ENTRADA_VAZIA_DO_GANCHO,
                 capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=raiz,
-                timeout=TEMPO_DE_UM_GANCHO)
+                env=ambiente, timeout=TEMPO_DE_UM_GANCHO)
         except (OSError, subprocess.SubprocessError):
             cegos += 1
             continue
@@ -10979,6 +11544,22 @@ def numeros_dos_pedidos_abertos(raiz: Path, base: str, cabeca: str):
             if isinstance(p, dict) and CHAVE_DO_NUMERO_DO_PEDIDO in p]
 
 
+MARCA_DA_BUSCA_FEITA_POR_QUEM_CHAMOU = "ATLAS_BUSCA_FEITA"
+VALIDADE_DA_MARCA_DA_BUSCA_S = 30
+
+
+def quem_chamou_ja_buscou(branches, ambiente=None, agora=None) -> bool:
+    marca = (os.environ if ambiente is None else ambiente).get(
+        MARCA_DA_BUSCA_FEITA_POR_QUEM_CHAMOU, "")
+    instante, _, buscadas = marca.partition("|")
+    try:
+        idade = (time.time() if agora is None else agora) - float(instante)
+    except ValueError:
+        return False
+    return (0 <= idade <= VALIDADE_DA_MARCA_DA_BUSCA_S
+            and set(branches) <= set(buscadas.split(",")))
+
+
 def o_que_espera_incorporacao(raiz: Path, atual: str,
                               consultar_pedidos=numeros_dos_pedidos_abertos
                               ) -> int:
@@ -10995,9 +11576,10 @@ def o_que_espera_incorporacao(raiz: Path, atual: str,
         print(PEDIDO_PULADO_SEM_INTEGRACAO.format(
             ARQUIVO_DO_EXECUTOR, CHAVE_DAS_BRANCHES, CHAVE_DA_INTEGRACAO))
         return SAIDA_LIMPA
-    codigo, falha = corre(
+    codigo, falha = ((0, "") if quem_chamou_ja_buscou(
+        (integracao, incorporacao)) else corre(
         COMANDO_DA_BUSCA_NO_REMOTO.format(integracao, incorporacao),
-        tempo=TEMPO_DA_REDE, cwd=raiz)
+        tempo=TEMPO_DA_REDE, cwd=raiz))
     if codigo != 0:
         print(PEDIDO_BUSCA_NAO_MEDIDA.format(integracao, incorporacao,
                                              falha.splitlines()[-1]
@@ -11149,6 +11731,53 @@ def estado_do_cliente_sobre_os_servidores(raiz: Path, declarados: list,
     return "\\n".join(linhas)
 
 
+CHAVE_DA_LISTA_PERMITIDA = "allowedMcpServers"
+FONTES_DA_LISTA_PERMITIDA_NA_CASA = (".claude/remote-settings.json", ".claude/settings.json")
+FONTES_DA_LISTA_PERMITIDA_NO_PROJETO = (".claude/settings.local.json", ".claude/settings.json")
+MCP_BARRADO_PELA_LISTA = (
+    "  a lista permitida barra {} deste(s): {} — o cliente nem tenta subir e\\n"
+    "  não avisa; o comando ou o endereço declarado tem de casar exato com uma\\n"
+    "  entrada de allowedMcpServers, e só vale em sessão aberta depois.")
+
+
+def entradas_da_lista_permitida(raiz: Path, casa: Path):
+    entradas, achou = [], False
+    candidatos = ([casa / f for f in FONTES_DA_LISTA_PERMITIDA_NA_CASA]
+                  + [raiz / f for f in FONTES_DA_LISTA_PERMITIDA_NO_PROJETO])
+    for arquivo in candidatos:
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        lista = dado.get(CHAVE_DA_LISTA_PERMITIDA) if isinstance(dado, dict) else None
+        if isinstance(lista, list):
+            achou = True
+            entradas.extend(e for e in lista if isinstance(e, dict))
+    return entradas if achou else None
+
+
+def servidor_passa_pela_lista(nome: str, declaracao: dict, entradas: list) -> bool:
+    comandos = [e["serverCommand"] for e in entradas if "serverCommand" in e]
+    enderecos = [e["serverUrl"] for e in entradas if "serverUrl" in e]
+    nomes = {e.get("serverName") for e in entradas if "serverName" in e}
+    if "command" in declaracao:
+        linha = [declaracao["command"], *declaracao.get("args", [])]
+        return linha in comandos if comandos else nome in nomes
+    if "url" in declaracao:
+        return (any(fnmatch.fnmatchcase(declaracao["url"], padrao) for padrao in enderecos)
+                if enderecos else nome in nomes)
+    return nome in nomes
+
+
+def servidores_barrados_pela_lista(raiz: Path, declarados: dict, casa: Path) -> list:
+    entradas = entradas_da_lista_permitida(raiz, casa)
+    if entradas is None:
+        return []
+    return sorted(nome for nome, declaracao in declarados.items()
+                  if isinstance(declaracao, dict)
+                  and not servidor_passa_pela_lista(nome, declaracao, entradas))
+
+
 def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
     alvo = raiz / ARQUIVO_DA_DECLARACAO_DE_MCP
     if not alvo.is_file():
@@ -11166,6 +11795,10 @@ def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
     declaracao = MCP_DECLARADO.format(ARQUIVO_DA_DECLARACAO_DE_MCP,
                                       len(nomes), ", ".join(nomes))
     estado = estado_do_cliente_sobre_os_servidores(raiz, nomes, casa=casa)
+    barrados = servidores_barrados_pela_lista(
+        raiz, declarados, Path.home() if casa is None else casa)
+    if barrados:
+        estado = MCP_BARRADO_PELA_LISTA.format(len(barrados), ", ".join(barrados)) + "\\n" + estado
     return True, f"{declaracao}\\n{estado}"
 
 
@@ -11606,6 +12239,17 @@ def divergencias_do_despachante(raiz: Path) -> list:
     return saldos
 
 
+def cercas_fora_da_tabela_do_briefing(raiz: Path) -> list:
+    try:
+        tabela = (raiz / BRIEFING_DA_SESSAO).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return [(caminho, SALDO_FORA_DO_BRIEFING)
+            for caminho in sorted(cercas_do_despachante(raiz))
+            if LINHA_DA_CERCA_NA_TABELA.format(Path(caminho).stem)
+            not in tabela]
+
+
 def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
                         declarados: set) -> list:
     embutidos = embutidos_sob(raiz, fontes, f"{PASTA_DOS_GANCHOS}/")
@@ -11627,10 +12271,21 @@ def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
     return saldos
 
 
+def instrumentos_de_modulo_privado(raiz: Path) -> set:
+    base = raiz / PASTA_DOS_MODULOS_DA_MATRICULA
+    if not base.is_dir():
+        return set()
+    return {arquivo.relative_to(pasta).as_posix()
+            for pasta in base.iterdir()
+            if pasta.is_dir() and (pasta / MARCA_DE_MODULO_PRIVADO).is_file()
+            for arquivo in pasta.rglob("*.py") if arquivo.is_file()}
+
+
 def saldos_dos_instrumentos(raiz: Path, instrumentos: list, fontes: tuple,
                             por_modulo: set) -> list:
     viajam = (embutidos_sob(raiz, fontes, f"{PASTA_DOS_INSTRUMENTOS}/")
-              | por_modulo | set(INSTRUMENTOS_QUE_FICAM))
+              | por_modulo | set(INSTRUMENTOS_QUE_FICAM)
+              | instrumentos_de_modulo_privado(raiz))
     saldos = [(c, SALDO_NAO_VIAJA) for c in instrumentos if c not in viajam]
     saldos += [(c, SALDO_EXCECAO_VELHA)
                for c in sorted(INSTRUMENTOS_QUE_FICAM)
@@ -11659,6 +12314,7 @@ def matricula(raiz: Path) -> int:
     saldos = saldos_da_matricula(raiz, ganchos, fontes, declarados)
     saldos += saldos_dos_instrumentos(raiz, instrumentos, fontes, por_modulo)
     saldos += divergencias_do_despachante(raiz)
+    saldos += cercas_fora_da_tabela_do_briefing(raiz)
     for caminho, motivo in saldos:
         print(LINHA_DO_SALDO.format(caminho, motivo))
     fora_do_git = ganchos_ligados_fora_do_git(raiz, ganchos)
@@ -12521,6 +13177,9 @@ def main() -> int:
                          "entrega e acerto de rota, para comparar versões")
     ap.add_argument("--resumo", action="store_true",
                     help="só o JSON, para comparar entre rodadas")
+    ap.add_argument("--raiz", default=None,
+                    help="a raiz a medir, por extenso; sem ela, o diretório "
+                         "atual")
     ap.add_argument(BANDEIRA_DE_TESTE, action="store_true",
                     dest="testar", help="roda os casos deste instrumento")
     a = ap.parse_args()
@@ -12533,7 +13192,7 @@ def main() -> int:
             return 0
         return testar()
 
-    raiz = Path.cwd()
+    raiz = Path(a.raiz).resolve() if a.raiz else Path.cwd()
     if not (raiz / PASTA_DO_CONHECIMENTO).is_dir():
         sys.exit(FORA_DA_RAIZ.format(PASTA_DO_CONHECIMENTO))
 
@@ -14917,6 +15576,7 @@ SAIDA_QUE_BARRA = 2
 FERRAMENTA = "devin"
 ONDE_A_OUTRA_LE_GANCHO = ".devin/hooks.v1.json"
 BANDEIRA = f"--{FERRAMENTA}"
+BANDEIRA_QUE_ESCREVE = "--escrever"
 RAIZ_QUE_A_OUTRA_DA = "DEVIN_PROJECT_DIR"
 
 BARRA = "barra"
@@ -15042,8 +15702,8 @@ def medir_o_custo(raiz, pedido):
 
 def preparar(raiz, alvo):
     subprocess.run(["git", "init", "-q", "."], cwd=alvo, check=False)
-    subprocess.run([INTERPRETADOR, str(Path(raiz) / "montar.py"), BANDEIRA],
-                   cwd=alvo, capture_output=True, check=False)
+    subprocess.run([INTERPRETADOR, str(Path(raiz) / "montar.py"), BANDEIRA,
+                    BANDEIRA_QUE_ESCREVE], cwd=alvo, capture_output=True, check=False)
     (Path(alvo) / ARQUIVO_EXECUTOR).write_text(
         json.dumps(CONFIGURACAO_MINIMA), encoding="utf-8")
     print(f"camada instalada e ponte ligada em {alvo}")
@@ -15164,39 +15824,90 @@ PALAVRA_QUE_RECUSA_NA_OUTRA = "block"
 SAIDA_QUE_BARRA = 2
 RECUSADO_SEM_MOTIVO_DITO = "recusado sem motivo dito"
 
-COMO_O_ASSISTENTE_DO_EDITOR_CHAMA_A_MESMA_COISA = {
-    "bash": "Bash", "powershell": "PowerShell", "edit": "Edit",
-    "create": "Write", "write": "Write", "view": "Read", "read": "Read"}
-CHAVE_DA_FERRAMENTA_NO_EDITOR = "toolName"
-CHAVE_DOS_ARGUMENTOS_NO_EDITOR = "toolArgs"
-CHAVE_DO_CWD_NO_EDITOR = "cwd"
+CHAVE_DO_CWD = "cwd"
 RAIZ_QUE_A_OUTRA_FERRAMENTA_DA = "DEVIN_PROJECT_DIR"
 RAIZ_QUE_AS_CERCAS_LEEM = "CLAUDE_PROJECT_DIR"
 EVENTO_PADRAO = "PreToolUse"
 CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
 MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
 
+BANDEIRA_DO_CODEX = "--codex"
+FERRAMENTA_DE_PATCH_DO_CODEX = "apply_patch"
+CAMPO_DO_COMANDO = "command"
+MARCA_DE_ARQUIVO_NOVO = "*** Add File: "
+MARCA_DE_ARQUIVO_MUDADO = "*** Update File: "
+MARCA_DE_ARQUIVO_APAGADO = "*** Delete File: "
+MARCA_DE_FIM_DO_PATCH = "*** End Patch"
+MARCA_DE_TRECHO = "@@"
+COMANDO_QUE_APAGA = "rm"
+CHAVE_DO_NOME_DO_EVENTO = "hookEventName"
+EVENTO_DE_PARADA = "Stop"
+
+
+def escritas_de_um_patch(patch: str) -> list:
+    escritas, atual = [], None
+
+    def fechar():
+        if not atual:
+            return
+        ferramenta, caminho, tiradas, postas = atual
+        if ferramenta == "Write":
+            escritas.append(("Write", {"file_path": caminho,
+                                       "content": "\\n".join(postas)}))
+        else:
+            escritas.append(("Edit", {"file_path": caminho,
+                                      "old_string": "\\n".join(tiradas),
+                                      "new_string": "\\n".join(postas)}))
+
+    for linha in str(patch).splitlines():
+        if linha.startswith(MARCA_DE_ARQUIVO_NOVO):
+            fechar()
+            atual = ("Write", linha[len(MARCA_DE_ARQUIVO_NOVO):].strip(),
+                     [], [])
+        elif linha.startswith(MARCA_DE_ARQUIVO_MUDADO):
+            fechar()
+            atual = ("Edit", linha[len(MARCA_DE_ARQUIVO_MUDADO):].strip(),
+                     [], [])
+        elif linha.startswith(MARCA_DE_ARQUIVO_APAGADO):
+            fechar()
+            atual = None
+            caminho = linha[len(MARCA_DE_ARQUIVO_APAGADO):].strip()
+            escritas.append(("Bash", {CAMPO_DO_COMANDO:
+                                      f"{COMANDO_QUE_APAGA} {caminho}"}))
+        elif linha.startswith(MARCA_DE_FIM_DO_PATCH):
+            fechar()
+            atual = None
+        elif atual is None or linha.startswith(MARCA_DE_TRECHO):
+            continue
+        elif linha.startswith("+"):
+            atual[3].append(linha[1:])
+        elif linha.startswith("-"):
+            atual[2].append(linha[1:])
+        else:
+            atual[2].append(linha[1:])
+            atual[3].append(linha[1:])
+    fechar()
+    return escritas
+
+
+def pedidos_no_dialeto_do_codex(pedido: dict) -> list:
+    chegou = pedido.get("tool_name", "")
+    entrada = pedido.get("tool_input") or {}
+    if chegou == FERRAMENTA_DE_PATCH_DO_CODEX:
+        return [dict(pedido, tool_name=ferramenta, tool_input=escrita)
+                for ferramenta, escrita in escritas_de_um_patch(
+                    entrada.get(CAMPO_DO_COMANDO, ""))]
+    comando = entrada.get(CAMPO_DO_COMANDO)
+    if isinstance(comando, list):
+        entrada = dict(entrada, **{CAMPO_DO_COMANDO: " ".join(map(str, comando))})
+        return [dict(pedido, tool_input=entrada)]
+    return [pedido]
+
 
 def raiz_do_repositorio(pedido=None):
-    dito = (pedido or {}).get(CHAVE_DO_CWD_NO_EDITOR)
+    dito = (pedido or {}).get(CHAVE_DO_CWD)
     return Path(os.environ.get(RAIZ_QUE_A_OUTRA_FERRAMENTA_DA) or dito
                 or Path.cwd())
-
-
-def veio_do_assistente_do_editor(pedido) -> bool:
-    return CHAVE_DA_FERRAMENTA_NO_EDITOR in pedido
-
-
-def no_dialeto_das_cercas(pedido):
-    if not veio_do_assistente_do_editor(pedido):
-        return pedido
-    chegou = str(pedido.get(CHAVE_DA_FERRAMENTA_NO_EDITOR, ""))
-    argumentos = pedido.get(CHAVE_DOS_ARGUMENTOS_NO_EDITOR) or {}
-    return {"hook_event_name": EVENTO_PADRAO,
-            "tool_name": COMO_O_ASSISTENTE_DO_EDITOR_CHAMA_A_MESMA_COISA.get(
-                chegou.lower(), chegou),
-            "tool_input": argumentos if isinstance(argumentos, dict) else {},
-            CHAVE_DO_CWD_NO_EDITOR: pedido.get(CHAVE_DO_CWD_NO_EDITOR, "")}
 
 
 def cercas_que_a_ferramenta_de_origem_rodaria(raiz, evento, ferramenta):
@@ -15234,16 +15945,34 @@ def a_recusa_e_o_ensino_de_uma_cerca(saida, codigo):
     return None, ensino
 
 
+def comando_com_a_raiz_expandida(comando: str, raiz) -> str:
+    raiz_posix = str(raiz).replace("\\\\", "/")
+    return (comando.replace("${" + RAIZ_QUE_AS_CERCAS_LEEM + "}", raiz_posix)
+            .replace("$" + RAIZ_QUE_AS_CERCAS_LEEM, raiz_posix))
+
+
 def pergunta_para_as_cercas(pedido_da_outra_ferramenta, ferramenta):
     pergunta = dict(pedido_da_outra_ferramenta, tool_name=ferramenta)
     pergunta.setdefault(CAMPO_DO_MODO_DE_PERMISSAO, MODO_SEM_QUEM_RESPONDA)
     return pergunta
 
 
-def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):
+def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta, codex=False):
+    pedidos = (pedidos_no_dialeto_do_codex(pedido_da_outra_ferramenta)
+               if codex else [pedido_da_outra_ferramenta])
+    ensinos = []
+    for pedido in pedidos:
+        recusa, ensino = a_recusa_e_o_ensino_de_um_pedido(pedido)
+        if recusa is not None:
+            return recusa, None
+        if ensino:
+            ensinos.append(ensino)
+    return None, "\\n".join(ensinos) or None
+
+
+def a_recusa_e_o_ensino_de_um_pedido(pedido_da_outra_ferramenta):
     raiz = raiz_do_repositorio(pedido_da_outra_ferramenta)
-    pedido_da_outra_ferramenta = no_dialeto_das_cercas(pedido_da_outra_ferramenta)
-    chegou = pedido_da_outra_ferramenta.get("tool_name", "")
+    chegou =pedido_da_outra_ferramenta.get("tool_name", "")
     evento = pedido_da_outra_ferramenta.get("hook_event_name", EVENTO_PADRAO)
     ferramenta = COMO_A_OUTRA_FERRAMENTA_CHAMA_A_MESMA_COISA.get(chegou, chegou)
 
@@ -15253,6 +15982,7 @@ def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta):
     ensinos = []
     for comando in cercas_que_a_ferramenta_de_origem_rodaria(raiz, evento,
                                                              ferramenta):
+        comando = comando_com_a_raiz_expandida(comando, raiz)
         try:
             corrida = subprocess.run(comando, shell=True, cwd=raiz, env=ambiente,
                                      input=json.dumps(pergunta),
@@ -15303,21 +16033,138 @@ CASOS_DO_NOME = (("write", "Write"), ("edit", "Edit"), ("exec", "Bash"),
                  ("ask_user_question", "AskUserQuestion"),
                  ("glob", "glob"))
 
-CASOS_DO_EDITOR = (
-    ({"toolName": "bash", "toolArgs": {"command": "rm x"}, "cwd": "/r"},
-     {"hook_event_name": "PreToolUse", "tool_name": "Bash",
-      "tool_input": {"command": "rm x"}, "cwd": "/r"}),
-    ({"toolName": "create", "toolArgs": {"file_path": "a.py"}},
-     {"hook_event_name": "PreToolUse", "tool_name": "Write",
-      "tool_input": {"file_path": "a.py"}, "cwd": ""}),
-    ({"tool_name": "exec", "tool_input": {"command": "ls"}},
-     {"tool_name": "exec", "tool_input": {"command": "ls"}}),
-)
 
 CASOS_DO_CASADOR = (("Write", ["cerca-da-escrita", "cerca-de-tudo"]),
                     ("Bash", ["cerca-do-shell", "cerca-de-tudo"]),
                     ("Read", ["cerca-de-tudo"]))
 
+PATCH_DE_EXEMPLO = """*** Begin Patch
+*** Add File: novo.py
++import os
++print(os.name)
+*** Update File: velho.py
+@@ def f():
+ contexto
+-antigo
++novo
+*** Delete File: fora.py
+*** End Patch"""
+PEDIDO_DE_PATCH = {"hook_event_name": "PreToolUse",
+                   "tool_name": "apply_patch",
+                   "tool_input": {"command": PATCH_DE_EXEMPLO}}
+CERCA_QUE_BARRA_A_PARADA = 'print(\\'{"decision": "block", "reason": "falta x"}\\')\\n'
+TEMPO_DA_PONTE_VISTA_DE_FORA_S = 60
+
+
+def a_parada_do_codex_vista_de_fora():
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        cerca = Path(tmp) / "cerca.py"
+        cerca.write_text(CERCA_QUE_BARRA_A_PARADA, encoding="utf-8")
+        declarado = Path(tmp) / ONDE_AS_CERCAS_SAO_DECLARADAS
+        declarado.parent.mkdir(parents=True)
+        declarado.write_text(json.dumps({CHAVE_DOS_GANCHOS: {EVENTO_DE_PARADA: [
+            {CHAVE_DOS_GANCHOS: [
+                {CHAVE_DO_COMANDO: f'"{sys.executable}" "{cerca}"'}]}]}}),
+            encoding="utf-8")
+        corrida = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), BANDEIRA_DO_CODEX],
+            input=json.dumps({"hook_event_name": EVENTO_DE_PARADA}),
+            env=dict(os.environ, **{RAIZ_QUE_A_OUTRA_FERRAMENTA_DA: tmp}),
+            capture_output=True, text=True, encoding="utf-8",
+            timeout=TEMPO_DA_PONTE_VISTA_DE_FORA_S)
+        return corrida.returncode, json.loads(corrida.stdout or "null")
+
+
+CERCA_NOVA_QUE_BARRA = ('import json\\nprint(json.dumps({"hookSpecificOutput": '
+                        '{"permissionDecision": "deny", '
+                        '"permissionDecisionReason": "falta y"}}))\\n')
+PROGRAMA_QUE_RODA_A_CERCA = (
+    "import os,sys,runpy;"
+    "r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();"
+    "a=os.path.join(r,sys.argv[1]);"
+    "sys.argv=[a];sys.path[0]=os.path.dirname(a);"
+    "runpy.run_path(a,run_name='__main__')")
+
+
+def a_cerca_sem_variavel_no_texto_vista_de_fora():
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        cerca = Path(tmp) / ".claude" / "hooks" / "cerca-nova.py"
+        cerca.parent.mkdir(parents=True)
+        cerca.write_text(CERCA_NOVA_QUE_BARRA, encoding="utf-8")
+        (Path(tmp) / ONDE_AS_CERCAS_SAO_DECLARADAS).write_text(json.dumps(
+            {CHAVE_DOS_GANCHOS: {EVENTO_PADRAO: [
+                {CHAVE_DO_CASADOR: "Bash", CHAVE_DOS_GANCHOS: [
+                    {CHAVE_DO_COMANDO: f'"{sys.executable}" -c '
+                                       f'"{PROGRAMA_QUE_RODA_A_CERCA}" '
+                                       '.claude/hooks/cerca-nova.py'}]}]}}),
+            encoding="utf-8")
+        ambiente = {k: v for k, v in os.environ.items()
+                    if k != RAIZ_QUE_AS_CERCAS_LEEM}
+        ambiente[RAIZ_QUE_A_OUTRA_FERRAMENTA_DA] = tmp
+        corrida = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve())],
+            input=json.dumps({"tool_name": "exec",
+                              "tool_input": {"command": "ls"}}),
+            env=ambiente, capture_output=True, text=True, encoding="utf-8",
+            timeout=TEMPO_DA_PONTE_VISTA_DE_FORA_S)
+        return corrida.returncode, json.loads(corrida.stdout or "null")
+
+
+def casos_do_codex():
+    return (
+        ("patch: arquivo novo vira Write com o conteúdo das linhas postas",
+         escritas_de_um_patch(PATCH_DE_EXEMPLO)[0],
+         ("Write", {"file_path": "novo.py",
+                    "content": "import os\\nprint(os.name)"})),
+        ("patch: arquivo mudado vira Edit com o que saiu e o que entrou",
+         escritas_de_um_patch(PATCH_DE_EXEMPLO)[1],
+         ("Edit", {"file_path": "velho.py", "old_string": "contexto\\nantigo",
+                   "new_string": "contexto\\nnovo"})),
+        ("patch: arquivo apagado vira o comando que apaga",
+         escritas_de_um_patch(PATCH_DE_EXEMPLO)[2],
+         ("Bash", {"command": "rm fora.py"})),
+        ("o pedido de patch vira um pedido por arquivo, no nome das cercas",
+         [p["tool_name"] for p in pedidos_no_dialeto_do_codex(PEDIDO_DE_PATCH)],
+         ["Write", "Edit", "Bash"]),
+        ("comando de shell em lista vira uma linha só",
+         pedidos_no_dialeto_do_codex(
+             {"tool_name": "Bash",
+              "tool_input": {"command": ["git", "push"]}})[0]["tool_input"],
+         {"command": "git push"}),
+        ("pedido comum passa inteiro e sozinho",
+         pedidos_no_dialeto_do_codex({"tool_name": "Read", "tool_input": {}}),
+         [{"tool_name": "Read", "tool_input": {}}]),
+        ("recusa para o codex sai no dialeto longo com o nome do evento",
+         resposta_para_quem_perguntou(PEDIDO_DE_PATCH, "porque sim", codex=True),
+         {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                 "permissionDecision": "deny",
+                                 "permissionDecisionReason": "porque sim"}}),
+        ("na parada, a recusa para o codex sai no dialeto curto",
+         resposta_para_quem_perguntou({"hook_event_name": "Stop"}, "falta x",
+                                      codex=True),
+         {"decision": "block", "reason": "falta x"}),
+        ("a raiz entra no comando da cerca antes do shell, porque o cmd do "
+         "Windows não expande ${VAR}",
+         comando_com_a_raiz_expandida(
+             'python "${CLAUDE_PROJECT_DIR}/x.py" $CLAUDE_PROJECT_DIR',
+             Path("D:\\\\r")),
+         'python "D:/r/x.py" D:/r'),
+        ("ensino para o codex leva o nome do evento",
+         ensino_para_quem_perguntou({"hook_event_name": "SessionStart"}, "oi",
+                                    codex=True),
+         {"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                 "additionalContext": "oi"}}),
+        ("na parada, o codex recebe o bloqueio no JSON e a ponte sai sem erro, "
+         "porque o PowerShell que roda o gancho no Windows troca o 2 por 1",
+         a_parada_do_codex_vista_de_fora(),
+         (0, {"decision": "block", "reason": "falta x"})),
+        ("cerca declarada sem variável no texto do comando, que acha a raiz "
+         "pelo ambiente, barra o Devin pela ponte com a saída que barra",
+         a_cerca_sem_variavel_no_texto_vista_de_fora(),
+         (2, {"decision": "block", "reason": "falta y"})),
+    )
 FALHA = "  FALHA {}: esperado {!r}, veio {!r}"
 PLACAR = "ponte: {} de {} casos"
 
@@ -15350,18 +16197,7 @@ def testar():
         if vazio != []:
             quebrou += 1
             print(FALHA.format("sem settings", [], vazio))
-    for pedido, esperado in CASOS_DO_EDITOR:
-        veio = no_dialeto_das_cercas(pedido)
-        if veio != esperado:
-            quebrou += 1
-            print(FALHA.format("dialeto do editor", esperado, veio))
-    saida_do_editor = resposta_para_quem_perguntou(
-        {"toolName": "bash"}, "porque sim")
-    if saida_do_editor != {"permissionDecision": "deny",
-                           "permissionDecisionReason": "porque sim"}:
-        quebrou += 1
-        print(FALHA.format("resposta ao editor", "deny", saida_do_editor))
-    sem_modo = pergunta_para_as_cercas({"tool_name": "exec"}, "Bash")
+    sem_modo =pergunta_para_as_cercas({"tool_name": "exec"}, "Bash")
     if sem_modo.get(CAMPO_DO_MODO_DE_PERMISSAO) != MODO_SEM_QUEM_RESPONDA:
         quebrou += 1
         print(FALHA.format("pedido sem modo declara que ninguem responde",
@@ -15376,249 +16212,60 @@ def testar():
     if saida_da_outra != {"decision": "block", "reason": "x"}:
         quebrou += 1
         print(FALHA.format("resposta a outra ferramenta", "block", saida_da_outra))
+    casos_do_codex_medidos = casos_do_codex()
+    for nome, veio, esperado in casos_do_codex_medidos:
+        if veio != esperado:
+            quebrou += 1
+            print(FALHA.format(nome, esperado, veio))
     total = (len(CASOS_DA_RESPOSTA) + len(CASOS_DO_NOME)
-             + len(CASOS_DO_CASADOR) + 1 + len(CASOS_DO_EDITOR) + 4)
+             + len(CASOS_DO_CASADOR) + 1 + 3
+             + len(casos_do_codex_medidos))
     print(PLACAR.format(total - quebrou, total))
     return 1 if quebrou else 0
 
 
 
-def resposta_para_quem_perguntou(pedido, recusa):
-    if veio_do_assistente_do_editor(pedido):
-        return {CHAVE_DA_DECISAO_LONGA: "deny", CHAVE_DO_MOTIVO_LONGO: recusa}
+def resposta_para_quem_perguntou(pedido, recusa, codex=False):
+    evento =pedido.get("hook_event_name", EVENTO_PADRAO)
+    if codex and evento == EVENTO_PADRAO:
+        return {CHAVE_DA_RESPOSTA_LONGA: {
+            CHAVE_DO_NOME_DO_EVENTO: evento,
+            CHAVE_DA_DECISAO_LONGA: "deny", CHAVE_DO_MOTIVO_LONGO: recusa}}
     return {CHAVE_DA_DECISAO_CURTA: PALAVRA_QUE_RECUSA_NA_OUTRA,
             CHAVE_DO_MOTIVO_CURTO: recusa}
+
+
+def ensino_para_quem_perguntou(pedido, ensino, codex=False):
+    resposta = {CHAVE_DO_ENSINO: ensino}
+    if codex:
+        resposta[CHAVE_DO_NOME_DO_EVENTO] = pedido.get("hook_event_name",
+                                                       EVENTO_PADRAO)
+    return {CHAVE_DA_RESPOSTA_LONGA: resposta}
+
+
+def codigo_de_saida_da_recusa(pedido, codex=False):
+    if codex:
+        return 0
+    return SAIDA_QUE_BARRA
 
 
 def main():
     if BANDEIRA_DE_TESTE in sys.argv[1:]:
         return testar()
+    codex = BANDEIRA_DO_CODEX in sys.argv[1:]
     try:
         pedido = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         return 0
-    recusa, ensino = a_recusa_e_o_ensino_da_camada(pedido)
+    recusa, ensino = a_recusa_e_o_ensino_da_camada(pedido, codex)
     if recusa is None:
-        if ensino and not veio_do_assistente_do_editor(pedido):
-            print(json.dumps({CHAVE_DA_RESPOSTA_LONGA: {CHAVE_DO_ENSINO: ensino}},
+        if ensino:
+            print(json.dumps(ensino_para_quem_perguntou(pedido, ensino, codex),
                              ensure_ascii=False))
         return 0
-    print(json.dumps(resposta_para_quem_perguntou(pedido, recusa),
+    print(json.dumps(resposta_para_quem_perguntou(pedido, recusa, codex),
                      ensure_ascii=False))
-    return 0 if veio_do_assistente_do_editor(pedido) else SAIDA_QUE_BARRA
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-''',
-    '.agents/higiene/higiene.py': '''\
-import argparse
-import json
-import re
-import subprocess
-import sys
-
-DESCRICAO_DA_CLI = ("varre o rastreador pelos termos de um assunto e diz o "
-                    "que ficou espalhado, o que envelheceu e o que não "
-                    "aponta para a issue que consolidou o trabalho")
-
-FERRAMENTA = "gh"
-CAMPOS = "number,title,body,state,url"
-TETO_DA_VARREDURA = 200
-TEMPO_DA_REDE_S = 120
-
-PALAVRAS_QUE_ENVELHECEM = (
-    "em execução", "em execucao", "em andamento", "está aberta",
-    "esta aberta", "continua aberta", "segue aberta", "ainda aberta",
-    "em curso", "vai fechar", "falta fechar", "aguarda mescla",
-    "aguardando mescla", "pendente de mescla")
-REFERENCIA = re.compile(r"#(\\d{1,6})\\b")
-
-TITULO = "A HIGIENE DO FIM DO TRABALHO — assunto {!r}"
-SEM_TERMO = "  nenhum termo casou em issue aberta nenhuma"
-CABECA_ESPALHADO = "  ESPALHADO — fala do assunto e não aponta para #{}:"
-CABECA_ENVELHECIDO = "  ENVELHECIDO — diz que algo segue aberto, e não segue:"
-CABECA_VIZINHA = "  VIZINHAS — falam do assunto e apontam para #{} (ok):"
-LINHA = "    #{:<6} {}"
-LINHA_COM_MOTIVO = "    #{:<6} {} — {}"
-PLACAR = "  {} issue(s) varrida(s), {} com o assunto, {} a arrumar"
-NADA_A_ARRUMAR = "  nada a arrumar"
-
-
-def issues_abertas(repositorio):
-    corrida = subprocess.run(
-        [FERRAMENTA, "issue", "list", "--repo", repositorio, "--state", "open",
-         "--limit", str(TETO_DA_VARREDURA), "--json", CAMPOS],
-        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DA_REDE_S)
-    if corrida.returncode != 0:
-        return None
-    return json.loads(corrida.stdout or "[]")
-
-
-def estado_de_cada_referencia(repositorio, numeros):
-    estados = {}
-    for numero in sorted(numeros):
-        corrida = subprocess.run(
-            [FERRAMENTA, "issue", "view", str(numero), "--repo", repositorio,
-             "--json", "state,title"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DA_REDE_S)
-        if corrida.returncode != 0:
-            continue
-        estados[numero] = json.loads(corrida.stdout)["state"]
-    return estados
-
-
-def fala_do_assunto(issue, termos):
-    texto = f"{issue.get('title', '')}\\n{issue.get('body') or ''}".lower()
-    return [t for t in termos if t.lower() in texto]
-
-
-def aponta_para(issue, consolidada):
-    texto = f"{issue.get('title', '')}\\n{issue.get('body') or ''}"
-    return str(consolidada) in REFERENCIA.findall(texto)
-
-
-def frases_que_envelheceram(issue, estados):
-    texto = (issue.get("body") or "")
-    baixo = texto.lower()
-    achados = []
-    for numero in {int(n) for n in REFERENCIA.findall(texto)}:
-        if estados.get(numero) != "CLOSED":
-            continue
-        for palavra in PALAVRAS_QUE_ENVELHECEM:
-            if palavra in baixo:
-                achados.append(f"cita #{numero}, que já fechou, e diz "
-                               f"{palavra!r}")
-                break
-    return achados
-
-
-def varrer(issues, termos, consolidada, estados):
-    espalhadas, envelhecidas, vizinhas = [], [], []
-    for issue in issues:
-        if issue.get("number") == consolidada:
-            continue
-        casou = fala_do_assunto(issue, termos)
-        if not casou:
-            continue
-        if aponta_para(issue, consolidada):
-            vizinhas.append((issue, casou))
-        else:
-            espalhadas.append((issue, casou))
-        for motivo in frases_que_envelheceram(issue, estados):
-            envelhecidas.append((issue, motivo))
-    return espalhadas, envelhecidas, vizinhas
-
-
-def numeros_citados(issues):
-    citados = set()
-    for issue in issues:
-        citados.update(int(n) for n in REFERENCIA.findall(issue.get("body") or ""))
-    return citados
-
-
-def relatar(issues, termos, consolidada, estados):
-    print(TITULO.format(", ".join(termos)))
-    espalhadas, envelhecidas, vizinhas = varrer(issues, termos, consolidada,
-                                                estados)
-    if not (espalhadas or vizinhas):
-        print(SEM_TERMO)
-        return 0
-    if espalhadas:
-        print(CABECA_ESPALHADO.format(consolidada))
-        for issue, casou in espalhadas:
-            print(LINHA_COM_MOTIVO.format(issue["number"],
-                                          issue["title"][:52],
-                                          ", ".join(casou)))
-    if envelhecidas:
-        print(CABECA_ENVELHECIDO)
-        for issue, motivo in envelhecidas:
-            print(LINHA_COM_MOTIVO.format(issue["number"],
-                                          issue["title"][:52], motivo))
-    if vizinhas:
-        print(CABECA_VIZINHA.format(consolidada))
-        for issue, _ in vizinhas:
-            print(LINHA.format(issue["number"], issue["title"][:60]))
-    a_arrumar = len(espalhadas) + len(envelhecidas)
-    print(PLACAR.format(len(issues), len(espalhadas) + len(vizinhas),
-                        a_arrumar))
-    if not a_arrumar:
-        print(NADA_A_ARRUMAR)
-    return 1 if a_arrumar else 0
-
-
-ISSUES_DE_TESTE = [
-    {"number": 1, "title": "farol - troca do login", "state": "OPEN",
-     "body": "o login novo depende da sessão compartilhada. ver #9"},
-    {"number": 2, "title": "outro assunto", "state": "OPEN",
-     "body": "nada a ver com nada"},
-    {"number": 3, "title": "farol - resíduo do login", "state": "OPEN",
-     "body": "sobrou isto do login antigo, sem apontar para lugar nenhum"},
-    {"number": 4, "title": "farol - vizinha do login", "state": "OPEN",
-     "body": "isto é do login e está consolidado em #9"},
-    {"number": 5, "title": "farol - fala de fechada", "state": "OPEN",
-     "body": "o login sai por #99, que está em execução"},
-    {"number": 9, "title": "a consolidada do login", "state": "OPEN",
-     "body": "aqui mora o assunto login"},
-]
-ESTADOS_DE_TESTE = {9: "OPEN", 99: "CLOSED"}
-BANDEIRA_DE_TESTE = "--testar"
-FALHA = "  FALHA {}: esperado {!r}, veio {!r}"
-PLACAR_DO_TESTE = "higiene: {} de {} casos"
-
-
-def testar():
-    quebrou = 0
-    espalhadas, envelhecidas, vizinhas = varrer(
-        ISSUES_DE_TESTE, ["login"], 9, ESTADOS_DE_TESTE)
-    casos = (
-        ("espalhadas", sorted(i["number"] for i, _ in espalhadas), [3, 5]),
-        ("vizinhas", sorted(i["number"] for i, _ in vizinhas), [1, 4]),
-        ("envelhecidas", sorted(i["number"] for i, _ in envelhecidas), [5]),
-        ("a consolidada nao se acusa", 9 in [i["number"] for i, _ in espalhadas],
-         False),
-        ("quem nao fala do assunto fica fora",
-         2 in [i["number"] for i, _ in espalhadas + vizinhas], False),
-        ("termo casa no titulo tambem",
-         bool(fala_do_assunto({"title": "do LOGIN", "body": ""}, ["login"])),
-         True),
-        ("referencia so conta numero de verdade",
-         aponta_para({"title": "", "body": "ver #91"}, 9), False),
-        ("issue fechada sem palavra que envelhece nao acusa",
-         frases_que_envelheceram({"body": "ver #99"}, ESTADOS_DE_TESTE), []),
-        ("issue aberta com palavra que envelhece nao acusa",
-         frases_que_envelheceram({"body": "#9 em execução"}, ESTADOS_DE_TESTE),
-         []),
-        ("numeros citados sao colhidos",
-         sorted(numeros_citados(ISSUES_DE_TESTE)), [9, 99]),
-    )
-    for nome, veio, esperado in casos:
-        if veio != esperado:
-            quebrou += 1
-            print(FALHA.format(nome, esperado, veio))
-    print(PLACAR_DO_TESTE.format(len(casos) - quebrou, len(casos)))
-    return 1 if quebrou else 0
-
-
-def main(argv=None):
-    p = argparse.ArgumentParser(description=DESCRICAO_DA_CLI)
-    p.add_argument("--repositorio", help="dono/nome do repositório")
-    p.add_argument("--consolidada", type=int,
-                   help="a issue que consolidou o trabalho")
-    p.add_argument("--termo", action="append", default=[],
-                   help="termo do assunto; repita para vários")
-    p.add_argument(BANDEIRA_DE_TESTE, action="store_true")
-    a = p.parse_args(argv)
-    if a.testar:
-        return testar()
-    if not (a.repositorio and a.consolidada and a.termo):
-        p.error("--repositorio, --consolidada e ao menos um --termo")
-    issues = issues_abertas(a.repositorio)
-    if issues is None:
-        print("  o rastreador não respondeu")
-        return 1
-    estados = estado_de_cada_referencia(a.repositorio, numeros_citados(issues))
-    return relatar(issues, a.termo, a.consolidada, estados)
+    return codigo_de_saida_da_recusa(pedido, codex)
 
 
 if __name__ == "__main__":
@@ -21889,7 +22536,7 @@ def testar_a_evidencia_materializada(caso, falhas: list) -> None:
         caso("a prova do provado re-executa igual",
              prova.stdout.strip() == r1["provado"][0]["saida"])
         caso("a prova re-executa pelo bash que mora ao lado do git, que é "
-             "onde o lançador do settings.json vai parar — antes ela pedia "
+             "onde o lançador de reserva vai parar — antes ela pedia "
              "um python3 que nesta máquina é o atalho da loja",
              prova.returncode == 0
              and prova.stdout.strip() == r1["provado"][0]["saida"])
@@ -22520,6 +23167,15 @@ def gancho_que_chama(interpretador: str) -> str:
         {CHAVE_DOS_GANCHOS: [{"type": "command",
                               CHAVE_DO_COMANDO: comando}]}]}})
 
+
+def gancho_sem_variavel_que_chama(interpretador: str) -> str:
+    comando = (interpretador + ' -c "import os,sys,runpy;'
+               "runpy.run_path(os.path.join(os.environ['CLAUDE_PROJECT_DIR'],"
+               "sys.argv[1]),run_name='__main__')\\" .claude/hooks/x.py")
+    return json.dumps({CHAVE_DOS_GANCHOS: {"PreToolUse": [
+        {CHAVE_DOS_GANCHOS: [{"type": "command",
+                              CHAVE_DO_COMANDO: comando}]}]}})
+
 ACUSA = [
     ("variável do .mcp.json ausente",
      dict(mcp='{"x": "${TAMBOR_MAIOR}"}')),
@@ -22546,6 +23202,9 @@ ACUSA = [
     ("nem o caminho absoluto que apodreceu escapa",
      dict(settings=gancho_que_chama(
          "C:/Python-que-mudou-de-lugar/python.exe"))),
+    ("a linha sem variável no texto, que roda em qualquer concha, também "
+     "acusa o interpretador que não roda",
+     dict(settings=gancho_sem_variavel_que_chama("python3"))),
 ]
 
 CALA = [
@@ -22571,6 +23230,9 @@ CALA = [
      dict(declarado={"comando": ["python"]})),
     ("linha de gancho que chama um Python 3 que responde não acusa nada",
      dict(settings=gancho_que_chama("python"))),
+    ("a linha sem variável no texto com um Python 3 que responde não acusa "
+     "nada",
+     dict(settings=gancho_sem_variavel_que_chama("python"))),
     ("linha de gancho pelo LANÇADOR não é cobrada por interpretador — ali "
      "quem escolhe é o bash, a cada execução",
      dict(settings=gancho_que_chama(
@@ -23817,7 +24479,8 @@ COMANDO_DA_BRANCH_DA_ARVORE = ["git", "branch", "--show-current"]
 COMANDO_DO_COMMIT_DA_ARVORE = ["git", "rev-parse", "HEAD"]
 COMANDO_DA_BRANCH_NO_DURAVEL = [
     "git", "ls-remote", "--heads", "origin", "{}"]
-COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{}", "{}"]
+COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{0}", "{1}"]
+MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO = "ATLAS_BUSCA_FEITA"
 COMANDO_DA_RAIZ_DO_REPOSITORIO = ["git", "rev-parse", "--show-toplevel"]
 COMANDO_DO_QUE_NAO_ESTA_EM_REMOTO_NENHUM = [
     "git", "log", "--oneline", "--no-decorate", "HEAD", "--not", "--remotes"]
@@ -24291,12 +24954,20 @@ def sobra_fora_da_branch_de_entrega(raiz: Path):
     return dito
 
 
+def marca_da_busca_feita(principal: str, integracao: str, agora: float) -> tuple:
+    return (MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO,
+            f"{agora}|{principal},{integracao}")
+
+
 def commits_da_integracao_fora_da_principal(raiz: Path, principal: str,
                                             integracao: str):
     if not principal or not integracao:
         return NAO_MEDIDO
-    responde([parte.format(principal, integracao)
-              for parte in COMANDO_DE_BUSCA_NO_REMOTO], raiz, TEMPO_DA_REDE)
+    buscou = responde([parte.format(principal, integracao)
+                       for parte in COMANDO_DE_BUSCA_NO_REMOTO], raiz, TEMPO_DA_REDE)
+    if buscou is not NAO_MEDIDO and buscou[0] == 0:
+        chave, valor = marca_da_busca_feita(principal, integracao, time.time())
+        os.environ[chave] = valor
     comando = [parte.format(ESPELHO_NO_REMOTO.format(principal),
                             ESPELHO_NO_REMOTO.format(integracao))
                for parte in COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM]
@@ -25688,6 +26359,19 @@ def testar() -> int:
              any("não deu para medir" in c
                  for c in o_que_cobra_com_pedidos(NAO_MEDIDO)))
 
+    montada = [parte.format("main", "homolog")
+               for parte in COMANDO_DE_BUSCA_NO_REMOTO]
+    caso("a busca no remoto traz a principal e a integração numa chamada só — "
+         "formatar cada pedaço com {} punha a principal nas duas posições, e a "
+         "integração nunca era buscada",
+         montada[-2:] == ["main", "homolog"])
+    avisar = globals().get("marca_da_busca_feita")
+    caso("depois de buscar, o gancho deixa a marca que dispensa o instrumento "
+         "de entrega de buscar de novo na mesma parada",
+         callable(avisar)
+         and avisar("main", "homolog", 1000.0) == ("ATLAS_BUSCA_FEITA",
+                                                   "1000.0|main,homolog"))
+
     falhas += [FALHA_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]
     for falha in falhas:
@@ -26412,10 +27096,10 @@ MANDA_GRAVAR = (
 LIMITE_CONFESSADO = (
     "O que esta cerca NÃO cobre, dito de frente para ninguém confiar "
     "demais nela: ela lê o CAMINHO pedido, não o que um programa faz por "
-    "dentro. `python montar.py --sincronizar` reescreve o settings.json e "
-    "passa, porque não nomeia o arquivo — e é assim de propósito, senão a "
-    "própria execução travaria. Isso não é permissão: é o limite do "
-    "instrumento."
+    "dentro. `python montar.py --atualizar` reescreve o settings.json e "
+    "passa, porque não nomeia o arquivo — e é assim de propósito, senão "
+    "todo programa que grava por dentro travaria a execução. Isso não é "
+    "permissão: é o limite do instrumento."
 )
 
 ACAO_ESCREVER_EM = "escrever em {!r}"
@@ -26809,7 +27493,9 @@ DEIXA_PASSAR_OS_CASOS = [
      pedido_de_escrita("Edit", "montar.py")),
     ("settings.local.json é pessoal e não é a política",
      pedido_de_escrita("Edit", ".claude/settings.local.json")),
-    ("montar.py --sincronizar reescreve o settings por dentro e passa",
+    ("montar.py --atualizar reescreve o settings por dentro e passa",
+     pedido_de_shell("python3 montar.py --atualizar")),
+    ("montar.py --sincronizar regenera as cópias e passa",
      pedido_de_shell("python3 montar.py --sincronizar")),
     ("skill nova, que é conteúdo",
      pedido_de_escrita("Write", ".agents/skills/nova/SKILL.md")),
@@ -26959,8 +27645,11 @@ def testar() -> int:
         caso("a recusa liga a cerca à bandeira que desligou a pergunta",
              "--dangerously-skip-permissions" in mensagem)
         caso("a recusa confessa o limite: o que escreve por dentro passa",
-             "montar.py --sincronizar" in mensagem
+             "montar.py --atualizar" in mensagem
              and "não é permissão" in mensagem)
+        caso("a recusa não ensina que o --sincronizar reescreve o "
+             "settings.json — só a montagem e a atualização o reescrevem",
+             "--sincronizar` reescreve" not in mensagem)
 
         caso("o dono continua passando: sem a marca da etapa, curl | sh "
              "não é recusado",
@@ -29195,6 +29884,24 @@ O pedido do dono:
 
 $ARGUMENTS
 ''',
+    '.claude/commands/partida.md': '''\
+---
+description: Roda o checklist de partida da camada — prova item por item que a sessão tem instruções, interpretador, cercas, servidores de contexto, índice, skills e a caixa de ferramentas dos projetos, e devolve o relatório GO, GO DEGRADADO ou NO-GO antes do briefing. Sob demanda: quando o dono pede ou quando a abertura acusa falta.
+---
+
+# Partida
+
+Leia `.agents/prompts/partida.md` inteiro e execute o checklist como ele
+manda: um item por vez, comando rodado e saída colada, resposta no
+vocabulário fechado, e o relatório no molde dele como primeira resposta. Não
+trabalhe de memória: abra o arquivo. Depois do veredito vem o briefing,
+`.agents/prompts/bootstart.md`, e a linha que diz qual caminho da tabela dele
+o pedido segue.
+
+O pedido do dono, se houver:
+
+$ARGUMENTS
+''',
     '.markdownlint.jsonc': '''\
 {
   // Régua de markdown da camada. O verificador a usa; o VS Code também lê.
@@ -29952,98 +30659,6 @@ def main() -> int:
 if __name__ == "__main__":
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())
 ''',
-        'conhecimento/auditor.md': '''\
-# Auditor: quem verifica a execução lê evidência, não comportamento
-
-Depois que o executor de roteiros roda, sobra uma pasta de evidências — uma
-por etapa. O auditor lê essa pasta e responde três perguntas que ninguém
-responde de graça: **o que aconteceu, o que ainda reproduz, e o que isso
-sugere.**
-
-## Por que ele não observa a sessão
-
-A tentação é pôr uma sessão para assistir a outra e dizer onde ela errou.
-Isso não funciona, e o motivo é a regra 2: *"o modelo disse" não é prova*. Uma
-sessão narrando outra devolve texto plausível sobre comportamento que ela não
-mediu — exatamente o que a camada inteira existe para evitar.
-
-O auditor faz o contrário: **só fala do que ficou escrito**. A evidência é o
-que a etapa declarou, e a re-execução é o que ainda se sustenta. O resto ele
-marca como leitura.
-
-## As duas partes do relatório, e por que se separam
-
-| Parte | O que entra | Como se lê |
-| --- | --- | --- |
-| **PROVADO** | veredito, ciclo, faltas, e o que o verificador re-executou | fato |
-| **SUPOSTO** | onde a execução parou, quem repetiu, quem seguiu sem prova | leitura |
-
-Misturar as duas é o defeito clássico do relatório automático: ele soa
-confiante sobre a metade que inventou. Separadas, a opinião pode existir sem
-se disfarçar.
-
-## O que ele aponta, e por que cada coisa importa
-
-- **Etapa que gastou mais de um ciclo.** Repetir não é falha — é sinal de que
-  o critério não estava claro na primeira passada. É o melhor lugar para
-  melhorar o roteiro.
-- **Evidência escrita pelo motor, não pela etapa.** Quando a etapa morre,
-  estoura o tempo ou devolve algo inválido, quem dá nome ao estado é o motor.
-  Toda evidência assim é uma etapa que não conseguiu se explicar.
-- **Etapa que seguiu sem nenhum item provado.** É a regra 2 sendo contornada
-  por dentro: veredito de sucesso sem nada que o sustente.
-- **Prova que não reproduz mais.** O comando estava lá, a saída estava lá, e
-  agora dão outra coisa, e nada no disco mostra que um dia deu certo. É o
-  achado mais forte: ou o mundo mudou sem deixar rastro, ou a prova foi
-  redigida em vez de colada.
-- **Prova superada pelo mundo.** A mesma divergência, com uma diferença que
-  muda tudo: o disco mostra que aquela prova reproduziu na hora da etapa.
-  Aqui não cabe falar em forja — o mundo andou depois.
-
-## Superada ou forjada: quem decide é o registro de janela
-
-O executor de roteiros verifica cada evidência **na hora em que ela nasce** e
-grava o resultado ao lado, em `<pasta>/verificacoes/<mesma evidência>.json`,
-com o `exit` e o `quando`. Esse arquivo é a única testemunha de que a prova
-já reproduziu um dia.
-
-O auditor lê as acusações do verificador, tira delas o nome de cada
-evidência acusada, e pergunta ao registro:
-
-| O que o registro diz | O que o auditor conclui |
-| --- | --- |
-| `exit` 0 | prova superada pelo mundo, citando o `quando` |
-| `exit` diferente de zero | achado forte: nem na janela ela reproduziu |
-| registro ausente | achado forte — ausência é "não provado na janela" |
-
-Quando o registro falta, sobra um sinal secundário no mesmo dado: se um ciclo
-mais novo da mesma etapa seguiu, a evidência velha foi substituída, e isso
-também é superação.
-
-A assimetria é de propósito. Superação exige testemunha; ausência de
-testemunha nunca vira absolvição, porque "não medido" não é "não
-aconteceu".
-
-## Auditoria não é guarda
-
-A distinção decide onde cada coisa mora:
-
-- **Guarda** é barata, determinística e **roda sempre** — gancho que recusa,
-  rotina que reprova no ritual. Ela vale justamente porque não dá para pular.
-- **Auditoria** é cara e narrativa, e **roda quando alguém liga**.
-
-Mudar uma guarda para dentro de um módulo opcional é perder a guarda. Por isso
-o auditor não recebe o que já é cobrado sempre: ele acrescenta leitura, não
-substitui recusa.
-
-## O limite, declarado
-
-Ele lê o que terminou. Não acompanha ao vivo, etapa a etapa, e não sabe nada
-do que a sessão pensou — só do que ela deixou escrito. Uma etapa que erra e
-não registra nada é, para o auditor, uma etapa que não existiu.
-
-A evidência nasce na execução, uma etapa antes.
-''',
     },
     'bancada': {
         '.agents/bancada/bancada.py': '''\
@@ -30087,6 +30702,13 @@ BRANCH_DE_TRABALHO = re.compile(r"^(issue|frente)/\\d+-")
 NASCIMENTO_DA_BRANCH = re.compile(r"(?:checkout\\s+-b|switch\\s+-c)\\s+[\\"']?((?:issue|frente)/\\S+)")
 
 ARROBA = chr(64)
+ARQUIVO_DO_BRIEFING = ".agents/prompts/bootstart.md"
+SKILL_DO_BRIEFING = "bootstart"
+BANDEIRA_DE_TESTE = "--testar"
+FERRAMENTAS_DE_SHELL = ("Bash", "PowerShell")
+LEITORES_INTEIROS = ("cat", "type", "get-content", "gc")
+OPCOES_QUE_CORTAM = ("-totalcount", "-head", "-tail", "-first", "-last")
+SEPARADORES_SEM_PIPE = re.compile(r"&&|\\|\\||;|\\n")
 ENDERECO_DE_MENTIRA = "sessao{}invalido.local"
 
 GITCONFIG = """[user]
@@ -30549,10 +31171,8 @@ def medir(versao: str, braco: str) -> dict:
         fonte_nao_copia = None
         so_no_alvo = int(not da_camada.get("sujeira") and not da_camada.get("commits_novos"))
 
-    leu_o_briefing = any(
-        marca in json.dumps(f.get("entrada") or {}, ensure_ascii=False).replace("\\\\\\\\", "/")
-        for f in transcript["ferramentas"]
-        for marca in ("prompts/bootstart", '"skill": "bootstart"', '"skill":"bootstart"'))
+    leu_o_briefing = leu_o_briefing_inteiro_antes_de_outro_arquivo(
+        transcript["ferramentas"], linhas_do_briefing(arvore))
     itens = {
         "00_leu_o_briefing": int(leu_o_briefing),
         "01_abertura_rodou": int("camada.py" in juntos and ("--abertura" in juntos or "medir provar" in juntos)),
@@ -30714,7 +31334,156 @@ def main() -> int:
     return 0
 
 
+def linhas_do_briefing(arvore: Path) -> float:
+    try:
+        return len((arvore / ARQUIVO_DO_BRIEFING).read_text(
+            encoding="utf-8", errors="replace").splitlines())
+    except OSError:
+        return float("inf")
+
+
+def caminho_por_barra(texto) -> str:
+    return str(texto or "").replace("\\\\", "/")
+
+
+def e_o_briefing(caminho: str) -> bool:
+    caminho = caminho_por_barra(caminho).strip("\\"'")
+    return caminho == ARQUIVO_DO_BRIEFING or caminho.endswith(
+        "/" + ARQUIVO_DO_BRIEFING)
+
+
+def leitura_inteira_pela_ferramenta(entrada: dict, linhas: float) -> bool:
+    if not e_o_briefing(entrada.get("file_path")):
+        return False
+    comeco = int(entrada.get("offset") or 1)
+    limite = entrada.get("limit")
+    return comeco <= 1 and (limite is None or int(limite) >= linhas)
+
+
+def leitura_inteira_no_shell(comando: str) -> bool:
+    for trecho in SEPARADORES_SEM_PIPE.split(caminho_por_barra(comando)):
+        palavras = trecho.split()
+        if (len(palavras) >= 2 and palavras[0].lower() in LEITORES_INTEIROS
+                and "|" not in trecho
+                and not any(p.lower() in OPCOES_QUE_CORTAM for p in palavras)
+                and any(e_o_briefing(p) for p in palavras[1:])):
+            return True
+    return False
+
+
+def leitura_inteira_do_briefing(ferramenta: dict, linhas: float) -> bool:
+    nome = ferramenta.get("nome")
+    entrada = ferramenta.get("entrada") or {}
+    if nome == "Skill":
+        return entrada.get("skill") == SKILL_DO_BRIEFING
+    if nome == "Read":
+        return leitura_inteira_pela_ferramenta(entrada, linhas)
+    if nome in FERRAMENTAS_DE_SHELL:
+        return leitura_inteira_no_shell(entrada.get("command"))
+    return False
+
+
+def abre_outro_arquivo(ferramenta: dict) -> bool:
+    entrada = ferramenta.get("entrada") or {}
+    return (ferramenta.get("nome") == "Read"
+            and not e_o_briefing(entrada.get("file_path")))
+
+
+def leu_o_briefing_inteiro_antes_de_outro_arquivo(ferramentas: list,
+                                                  linhas: float) -> bool:
+    for ferramenta in ferramentas:
+        if leitura_inteira_do_briefing(ferramenta, linhas):
+            return True
+        if abre_outro_arquivo(ferramenta):
+            return False
+    return False
+
+
+def pedido_de_leitura(caminho: str, **opcoes) -> dict:
+    return {"nome": "Read", "entrada": {"file_path": caminho, **opcoes}}
+
+
+def pedido_de_shell(comando: str, nome: str = "Bash") -> dict:
+    return {"nome": nome, "entrada": {"command": comando}}
+
+
+BRIEFING_POR_EXTENSO = "D:\\\\raiz\\\\.agents\\\\prompts\\\\bootstart.md"
+LINHAS_DE_MENTIRA = 300
+LEITURAS_QUE_VALEM = (
+    ("Read sem limite", pedido_de_leitura(BRIEFING_POR_EXTENSO)),
+    ("Read com limite que cobre o arquivo inteiro",
+     pedido_de_leitura(ARQUIVO_DO_BRIEFING, offset=1, limit=2000)),
+    ("cat sozinho", pedido_de_shell("cat .agents/prompts/bootstart.md")),
+    ("cat seguido de outro comando por &&",
+     pedido_de_shell("cat .agents/prompts/bootstart.md && git status")),
+    ("Get-Content -Raw no PowerShell",
+     pedido_de_shell("Get-Content -Raw D:\\\\raiz\\\\.agents\\\\prompts\\\\bootstart.md",
+                     "PowerShell")),
+    ("a skill do briefing", {"nome": "Skill",
+                             "entrada": {"skill": SKILL_DO_BRIEFING}}),
+)
+TOQUES_QUE_NAO_VALEM = (
+    ("Read com limite curto", pedido_de_leitura(ARQUIVO_DO_BRIEFING, limit=40)),
+    ("Read a partir do meio",
+     pedido_de_leitura(ARQUIVO_DO_BRIEFING, offset=120)),
+    ("Grep no briefing", {"nome": "Grep", "entrada": {
+        "pattern": "gancho", "path": ARQUIVO_DO_BRIEFING}}),
+    ("head", pedido_de_shell("head -50 .agents/prompts/bootstart.md")),
+    ("grep", pedido_de_shell("grep -n regra .agents/prompts/bootstart.md")),
+    ("cat cortado por pipe",
+     pedido_de_shell("cat .agents/prompts/bootstart.md | head -80")),
+    ("sed com trecho", pedido_de_shell("sed -n 1,60p .agents/prompts/bootstart.md")),
+    ("Get-Content -TotalCount",
+     pedido_de_shell("Get-Content .agents\\\\prompts\\\\bootstart.md -TotalCount 40",
+                     "PowerShell")),
+    ("outro arquivo com nome parecido",
+     pedido_de_leitura(".agents/prompts/bootstart-antigo.md")),
+)
+
+
+def testar() -> int:
+    resultados = []
+
+    def caso(rotulo: str, passou: bool) -> None:
+        resultados.append((rotulo, bool(passou)))
+
+    for rotulo, pedido in LEITURAS_QUE_VALEM:
+        caso(f"vale como leitura inteira: {rotulo}",
+             leitura_inteira_do_briefing(pedido, LINHAS_DE_MENTIRA))
+    for rotulo, pedido in TOQUES_QUE_NAO_VALEM:
+        caso(f"toque que não vale como leitura: {rotulo}",
+             not leitura_inteira_do_briefing(pedido, LINHAS_DE_MENTIRA))
+    inteira = pedido_de_leitura(ARQUIVO_DO_BRIEFING)
+    outro = pedido_de_leitura("conhecimento/mapa-do-repositorio.md")
+    caso("briefing inteiro antes de outro arquivo conta",
+         leu_o_briefing_inteiro_antes_de_outro_arquivo([inteira, outro],
+                                                       LINHAS_DE_MENTIRA))
+    caso("outro arquivo aberto antes do briefing não conta — o AGENTS.md "
+         "manda ler o briefing antes de abrir arquivo",
+         not leu_o_briefing_inteiro_antes_de_outro_arquivo(
+             [outro, inteira], LINHAS_DE_MENTIRA))
+    caso("toque parcial seguido de outro arquivo não conta",
+         not leu_o_briefing_inteiro_antes_de_outro_arquivo(
+             [TOQUES_QUE_NAO_VALEM[3][1], outro], LINHAS_DE_MENTIRA))
+    caso("sem o briefing na árvore, só a leitura sem limite vale",
+         leitura_inteira_do_briefing(inteira, float("inf"))
+         and not leitura_inteira_do_briefing(
+             pedido_de_leitura(ARQUIVO_DO_BRIEFING, limit=2000),
+             float("inf")))
+
+    falhas = [rotulo for rotulo, passou in resultados if not passou]
+    for rotulo in falhas:
+        print(f"  falhou: {rotulo}")
+    if falhas:
+        print(f"FALHOU: {len(falhas)} de {len(resultados)} casos")
+        return 1
+    print(f"OK: {len(resultados)} casos")
+    return 0
+
+
 if __name__ == "__main__":
+    if BANDEIRA_DE_TESTE in sys.argv[1:]:
+        sys.exit(testar())
     sys.exit(main())
 ''',
         '.agents/bancada/gh_duble.py': '''\
@@ -35226,12 +35995,8 @@ if __name__ == "__main__":
 # que reabriria a pasta inteira e deixaria roteiro local vazar.
 !catalogador.json
 !entrega.json
-!catalogador.md
-!entrega.md
 !revisar-a-camada.json
-!revisar-a-camada.md
 !mexida-em-vizinho.json
-!mexida-em-vizinho.md
 
 # Prompts de família, referenciados por prompt-de nas etapas acima.
 !prompts
@@ -35286,36 +36051,6 @@ if __name__ == "__main__":
     }
   ]
 }
-''',
-        'execucoes/catalogador.md': '''\
-# O catalogador
-
-O roteiro `catalogador.json`, ao lado, é a rotina fixa que reorganiza a
-camada de conhecimento e as anotações do workspace.
-
-O CATALOGADOR — a rotina fixa que reorganiza a camada de conhecimento e as anotações do workspace.
-
-Roteiro da CAMADA: viaja com o módulo, não sabe nada de ninguém, e por isso todo endereço sai da configuração.
-
-O dono a invoca quando quiser; ela NUNCA roda sozinha.
-
-Ela não commita: deixa o diff para revisão.
-
-O alcance é limitado por CÓDIGO — o gancho vetar-conhecimento-em-codigo.py barra escrita em diretório só de código, e a etapa de verificação acusa qualquer toque fora do permitido, inclusive em nucleo/.
-
-## Como rodar
-
-```bash
-python .agents/encadeador/encadeador.py ensaio \\
-  --roteiro execucoes/catalogador.json \\
-  --trabalho catalogador --dir tmp/evidencias
-python .agents/encadeador/encadeador.py executar \\
-  --roteiro execucoes/catalogador.json \\
-  --trabalho catalogador --dir tmp/evidencias --cwd .
-```
-
-O ensaio primeiro, sempre. E **o dono invoca**: esta rotina não tem
-agendamento e não roda sozinha.
 ''',
         'execucoes/entrega.json': '''\
 {
@@ -35412,63 +36147,6 @@ agendamento e não roda sozinha.
   ]
 }
 ''',
-        'execucoes/entrega.md': '''\
-# O roteiro de entrega — um EXEMPLO, não o processo do seu repositório
-
-`entrega.json`, ao lado, mostra a forma de um trabalho que termina em pedido
-de revisão. **Ele é exemplo, e cada nome dentro dele sai da configuração** —
-a camada não tem opinião sobre a topologia do seu repositório.
-
-## O que ele demonstra
-
-Nove estágios: abrir a branch de trabalho a partir da base declarada →
-trabalhar → medir se o trabalho foi commitado → **empurrar a branch para o
-repositório durável** → **revisar o diff pela régua da stack** → medir se o
-resultado entra na branch de integração declarada → verificação → escrever o
-corpo do pedido de revisão → aprovação manual.
-
-O estágio que revisa pela régua da stack lê a stack de CONFIGURAÇÃO —
-`projetos.<projeto>.stack`, em `nucleo/executor.json` —, nunca da extensão dos
-arquivos. Sem stack declarada ele passa com recado, em vez de quebrar a rodada
-ou inventar uma régua que ninguém pediu: a camada não tem opinião sobre a
-stack de quem instala. Ele lê e opina; consertar é de quem trabalha.
-
-O estágio que empurra existe por uma medição: a árvore de trabalho costuma
-ser descartável — em muitas máquinas `/tmp` é memória, não disco — e trabalho
-commitado que nunca saiu dela some com ela, sem log e sem aviso. O estágio
-empurra assim que o commit existe e prova o destino com
-`git ls-remote --heads origin <branch>`; se a branch não chegou, ele reprova
-e a execução para ali, antes de qualquer espera.
-
-**Nada disso é obrigatório.** Se o seu repositório entrega direto na base,
-apague os estágios do meio; se não usa branch de integração, tire o estágio
-que mede o merge. O que o exemplo ensina não é a topologia — é que **a
-fronteira é de etapa, não de sempre**: a etapa de trabalho só commita na
-branch de trabalho, e quem leva o resultado para a branch de integração
-declarada é a ENTREGA, depois da aprovação manual. Mesclar a branch de
-publicação e publicar seguem do dono, sempre. E o corpo do pedido cobre
-o que o diff entrega.
-
-## O que sai da configuração, e nunca do roteiro
-
-| No roteiro | De onde vem |
-| --- | --- |
-| a base da branch de trabalho | `branches.base` |
-| o nome da branch | `branches.padrao_de_trabalho` |
-| onde o trabalho é medido | `branches.integracao` |
-| o que a automação pode fazer | `autorizacoes`, em `nucleo/configuracao.json` |
-| a régua do revisor de diff | `projetos.<projeto>.stack` |
-
-Troque a configuração e o mesmo roteiro serve outro repositório. É esse o
-teste de que ele é mecanismo, e não o processo de alguém.
-
-## As quatro seções do pedido de revisão
-
-O estágio que escreve o corpo exige, com estes títulos: **o que foi
-testado** (comando e saída), **risco de quebrar em produção**, **mitigação**
-e **plano de reversão** — incluindo o que a reversão *não* desfaz. Quem abre
-o pedido é o dono, com o texto na mão.
-''',
         'execucoes/LEIAME.md': '''\
 # Roteiros que viajam com a camada
 
@@ -35481,12 +36159,12 @@ endereço da configuração, e serve a qualquer repositório que instale o
 módulo. Troque a configuração e o mesmo roteiro serve outro lugar — é esse o
 teste de que ele é mecanismo, e não o processo de alguém.
 
-| Roteiro | O que faz | A página |
+| Roteiro | O que faz | A seção, em "Os roteiros, um a um" |
 | --- | --- | --- |
-| `catalogador.json` | reorganiza a camada de conhecimento e as anotações | `catalogador.md` |
-| `entrega.json` | exemplo de trabalho que termina em pedido de revisão | `entrega.md` |
-| `revisar-a-camada.json` | revisão periódica da camada, pela execução | `revisar-a-camada.md` |
-| `mexida-em-vizinho.json` | trabalha uma issue dentro de outro repositório do workspace | `mexida-em-vizinho.md` |
+| `catalogador.json` | reorganiza a camada de conhecimento e as anotações | O catalogador |
+| `entrega.json` | exemplo de trabalho que termina em pedido de revisão | O roteiro de entrega |
+| `revisar-a-camada.json` | revisão periódica da camada, pela execução, e a auditoria de fora | Revisar a camada |
+| `mexida-em-vizinho.json` | trabalha uma issue dentro de outro repositório do workspace | Mexida em repositório vizinho |
 
 O `.gitignore` ao lado ignora tudo e **libera por nome**, um roteiro por
 linha — nunca `!*.json`, que reabriria a pasta e deixaria roteiro local
@@ -35635,6 +36313,436 @@ Medidos em rodadas anteriores; cada um custou um turno a quem não sabia.
   e a retomada a pula: preserve a trilha, deixe o mapa no ponto de retomada
   da issue (arquivos, ordem, "commite cedo") e recomece a execução.
 
+## Os roteiros, um a um
+
+### O catalogador
+
+O roteiro `catalogador.json`, ao lado, é a rotina fixa que reorganiza a
+camada de conhecimento e as anotações do workspace.
+
+O CATALOGADOR — a rotina fixa que reorganiza a camada de conhecimento e as anotações do workspace.
+
+Roteiro da CAMADA: viaja com o módulo, não sabe nada de ninguém, e por isso todo endereço sai da configuração.
+
+O dono a invoca quando quiser; ela NUNCA roda sozinha.
+
+Ela não commita: deixa o diff para revisão.
+
+O alcance é limitado por CÓDIGO — o gancho vetar-conhecimento-em-codigo.py barra escrita em diretório só de código, e a etapa de verificação acusa qualquer toque fora do permitido, inclusive em nucleo/.
+
+#### Como rodar o catalogador
+
+```bash
+python .agents/encadeador/encadeador.py ensaio \\
+  --roteiro execucoes/catalogador.json \\
+  --trabalho catalogador --dir tmp/evidencias
+python .agents/encadeador/encadeador.py executar \\
+  --roteiro execucoes/catalogador.json \\
+  --trabalho catalogador --dir tmp/evidencias --cwd .
+```
+
+O ensaio primeiro, sempre. E **o dono invoca**: esta rotina não tem
+agendamento e não roda sozinha.
+
+### O roteiro de entrega — um EXEMPLO, não o processo do seu repositório
+
+`entrega.json`, ao lado, mostra a forma de um trabalho que termina em pedido
+de revisão. **Ele é exemplo, e cada nome dentro dele sai da configuração** —
+a camada não tem opinião sobre a topologia do seu repositório.
+
+#### O que ele demonstra
+
+Nove estágios: abrir a branch de trabalho a partir da base declarada →
+trabalhar → medir se o trabalho foi commitado → **empurrar a branch para o
+repositório durável** → **revisar o diff pela régua da stack** → medir se o
+resultado entra na branch de integração declarada → verificação → escrever o
+corpo do pedido de revisão → aprovação manual.
+
+O estágio que revisa pela régua da stack lê a stack de CONFIGURAÇÃO —
+`projetos.<projeto>.stack`, em `nucleo/executor.json` —, nunca da extensão dos
+arquivos. Sem stack declarada ele passa com recado, em vez de quebrar a rodada
+ou inventar uma régua que ninguém pediu: a camada não tem opinião sobre a
+stack de quem instala. Ele lê e opina; consertar é de quem trabalha.
+
+O estágio que empurra existe por uma medição: a árvore de trabalho costuma
+ser descartável — em muitas máquinas `/tmp` é memória, não disco — e trabalho
+commitado que nunca saiu dela some com ela, sem log e sem aviso. O estágio
+empurra assim que o commit existe e prova o destino com
+`git ls-remote --heads origin <branch>`; se a branch não chegou, ele reprova
+e a execução para ali, antes de qualquer espera.
+
+**Nada disso é obrigatório.** Se o seu repositório entrega direto na base,
+apague os estágios do meio; se não usa branch de integração, tire o estágio
+que mede o merge. O que o exemplo ensina não é a topologia — é que **a
+fronteira é de etapa, não de sempre**: a etapa de trabalho só commita na
+branch de trabalho, e quem leva o resultado para a branch de integração
+declarada é a ENTREGA, depois da aprovação manual. Mesclar a branch de
+publicação e publicar seguem do dono, sempre. E o corpo do pedido cobre
+o que o diff entrega.
+
+#### O que sai da configuração no roteiro de entrega
+
+| No roteiro | De onde vem |
+| --- | --- |
+| a base da branch de trabalho | `branches.base` |
+| o nome da branch | `branches.padrao_de_trabalho` |
+| onde o trabalho é medido | `branches.integracao` |
+| o que a automação pode fazer | `autorizacoes`, em `nucleo/configuracao.json` |
+| a régua do revisor de diff | `projetos.<projeto>.stack` |
+
+Troque a configuração e o mesmo roteiro serve outro repositório. É esse o
+teste de que ele é mecanismo, e não o processo de alguém.
+
+#### As quatro seções do pedido de revisão
+
+O estágio que escreve o corpo exige, com estes títulos: **o que foi
+testado** (comando e saída), **risco de quebrar em produção**, **mitigação**
+e **plano de reversão** — incluindo o que a reversão *não* desfaz. Quem abre
+o pedido é o dono, com o texto na mão.
+
+### Mexida em repositório vizinho
+
+Este roteiro faz o trabalho de uma issue **dentro de outro repositório do
+seu workspace**, sem instalar a camada nele. O alvo é um repositório de
+código, e continua sendo depois que a execução sai.
+
+A configuração continua sendo lida da **raiz do workspace**; o que muda é
+onde o `git` roda. O alvo chega por variável de ambiente:
+
+```sh
+PROJETO=<caminho-do-repositorio-alvo> ISSUE=<n> ASSUNTO=<assunto-em-kebab> \\
+  python .agents/encadeador/encadeador.py executar \\
+  --roteiro execucoes/mexida-em-vizinho.json \\
+  --trabalho issue-<n> \\
+  --dir execucoes/evidencias
+```
+
+#### As três recusas, e o porquê de cada uma
+
+O primeiro estágio é a barreira. Ele recusa antes de tocar em qualquer
+coisa, e a mensagem diz o motivo — recusa muda que não se explica vira
+tentativa de adivinhar de novo.
+
+| Quando | Por que recusa |
+| --- | --- |
+| `PROJETO` não veio | adivinhar alvo é escrever no lugar errado |
+| o alvo não tem `.git` | só sabe trabalhar dentro de um repositório |
+| o alvo é somente leitura | dele se lê, nele não se escreve |
+
+**A lista de somente leitura não mora no roteiro.** Ela sai de
+`nucleo/executor.json`: cada projeto se declara em `projetos.<etiqueta>`, e o
+que tem `somente_leitura: true` entra na lista pelo nome do `repositorio`. O
+gancho `.claude/hooks/vetar-escrita-em-somente-leitura.py` deriva a lista da
+MESMA chave — por isso a recusa vale por qualquer caminho, não só por este
+roteiro. Fato repetido em dois lugares envelhece torto e passa a mentir de um
+dos lados, e é por isso que os dois leem o mesmo campo.
+
+O molde está em `nucleo/executor.exemplo.json`, que viaja com a camada.
+
+#### Os cinco estágios
+
+| Estágio | O que prova |
+| --- | --- |
+| `abrir-branch-no-vizinho` | a branch nasceu no alvo, no commit da base |
+| `trabalhar` | a sessão faz o pedido da issue, dentro do alvo |
+| `trabalho-commitado` | alvo limpo, commit novo, nada mexido fora |
+| `trabalho-empurrado` | a branch chegou ao repositório durável do alvo |
+| `verificacao` | as provas dos estágios re-executam e batem |
+
+Toda prova roda a partir da raiz do workspace e chega ao alvo por
+`git -C "$PROJETO" ...`. É isso que deixa a verificação re-executar:
+caminho de máquina escrito à mão morre na primeira máquina diferente.
+
+A prova de commit novo ancora no **SHA** da base, não em `origin/<base>`.
+Ref que anda envelhece a prova antes de a verificação chegar nela.
+
+#### Empurrar no alvo, sem empurrar cego
+
+Commit que fica só na árvore do alvo não existe para o resto do mundo, e
+some no dia em que aquela pasta sumir — é a regra 16. Por isso o estágio
+`trabalho-empurrado` leva a branch de trabalho ao repositório durável do
+alvo e prova o destino comparando o `rev-parse HEAD` do alvo com o
+`ls-remote --heads origin` dele. Sha diferente é trabalho que não chegou;
+remoto que não respondeu é **não medido**, nunca "chegou".
+
+Cego ele não empurra. Antes, procura a etiqueta do alvo — o nome da
+pasta de `PROJETO` em `projetos.<etiqueta>.repositorio` — e para
+quando a resposta do cadastro é não:
+
+| Quando | O que ele diz |
+| --- | --- |
+| o alvo não tem etiqueta declarada | falta `projetos.<etiqueta>.repositorio` com o nome da pasta |
+| o cadastro diz `somente_leitura` | o caminho é pedido de incorporação como sugestão, com o `revisor` declarado |
+| `autorizacoes.push` não está ligado | omissão não é permissão: ligue a chave, ou peça ao dono |
+
+As três leem a MESMA chave que os ganchos leem — o de somente leitura e o
+de branch protegida. Empurrar cego bateria na cerca e pararia a execução
+com um erro que não ensina nada.
+
+#### O que a mexida NÃO faz
+
+- Não abre pedido de incorporação, e não mescla. Publicar é do dono.
+- Não empurra onde o cadastro do alvo não autoriza.
+- Não escreve fora do alvo — e isso é medido, não pedido: se a árvore do
+  workspace ficar suja, `trabalho-commitado` reprova.
+- Não instala a camada no alvo. Nada de `.agents/`, `conhecimento/` ou
+  `nucleo/` copiados para lá.
+
+#### O que sai da configuração na mexida em vizinho
+
+| No roteiro | De onde vem |
+| --- | --- |
+| a base da branch de trabalho | `projetos.<etiqueta>.branches.base`; sem ela, `branches.base` da raiz |
+| o nome da branch | `projetos.<etiqueta>.branches.padrao_de_trabalho`; sem ela, `branches.padrao_de_trabalho` da raiz |
+| quais repositórios são somente leitura | `projetos.<etiqueta>.somente_leitura` |
+| se a automação pode empurrar no alvo | `projetos.<etiqueta>.autorizacoes.push` |
+| a quem sugerir o pedido de incorporação | `projetos.<etiqueta>.revisor` |
+| o repositório alvo | a variável `PROJETO` |
+| o número da issue e o assunto | as variáveis `ISSUE` e `ASSUNTO` |
+
+Cada projeto pode declarar o seu bloco `branches` dentro do cadastro, e só
+o que ele declarar vale para ele: o bloco da raiz é o padrão de quem não
+declara. Assim um vizinho cuja integração é `develop` convive com uma raiz
+cuja integração é `homolog`, sem mudar nada no repositório do vizinho.
+
+Troque a configuração e o mesmo roteiro serve outro workspace — é esse o
+teste de que ele é mecanismo, e não o processo de alguém.
+
+### Revisar a camada
+
+O roteiro `revisar-a-camada.json`, ao lado, mede a camada de IA **deste**
+repositório e diz se ela ainda paga o que cobra.
+
+Ela responde três perguntas, nesta ordem, e nenhuma delas por opinião:
+
+1. **Quanto a camada cobra?** Quantos bytes toda sessão paga antes de fazer
+   qualquer coisa — as instruções mais o catálogo de skills. O corpo de cada
+   skill não entra nessa conta: ele só é cobrado quando a skill dispara.
+2. **A camada se prova?** Todo gancho e todo instrumento roda o próprio
+   `--testar`, e o instalador verifica se o que ele carrega embutido bate com
+   o disco. Gancho sem teste é acusado pelo nome.
+3. **Uma sessão de verdade lê e aplica as regras?** Uma sessão sem dono por
+   perto abre neste repositório, lê a camada e responde seis perguntas sobre
+   as regras dela — onde abrir a sessão, quantas regras existem, se pode
+   commitar, o que fazer com segredo, o que fazer com branch de longa
+   duração, o que é pronto. Depois escreve um script pequeno, e duas
+   checagens medem se o teste que ela escreveu passa e se ele exercita o
+   próprio código. A correção é programática: comparação com
+   `nucleo/regras.json` e leitura de AST. Não há juiz de IA.
+
+#### O que a revisão NÃO faz
+
+Não commita, não empurra, não publica e não conserta nada. Ela mede e
+relata; o que fazer com o número é de quem lê.
+
+#### Como rodar a revisão
+
+```bash
+python .agents/encadeador/encadeador.py ensaio \\
+  --roteiro execucoes/revisar-a-camada.json \\
+  --trabalho revisar-a-camada --dir tmp/evidencias
+python .agents/encadeador/encadeador.py executar \\
+  --roteiro execucoes/revisar-a-camada.json \\
+  --trabalho revisar-a-camada --dir tmp/evidencias --cwd .
+```
+
+O ensaio lista os estágios sem executar nada. A etapa `sessao-simulada` gasta
+uma sessão de verdade: é a única que custa dinheiro, e a única cujo número
+varia sozinho. Acurácia que cai pede uma segunda rodada antes de virar
+achado.
+
+#### Onde os números moram
+
+Cada etapa grava uma evidência em `<dir>/<trabalho>/`. As provas são
+comandos re-executáveis que imprimem um número só — o `--numero` do
+`camada.py` existe para isso, e é o que a etapa de verificação re-roda.
+
+#### O método, quando a revisão é sua e não do roteiro
+
+O roteiro acima mede. Quando a revisão é conduzida por alguém — lendo,
+perguntando, propondo —, o que separa revisão de opinião é a régua abaixo.
+
+##### A régua de uma proposta
+
+Proposta só existe com três partes. Sem as três, não é proposta:
+
+1. **O problema, medido** — comando rodado e saída colada. Para achado vindo
+   de fora, o endereço da fonte no lugar do comando.
+2. **O custo de deixar como está** — em quê isso morde: estabilidade, tempo,
+   contexto, dinheiro da sessão, ou risco de quem instalar a camada.
+3. **O instrumento que provaria o conserto** — o que vai ficar verde depois.
+
+Está proibido: *poderia ficar mais limpo*, *boa prática recomenda*, *seria bom
+padronizar*, *a versão nova tem isso*. Quem não consegue medir tem uma
+**pergunta aberta**, e pergunta aberta se registra como pergunta — nunca como
+tarefa.
+
+##### A ordem de executar o que passou na régua
+
+- Estabilidade antes de economia, economia antes de performance, performance
+  antes de estética.
+- **Menor diff coerente**: uma entrega que passa sozinha por vez.
+- Arrumação e mudança de comportamento não andam no mesmo passo — diff
+  misturado ninguém revisa.
+- Antes de começar e antes de terminar: `git status --short`. Arquivo que
+  mudou e não é seu é outra sessão — pare e avise.
+
+##### A definição de pronto
+
+Tudo medido, sem exceção: o ritual verde, todo `--testar` em OK e **nenhum
+piso abaixo** da última medição registrada, o instalador dizendo que está tudo
+em dia, e `git status --short` mostrando só o que se quis mudar. Onde o
+repositório publicar para fora, o ensaio da publicação entra na conta — e
+quem não publica não tem esse passo.
+
+A medida que **varia sozinha** é a sessão simulada, porque é uma sessão de
+verdade. A regra dela: caiu, rode de novo antes de chamar de achado; caiu duas
+vezes seguidas, é achado — e olhe **qual** checagem caiu, não só o placar.
+
+##### Quando não há nada a fazer, e quando as barreiras barram
+
+Diga isso, com a medição junto, e pare. **Não invente trabalho.** Um "nada a
+fazer" provado vale mais que uma refatoração inventada, e a revisão seguinte
+começa sabendo onde já se olhou. Vale por pergunta: dez perguntas com achado e
+uma sem é revisão normal; dez perguntas com achado forçado é revisão perdida.
+
+Há o outro fim, que também não é fracasso: **uma barreira barrou.** Gancho, veto e
+doutrina são calibrados por quem não vai executá-los, então param a sessão por
+tolerância que ninguém previu — não por erro dela.
+
+Quando acontecer: **não contorne, não peça exceção, e não trate como falha
+sua.** Registre a parada com o comando que a disparou e a tolerância que
+faltava, e siga o que der para seguir. A lista dessas paradas é a matéria-prima
+para recalibrar as barreiras, e é a única forma de a régua melhorar sem
+alguém afrouxá-las no susto.
+
+#### A auditoria externa: prove que a camada merece existir
+
+Receita para uma sessão **de fora**: outro modelo, outra conta, contexto
+limpo. Peça que ela a siga inteira, aberta na raiz do repositório da camada.
+
+Seu papel não é ajudar. É **derrubar**. A camada tem de se provar diante de
+você, não o contrário.
+
+##### Por que uma sessão de fora
+
+O ritual do repositório tem as suas rotinas e elas passam verdes com defeito
+grave dentro. Já aconteceu: um instrumento nunca conseguiu mover o cartão do
+quadro por falta de permissão e a recusa aparecia como "não achei" — semanas
+assim, ritual verde o tempo todo. Ritual verifica o que alguém pensou em
+verificar. **Você existe para olhar o que ninguém pensou.**
+
+##### A regra que vale acima de todas
+
+**Meça antes de afirmar.** Este repositório recusa opinião: cada afirmação
+sua precisa vir com o comando que a produziu e a saída colada. Achado sem
+medição é palpite, e palpite aqui custa mais caro que silêncio.
+
+E **uma medição não é medição**. Onde houver variação — escolha de modelo,
+tempo, custo —, o ruído engole diferenças pequenas. Compare medianas de cinco
+execuções, e desconfie de qualquer diferença menor que o ruído que você
+mediu.
+
+##### O que a sessão de fora faz, nesta ordem
+
+###### 1. Entenda antes de julgar
+
+- [ ] `cat AGENTS.md` e `cat CLAUDE.md` — as instruções que toda sessão paga.
+- [ ] `python verificacoes.py` — a lista das rotinas e o que cada uma prova.
+- [ ] `python verificacoes.py ritual` — rode e leia a saída inteira. Ela passa
+      de 100 KB: leia por seção, com `grep` ou `awk`, em vez de abrir tudo de
+      uma vez — leitor que estoura o teto de saída perde o fim, que é onde
+      mora o veredito.
+- [ ] `python verificacoes.py instalada` — **esta não está no ritual** e é a
+      que roda o `--testar` de cada gancho e instrumento. Rode sempre.
+- [ ] `python .agents/camada/camada.py --largada` — o que toda sessão paga
+      antes de trabalhar, e o teto declarado.
+
+###### 2. Ataque a premissa, não a implementação
+
+Para cada peça que você encontrar, pergunte nesta ordem:
+
+1. **Isto resolve um problema real, ou um problema imaginado?** Peça sem
+   caso de uso medido é peso. Procure quem a chama: se ninguém chama, diga.
+2. **Isto já existe pronto?** Compare com o que a ferramenta oficial já
+   traz, com o que o ecossistema tem, e com o que outra peça daqui já faz.
+   Cite a fonte oficial — versão e data — quando disser que existe.
+3. **A prova dela prova mesmo?** Teste que não falha quando o código quebra
+   não é teste. Quebre de propósito e veja se alguém acusa.
+4. **O que ela custa a toda sessão?** Bytes de largada, tempo, tokens.
+   Compare o custo com o problema que ela resolve.
+
+###### 3. Procure o caminho de erro que ninguém escolheu testar
+
+É onde os defeitos moram. Especificamente:
+
+- [ ] Função que **engole exceção em volta de uma conta**: falha vira zero, e
+      zero parece fato.
+- [ ] Verificação que enumera **o que ignora** em vez de declarar **o que
+      prova**: cada peça nova do repositório vira falso positivo.
+- [ ] Cópia gerada que diverge da fonte sem ninguém acusar.
+- [ ] Cerca que barra por uma via e cala por outra — o mesmo efeito por
+      `Edit` e por `Bash`, por exemplo.
+- [ ] Cerca que reconhece uma **lista fechada de programas**: liste todo
+      programa que o parser de comando conhece e pergunte o que produz o
+      mesmo efeito e NÃO está na lista. A falha mora dentro do mesmo canal,
+      não entre canais — em 03/09/2026 foi `curl -o`, `wget -O`, `rsync`,
+      `perl -i` e `dd of=` atravessando quatro cercas de escrita que só
+      conheciam `rm`, `mv`, `cp`, `tee` e `sed -i`.
+- [ ] **Antes de atacar um gancho, leia a issue mais recente que o tocou**
+      (`gh issue list --search "<nome do gancho>"`). Achado que a issue já
+      discutiu e deixou fora de propósito não é achado — é comentário nela.
+- [ ] Recusa de permissão que aparece como "não encontrei".
+
+###### 4. Consulte a documentação oficial, e cite
+
+Onde a camada usa ferramenta de terceiro, confira contra a documentação
+oficial **de hoje**, não contra a sua memória. Diga a versão que consultou.
+Se a camada usa um recurso descontinuado, ou deixa de usar um que resolveria
+melhor, isso é achado de primeira ordem.
+
+##### O que fazer com o que você achar
+
+**Achado vira linha no quadro, não arquivo:**
+
+```bash
+python .agents/caixa/caixa.py defeito --id <kebab-minusculo> --assunto "<o achado inteiro, com a medição e o comando que a replica>"
+python .agents/caixa/caixa.py melhoria --id <kebab-minusculo> --assunto "<idem>"
+```
+
+Uma linha por achado, com o comando que o reproduz. Sem isso, quem ler não
+consegue reproduzir e o achado morre.
+
+**Mudança de regra se PROPÕE, não se aplica.** Regra, gancho e política são
+do dono. Escreva a proposta com a medição que a sustenta e pare.
+
+**Feche mais do que abre.** Antes de abrir issue nova, procure a existente:
+`gh issue list --repo <declarado em nucleo/executor.json>`. Achado que já tem
+linha no quadro vira comentário nela, não linha nova.
+
+##### Onde a sessão de fora NÃO manda
+
+- **Publicar é do dono.** Seu teto é `python publicar.py --ensaio` — e ele
+  clona o espelho e exige conta ativa no `gh`. Para varrer só o conteúdo do
+  que o git rastreia, sem rede, sem clone e sem conta:
+  `python publicar.py --varredura`, que sai 1 nomeando o arquivo quando acha
+  nome próprio, credencial ou caminho de máquina.
+- **Destrutivo é do dono.** Não apague nada; proponha, com a razão.
+- **Não edite cópia gerada.** A fonte é a que viaja; a cópia se regenera.
+- **Nada de segredo, nome de pessoa, de empresa ou caminho de máquina** em
+  arquivo, commit ou issue. Este repositório é público.
+
+##### Como a sessão de fora encerra
+
+- [ ] O que você **mediu**, com comando e saída colados.
+- [ ] O que você **derrubou** — afirmação da camada que não se sustentou.
+- [ ] O que você **não conseguiu derrubar**, que é o valor de verdade: peça
+      que resistiu a um ataque honesto está mais provada que antes.
+- [ ] As linhas que você pôs no quadro, por identidade.
+- [ ] **Uma crítica a este prompt**: o que ele te fez perder tempo olhando, e
+      o que ele deixou de mandar você olhar. A régua sobe a cada rodada, e
+      quem a levanta é você.
+
 ## Onde mora o SEU roteiro
 
 Na `execucoes/` da raiz do seu repositório. Lá o conteúdo não entra no git,
@@ -35643,7 +36751,7 @@ seus outros repositórios, o seu caso. Nada disso viaja.
 
 Quando um roteiro seu deixar de citar o seu caso e passar a servir qualquer
 repositório, ele é candidato a mudar para cá — e aí precisa da linha no
-`.gitignore` e da página ao lado.
+`.gitignore` e da seção dele em "Os roteiros, um a um", acima.
 ''',
         'execucoes/mexida-em-vizinho.json': '''\
 {
@@ -35689,115 +36797,6 @@ repositório, ele é candidato a mudar para cá — e aí precisa da linha no
     }
   ]
 }
-''',
-        'execucoes/mexida-em-vizinho.md': '''\
-# Mexida em repositório vizinho
-
-Este roteiro faz o trabalho de uma issue **dentro de outro repositório do
-seu workspace**, sem instalar a camada nele. O alvo é um repositório de
-código, e continua sendo depois que a execução sai.
-
-A configuração continua sendo lida da **raiz do workspace**; o que muda é
-onde o `git` roda. O alvo chega por variável de ambiente:
-
-```sh
-PROJETO=<caminho-do-repositorio-alvo> ISSUE=<n> ASSUNTO=<assunto-em-kebab> \\
-  python .agents/encadeador/encadeador.py executar \\
-  --roteiro execucoes/mexida-em-vizinho.json \\
-  --trabalho issue-<n> \\
-  --dir execucoes/evidencias
-```
-
-## As três recusas, e o porquê de cada uma
-
-O primeiro estágio é a barreira. Ele recusa antes de tocar em qualquer
-coisa, e a mensagem diz o motivo — recusa muda que não se explica vira
-tentativa de adivinhar de novo.
-
-| Quando | Por que recusa |
-| --- | --- |
-| `PROJETO` não veio | adivinhar alvo é escrever no lugar errado |
-| o alvo não tem `.git` | só sabe trabalhar dentro de um repositório |
-| o alvo é somente leitura | dele se lê, nele não se escreve |
-
-**A lista de somente leitura não mora no roteiro.** Ela sai de
-`nucleo/executor.json`: cada projeto se declara em `projetos.<etiqueta>`, e o
-que tem `somente_leitura: true` entra na lista pelo nome do `repositorio`. O
-gancho `.claude/hooks/vetar-escrita-em-somente-leitura.py` deriva a lista da
-MESMA chave — por isso a recusa vale por qualquer caminho, não só por este
-roteiro. Fato repetido em dois lugares envelhece torto e passa a mentir de um
-dos lados, e é por isso que os dois leem o mesmo campo.
-
-O molde está em `nucleo/executor.exemplo.json`, que viaja com a camada.
-
-## Os cinco estágios
-
-| Estágio | O que prova |
-| --- | --- |
-| `abrir-branch-no-vizinho` | a branch nasceu no alvo, no commit da base |
-| `trabalhar` | a sessão faz o pedido da issue, dentro do alvo |
-| `trabalho-commitado` | alvo limpo, commit novo, nada mexido fora |
-| `trabalho-empurrado` | a branch chegou ao repositório durável do alvo |
-| `verificacao` | as provas dos estágios re-executam e batem |
-
-Toda prova roda a partir da raiz do workspace e chega ao alvo por
-`git -C "$PROJETO" ...`. É isso que deixa a verificação re-executar:
-caminho de máquina escrito à mão morre na primeira máquina diferente.
-
-A prova de commit novo ancora no **SHA** da base, não em `origin/<base>`.
-Ref que anda envelhece a prova antes de a verificação chegar nela.
-
-## Empurrar no alvo, sem empurrar cego
-
-Commit que fica só na árvore do alvo não existe para o resto do mundo, e
-some no dia em que aquela pasta sumir — é a regra 16. Por isso o estágio
-`trabalho-empurrado` leva a branch de trabalho ao repositório durável do
-alvo e prova o destino comparando o `rev-parse HEAD` do alvo com o
-`ls-remote --heads origin` dele. Sha diferente é trabalho que não chegou;
-remoto que não respondeu é **não medido**, nunca "chegou".
-
-Cego ele não empurra. Antes, procura a etiqueta do alvo — o nome da
-pasta de `PROJETO` em `projetos.<etiqueta>.repositorio` — e para
-quando a resposta do cadastro é não:
-
-| Quando | O que ele diz |
-| --- | --- |
-| o alvo não tem etiqueta declarada | falta `projetos.<etiqueta>.repositorio` com o nome da pasta |
-| o cadastro diz `somente_leitura` | o caminho é pedido de incorporação como sugestão, com o `revisor` declarado |
-| `autorizacoes.push` não está ligado | omissão não é permissão: ligue a chave, ou peça ao dono |
-
-As três leem a MESMA chave que os ganchos leem — o de somente leitura e o
-de branch protegida. Empurrar cego bateria na cerca e pararia a execução
-com um erro que não ensina nada.
-
-## O que ele NÃO faz
-
-- Não abre pedido de incorporação, e não mescla. Publicar é do dono.
-- Não empurra onde o cadastro do alvo não autoriza.
-- Não escreve fora do alvo — e isso é medido, não pedido: se a árvore do
-  workspace ficar suja, `trabalho-commitado` reprova.
-- Não instala a camada no alvo. Nada de `.agents/`, `conhecimento/` ou
-  `nucleo/` copiados para lá.
-
-## O que sai da configuração, e nunca do roteiro
-
-| No roteiro | De onde vem |
-| --- | --- |
-| a base da branch de trabalho | `projetos.<etiqueta>.branches.base`; sem ela, `branches.base` da raiz |
-| o nome da branch | `projetos.<etiqueta>.branches.padrao_de_trabalho`; sem ela, `branches.padrao_de_trabalho` da raiz |
-| quais repositórios são somente leitura | `projetos.<etiqueta>.somente_leitura` |
-| se a automação pode empurrar no alvo | `projetos.<etiqueta>.autorizacoes.push` |
-| a quem sugerir o pedido de incorporação | `projetos.<etiqueta>.revisor` |
-| o repositório alvo | a variável `PROJETO` |
-| o número da issue e o assunto | as variáveis `ISSUE` e `ASSUNTO` |
-
-Cada projeto pode declarar o seu bloco `branches` dentro do cadastro, e só
-o que ele declarar vale para ele: o bloco da raiz é o padrão de quem não
-declara. Assim um vizinho cuja integração é `develop` convive com uma raiz
-cuja integração é `homolog`, sem mudar nada no repositório do vizinho.
-
-Troque a configuração e o mesmo roteiro serve outro workspace — é esse o
-teste de que ele é mecanismo, e não o processo de alguém.
 ''',
         'execucoes/prompts/revisao-geral-do-diff.md': '''\
 # Revisão geral do diff — correção antes da entrega
@@ -35913,115 +36912,6 @@ A PROVA: cada afirmação da sua evidência tem comando e saída COLADA do termi
     }
   ]
 }
-''',
-        'execucoes/revisar-a-camada.md': '''\
-# Revisar a camada
-
-O roteiro `revisar-a-camada.json`, ao lado, mede a camada de IA **deste**
-repositório e diz se ela ainda paga o que cobra.
-
-Ela responde três perguntas, nesta ordem, e nenhuma delas por opinião:
-
-1. **Quanto a camada cobra?** Quantos bytes toda sessão paga antes de fazer
-   qualquer coisa — as instruções mais o catálogo de skills. O corpo de cada
-   skill não entra nessa conta: ele só é cobrado quando a skill dispara.
-2. **A camada se prova?** Todo gancho e todo instrumento roda o próprio
-   `--testar`, e o instalador verifica se o que ele carrega embutido bate com
-   o disco. Gancho sem teste é acusado pelo nome.
-3. **Uma sessão de verdade lê e aplica as regras?** Uma sessão sem dono por
-   perto abre neste repositório, lê a camada e responde seis perguntas sobre
-   as regras dela — onde abrir a sessão, quantas regras existem, se pode
-   commitar, o que fazer com segredo, o que fazer com branch de longa
-   duração, o que é pronto. Depois escreve um script pequeno, e duas
-   checagens medem se o teste que ela escreveu passa e se ele exercita o
-   próprio código. A correção é programática: comparação com
-   `nucleo/regras.json` e leitura de AST. Não há juiz de IA.
-
-## O que ela NÃO faz
-
-Não commita, não empurra, não publica e não conserta nada. Ela mede e
-relata; o que fazer com o número é de quem lê.
-
-## Como rodar
-
-```bash
-python .agents/encadeador/encadeador.py ensaio \\
-  --roteiro execucoes/revisar-a-camada.json \\
-  --trabalho revisar-a-camada --dir tmp/evidencias
-python .agents/encadeador/encadeador.py executar \\
-  --roteiro execucoes/revisar-a-camada.json \\
-  --trabalho revisar-a-camada --dir tmp/evidencias --cwd .
-```
-
-O ensaio lista os estágios sem executar nada. A etapa `sessao-simulada` gasta
-uma sessão de verdade: é a única que custa dinheiro, e a única cujo número
-varia sozinho. Acurácia que cai pede uma segunda rodada antes de virar
-achado.
-
-## Onde os números moram
-
-Cada etapa grava uma evidência em `<dir>/<trabalho>/`. As provas são
-comandos re-executáveis que imprimem um número só — o `--numero` do
-`camada.py` existe para isso, e é o que a etapa de verificação re-roda.
-
-## O método, quando a revisão é sua e não do roteiro
-
-O roteiro acima mede. Quando a revisão é conduzida por alguém — lendo,
-perguntando, propondo —, o que separa revisão de opinião é a régua abaixo.
-
-### A régua de uma proposta
-
-Proposta só existe com três partes. Sem as três, não é proposta:
-
-1. **O problema, medido** — comando rodado e saída colada. Para achado vindo
-   de fora, o endereço da fonte no lugar do comando.
-2. **O custo de deixar como está** — em quê isso morde: estabilidade, tempo,
-   contexto, dinheiro da sessão, ou risco de quem instalar a camada.
-3. **O instrumento que provaria o conserto** — o que vai ficar verde depois.
-
-Está proibido: *poderia ficar mais limpo*, *boa prática recomenda*, *seria bom
-padronizar*, *a versão nova tem isso*. Quem não consegue medir tem uma
-**pergunta aberta**, e pergunta aberta se registra como pergunta — nunca como
-tarefa.
-
-### A ordem de executar o que passou na régua
-
-- Estabilidade antes de economia, economia antes de performance, performance
-  antes de estética.
-- **Menor diff coerente**: uma entrega que passa sozinha por vez.
-- Arrumação e mudança de comportamento não andam no mesmo passo — diff
-  misturado ninguém revisa.
-- Antes de começar e antes de terminar: `git status --short`. Arquivo que
-  mudou e não é seu é outra sessão — pare e avise.
-
-### A definição de pronto
-
-Tudo medido, sem exceção: o ritual verde, todo `--testar` em OK e **nenhum
-piso abaixo** da última medição registrada, o instalador dizendo que está tudo
-em dia, e `git status --short` mostrando só o que se quis mudar. Onde o
-repositório publicar para fora, o ensaio da publicação entra na conta — e
-quem não publica não tem esse passo.
-
-A medida que **varia sozinha** é a sessão simulada, porque é uma sessão de
-verdade. A regra dela: caiu, rode de novo antes de chamar de achado; caiu duas
-vezes seguidas, é achado — e olhe **qual** checagem caiu, não só o placar.
-
-### Quando não há nada a fazer, e quando as barreiras barram
-
-Diga isso, com a medição junto, e pare. **Não invente trabalho.** Um "nada a
-fazer" provado vale mais que uma refatoração inventada, e a revisão seguinte
-começa sabendo onde já se olhou. Vale por pergunta: dez perguntas com achado e
-uma sem é revisão normal; dez perguntas com achado forçado é revisão perdida.
-
-Há o outro fim, que também não é fracasso: **uma barreira barrou.** Gancho, veto e
-doutrina são calibrados por quem não vai executá-los, então param a sessão por
-tolerância que ninguém previu — não por erro dela.
-
-Quando acontecer: **não contorne, não peça exceção, e não trate como falha
-sua.** Registre a parada com o comando que a disparou e a tolerância que
-faltava, e siga o que der para seguir. A lista dessas paradas é a matéria-prima
-para recalibrar as barreiras, e é a única forma de a régua melhorar sem
-alguém afrouxá-las no susto.
 ''',
     },
     'indice': {
@@ -39960,6 +40850,87 @@ que já poderia saber.
 e o caderno; o resto, sob demanda. Sem esse corte, em seis meses a abertura
 carrega tudo e a janela acaba antes de a investigação começar.
 
+## Investigação de incidente
+
+Algo quebrou e a pergunta é "o que mudou?". A ordem abaixo estreita o campo
+a cada passo; as armadilhas de medição, no fim, são o que faz uma conclusão
+errada passar por prova.
+
+### A ordem
+
+1. **Reproduza o sintoma, com a chamada do cliente real.** Opção a mais na
+   sua chamada percorre outro caminho e fabrica defeito. Não reproduziu? O
+   primeiro trabalho é descobrir para quem acontece.
+2. **Ache no código a mensagem que a pessoa vê** — o fio mais curto entre a
+   tela e a linha.
+3. **Extraia o identificador de rastreio.** Sem ele você lê log por horário —
+   e lê o log errado.
+4. **Ache a requisição exata**, inteira, com começo e fim.
+5. **Ancore a linha do tempo**: não "está falhando?" — **"desde quando?"**,
+   com contagem por período. Sem nomear o instante do começo, você ainda não
+   investigou o suficiente para acusar nada.
+6. **Diferencie o que mudou**, preferindo artefato imutável a memória: versão
+   publicada, data de implantação, trilha de auditoria. Quatro suspeitos:
+   código, configuração, infraestrutura, rede.
+7. **Separe defeito seu de dependência externa** — muda o que se faz a
+   seguir.
+8. **Rode o cético** (skill `verificacao-adversarial`) antes de concluir.
+9. **Conclua — e diga o que ficou sem prova.**
+
+O raciocínio que fecha: código idêntico + infraestrutura idêntica + hora exata
+de uma mudança de configuração = a configuração é a variável.
+
+Os passos 3 a 7 mudam de forma conforme a ferramenta de observabilidade; os
+outros quatro não mudam. As armadilhas abaixo mordem principalmente nos
+passos 3 e 5.
+
+### O pedido que se leva a quem pode consertar
+
+Quando o defeito é do outro lado da fronteira, o que se manda vale mais que o
+quanto se manda:
+
+| O que entra | Por quê |
+| --- | --- |
+| o sintoma em uma frase, do ponto de vista de quem usa | quem recebe reconhece o problema como real |
+| o escopo **medido** — quantos afetados sobre quantos tentaram | amostra pequena vira prioridade baixa, e quem não reclama some da conta |
+| o instante exato em que começou | sem ele não se sabe onde procurar |
+| identificadores que **quem recebe** consegue procurar | o seu identificador não serve na ferramenta de quem recebe |
+| o que mudou do seu lado, com hora | antecipa a pergunta de volta |
+| **o pedido acionável**: o que verificar, e o que fazer em cada resultado | evidência sem pedido é meia entrega |
+| como a correção será validada em tempo real | fecha sem segunda rodada |
+
+Sem acusação e sem adjetivo. O que não estiver medido entra como "não
+medido" — nunca estimado.
+
+### As armadilhas de medição
+
+#### Retenção é parte da prova
+
+Todo log, toda métrica e todo rastro tem uma janela de retenção. Antes de
+concluir qualquer coisa a partir de uma busca, confira se o período pedido cabe
+dentro da janela — sem isso, a busca não prova nada sobre o que aconteceu antes
+dela.
+
+#### "Não achei" fora da janela não significa nada
+
+Buscar um identificador e não encontrá-lo só é evidência de ausência quando a
+busca cobriu o período inteiro em que o evento poderia ter acontecido. Fora da
+janela de retenção, "não achei" quer dizer "não sei" — nunca "não aconteceu".
+
+#### Ausência de linha não é ausência de falha
+
+Sistema que não grava toda categoria de evento tem zero na tabela mesmo quando
+o evento aconteceu. Antes de tratar um zero como fato, confirme que o
+instrumento realmente registraria o que se procura — comparando com uma
+categoria vizinha de volume conhecido, por exemplo.
+
+#### O identificador da requisição costuma dizer a hora em que ela começou
+
+Muitos formatos de identificador de rastreio (trace id, request id) embutem um
+carimbo de tempo. Antes de assumir que o evento é recente, ou de descartá-lo
+por estar fora de uma janela estimada, decodifique o identificador — ele pode
+apontar para um instante bem mais antigo do que a hora em que foi observado.
+
 ## No Datadog
 
 ### O que já existe pronto, e não se reescreve
@@ -39980,7 +40951,7 @@ arquitetura**.
 
 ### Os nove passos, traduzidos
 
-A ordem genérica da investigação de incidente não se repete aqui. O que
+A ordem genérica está em "Investigação de incidente", acima. O que
 muda por ferramenta é onde se olha:
 
 | Passo | No Datadog |
@@ -39991,8 +40962,7 @@ muda por ferramenta é onde se olha:
 | 6 — o que mudou | implantações e eventos na linha do tempo, mais a trilha de auditoria de quem alterou o quê |
 | 7 — nosso ou de terceiro | o mapa de dependências entre serviços mostra de que lado o erro nasce |
 
-Os passos 1, 2, 8 e 9 não mudam de ferramenta. A ordem inteira está em
-`conhecimento/investigacao-de-incidente.md`, na camada.
+Os passos 1, 2, 8 e 9 não mudam de ferramenta.
 
 ### A sintaxe que decide se a busca mente
 

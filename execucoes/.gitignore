@@ -17,12 +17,8 @@
 # que reabriria a pasta inteira e deixaria roteiro local vazar.
 !catalogador.json
 !entrega.json
-!catalogador.md
-!entrega.md
 !revisar-a-camada.json
-!revisar-a-camada.md
 !mexida-em-vizinho.json
-!mexida-em-vizinho.md
 
 # Prompts de família, referenciados por prompt-de nas etapas acima.
 !prompts

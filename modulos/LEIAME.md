@@ -25,7 +25,7 @@ modulos/<nome>/
 └── .agents/skills/<skill>/      vai para .agents/skills/<skill>/
 ```
 
-Três regras que o mecanismo cobra:
+Quatro regras que o mecanismo cobra:
 
 - **O `LEIAME.md` da raiz do módulo fica.** Instalado, ele iria parar na raiz
   do repositório de destino e sobrescreveria arquivo alheio. LEIAME de
@@ -34,6 +34,10 @@ Três regras que o mecanismo cobra:
   mais.** É molde: o que nasce ali é a memória de quem usa, e a atualização
   não a sobrescreve. A fronteira é a mesma do mapa do repositório — primeiro
   nível é da camada, subpasta é do repositório.
+- **Módulo privado leva o arquivo `MODULO_PRIVADO` na raiz da pasta.** Com
+  ele, o instalador não embute o módulo nem as cópias em uso dele, o
+  publicador não sobe nenhum dos dois, e a matrícula não cobra o instrumento
+  dele. É para o jeito de trabalhar de quem usa, que não é técnica de agente.
 - **O nome da pasta é o nome do módulo, e ele não se renomeia.** Renomear
   deixa órfão eterno em toda máquina que já instalou. Módulo nasce com nome
   largo o bastante para caber a segunda ferramenta dentro dele.

@@ -72,7 +72,8 @@ COMANDO_DA_BRANCH_DA_ARVORE = ["git", "branch", "--show-current"]
 COMANDO_DO_COMMIT_DA_ARVORE = ["git", "rev-parse", "HEAD"]
 COMANDO_DA_BRANCH_NO_DURAVEL = [
     "git", "ls-remote", "--heads", "origin", "{}"]
-COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{}", "{}"]
+COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{0}", "{1}"]
+MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO = "ATLAS_BUSCA_FEITA"
 COMANDO_DA_RAIZ_DO_REPOSITORIO = ["git", "rev-parse", "--show-toplevel"]
 COMANDO_DO_QUE_NAO_ESTA_EM_REMOTO_NENHUM = [
     "git", "log", "--oneline", "--no-decorate", "HEAD", "--not", "--remotes"]
@@ -546,12 +547,20 @@ def sobra_fora_da_branch_de_entrega(raiz: Path):
     return dito
 
 
+def marca_da_busca_feita(principal: str, integracao: str, agora: float) -> tuple:
+    return (MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO,
+            f"{agora}|{principal},{integracao}")
+
+
 def commits_da_integracao_fora_da_principal(raiz: Path, principal: str,
                                             integracao: str):
     if not principal or not integracao:
         return NAO_MEDIDO
-    responde([parte.format(principal, integracao)
-              for parte in COMANDO_DE_BUSCA_NO_REMOTO], raiz, TEMPO_DA_REDE)
+    buscou = responde([parte.format(principal, integracao)
+                       for parte in COMANDO_DE_BUSCA_NO_REMOTO], raiz, TEMPO_DA_REDE)
+    if buscou is not NAO_MEDIDO and buscou[0] == 0:
+        chave, valor = marca_da_busca_feita(principal, integracao, time.time())
+        os.environ[chave] = valor
     comando = [parte.format(ESPELHO_NO_REMOTO.format(principal),
                             ESPELHO_NO_REMOTO.format(integracao))
                for parte in COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM]
@@ -1942,6 +1951,19 @@ def testar() -> int:
         caso("gh mudo no vizinho somente leitura é não medido, nunca pedido aberto",
              any("não deu para medir" in c
                  for c in o_que_cobra_com_pedidos(NAO_MEDIDO)))
+
+    montada = [parte.format("main", "homolog")
+               for parte in COMANDO_DE_BUSCA_NO_REMOTO]
+    caso("a busca no remoto traz a principal e a integração numa chamada só — "
+         "formatar cada pedaço com {} punha a principal nas duas posições, e a "
+         "integração nunca era buscada",
+         montada[-2:] == ["main", "homolog"])
+    avisar = globals().get("marca_da_busca_feita")
+    caso("depois de buscar, o gancho deixa a marca que dispensa o instrumento "
+         "de entrega de buscar de novo na mesma parada",
+         callable(avisar)
+         and avisar("main", "homolog", 1000.0) == ("ATLAS_BUSCA_FEITA",
+                                                   "1000.0|main,homolog"))
 
     falhas += [FALHA_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]

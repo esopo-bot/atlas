@@ -83,10 +83,10 @@ MANDA_GRAVAR = (
 LIMITE_CONFESSADO = (
     "O que esta cerca NÃO cobre, dito de frente para ninguém confiar "
     "demais nela: ela lê o CAMINHO pedido, não o que um programa faz por "
-    "dentro. `python montar.py --sincronizar` reescreve o settings.json e "
-    "passa, porque não nomeia o arquivo — e é assim de propósito, senão a "
-    "própria execução travaria. Isso não é permissão: é o limite do "
-    "instrumento."
+    "dentro. `python montar.py --atualizar` reescreve o settings.json e "
+    "passa, porque não nomeia o arquivo — e é assim de propósito, senão "
+    "todo programa que grava por dentro travaria a execução. Isso não é "
+    "permissão: é o limite do instrumento."
 )
 
 ACAO_ESCREVER_EM = "escrever em {!r}"
@@ -480,7 +480,9 @@ DEIXA_PASSAR_OS_CASOS = [
      pedido_de_escrita("Edit", "montar.py")),
     ("settings.local.json é pessoal e não é a política",
      pedido_de_escrita("Edit", ".claude/settings.local.json")),
-    ("montar.py --sincronizar reescreve o settings por dentro e passa",
+    ("montar.py --atualizar reescreve o settings por dentro e passa",
+     pedido_de_shell("python3 montar.py --atualizar")),
+    ("montar.py --sincronizar regenera as cópias e passa",
      pedido_de_shell("python3 montar.py --sincronizar")),
     ("skill nova, que é conteúdo",
      pedido_de_escrita("Write", ".agents/skills/nova/SKILL.md")),
@@ -630,8 +632,11 @@ def testar() -> int:
         caso("a recusa liga a cerca à bandeira que desligou a pergunta",
              "--dangerously-skip-permissions" in mensagem)
         caso("a recusa confessa o limite: o que escreve por dentro passa",
-             "montar.py --sincronizar" in mensagem
+             "montar.py --atualizar" in mensagem
              and "não é permissão" in mensagem)
+        caso("a recusa não ensina que o --sincronizar reescreve o "
+             "settings.json — só a montagem e a atualização o reescrevem",
+             "--sincronizar` reescreve" not in mensagem)
 
         caso("o dono continua passando: sem a marca da etapa, curl | sh "
              "não é recusado",

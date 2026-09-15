@@ -12,9 +12,9 @@ máquina, fica fora do git.
 
 | Pasta | O que mora ali | Viaja para quem instala? |
 | --- | --- | --- |
-| `conhecimento/` | página que gente lê | quatro: `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json` — e as três receitas de quem instala, `verificacao-pos-atualizacao.md`, `prova-de-leitura-do-agente.md` e `organizar-conhecimento-e-projetos.md`. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
+| `conhecimento/` | página que gente lê | três: `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json` — e as duas receitas de quem instala, `verificacao-pos-atualizacao.md` e `organizar-conhecimento-e-projetos.md`. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
 | `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `perfil-de-repositorio` | não: é conteúdo do workspace, fora do git |
-| `.agents/` | instrumentos (Python), as skills (fonte) e um prompt só, `.agents/prompts/bootstart.md`: o briefing de abertura para qualquer agente — o que a sessão vai encontrar, o que os ganchos recusam, e que skill ou receita atende cada pedido | os instrumentos, as skills e o bootstart, sim. Quem tem comando de barra chega nele por `/bootstart`; quem só carrega o arquivo de instruções da raiz chega pelo `AGENTS.md`; e o primeiro comando dele é a saúde da abertura |
+| `.agents/` | instrumentos (Python), as skills (fonte) e dois prompts: `.agents/prompts/bootstart.md`, o briefing de abertura para qualquer agente — o que a sessão vai encontrar, o que os ganchos recusam, e que skill ou receita atende cada pedido — e [`.agents/prompts/partida.md`](../.agents/prompts/partida.md), o checklist de partida, que roda sob demanda, em qualquer agente, e devolve o relatório GO ou NO-GO | os instrumentos, as skills e os dois prompts, sim. Quem tem comando de barra chega neles por `/bootstart` e `/partida`; quem só carrega o arquivo de instruções da raiz chega pelo `AGENTS.md`, que manda ler o briefing e aponta a partida para quando o dono pedir; e o primeiro comando do briefing é a saúde da abertura |
 | `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills e a regra por caminho do padrão de código, gerada da skill | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |
 | `modulos/` | peça opcional, que só chega para quem pedir pelo nome | não |
@@ -128,8 +128,22 @@ ser independentes: se o despachante não sobe, **todas** caem juntas. Ele
 paga isso negando por conta da cerca que estourar, em vez de deixar passar
 sem cerca, e continua avaliando as outras.
 
-Toda linha de gancho começa pelo **lançador**, `.claude/hooks/interpretador.sh`:
-um script de bash que escolhe o interpretador por execução — o primeiro da
+Toda linha de gancho chama o Python pelo nome que o instalador mediu nesta
+máquina, e o próprio Python acha o gancho: `python -c "..."
+.claude/hooks/<arquivo>.py`. O programa curto do `-c` lê a raiz em
+`CLAUDE_PROJECT_DIR`, ou no diretório atual quando a variável falta, põe a
+pasta dos ganchos no lugar do diretório atual no caminho de importação, e roda
+o gancho no mesmo processo; gancho que falta sai 2, que barra. **A linha não
+tem variável no texto de propósito.** O Claude Code roda o gancho pelo Git Bash
+no Windows; o Copilot, com a pasta confiada, roda o mesmo `.claude/settings.json`
+por uma concha que não expande `${...}`, e já entrega a variável no ambiente e
+a entrada no formato do Claude; a ponte do Codex e do Devin roda as cercas pelo
+cmd. Só uma linha sem variável no texto roda igual nas três — medido em
+15/09/2026, com a sonda recusada no Copilot pela cerca do próprio Claude.
+
+O **lançador**, `.claude/hooks/interpretador.sh`, fica para a linha de reserva,
+quando nenhum Python respondeu na instalação, e para as pontes do Codex e do
+Devin. É um script de bash que escolhe o interpretador por execução — o primeiro da
 lista dele que responde `3` a `-c "import sys; print(sys.version_info[0])"` —
 e entrega o gancho a ele. Ele existe porque o nome `python3` não é universal:
 no Windows é o atalho da loja, que está no PATH, não roda, e `which` dá por
@@ -153,8 +167,9 @@ impostor na lembrança e prova que o Python roda no lugar dele. Medido em
 09/09/2026, A/B intercalado, 25 voltas de cada braço
 numa camada de verdade: a chamada de uma ferramenta caiu de **371 ms para
 229 ms** de mediana (p10 de 324 para 199), e o piso restante é o bash mais a
-partida do Python — chamar o Python direto, sem bash, economizaria só 56 ms
-a mais e custaria a portabilidade que o lançador existe para dar.
+partida do Python. Chamar o Python direto, sem bash, economizava mais 56 ms;
+em 10/09/2026 a linha passou a fazer isso com o nome medido na instalação, e
+o lançador ficou como reserva.
 
 **Quando nenhum nome responde, o lançador sai 2, que é a única saída que
 barra.** A documentação oficial dos ganchos é explícita: em `PreToolUse` só
@@ -256,7 +271,8 @@ tem duas metades, e as duas atravessam — por caminhos diferentes.
 | o que | como atravessa |
 | --- | --- |
 | as regras, as skills, as nove barreiras, as páginas | sozinhas: é texto, e a outra ferramenta testada já lê `.agents/skills/` sem configuração nenhuma |
-| as cercas que recusam e as que orientam | pela **ponte**, ligada com `python montar.py --devin` para o agente de terminal e `--copilot` para o assistente do editor (`.github/hooks/atlas.json`) |
+| as cercas que recusam e as que orientam | pela **ponte**, ligada com `python montar.py --devin --escrever` para o agente de terminal e `--codex --escrever` para o agente sem comando de barra; sem `--escrever`, as duas só ensaiam (`.codex/hooks.json`, mais o espelho dos servidores de contexto em `~/.codex/config.toml`). O Copilot não tem ponte: com a pasta confiada, ele roda direto as cercas do `.claude/settings.json` — medido no CLI em 15/09/2026 |
+| a abertura e a parada | no agente sem comando de barra, pela mesma ponte: `SessionStart` e `Stop` do `.codex/hooks.json` |
 
 A ponte não é cerca nova. Ela lê a mesma lista de cercas que o Claude Code lê,
 traduz o nome da ferramenta que chegou — os parâmetros já são os mesmos — e
@@ -276,6 +292,16 @@ A primeira linha **não abre sessão nenhuma**: ela conversa com a ponte no
 dialeto da outra ferramenta e compara com o que a camada deveria responder. É
 de graça e se repete quando quiser. A segunda abre duas sessões, com e sem a
 camada, e diz a diferença — essa paga, e avisa que paga.
+
+**O agente sem comando de barra ignora gancho não revisado, em silêncio.**
+Medido em 14/09/2026: com `.codex/hooks.json` escrito e `hooks = true`,
+a escrita na cópia gerada passou sem uma linha de log. Ele só roda gancho
+que o dono marcou como confiável pelo `/hooks`, por hash da definição, e
+gancho que muda pede revisão de novo. Para provar sem o dono, a sessão
+não interativa aceita `--dangerously-bypass-hook-trust`; foi assim que a
+regra 15 barrou o `apply_patch` na cópia gerada. O patch chega inteiro em
+`tool_input.command`, e a ponte o traduz em uma escrita por arquivo antes
+de perguntar às cercas.
 
 **O que ainda não atravessa.** A lista de caminhos negados da outra ferramenta
 só vale no arquivo de configuração do usuário, não no do repositório: foi

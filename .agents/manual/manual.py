@@ -2,6 +2,7 @@ import argparse
 import html
 import io
 import re
+import subprocess
 import sys
 import unicodedata
 from contextlib import redirect_stdout
@@ -12,6 +13,7 @@ USO = ("gera o manual do atlas num arquivo HTML só, a partir das páginas de "
        "conhecimento/: abre com duplo clique, sem servidor e sem rede")
 
 DESTINO = "manual.html"
+TEMPO_DO_GIT = 30
 PASTA_DAS_PAGINAS = "conhecimento"
 PAGINA_DA_RECEITA = "execucoes/LEIAME.md"
 ABERTURA = ("conhecimento/LEIAME.md", "conhecimento/mapa-do-repositorio.md")
@@ -270,9 +272,27 @@ def converter(texto: str, ancoras: dict, comandos: list, origem: str) -> str:
     return "\n".join(saida)
 
 
+def paginas_que_o_git_ignora(raiz: Path) -> set:
+    try:
+        rodada = subprocess.run(
+            ["git", "-C", str(raiz), "ls-files", "--others", "--ignored",
+             "--exclude-standard", "--", PASTA_DAS_PAGINAS],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=TEMPO_DO_GIT)
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    if rodada.returncode != 0:
+        return set()
+    return {linha.strip() for linha in rodada.stdout.splitlines()
+            if linha.strip()}
+
+
 def paginas_do_disco(raiz: Path) -> list:
     pasta = raiz / PASTA_DAS_PAGINAS
-    todas = sorted(f"{PASTA_DAS_PAGINAS}/{p.name}" for p in pasta.glob("*.md"))
+    ignoradas = paginas_que_o_git_ignora(raiz)
+    todas = sorted(rel for rel in (f"{PASTA_DAS_PAGINAS}/{p.name}"
+                                   for p in pasta.glob("*.md"))
+                   if rel not in ignoradas)
     ordenadas = [rel for rel in ABERTURA if rel in todas]
     ordenadas += [rel for rel in todas if rel not in ordenadas]
     if (raiz / PAGINA_DA_RECEITA).is_file():
@@ -537,6 +557,20 @@ def testar() -> int:
         caso("pergunta que perdeu a seção falha alto, e não gera manual torto",
              ERRO_SEM_ANCORA.split(":")[0] in str(erro_de(
                  lambda: montar(raiz))))
+
+    with tempfile.TemporaryDirectory() as pasta, redirect_stdout(mudo):
+        raiz = arvore_de_mentira(Path(pasta))
+        (raiz / PASTA_DAS_PAGINAS / "modulo-instalado.md").write_text(
+            "# Página de módulo instalado\n", encoding="utf-8")
+        (raiz / ".gitignore").write_text(
+            f"{PASTA_DAS_PAGINAS}/modulo-instalado.md\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=raiz, capture_output=True)
+        lidas = paginas_do_disco(raiz)
+        caso("página que o git ignora não entra no manual — senão ele muda "
+             "conforme a máquina que o gera tem o módulo instalado",
+             f"{PASTA_DAS_PAGINAS}/modulo-instalado.md" not in lidas)
+        caso("página que o git não ignora entra mesmo antes do add",
+             f"{PASTA_DAS_PAGINAS}/mapa-do-repositorio.md" in lidas)
 
     falhas = [nome for nome, deu_certo in resultados if not deu_certo]
     for falha in falhas:

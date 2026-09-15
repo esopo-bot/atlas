@@ -62,9 +62,11 @@ chama não precisa existir — e instalar por precaução é sujeira futura.
       sai sem rodar e engana o `which`; em Linux enxuto `python` pode não
       existir. Julgue executando, nunca pelo nome:
       `python -c "import sys; print(sys.version_info[0])"` — e se esse nome
-      não responder `3`, tente `python3`. Os ganchos não dependem disso:
-      eles passam pelo lançador `.claude/hooks/interpretador.sh`, que
-      escolhe o interpretador por execução.
+      não responder `3`, tente `python3`. Os ganchos do Claude Code dependem
+      disso: a linha de cada um chama o Python pelo nome medido na
+      instalação; sem Python que responda, ela volta ao lançador
+      `.claude/hooks/interpretador.sh`, que escolhe o interpretador por
+      execução.
 - [ ] `gh auth status` — necessário se o repositório abre issue, comenta ou
       mexe no quadro. Se a camada aqui move cartão de projeto, a linha de
       escopos precisa trazer `project`; só `repo` comenta e etiqueta, mas

@@ -61,8 +61,8 @@ pedido do dono vem no fim.
    da loja de aplicativos: está no PATH, não roda, e `which` o dá por
    presente. Julgue executando
    (`python -c "import sys; print(sys.version_info[0])"`), nunca pelo nome.
-   Os ganchos não dependem disso: passam pelo lançador
-   `.claude/hooks/interpretador.sh`.
+   Os ganchos chamam o Python pelo nome medido na instalação, e voltam ao
+   lançador `.claude/hooks/interpretador.sh` só quando nenhum respondeu.
 8. **A árvore pode ser compartilhada.** Mais de uma sessão trabalha na mesma
    raiz: `git worktree list`, `git status --short` e
    `git branch --show-current` antes de qualquer `git`. Nunca `checkout`,
@@ -89,7 +89,7 @@ pedido do dono vem no fim.
 python .agents/camada/camada.py --abertura
 ```
 
-Com a raiz por extenso quando você não estiver nela. Ele prova quatro peças e falha alto nomeando a que falta: o arquivo de
+Fora da raiz, acrescente `--raiz` com o caminho por extenso. Ele prova quatro peças e falha alto nomeando a que falta: o arquivo de
 instruções na raiz (regra 1), a declaração dos servidores de contexto
 (`.mcp.json`), o endereço do quadro de issues (`nucleo/executor.json`) e o
 índice de pé (`.agents/indice/alvos.json` mais as duas portas). Peça que
@@ -137,12 +137,11 @@ precisa abrir dois.
 | indexar um projeto, criar ou atualizar o perfil de um vizinho | skill `perfil-de-repositorio` | o perfil mora em `conhecimento/projetos/`, fora do git |
 | só pesquisar, sem escrever no repositório | a marca `ATLAS_SO_LEITURA` no ambiente (seção abaixo) | a cerca fecha a escrita e a cobrança de destino cala; entrega na issue |
 | a camada foi atualizada aqui | página `conhecimento/verificacao-pos-atualizacao.md` | prova a instalação e caça o resto da versão anterior |
-| provar que o agente lê a camada | página `conhecimento/prova-de-leitura-do-agente.md` | tabela com saída colada, em comentário de issue |
+| provar que o agente lê a camada | seção "Prova de leitura" do checklist `.agents/prompts/partida.md` | tabela com saída colada, em comentário de issue |
 | organizar `conhecimento/` e `projetos/` | página `conhecimento/organizar-conhecimento-e-projetos.md` | lista antes de mover; apagar é do dono |
-| auditar a camada de fora, para derrubar | página `conhecimento/auditoria-externa-da-camada.md` | medir antes de afirmar; achado vira linha do quadro |
+| auditar a camada de fora, para derrubar | seção "A auditoria externa" de `execucoes/LEIAME.md` | medir antes de afirmar; achado vira linha do quadro |
 | fechar uma conclusão antes de agir sobre ela | skill `verificacao-adversarial` | provado / provável / não provado |
 | dar um trabalho por pronto | skill `analise-de-promocao` | o que dele vira genérico |
-| a reunião do dia | skill `reuniao-diaria` | minuta no quadro |
 | encerrar o dia | skill `encerramento-de-sessao` | colhe o que a sessão ensinou |
 
 Cinco hábitos que a bancada mediu faltarem, qualquer que seja o caminho:
@@ -160,7 +159,7 @@ Cinco hábitos que a bancada mediu faltarem, qualquer que seja o caminho:
 - **Duas tentativas no mesmo obstáculo e pare**: leia a receita ou pergunte,
   em vez de trocar de ferramenta. Trocar de ferramenta seis vezes é sinal de
   que a receita existe e não foi lida.
-- **Trabalho em vizinho tem receita escrita**, `execucoes/mexida-em-vizinho.md`
+- **Trabalho em vizinho tem receita escrita**, na seção "Mexida em repositório vizinho" de `execucoes/LEIAME.md`
   — instrumento da camada não se descobre por `--help` nem lendo o fonte.
 - **Edite só as linhas pedidas, com a ferramenta de edição** — nunca
   `sed -i`, nunca script próprio que reescreve o arquivo. Se o diff mostrar o
@@ -278,6 +277,7 @@ inventário vivo é `conhecimento/guarda-mecanica-das-regras.md`.
 | `avisar-sessao-paralela` | outra sessão viva na mesma raiz | aviso, uma vez: `git add` por caminho, e diga à outra o que vai tocar |
 | `vetar-caminho-relativo-apos-cd` | `cd <pasta>` seguido de caminho relativo | caminho absoluto, ou `git -C` |
 | `vetar-escrita-em-sessao-de-pesquisa` | com `ATLAS_SO_LEITURA` posta, qualquer escrita dentro da raiz | pasta temporária da máquina; o que vale vai para a issue |
+| `vetar-despejo-de-ambiente` | comando que despeja o ambiente sem nomear a variável (`env`, `printenv`, `set`, `export -p`, `os.environ` inteiro, `gci env:`); pergunta com gente na sessão e recusa quando não há quem responda | leia a variável pelo nome; faltando o nome, liste só nomes: `compgen -e`, `(gci env:).Name`, `sorted(os.environ)` |
 | `vetar-documento-rastreavel` | `.pdf`, `.docx`, `.pptx`, `.xlsx`… nascendo onde o git rastrearia | pasta fora do git; ou declare em `.claude/documentos-versionados.txt` |
 | `cobrar-apresentacao-da-entrega` | na parada, vizinho com `apresentacao` no cadastro recebeu mescla desta sessão e o transcript não mostra, depois dela, navegação ao endereço declarado pelo navegador do dono (e voz, se pedida) | abra a integração no navegador dele, troque para o perfil que a prova pede, percorra o entregue narrando, defenda produção; só então o relato |
 
