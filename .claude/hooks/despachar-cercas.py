@@ -18,6 +18,7 @@ CHAVE_DO_EVENTO = "hookEventName"
 CHAVE_DA_DECISAO = "permissionDecision"
 CHAVE_DA_RAZAO = "permissionDecisionReason"
 CHAVE_DO_CONTEXTO = "additionalContext"
+CHAVE_DA_MENSAGEM_DE_SISTEMA = "systemMessage"
 
 CERCAS = (
     ("vetar-branch-protegida", "Bash|PowerShell"),
@@ -35,11 +36,13 @@ CERCAS = (
      "Write|Edit|NotebookEdit|Bash|PowerShell"),
     ("vetar-escrita-em-politica", "Write|Edit|NotebookEdit|Bash|PowerShell"),
     ("avisar-sessao-paralela", "Write|Edit|NotebookEdit|Bash|PowerShell"),
-    ("vetar-caminho-relativo-apos-cd", "Bash|PowerShell"),
+    ("avisar-clone-desatualizado", "Read|Bash|PowerShell"),
     ("vetar-escrita-em-sessao-de-pesquisa",
      "Write|Edit|NotebookEdit|Bash|PowerShell"),
     ("vetar-documento-rastreavel", "Write|Edit|NotebookEdit"),
     ("vetar-despejo-de-ambiente", "Bash|PowerShell"),
+    ("vetar-enxame-de-agentes",
+     "Task|Agent|Workflow|Write|Edit|NotebookEdit|Bash|PowerShell|Read"),
 )
 
 CHAVE_DA_FERRAMENTA = "tool_name"
@@ -107,11 +110,32 @@ def ler_a_saida_da_cerca(texto: str):
     return None
 
 
+def mensagem_de_sistema_da_linha(linha: str) -> str:
+    if not linha.startswith("{"):
+        return ""
+    try:
+        dado = json.loads(linha)
+    except ValueError:
+        return ""
+    if not isinstance(dado, dict):
+        return ""
+    mensagem = dado.get(CHAVE_DA_MENSAGEM_DE_SISTEMA)
+    return mensagem if isinstance(mensagem, str) else ""
+
+
+def mensagens_de_sistema(texto: str) -> list:
+    achadas = [mensagem_de_sistema_da_linha(linha.strip())
+               for linha in texto.splitlines()]
+    return [mensagem for mensagem in achadas if mensagem]
+
+
 def sobrou_de_prosa(texto: str) -> str:
     sobra = []
     for linha in texto.splitlines():
         limpa = linha.strip()
         if limpa.startswith("{") and CHAVE_DA_SAIDA in limpa:
+            continue
+        if mensagem_de_sistema_da_linha(limpa):
             continue
         if limpa:
             sobra.append(limpa)
@@ -163,8 +187,11 @@ def despachar(pasta, corpo: str, cercas=CERCAS):
         elif bloco and bloco.get(CHAVE_DA_DECISAO) == DECISAO_DE_PERGUNTAR:
             perguntas.append(UMA_RAZAO.format(
                 nome, bloco.get(CHAVE_DA_RAZAO, "")))
+        ditos = mensagens_de_sistema(saida)
         if bloco and bloco.get(CHAVE_DO_CONTEXTO):
-            contextos.append(bloco[CHAVE_DO_CONTEXTO])
+            ditos.insert(0, bloco[CHAVE_DO_CONTEXTO])
+        contextos.extend(dito for dito in dict.fromkeys(ditos)
+                         if dito not in contextos)
         avulso = sobrou_de_prosa(saida)
         if avulso:
             prosa.append(UMA_RAZAO.format(nome, avulso))
@@ -184,20 +211,20 @@ def responder(razoes, contextos, prosa, perguntas) -> int:
             CHAVE_DO_EVENTO: EVENTO_ANTES_DA_FERRAMENTA,
             CHAVE_DA_DECISAO: DECISAO_DE_NEGAR,
             CHAVE_DA_RAZAO: "\n\n".join(razoes),
-        }}, ensure_ascii=False))
+        }}))
         return SILENCIO
     if perguntas:
         print(json.dumps({CHAVE_DA_SAIDA: {
             CHAVE_DO_EVENTO: EVENTO_ANTES_DA_FERRAMENTA,
             CHAVE_DA_DECISAO: DECISAO_DE_PERGUNTAR,
             CHAVE_DA_RAZAO: "\n\n".join(perguntas),
-        }}, ensure_ascii=False))
+        }}))
         return SILENCIO
     if contextos:
         print(json.dumps({CHAVE_DA_SAIDA: {
             CHAVE_DO_EVENTO: EVENTO_ANTES_DA_FERRAMENTA,
             CHAVE_DO_CONTEXTO: "\n\n".join(contextos),
-        }}, ensure_ascii=False))
+        }}))
     return SILENCIO
 
 
@@ -267,6 +294,14 @@ def main():
     return 0
 '''
 
+CERCA_QUE_AVISA_POR_MENSAGEM_DE_SISTEMA = '''
+import json, sys
+def main():
+    json.load(sys.stdin)
+    print(json.dumps({"systemMessage": "aviso que os dois avisos reais usam"}))
+    return 0
+'''
+
 CERCA_QUE_FALA_EM_PROSA = '''
 import json, sys
 def main():
@@ -301,6 +336,11 @@ BANCADA = (
      [("limpa", CERCA_QUE_SAI_LIMPA)], 0, 0),
     ("aviso sobrevive quando ninguém nega",
      [("avisa", CERCA_QUE_AVISA)], 0, 1),
+    ("aviso dado por mensagem de sistema chega como contexto — tratado "
+     "como prosa, ele ia para o canal de erro com saída zero e ninguém via",
+     [("avisa", CERCA_QUE_AVISA_POR_MENSAGEM_DE_SISTEMA)], 0, 1),
+    ("prosa solta continua sendo prosa, não vira contexto",
+     [("fala", CERCA_QUE_FALA_EM_PROSA)], 0, 0),
     ("cada cerca recebe o corpo inteiro, não só a primeira",
      [("passa", CERCA_QUE_DEIXA_PASSAR),
       ("exige", CERCA_QUE_EXIGE_O_CORPO_INTEIRO),
@@ -345,6 +385,69 @@ def perguntas_de(pasta, cercas) -> list:
     return despachar(pasta, CORPO_DE_PROVA, cercas)[3]
 
 
+ALCANCE_NAO_MEDIDO = ("NÃO MEDIDO: a linha do despachante em {} não foi lida "
+                      "({}) — o alcance declarado de cada cerca ficou sem "
+                      "conferência")
+ALCANCE_QUE_NUNCA_CHEGA = ("{} declara alcançar {}, e a linha do despachante "
+                           "na configuração do agente nunca o chama para "
+                           "isso: alcance declarado que não existe")
+
+
+def alcance_declarado_que_a_configuracao_nao_entrega() -> list:
+    configuracao = pasta_das_cercas().parent / "settings.json"
+    try:
+        ganchos = json.loads(configuracao.read_text(encoding="utf-8"))[
+            "hooks"]["PreToolUse"]
+        do_despachante = [g["matcher"] for g in ganchos
+                          if any(pathlib.Path(__file__).name in h["command"]
+                                 for h in g["hooks"])]
+    except (OSError, ValueError, KeyError, TypeError) as erro:
+        return [ALCANCE_NAO_MEDIDO.format(configuracao.name,
+                                          type(erro).__name__)]
+    if len(do_despachante) != 1:
+        return [ALCANCE_NAO_MEDIDO.format(
+            configuracao.name, "%d linha(s)" % len(do_despachante))]
+    entregue = set(do_despachante[0].split("|"))
+    return [ALCANCE_QUE_NUNCA_CHEGA.format(cerca, ", ".join(sorted(sobra)))
+            for cerca, matcher in CERCAS
+            if matcher and (sobra := set(matcher.split("|")) - entregue)]
+
+
+RAZAO_FORA_DO_CP1252 = "cerca: a seta → não existe no cp1252"
+SAIDA_QUE_O_CP1252_DERRUBA = (
+    "a recusa com caractere fora do cp1252, impressa sem o modo UTF-8, tem "
+    "de sair JSON válido com a razão intacta — saiu %d, razão %r, erro %r")
+
+
+def saida_que_o_cp1252_derruba() -> list:
+    import os
+    import subprocess
+    programa = (
+        "import importlib.util, sys\n"
+        "especificacao = importlib.util.spec_from_file_location("
+        "'despachante', sys.argv[1])\n"
+        "modulo = importlib.util.module_from_spec(especificacao)\n"
+        "especificacao.loader.exec_module(modulo)\n"
+        "sys.exit(modulo.responder([" + ascii(RAZAO_FORA_DO_CP1252)
+        + "], [], [], []))\n")
+    ambiente = {k: v for k, v in os.environ.items()
+                if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+    ambiente.update(PYTHONUTF8="0", PYTHONIOENCODING="cp1252")
+    corrida = subprocess.run(
+        [sys.executable, "-c", programa, str(pathlib.Path(__file__).resolve())],
+        env=ambiente, capture_output=True, timeout=60)
+    try:
+        razao = json.loads(corrida.stdout.decode("utf-8"))[CHAVE_DA_SAIDA][
+            CHAVE_DA_RAZAO]
+    except (ValueError, KeyError, TypeError):
+        razao = None
+    if corrida.returncode == 0 and razao == RAZAO_FORA_DO_CP1252:
+        return []
+    return [SAIDA_QUE_O_CP1252_DERRUBA % (
+        corrida.returncode, razao,
+        corrida.stderr.decode("utf-8", "replace")[-200:])]
+
+
 def testar() -> int:
     import tempfile
     falhas = []
@@ -387,6 +490,29 @@ def testar() -> int:
         if "pergunta por" not in decidido.get(CHAVE_DA_RAZAO, ""):
             falhas.append("a razão da cerca que pergunta se perdeu no "
                           "caminho")
+    with tempfile.TemporaryDirectory() as pasta:
+        montar_bancada(pasta, [
+            ("avisa", CERCA_QUE_AVISA_POR_MENSAGEM_DE_SISTEMA),
+            ("repete", CERCA_QUE_AVISA_POR_MENSAGEM_DE_SISTEMA)])
+        entregue, vazado = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(entregue), \
+                contextlib.redirect_stderr(vazado):
+            responder(*despachar(pasta, CORPO_DE_PROVA,
+                                 (("avisa", ""), ("repete", ""))))
+        esperado = "aviso que os dois avisos reais usam"
+        try:
+            chegou = json.loads(entregue.getvalue())[CHAVE_DA_SAIDA].get(
+                CHAVE_DO_CONTEXTO, "")
+        except (ValueError, KeyError):
+            chegou = None
+        if chegou != esperado:
+            falhas.append(
+                "o aviso tem de CHEGAR ao cliente, com o texto dele e uma "
+                "vez só mesmo dito por duas cercas — a bancada provava a "
+                "coleta e não a entrega. Chegou: %r" % (chegou,))
+        if esperado in vazado.getvalue():
+            falhas.append("aviso entregue como contexto não reaparece como "
+                          "prosa no canal de erro")
     for caso in BANCADA:
         titulo, arquivos, negas_esperadas, contextos_esperados = caso[:4]
         forcados = caso[4] if len(caso) > 4 else None
@@ -415,6 +541,8 @@ def testar() -> int:
                 falhas.append("%s — esperava %d razão(ões), veio %d" % (
                     titulo, negas_esperadas, len(razoes)))
 
+    falhas.extend(saida_que_o_cp1252_derruba())
+    falhas.extend(alcance_declarado_que_a_configuracao_nao_entrega())
     total = len(BANCADA) + len(BANCADA_DO_ALCANCE) + len(BANCADA_DO_ROTEIRO)
     if falhas:
         for linha in falhas:

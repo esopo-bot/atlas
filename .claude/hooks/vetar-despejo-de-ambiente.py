@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shlex
 import sys
@@ -7,7 +8,8 @@ EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
 DECISAO_DE_PERGUNTAR = "ask"
 CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
-MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
+MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO = "bypassPermissions"
+MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
 BANDEIRA_DE_TESTE = "--testar"
 SILENCIO = 0
 PASSA = ""
@@ -22,7 +24,25 @@ DOCUMENTO_LITERAL = re.compile(
 INTERPRETADORES_QUE_EXECUTAM_O_DOCUMENTO = (
     "python", "python3", "node", "nodejs", "ruby", "perl", "php",
     "sh", "bash", "zsh", "dash", "ksh", "pwsh", "powershell")
+INTERPRETADORES_DE_SHELL = ("sh", "bash", "zsh", "dash", "ksh")
 SUBSTITUICAO_QUE_EXECUTA = ("$(", "`")
+ABRE_SUBSTITUICAO = "$("
+PROFUNDIDADE_DO_PARENTESE = {"(": 1, ")": -1}
+ABRE_ASPA_ANSI = "$'"
+CRASE = "`"
+CONTRABARRA = "\\"
+ASPA_SIMPLES = "'"
+ASPA_DUPLA = '"'
+FECHA_GRUPO = ")"
+PALAVRA_QUE_O_SHELL_TROCA = "''"
+NO_CORPO = "corpo do documento"
+NA_SUBSTITUICAO = "substituição"
+NA_CRASE = "crase"
+NA_ASPA_SIMPLES = "aspa simples"
+NA_ASPA_DUPLA = "aspa dupla"
+NA_ASPA_ANSI = "aspa $'...'"
+GUARDAM_COMANDO = (NA_SUBSTITUICAO, NA_CRASE)
+ABRE_ASPA_NO_COMANDO = {ASPA_SIMPLES: NA_ASPA_SIMPLES, ASPA_DUPLA: NA_ASPA_DUPLA}
 ATRIBUICAO_DE_AMBIENTE = re.compile(r"^[A-Za-z_]\w*=")
 PREFIXOS_TRANSPARENTES = ("command", "builtin", "exec", "sudo", "nohup", "time")
 ASPAS = "\"'"
@@ -134,6 +154,31 @@ BARRA_O_COMANDO = [
      "cat <<FIM\n$(env)\nFIM"),
     ("comando depois do documento segue sendo julgado",
      "cat <<'FIM'\nx\nFIM\nenv"),
+    ("declare -p sem nome", "declare -p"),
+    ("documento que alimenta o bash é comando do shell: declare -p segue "
+     "negado", "bash <<'FIM'\ndeclare -p\nFIM"),
+    ("declare -x depois do documento do python segue negado",
+     "python - <<'FIM'\nprint(1)\nFIM\ndeclare -x"),
+    ("documento sem aspas executa o $(...) do corpo, seja quem for que o "
+     "leia", "cat <<EOF\n$(\ndeclare -p\n)\nEOF"),
+    ("documento sem aspas executa a crase do corpo",
+     "cat <<EOF\n`declare -p`\nEOF"),
+    ("documento sem aspas do python também executa o $(...) do corpo",
+     "python - <<EOF\n$(declare -p)\nEOF"),
+    ("substituição dentro de substituição também é comando do shell",
+     "cat <<EOF\n$(echo $(declare -x))\nEOF"),
+    ("o ) entre aspas simples não fecha a substituição",
+     "cat <<EOF\n$(printf ')'; declare -p)\nEOF"),
+    ("o ) entre aspas duplas não fecha a substituição",
+     "cat <<EOF\n$(echo \")\"; declare -p)\nEOF"),
+    ("dentro de $'...' a contrabarra escapa a aspa, e o ) não fecha",
+     "cat <<EOF\n$(printf $'\\')'; declare -p)\nEOF"),
+    ("a contrabarra antes do nome do comando não o esconde",
+     "cat <<EOF\n$(\\declare -p)\nEOF"),
+    ("contrabarra escapada não escapa o $ seguinte",
+     "cat <<EOF\n\\\\$(declare -p)\nEOF"),
+    ("substituição entre aspas duplas dentro da substituição executa",
+     "cat <<EOF\n$(echo \"$(declare -p)\")\nEOF"),
 ]
 DEIXA_PASSAR = [
     ("echo de variável nomeada", "echo $CLAUDE_PROJECT_DIR"),
@@ -181,6 +226,27 @@ DEIXA_PASSAR = [
     ("documento sem aspas mas sem substituição também é texto",
      "cat > nota.md <<FIM\nfor k, v in os.environ.items()\nFIM"),
     ("variável nomeada despejada em arquivo", "echo $HOME > /tmp/x.txt"),
+    ("DECLARE do SQL num documento que o python lê é código do python, não "
+     "o declare do shell",
+     "python - <<'EOF'\nsql = '''\nDO $$\nDECLARE\n    v_total integer;\n"
+     "BEGIN\n    SELECT count(*) INTO v_total FROM t;\nEND $$;\n'''\n"
+     "print(sql)\nEOF"),
+    ("declare minúsculo do SQL, no documento do python, também",
+     "python - <<'EOF'\nsql = 'do $$; declare; begin; end $$'\nEOF"),
+    ("no documento que o cat lê, só a substituição executa: a linha env "
+     "ao lado dela é texto", "cat <<FIM\n$(date)\nenv\nFIM"),
+    ("DECLARE do SQL num documento sem aspas do python segue texto, ao lado "
+     "de uma substituição inofensiva",
+     "python - <<EOF\nsql = '''\nDO $$\nDECLARE\n    v_total integer;\n"
+     "BEGIN\nEND $$;\n'''\nprint('$(date)')\nEOF"),
+    ("no documento entre aspas nada se expande: $(declare -p) é texto",
+     "cat <<'EOF'\n$(declare -p)\nEOF"),
+    ("no documento sem aspas, \\$ torna a substituição literal",
+     "cat <<EOF\n\\$(declare -p)\nEOF"),
+    ("a mesma contrabarra vale para o $(env)",
+     "cat <<EOF\n\\$(env)\nEOF"),
+    ("dentro da substituição, o que está entre aspas simples é literal",
+     "cat <<EOF\n$(printf '%s' '$(declare -p)')\nEOF"),
 ]
 
 
@@ -222,13 +288,13 @@ def despeja_sem_nomear(nome: str, argumentos: list) -> bool:
     return False
 
 
-def despejo_de_shell(comando: str) -> str:
-    for segmento in SEPARADORES_DE_COMANDO.split(comando):
+def despejo_de_shell(linhas_do_shell: str, comando: str) -> str:
+    for segmento in SEPARADORES_DE_COMANDO.split(linhas_do_shell):
         tokens = tokens_de(segmento)
         nome, argumentos = comando_e_argumentos(tokens)
         if nome and despeja_sem_nomear(nome, argumentos):
             return segmento.strip()
-    achado = SUBSTITUICAO_QUE_DESPEJA.search(comando)
+    achado = SUBSTITUICAO_QUE_DESPEJA.search(linhas_do_shell)
     if achado:
         return achado.group(0)
     achado = ENVIRON_DO_PROCESSO.search(comando)
@@ -263,10 +329,14 @@ def despejo_de_powershell(comando: str) -> str:
     return achado.group(0).strip() if achado else PASSA
 
 
-def o_documento_e_executado(achado) -> bool:
+def leitor_do_documento(achado) -> str:
     abertura = SEPARADORES_DE_COMANDO.split(achado.group("abertura"))[-1]
     nome, _ = comando_e_argumentos(tokens_de(abertura))
-    if nome in INTERPRETADORES_QUE_EXECUTAM_O_DOCUMENTO:
+    return nome
+
+
+def o_documento_e_executado(achado) -> bool:
+    if leitor_do_documento(achado) in INTERPRETADORES_QUE_EXECUTAM_O_DOCUMENTO:
         return True
     expande = not achado.group("aspa")
     return expande and any(marca in achado.group("corpo")
@@ -281,26 +351,98 @@ def sem_os_documentos_que_sao_dado(comando: str) -> str:
     return DOCUMENTO_LITERAL.sub(corpo_ou_nada, comando)
 
 
+def quadro_novo(onde: str) -> dict:
+    return {"onde": onde, "lido": [], "grupos": 0}
+
+
+def comandos_que_o_documento_executa(corpo: str) -> list:
+    pilha, comandos, i = [quadro_novo(NO_CORPO)], [], 0
+    while i < len(corpo):
+        quadro, c, passo = pilha[-1], corpo[i], 1
+        onde, lido = quadro["onde"], quadro["lido"]
+        if onde == NA_ASPA_SIMPLES:
+            if c == ASPA_SIMPLES:
+                pilha.pop()
+        elif c == CONTRABARRA:
+            escapado = corpo[i + 1:i + 2]
+            if onde in GUARDAM_COMANDO and escapado.isalnum():
+                lido.append(escapado)
+            passo = 2
+        elif onde == NA_ASPA_ANSI:
+            if c == ASPA_SIMPLES:
+                pilha.pop()
+        elif corpo.startswith(ABRE_SUBSTITUICAO, i) or (
+                c == CRASE and onde != NA_CRASE):
+            if onde in GUARDAM_COMANDO:
+                lido.append(PALAVRA_QUE_O_SHELL_TROCA)
+            pilha.append(quadro_novo(NA_CRASE if c == CRASE
+                                     else NA_SUBSTITUICAO))
+            passo = len(CRASE) if c == CRASE else len(ABRE_SUBSTITUICAO)
+        elif (onde, c) == (NA_CRASE, CRASE) or (
+                (onde, c) == (NA_SUBSTITUICAO, FECHA_GRUPO)
+                and not quadro["grupos"]):
+            comandos.append("".join(lido))
+            pilha.pop()
+        elif onde == NA_ASPA_DUPLA:
+            if c == ASPA_DUPLA:
+                pilha.pop()
+        elif onde in GUARDAM_COMANDO:
+            aspa = (NA_ASPA_ANSI if corpo.startswith(ABRE_ASPA_ANSI, i)
+                    else ABRE_ASPA_NO_COMANDO.get(c))
+            if aspa:
+                lido.append(PALAVRA_QUE_O_SHELL_TROCA)
+                pilha.append(quadro_novo(aspa))
+                passo = len(ABRE_ASPA_ANSI) if aspa == NA_ASPA_ANSI else 1
+            else:
+                quadro["grupos"] += PROFUNDIDADE_DO_PARENTESE.get(c, 0)
+                lido.append(c)
+        i += passo
+    return comandos + ["".join(quadro["lido"]) for quadro in pilha
+                       if quadro["onde"] in GUARDAM_COMANDO]
+
+
+def so_o_que_o_shell_executa(comando: str) -> str:
+    def corpo_so_se_um_shell_le(achado):
+        if leitor_do_documento(achado) in INTERPRETADORES_DE_SHELL:
+            return achado.group(0)
+        expandido = ([] if achado.group("aspa")
+                     else comandos_que_o_documento_executa(
+                         achado.group("corpo")))
+        return "\n".join([achado.group("abertura"), *expandido]) + "\n"
+    return DOCUMENTO_LITERAL.sub(corpo_so_se_um_shell_le, comando)
+
+
 def despejo_no_comando(comando) -> str:
     if not isinstance(comando, str) or not comando.strip():
         return PASSA
+    linhas_do_shell = so_o_que_o_shell_executa(comando)
     comando = sem_os_documentos_que_sao_dado(comando)
-    return (despejo_de_shell(comando) or despejo_de_python(comando)
-            or despejo_de_powershell(comando))
+    return (despejo_de_shell(linhas_do_shell, comando)
+            or despejo_de_python(comando) or despejo_de_powershell(comando))
 
 
-def verbo_do_veto(entrada: dict) -> str:
-    sem_quem_responda = (entrada or {}).get(
-        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_SEM_QUEM_RESPONDA
-    return DECISAO_DE_NEGAR if sem_quem_responda else DECISAO_DE_PERGUNTAR
+def e_etapa_sem_ninguem(ambiente) -> bool:
+    return bool((ambiente or {}).get(MARCA_DE_ETAPA_NO_AMBIENTE))
 
 
-def vetar(entrada: dict, razao: str) -> int:
+def modo_que_nao_mostra_a_pergunta(entrada: dict) -> bool:
+    return (entrada or {}).get(
+        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO
+
+
+def verbo_do_veto(entrada: dict, ambiente) -> str:
+    if (e_etapa_sem_ninguem(ambiente)
+            or modo_que_nao_mostra_a_pergunta(entrada)):
+        return DECISAO_DE_NEGAR
+    return DECISAO_DE_PERGUNTAR
+
+
+def vetar(entrada: dict, razao: str, ambiente) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
-        "permissionDecision": verbo_do_veto(entrada),
+        "permissionDecision": verbo_do_veto(entrada, ambiente),
         "permissionDecisionReason": razao,
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -310,7 +452,7 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -325,14 +467,21 @@ def decidir() -> int:
     if not achado:
         return SILENCIO
     return vetar(entrada, RECUSA.format(achado)
-                 + MANDA_GRAVAR.format(APRENDIZADO))
+                 + MANDA_GRAVAR.format(APRENDIZADO), os.environ)
 
 
 RAZAO_DO_TESTE = "a razão que o veto explicaria"
 MODO_DA_SESSAO_INTERATIVA = "default"
 SESSAO_INTERATIVA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_DA_SESSAO_INTERATIVA}
-SEM_CABECA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_SEM_QUEM_RESPONDA}
+SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA = {
+    CAMPO_DO_MODO_DE_PERMISSAO: MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO}
 PEDIDO_SEM_MODO_DECLARADO = {}
+AMBIENTE_SEM_A_MARCA = {}
+AMBIENTE_DA_ETAPA_SEM_NINGUEM = {MARCA_DE_ETAPA_NO_AMBIENTE: "1"}
+ANINHAMENTO_ALEM_DA_PILHA = sys.getrecursionlimit() + 1
+SUBSTITUICOES_ANINHADAS_DEMAIS = (
+    "cat <<EOF\n" + "$(echo " * ANINHAMENTO_ALEM_DA_PILHA + "ok"
+    + ")" * ANINHAMENTO_ALEM_DA_PILHA + "\nEOF")
 
 FALHA_BARRA = "BARRA [{}]: deixou passar {!r}"
 FALHA_DEIXA_PASSAR = "DEIXA_PASSAR [{}]: barrou {!r} por {!r}"
@@ -352,6 +501,13 @@ def saida_em_json(funcao, *argumentos) -> dict:
         return json.loads(saida.getvalue())["hookSpecificOutput"]
     except (ValueError, KeyError):
         return {}
+
+
+def veredito_sem_estourar(comando: str) -> str:
+    try:
+        return despejo_no_comando(comando)
+    except RecursionError as falha:
+        return type(falha).__name__
 
 
 def testar() -> int:
@@ -375,19 +531,33 @@ def testar() -> int:
          "quem não consegue julgar não pode dizer sim",
          recusa.get("permissionDecision") == DECISAO_DE_NEGAR
          and "TypeError" in recusa.get("permissionDecisionReason", ""))
-    caso("em sessão interativa o veto é de julgamento: `ask`, e o dono decide",
-         saida_em_json(vetar, SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+    caso("em modo `default` sem a marca da etapa o dono vê a pergunta: "
+         "`ask`, e ele decide",
+         saida_em_json(vetar, SESSAO_INTERATIVA, RAZAO_DO_TESTE,
+                       AMBIENTE_SEM_A_MARCA)
          .get("permissionDecision") == DECISAO_DE_PERGUNTAR)
-    caso("em execução sem cabeça não há quem responda: `deny`",
-         saida_em_json(vetar, SEM_CABECA, RAZAO_DO_TESTE)
+    caso("em `bypassPermissions` sem a marca pode haver gente, mas o cliente "
+         "não garante mostrar a pergunta do gancho nesse modo: `deny`, o "
+         "único jeito de a regra valer",
+         saida_em_json(vetar, SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA,
+                       RAZAO_DO_TESTE, AMBIENTE_SEM_A_MARCA)
          .get("permissionDecision") == DECISAO_DE_NEGAR)
-    caso("pedido sem o modo declarado recebe `ask` — só o modo sem cabeça nega",
-         saida_em_json(vetar, PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE)
+    caso("na etapa do executor, com a marca no ambiente, ninguém responde "
+         "nem em modo `default`: `deny`",
+         saida_em_json(vetar, SESSAO_INTERATIVA, RAZAO_DO_TESTE,
+                       AMBIENTE_DA_ETAPA_SEM_NINGUEM)
+         .get("permissionDecision") == DECISAO_DE_NEGAR)
+    caso("pedido sem o modo declarado e sem a marca recebe `ask` — nega só "
+         "a etapa sem ninguém ou o modo que não mostra a pergunta",
+         saida_em_json(vetar, PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE,
+                       AMBIENTE_SEM_A_MARCA)
          .get("permissionDecision") == DECISAO_DE_PERGUNTAR)
     caso("a razão viaja na resposta, com `ask` e com `deny`",
-         saida_em_json(vetar, SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+         saida_em_json(vetar, SESSAO_INTERATIVA, RAZAO_DO_TESTE,
+                       AMBIENTE_SEM_A_MARCA)
          .get("permissionDecisionReason") == RAZAO_DO_TESTE
-         and saida_em_json(vetar, SEM_CABECA, RAZAO_DO_TESTE)
+         and saida_em_json(vetar, SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA,
+                           RAZAO_DO_TESTE, AMBIENTE_SEM_A_MARCA)
          .get("permissionDecisionReason") == RAZAO_DO_TESTE)
     razao_inteira = RECUSA.format("env") + MANDA_GRAVAR.format(APRENDIZADO)
     caso("a recusa nomeia a regra 8, ensina a leitura NOMEADA, cita o "
@@ -403,6 +573,9 @@ def testar() -> int:
     caso("comando que não é texto não estoura a cerca",
          despejo_no_comando(None) == PASSA
          and despejo_no_comando(["env"]) == PASSA)
+    caso("substituições aninhadas além do limite de recursão do Python não "
+         "estouram a cerca: a varredura não usa a pilha dele",
+         veredito_sem_estourar(SUBSTITUICOES_ANINHADAS_DEMAIS) == PASSA)
 
     falhas += [FALHA_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]

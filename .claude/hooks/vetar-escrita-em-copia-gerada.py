@@ -50,6 +50,42 @@ CACHE_DO_DESEMBRULHADOR = []
 MARCADORES_DE_EXPANSAO = ("$", "`", "%")
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
+FIM_DAS_OPCOES = "--"
+LETRAS_QUE_TRAZEM_O_ROTEIRO = {"sed": "ef", "perl": "eE"}
+LETRAS_QUE_TRAZEM_OUTRO_VALOR = {"sed": "l", "perl": ""}
+NOMES_LONGOS_QUE_TRAZEM_O_ROTEIRO = {"sed": {"expression": "e", "file": "f"},
+                                     "perl": {}}
+PROGRAMAS_CUJAS_OPCOES_ACABAM_NO_PRIMEIRO_OPERANDO = ("perl",)
+LETRA_DO_ROTEIRO_EM_ARQUIVO = "f"
+PROGRAMAS_CUJO_ROTEIRO_ESCREVE_ARQUIVO = ("sed",)
+MARCA_DE_ESCRITA_NO_ROTEIRO = re.compile(
+    r"(?<![A-Za-z\\])[wW]|(?<=[^A-Za-z0-9\s\\])[gpiImMe0-9]*w")
+TETO_DO_ROTEIRO_EM_ARQUIVO = 65536
+QUEBRA_DE_LINHA = "\n"
+ESCAPE_DO_SED = "\\"
+ENDERECO_POR_EXPRESSAO = "/"
+CARACTERES_DE_ENDERECO_POR_NUMERO = "0123456789$~+"
+BANDEIRAS_DO_ENDERECO = "IM"
+SEPARADOR_DE_ENDERECOS = ","
+NEGACAO_DO_ENDERECO = "!"
+ESPACOS_DO_SED = " \t"
+ENTRE_COMANDOS_DO_SED = " \t\n;"
+FIM_DO_ROTULO = ";\n"
+DIGITOS = "0123456789"
+COMANDOS_DO_SED_QUE_ESCREVEM = "wW"
+COMANDOS_DO_SED_COM_DUAS_PARTES = "sy"
+COMANDO_DO_SED_QUE_SUBSTITUI = "s"
+BANDEIRAS_DO_SUBSTITUIR = "gpiImMe0123456789"
+BANDEIRA_DO_SUBSTITUIR_QUE_ESCREVE = "w"
+COMANDOS_DO_SED_COM_O_RESTO_DA_LINHA = "aicrRe#"
+COMANDOS_DO_SED_COM_ROTULO = "btT:v"
+COMANDOS_DO_SED_COM_NUMERO = "qQlL"
+COMANDOS_DO_SED_SEM_ARGUMENTO = "=dDgGhHnNpPxzF{}"
+ABRE_COLCHETE = "["
+FECHA_COLCHETE = "]"
+NEGACAO_DO_COLCHETE = "^"
+ABERTURAS_DE_CLASSE = ("[:", "[.", "[=")
+LEITURAS_DO_COLCHETE = (True, False)
 
 MARCA_DE_REPOSITORIO = ".git"
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
@@ -91,26 +127,46 @@ RECUSA = (
 )
 
 MARCA_DE_MODULO_INSTALADO = "instalado:"
+REGISTRO_DA_INSTALACAO = ".agents/camada/registro-da-instalacao.json"
+INSTRUMENTO_DA_CAMADA = ".agents/camada/camada.py"
+ATUALIZAR_DA_RAIZ_DESTE_REPOSITORIO = (
+    "rode, da raiz deste repositório, "
+    "`python <pasta do clone do atlas>/montar.py --atualizar`")
 APRENDIZADO_MODULO_INSTALADO = (
     "cópia de módulo instalado também não se edita à mão: a fonte mora no "
-    "repositório atlas, não aqui — edite lá e rode `python montar.py "
-    "--atualizar` neste repositório."
+    "repositório atlas, não aqui — edite lá e "
+    + ATUALIZAR_DA_RAIZ_DESTE_REPOSITORIO + "."
 )
 RECUSA_MODULO_INSTALADO = (
     "Regra 15 da camada: isto quer escrever em {!r}, que é CÓPIA GERADA "
     "pelo módulo {} do atlas. Esta é uma instalação, não o repositório de "
     "desenvolvimento — não existe fonte local para editar aqui. O caminho "
-    "é editar a fonte no repositório atlas (`modulos/{}/...`) e trazer a "
-    "atualização com `python montar.py --atualizar`. Ler a cópia continua "
-    "livre."
+    "é editar a fonte no repositório atlas (`modulos/{}/...`) e, para "
+    "trazer a atualização, " + ATUALIZAR_DA_RAIZ_DESTE_REPOSITORIO + ". Ler "
+    "a cópia continua livre."
+)
+AVISO_DO_REGISTRO_AUSENTE = (
+    "AVISO, não recusa: o registro da instalação, `{}`, falta ou está "
+    "ilegível, e por isso a cerca não sabe que arquivos são cópia de módulo "
+    "neste repositório — uma escrita numa cópia passaria sem recusa. Para "
+    "gravar o registro, " + ATUALIZAR_DA_RAIZ_DESTE_REPOSITORIO + "."
 )
 
 FALHA_BARRA = "BARRA [{}]: deixou passar"
 FALHA_DEIXA_PASSAR = "DEIXA_PASSAR [{}]: barrou — {}"
+FALHA_AVISOU_SEM_MOTIVO = "DEIXA_PASSAR [{}]: passou, mas com aviso"
+FALHA_NEGOU_O_QUE_SO_AVISA = "SO_AVISA [{}]: negou o que só se avisa"
+FALHA_NAO_AVISOU = "SO_AVISA [{}]: passou calado, sem nomear a cópia"
 FALHA_COMPORTAMENTO = "COMPORTAMENTO [{}]"
 LINHA_DE_FALHA = "FALHOU: {}"
 RESUMO_FALHOU = "FALHOU: {} de {} casos"
-RESUMO_OK = "OK: {} casos — {} barrados, {} liberados, {} de comportamento"
+RESUMO_OK = ("OK: {} casos — {} barrados, {} avisados, {} liberados, "
+             "{} de comportamento")
+AVISO_DA_COPIA_SO_NOMEADA = (
+    "AVISO, não recusa: o comando escreve num destino que a cerca não "
+    "consegue resolver e nomeia a cópia gerada `{}`, cuja fonte é `{}`. Se o "
+    "destino for a cópia, a escrita se perde na próxima sincronização: "
+    "edite a fonte, e prefira o caminho por extenso, que a cerca sabe julgar.")
 
 INSTALADOR = "montar.py"
 SEM_INSTALADOR = (
@@ -157,31 +213,35 @@ def copias_de_espelho(raiz: Path) -> dict:
     return achadas
 
 
-def modulo_embutido_no_instalador(raiz: Path):
-    import importlib.util
-    alvo = raiz / INSTALADOR
-    origem = importlib.util.spec_from_file_location("instalador", alvo)
-    if origem is None or not alvo.is_file():
-        return None
-    instalador = importlib.util.module_from_spec(origem)
+def modulos_do_registro(raiz: Path):
     try:
-        origem.loader.exec_module(instalador)
-    except Exception:
+        registro = json.loads(
+            (raiz / REGISTRO_DA_INSTALACAO).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
-    return instalador
+    modulos = registro.get("modulos") if isinstance(registro, dict) else None
+    if not isinstance(modulos, dict):
+        return None
+    forma_certa = all(isinstance(caminhos, list)
+                      and all(isinstance(c, str) for c in caminhos)
+                      for caminhos in modulos.values())
+    return modulos if forma_certa else None
+
+
+def instalacao_sem_registro(raiz: Path) -> bool:
+    return (not (raiz / PASTA_MODULOS).is_dir()
+            and (raiz / INSTRUMENTO_DA_CAMADA).is_file()
+            and modulos_do_registro(raiz) is None)
 
 
 def copias_de_modulo_instalado(raiz: Path) -> dict:
-    instalador = modulo_embutido_no_instalador(raiz)
-    if instalador is None:
-        return {}
     achadas = {}
-    for nome, arquivos in instalador.MODULOS.items():
-        for rotulo in arquivos:
-            if instalador.e_territorio_do_repositorio(rotulo):
+    for nome, caminhos in (modulos_do_registro(raiz) or {}).items():
+        for caminho in caminhos:
+            if e_territorio_do_repositorio(caminho):
                 continue
-            if (raiz / rotulo).is_file():
-                achadas[rotulo] = f"{MARCA_DE_MODULO_INSTALADO}{nome}"
+            if (raiz / caminho).is_file():
+                achadas[caminho] = f"{MARCA_DE_MODULO_INSTALADO}{nome}"
     return achadas
 
 
@@ -269,15 +329,19 @@ def sem_o_par_de_aspas_que_envolve(token: str) -> str:
 
 
 def partir_em_tokens(segmento: str) -> list:
+    import shlex
+    analisador = shlex.shlex(segmento, posix=True)
+    analisador.whitespace_split = True
+    analisador.escape = ""
+    analisador.commenters = ""
     try:
-        import shlex
-        tokens = shlex.split(segmento, posix=False)
+        return list(analisador)
     except ValueError:
-        tokens = segmento.split()
-    return [sem_o_par_de_aspas_que_envolve(t) for t in tokens]
+        return [sem_o_par_de_aspas_que_envolve(t) for t in segmento.split()]
 
 
-def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
+def caminhos_escritos_pelo_segmento(segmento: str, tokens: list,
+                                    onde: str) -> list:
     escritos = [m.group(1)
                 for m in REDIRECIONAMENTO_DE_SHELL.finditer(segmento)]
     if tokens:
@@ -289,7 +353,7 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
             escritos.append(posicionais[-1])
         elif programa in COMANDOS_QUE_ESCREVEM_NO_LUGAR \
                 and escreve_no_lugar(tokens):
-            escritos += posicionais
+            escritos += arquivos_editados_no_lugar(programa, tokens, onde)
         escritos += caminhos_escritos_na_opcao(programa, tokens)
         escritos += saida_do_dd(programa, tokens)
     return [sem_o_par_de_aspas_que_envolve(e).strip(ASPAS)
@@ -302,6 +366,234 @@ def escreve_no_lugar(tokens: list) -> bool:
                or (not t.startswith(BANDEIRA_LONGA)
                    and LETRA_DE_ESCRITA_NO_LUGAR in t[1:])
                for t in tokens[1:] if t.startswith(PREFIXO_DE_OPCAO))
+
+
+def letra_que_leva_valor(aglomerado: str, letras_com_valor: str):
+    for posicao, letra in enumerate(aglomerado):
+        if letra == LETRA_DE_ESCRITA_NO_LUGAR:
+            return SEM_NOME, SEM_NOME, False
+        if letra in letras_com_valor:
+            valor = aglomerado[posicao + 1:]
+            return letra, valor, bool(valor)
+    return SEM_NOME, SEM_NOME, False
+
+
+def nome_longo_que_traz_o_roteiro(programa: str, token: str):
+    nome, igual, valor = token[len(BANDEIRA_LONGA):].partition(IGUAL)
+    letra = next((letra for longo, letra
+                  in NOMES_LONGOS_QUE_TRAZEM_O_ROTEIRO[programa].items()
+                  if nome and longo.startswith(nome)), SEM_NOME)
+    return letra, valor, bool(igual)
+
+
+def opcao_que_leva_valor(programa: str, token: str, letras_com_valor: str):
+    if token.startswith(BANDEIRA_LONGA):
+        return nome_longo_que_traz_o_roteiro(programa, token)
+    return letra_que_leva_valor(token[len(PREFIXO_DE_OPCAO):],
+                                letras_com_valor)
+
+
+def roteiro_que_o_arquivo_traz(caminho: str, onde: str):
+    alvo = resolver(caminho, onde)
+    try:
+        if alvo is None or not alvo.is_file() \
+                or alvo.stat().st_size > TETO_DO_ROTEIRO_EM_ARQUIVO:
+            return None
+        return alvo.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def alvos_depois_de_cada_marca_de_escrita(texto: str) -> list:
+    alvos = [texto[marca.end():].split(QUEBRA_DE_LINHA, 1)[0].strip()
+             for marca in MARCA_DE_ESCRITA_NO_ROTEIRO.finditer(texto)]
+    return [alvo for alvo in alvos if alvo]
+
+
+def depois_de(texto: str, posicao: int, caracteres: str) -> int:
+    while posicao < len(texto) and texto[posicao] in caracteres:
+        posicao += 1
+    return posicao
+
+
+def ate_um_de(texto: str, posicao: int, caracteres: str) -> int:
+    while posicao < len(texto) and texto[posicao] not in caracteres:
+        posicao += 1
+    return posicao
+
+
+def depois_do_colchete(texto: str, posicao: int):
+    posicao += texto.startswith(NEGACAO_DO_COLCHETE, posicao)
+    posicao += texto.startswith(FECHA_COLCHETE, posicao)
+    while posicao < len(texto):
+        par = texto[posicao:posicao + 2]
+        if texto[posicao] == FECHA_COLCHETE:
+            return posicao + 1
+        if par in ABERTURAS_DE_CLASSE:
+            fim = texto.find(par[1] + FECHA_COLCHETE, posicao + 2)
+            if fim < 0:
+                return None
+            posicao = fim + 2
+        else:
+            posicao += 1
+    return None
+
+
+def depois_do_delimitado(texto: str, posicao: int, delimitador: str,
+                         colchete_conta: bool):
+    while posicao is not None and posicao < len(texto):
+        if texto[posicao] == ESCAPE_DO_SED:
+            posicao += 2
+        elif texto[posicao] == delimitador:
+            return posicao + 1
+        elif colchete_conta and texto[posicao] == ABRE_COLCHETE:
+            posicao = depois_do_colchete(texto, posicao + 1)
+        else:
+            posicao += 1
+    return None
+
+
+def depois_do_endereco(texto: str, posicao: int, colchete_conta: bool):
+    if texto.startswith(ESCAPE_DO_SED, posicao):
+        delimitador = texto[posicao + 1:posicao + 2]
+        posicao = depois_do_delimitado(
+            texto, posicao + 2, delimitador, colchete_conta) \
+            if delimitador else None
+    elif texto.startswith(ENDERECO_POR_EXPRESSAO, posicao):
+        posicao = depois_do_delimitado(texto, posicao + 1,
+                                       ENDERECO_POR_EXPRESSAO, colchete_conta)
+    else:
+        return depois_de(texto, posicao, CARACTERES_DE_ENDERECO_POR_NUMERO)
+    return None if posicao is None \
+        else depois_de(texto, posicao, BANDEIRAS_DO_ENDERECO)
+
+
+def depois_dos_enderecos(texto: str, posicao: int, colchete_conta: bool):
+    posicao = depois_do_endereco(texto, posicao, colchete_conta)
+    if posicao is not None \
+            and texto.startswith(SEPARADOR_DE_ENDERECOS, posicao):
+        posicao = depois_do_endereco(
+            texto, depois_de(texto, posicao + 1, ESPACOS_DO_SED),
+            colchete_conta)
+    if posicao is None:
+        return None
+    return depois_de(texto, posicao, ESPACOS_DO_SED + NEGACAO_DO_ENDERECO)
+
+
+def resto_da_linha(texto: str, posicao: int):
+    fim = ate_um_de(texto, posicao, QUEBRA_DE_LINHA)
+    return texto[posicao:fim].strip(), fim
+
+
+def argumento_de_duas_partes(comando: str, texto: str, posicao: int,
+                             colchete_conta: bool):
+    delimitador = texto[posicao:posicao + 1]
+    substitui = comando == COMANDO_DO_SED_QUE_SUBSTITUI
+    if not delimitador or delimitador in QUEBRA_DE_LINHA + ESCAPE_DO_SED:
+        return SEM_NOME, None
+    posicao = depois_do_delimitado(texto, posicao + 1, delimitador,
+                                   colchete_conta and substitui)
+    if posicao is not None:
+        posicao = depois_do_delimitado(texto, posicao, delimitador, False)
+    if posicao is None or not substitui:
+        return SEM_NOME, posicao
+    posicao = depois_de(texto, posicao, BANDEIRAS_DO_SUBSTITUIR)
+    if texto.startswith(BANDEIRA_DO_SUBSTITUIR_QUE_ESCREVE, posicao):
+        return resto_da_linha(texto, posicao + 1)
+    return SEM_NOME, posicao
+
+
+def argumento_do_comando(comando: str, texto: str, posicao: int,
+                         colchete_conta: bool):
+    if comando in COMANDOS_DO_SED_QUE_ESCREVEM:
+        return resto_da_linha(texto, posicao)
+    if comando in COMANDOS_DO_SED_COM_DUAS_PARTES:
+        return argumento_de_duas_partes(comando, texto, posicao,
+                                        colchete_conta)
+    if comando in COMANDOS_DO_SED_COM_O_RESTO_DA_LINHA:
+        return SEM_NOME, ate_um_de(texto, posicao, QUEBRA_DE_LINHA)
+    if comando in COMANDOS_DO_SED_COM_ROTULO:
+        return SEM_NOME, ate_um_de(texto, posicao, FIM_DO_ROTULO)
+    if comando in COMANDOS_DO_SED_COM_NUMERO:
+        return SEM_NOME, depois_de(
+            texto, depois_de(texto, posicao, ESPACOS_DO_SED), DIGITOS)
+    if comando in COMANDOS_DO_SED_SEM_ARGUMENTO:
+        return SEM_NOME, posicao
+    return SEM_NOME, None
+
+
+def alvos_numa_leitura(texto: str, colchete_conta: bool):
+    alvos, posicao = [], depois_de(texto, 0, ENTRE_COMANDOS_DO_SED)
+    while posicao < len(texto):
+        posicao = depois_dos_enderecos(texto, posicao, colchete_conta)
+        if posicao is None or posicao >= len(texto):
+            return None
+        alvo, posicao = argumento_do_comando(texto[posicao], texto,
+                                             posicao + 1, colchete_conta)
+        if posicao is None:
+            return None
+        alvos += [alvo] if alvo else []
+        posicao = depois_de(texto, posicao, ENTRE_COMANDOS_DO_SED)
+    return alvos
+
+
+def alvos_que_o_roteiro_escreve(texto: str):
+    leituras = [alvos_numa_leitura(texto, colchete_conta)
+                for colchete_conta in LEITURAS_DO_COLCHETE]
+    if None in leituras:
+        return None
+    return list(dict.fromkeys(
+        alvo for leitura in leituras for alvo in leitura))
+
+
+def escritas_de_dentro_dos_roteiros(programa: str, roteiros: list,
+                                    onde: str) -> list:
+    if programa not in PROGRAMAS_CUJO_ROTEIRO_ESCREVE_ARQUIVO:
+        return []
+    escritas = []
+    for letra, roteiro in roteiros:
+        texto = roteiro_que_o_arquivo_traz(roteiro, onde) \
+            if letra == LETRA_DO_ROTEIRO_EM_ARQUIVO else roteiro
+        alvos = alvos_que_o_roteiro_escreve(texto) \
+            if texto is not None else None
+        if alvos is not None:
+            escritas += alvos
+        elif texto is None:
+            escritas.append(roteiro)
+        elif na_duvida := alvos_depois_de_cada_marca_de_escrita(texto):
+            escritas += [roteiro] + na_duvida
+    return escritas
+
+
+def arquivos_editados_no_lugar(programa: str, tokens: list,
+                               onde: str) -> list:
+    letras_do_roteiro = LETRAS_QUE_TRAZEM_O_ROTEIRO[programa]
+    letras_com_valor = letras_do_roteiro + LETRAS_QUE_TRAZEM_OUTRO_VALOR[programa]
+    operandos, roteiros = [], []
+    letra_que_espera, so_operandos = SEM_NOME, False
+    for token in tokens[1:]:
+        if letra_que_espera:
+            roteiros.append((letra_que_espera, token))
+            letra_que_espera = SEM_NOME
+        elif so_operandos or not token.startswith(PREFIXO_DE_OPCAO) \
+                or token == PREFIXO_DE_OPCAO:
+            operandos.append(token)
+            so_operandos = so_operandos or \
+                programa in PROGRAMAS_CUJAS_OPCOES_ACABAM_NO_PRIMEIRO_OPERANDO
+        elif token == FIM_DAS_OPCOES:
+            so_operandos = True
+        else:
+            letra, valor, colado = opcao_que_leva_valor(
+                programa, token, letras_com_valor)
+            if letra and colado:
+                roteiros.append((letra, valor))
+            letra_que_espera = SEM_NOME if colado else letra
+    roteiros = [(letra, valor) for letra, valor in roteiros
+                if letra and letra in letras_do_roteiro]
+    if not roteiros and operandos:
+        roteiros, operandos = [(SEM_NOME, operandos[0])], operandos[1:]
+    return operandos + escritas_de_dentro_dos_roteiros(programa, roteiros,
+                                                       onde)
 
 
 def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
@@ -351,7 +643,8 @@ def caminhos_escritos_pelo_comando(comando: str, onde: str) -> list:
                 desembrulhador().caminhos_escritos_dentro_do_script(comando)]
     for segmento in separar_desembrulhando(comando):
         tokens = partir_em_tokens(segmento.strip())
-        for caminho in caminhos_escritos_pelo_segmento(segmento, tokens):
+        for caminho in caminhos_escritos_pelo_segmento(segmento, tokens,
+                                                       onde):
             escritos.append((caminho, onde))
         if tokens and Path(tokens[0]).name == COMANDO_CD and len(tokens) > 1:
             destino = resolver(sem_o_par_de_aspas_que_envolve(tokens[1]), onde)
@@ -386,7 +679,44 @@ def recusa_do_pedido(entrada: dict, raiz: Path, onde: str):
         fonte = por_raiz[dona].get(rel) or fonte_nomeada_na_marca(dona / rel)
         if fonte:
             return rel, fonte
+    return None
+
+
+def copia_so_nomeada_no_texto_cru(entrada: dict, raiz: Path, onde: str):
+    escritos = caminhos_escritos_pelo_pedido(entrada, onde)
+    por_raiz = {dona: copias_geradas(dona)
+                for dona in {raiz_do_alvo(caminho, raiz)
+                             for caminho, _ in escritos}}
     return copia_nomeada_no_texto_cru(entrada, escritos, por_raiz)
+
+
+def o_aviso_da_copia_so_nomeada(copia: str, fonte: str) -> dict:
+    return {"hookSpecificOutput": {
+        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+        "additionalContext": AVISO_DA_COPIA_SO_NOMEADA.format(copia, fonte)}}
+
+
+def o_aviso_do_registro_ausente() -> dict:
+    return {"hookSpecificOutput": {
+        "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
+        "additionalContext": AVISO_DO_REGISTRO_AUSENTE.format(
+            REGISTRO_DA_INSTALACAO)}}
+
+
+def escreve_em_instalacao_sem_registro(entrada: dict, raiz: Path,
+                                       onde: str) -> bool:
+    donas = {raiz_do_alvo(caminho, raiz)
+             for caminho, _ in caminhos_escritos_pelo_pedido(entrada, onde)}
+    return any(instalacao_sem_registro(dona) for dona in donas)
+
+
+def o_aviso_sem_recusa(entrada: dict, raiz: Path, onde: str):
+    so_nomeada = copia_so_nomeada_no_texto_cru(entrada, raiz, onde)
+    if so_nomeada:
+        return o_aviso_da_copia_so_nomeada(*so_nomeada)
+    if escreve_em_instalacao_sem_registro(entrada, raiz, onde):
+        return o_aviso_do_registro_ausente()
+    return None
 
 
 def alvo_que_o_gancho_nao_resolve(caminho: str) -> bool:
@@ -432,7 +762,7 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -447,6 +777,9 @@ def decidir() -> int:
     raiz = raiz_do_projeto_nunca_o_cwd()
     recusa = recusa_do_pedido(entrada, raiz, onde)
     if not recusa:
+        aviso = o_aviso_sem_recusa(entrada, raiz, onde)
+        if aviso:
+            print(json.dumps(aviso))
         return SILENCIO
 
     copia, fonte = recusa
@@ -461,7 +794,7 @@ def decidir() -> int:
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": motivo,
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -472,6 +805,7 @@ INSTRUMENTO_DE_MODULO = ".agents/mod/mod.py"
 CARTAO_DE_EXECUCOES = "execucoes/LEIAME.md"
 TERRITORIO_DE_MODULO = "conhecimento/mod/nota.md"
 PAGINA_LIVRE = "conhecimento/livre.md"
+ROTEIRO_QUE_ESCREVE_NA_COPIA = "conhecimento/escreve.sed"
 INSTRUCOES_COM_MARCA = "AGENTS.md"
 FONTE_DAS_INSTRUCOES = "nucleo/regras.json e nucleo/vocabulario.json"
 MARCA_DAS_INSTRUCOES = (
@@ -503,6 +837,23 @@ def pedido_de_shell(comando: str) -> dict:
     return {"tool_name": "Bash", "tool_input": {"command": comando}}
 
 
+def o_que_a_cerca_imprime(pedido: dict, raiz: Path, onde: str) -> dict:
+    import contextlib
+    import io
+    global raiz_do_projeto_nunca_o_cwd
+    de_verdade, entrada_de_verdade = raiz_do_projeto_nunca_o_cwd, sys.stdin
+    impresso = io.StringIO()
+    try:
+        raiz_do_projeto_nunca_o_cwd = lambda: raiz
+        sys.stdin = io.StringIO(json.dumps({**pedido, "cwd": onde}))
+        with contextlib.redirect_stdout(impresso):
+            decidir()
+    finally:
+        raiz_do_projeto_nunca_o_cwd, sys.stdin = de_verdade, entrada_de_verdade
+    return json.loads(impresso.getvalue() or "{}").get(
+        "hookSpecificOutput", {})
+
+
 def pedido_de_escrita(ferramenta: str, caminho: str) -> dict:
     campo = "notebook_path" if ferramenta == "NotebookEdit" else "file_path"
     return {"tool_name": ferramenta, "tool_input": {campo: caminho}}
@@ -510,6 +861,26 @@ def pedido_de_escrita(ferramenta: str, caminho: str) -> dict:
 
 def pedido_de_leitura(caminho: str) -> dict:
     return {"tool_name": "Read", "tool_input": {"file_path": caminho}}
+
+
+ARQUIVO_INSTALADO = "arquivo-instalado.py"
+ARQUIVO_FORA_DO_REGISTRO = "arquivo-fora-do-registro.py"
+CARGA_DO_INSTALADOR_ANTIGO = (
+    "MODULOS = {'mod': {'arquivo-instalado.py': 'x'}}\n"
+    "def e_territorio_do_repositorio(caminho):\n"
+    "    return False\n")
+
+
+def o_que_a_cerca_imprime_ao_escrever(raiz: Path, rel: str) -> dict:
+    return o_que_a_cerca_imprime(pedido_de_escrita("Write", rel), raiz,
+                                 str(raiz))
+
+
+def passou_avisando_do_registro(impresso: dict) -> bool:
+    contexto = impresso.get("additionalContext", "")
+    return ("permissionDecision" not in impresso
+            and contexto.startswith("AVISO, não recusa:")
+            and REGISTRO_DA_INSTALACAO in contexto)
 
 
 ESPELHO_NA_COPIA = f"{COPIA_SKILLS}/{SKILL_ESPELHADA}"
@@ -563,10 +934,63 @@ BARRA = [
     ("node -e que escreve na cópia",
      pedido_de_shell(
          f"node -e \"require('fs').writeFileSync('{INSTRUMENTO_DE_MODULO}', 'x')\"")),
+    ("sed -i no espelho, o alvo que o pedido nomeia",
+     pedido_de_shell(f"sed -i 's/a/b/' {ESPELHO_NA_COPIA}")),
+    ("sed -i com o roteiro por -e e a cópia como arquivo",
+     pedido_de_shell(f"sed -i -e 's/a/b/' {INSTRUMENTO_DE_MODULO}")),
+    ("sed -ie: o e colado ao i é sufixo, não roteiro",
+     pedido_de_shell(f"sed -ie 's/a/b/' {INSTRUMENTO_DE_MODULO}")),
+    ("sed -i com a fonte e a cópia, as duas como arquivo",
+     pedido_de_shell(f"sed -i 's/a/b/' {PAGINA_LIVRE} {INSTRUMENTO_DE_MODULO}")),
+    ("sed -i com --expression= e a cópia como arquivo",
+     pedido_de_shell(f"sed -i --expression='s/a/b/' {ESPELHO_NA_COPIA}")),
+    ("sed -i com -- antes da cópia",
+     pedido_de_shell(f"sed -i -e 's/a/b/' -- {ESPELHO_NA_COPIA}")),
+    ("sed -ni: o n antes do i não esconde o alvo",
+     pedido_de_shell(f"sed -ni 's/a/b/p' {ESPELHO_NA_COPIA}")),
+    ("perl para de ler opção no primeiro arquivo: o -e depois dele é "
+     "arquivo, e a cópia também",
+     pedido_de_shell(
+         f"perl -pi -e 's/a/b/' {PAGINA_LIVRE} -e {INSTRUMENTO_DE_MODULO}")),
+    ("o mesmo com o roteiro em arquivo e sem -e",
+     pedido_de_shell(
+         f"perl -pi roteiro.pl {PAGINA_LIVRE} -e {ESPELHO_NA_COPIA}")),
+    ("o comando w do roteiro escreve no arquivo que ele nomeia",
+     pedido_de_shell(f"sed -i 'w {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("o mesmo com o comando W",
+     pedido_de_shell(f"sed -i 'W {INSTRUMENTO_DE_MODULO}' {PAGINA_LIVRE}")),
+    ("o mesmo com a bandeira w do s",
+     pedido_de_shell(f"sed -i 's/a/b/w {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("o roteiro do -f que se lê e escreve com w",
+     pedido_de_shell(
+         f"sed -i -f {ROTEIRO_QUE_ESCREVE_NA_COPIA} {PAGINA_LIVRE}")),
+    ("a bandeira w do s depois de outra bandeira",
+     pedido_de_shell(f"sed -i 's/a/b/gw {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("o comando w depois de um endereço por número",
+     pedido_de_shell(f"sed -i '1w {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("o comando w depois de um endereço por expressão",
+     pedido_de_shell(f"sed -i '/x/w {INSTRUMENTO_DE_MODULO}' {PAGINA_LIVRE}")),
+    ("a / dentro do colchete não fecha a expressão do s",
+     pedido_de_shell(
+         f"sed -i 's/[/]/a/w {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("o ] logo depois do [ é literal e não fecha o colchete",
+     pedido_de_shell(
+         f"sed -i 's/[]/]/a/w {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("a contrabarra escapa o delimitador da expressão do s",
+     pedido_de_shell(
+         f"sed -i 's/\\/x/a/w {ESPELHO_NA_COPIA}' {PAGINA_LIVRE}")),
+    ("a / dentro do colchete não fecha o endereço por expressão",
+     pedido_de_shell(
+         f"sed -i '/[/]/w {INSTRUMENTO_DE_MODULO}' {PAGINA_LIVRE}")),
+]
+
+SO_AVISA = [
     ("alvo guardado em variável: o caminho protegido está no texto cru",
      pedido_de_shell(f"ALVO={ESPELHO_NA_COPIA}; echo x > $ALVO")),
     ("alvo montado com a raiz em variável",
      pedido_de_shell(f'echo x > "$RAIZ/{INSTRUMENTO_DE_MODULO}"')),
+    ("alvo do sed -i guardado em variável",
+     pedido_de_shell(f"ALVO={ESPELHO_NA_COPIA}; sed -i 's/a/b/' \"$ALVO\"")),
 ]
 
 DEIXA_PASSAR = [
@@ -597,6 +1021,39 @@ DEIXA_PASSAR = [
      pedido_de_shell(f"sh -c 'cat {INSTRUMENTO_DE_MODULO}'")),
     ("alvo em variável sem caminho protegido no texto",
      pedido_de_shell("echo x > $SAIDA")),
+    ("sed -i num arquivo e a cópia citada em outro comando",
+     pedido_de_shell(f"sed -i 's/a/b/' {PAGINA_LIVRE} && grep x {ESPELHO_NA_COPIA}")),
+    ("roteiro do sed -i com cifrão não vira alvo que a cerca não resolve",
+     pedido_de_shell(f"sed -i 's/a$/b/' {PAGINA_LIVRE} && grep x {ESPELHO_NA_COPIA}")),
+    ("segundo roteiro por -e com cifrão, e a cópia só lida depois",
+     pedido_de_shell(f"sed -i -e 's/a/b/' -e 's/c$/d/' {PAGINA_LIVRE}; "
+                     f"wc -l {ESPELHO_NA_COPIA}")),
+    ("a cópia como arquivo de roteiro do -f é lida, não escrita",
+     pedido_de_shell(f"sed -i -f {ESPELHO_NA_COPIA} {PAGINA_LIVRE}")),
+    ("o mesmo com o -f depois de um -e",
+     pedido_de_shell(f"sed -i -e 's/a/b/' -f {ESPELHO_NA_COPIA} {PAGINA_LIVRE}")),
+    ("perl -pi com cifrão no roteiro e a cópia só lida depois",
+     pedido_de_shell(f"perl -pi -e 's/a$/b/' {PAGINA_LIVRE} && cat {ESPELHO_NA_COPIA}")),
+    ("no sed a opção depois do arquivo continua opção: o -f na cópia só é "
+     "lido", pedido_de_shell(
+         f"sed -i -e 's/a/b/' {PAGINA_LIVRE} -f {ESPELHO_NA_COPIA}")),
+    ("a bandeira w do s para a saída padrão não escreve na cópia",
+     pedido_de_shell(f"sed -i 's/a/b/w /dev/stdout' {PAGINA_LIVRE}")),
+    ("o w no texto de substituição não é o comando w",
+     pedido_de_shell(f"sed -i 's/a/w/' {PAGINA_LIVRE}")),
+    ("o w na expressão do s não é o comando w",
+     pedido_de_shell(f"sed -i 's/w/x/' {PAGINA_LIVRE}")),
+    ("bandeira do s que não escreve",
+     pedido_de_shell(f"sed -i 's/a/b/g' {PAGINA_LIVRE}")),
+    ("o w no y não é o comando w",
+     pedido_de_shell(f"sed -i 'y/abc/wxy/' {PAGINA_LIVRE}")),
+    ("o w num endereço por expressão não é o comando w",
+     pedido_de_shell(f"sed -i '/w/d' {PAGINA_LIVRE}")),
+    ("o w com cifrão na expressão do s, e a cópia só lida depois",
+     pedido_de_shell(
+         f"sed -i 's/w$/x/' {PAGINA_LIVRE} && grep x {ESPELHO_NA_COPIA}")),
+    ("o colchete com a / dentro, num s que não escreve",
+     pedido_de_shell(f"sed -i 's/[/]/x/g' {PAGINA_LIVRE}")),
 ]
 
 DESTE_REPOSITORIO_BARRA = [
@@ -636,6 +1093,8 @@ def testar() -> int:
         raiz = Path(tmp).resolve() / "arvore"
         raiz.mkdir()
         montar_arvore_de_mentira(raiz)
+        escrever_de_mentira(raiz, ROTEIRO_QUE_ESCREVE_NA_COPIA,
+                            f"w {ESPELHO_NA_COPIA}\n")
         onde = str(raiz)
 
         for rotulo, pedido in BARRA:
@@ -644,9 +1103,26 @@ def testar() -> int:
         for rotulo, pedido in DEIXA_PASSAR:
             if recusa := recusa_do_pedido(pedido, raiz, onde):
                 falhas.append(FALHA_DEIXA_PASSAR.format(rotulo, recusa[1]))
+            elif copia_so_nomeada_no_texto_cru(pedido, raiz, onde):
+                falhas.append(FALHA_AVISOU_SEM_MOTIVO.format(rotulo))
+        for rotulo, pedido in SO_AVISA:
+            impresso = o_que_a_cerca_imprime(pedido, raiz, onde)
+            if "permissionDecision" in impresso:
+                falhas.append(FALHA_NEGOU_O_QUE_SO_AVISA.format(rotulo))
+            elif "AVISO, não recusa" not in impresso.get(
+                    "additionalContext", ""):
+                falhas.append(FALHA_NAO_AVISOU.format(rotulo))
 
         def caso(rotulo, condicao):
             comportamento.append((rotulo, bool(condicao)))
+
+        aviso = o_aviso_da_copia_so_nomeada(ESPELHO_NA_COPIA, ESPELHO_NA_FONTE)
+        caso("o aviso da cópia só nomeada é contexto para o modelo: nomeia a "
+             "cópia e a fonte, e não carrega decisão nenhuma",
+             ESPELHO_NA_COPIA in aviso["hookSpecificOutput"]["additionalContext"]
+             and ESPELHO_NA_FONTE
+             in aviso["hookSpecificOutput"]["additionalContext"]
+             and "permissionDecision" not in aviso["hookSpecificOutput"])
 
         ao_lado = raiz.parent / (raiz.name + "-ao-lado")
         montar_arvore_de_mentira(ao_lado)
@@ -719,32 +1195,75 @@ def testar() -> int:
 
     daqui = raiz_do_projeto_nunca_o_cwd()
 
-    with tempfile.TemporaryDirectory(prefix="veto-instalacao-fresca-") as tmp:
-        fresca = Path(tmp).resolve()
-        (fresca / "arquivo-instalado.py").write_text("x\n", encoding="utf-8")
-        (fresca / INSTALADOR).write_text(
-            "MODULOS = {'mod': {'arquivo-instalado.py': 'x'}}\n"
-            "def e_territorio_do_repositorio(caminho):\n"
-            "    return False\n", encoding="utf-8")
-        recusa_fresca = recusa_do_pedido(
-            pedido_de_escrita("Write", "arquivo-instalado.py"),
-            fresca, str(fresca))
-        caso("instalação sem modulos/ no disco ainda barra a cópia, pelo "
-             "MODULOS embutido no montar.py",
-             recusa_fresca is not None)
-        caso("a recusa da instalação fresca nomeia o módulo, não um "
-             "caminho local inexistente",
-             recusa_fresca and recusa_fresca[1]
-             == f"{MARCA_DE_MODULO_INSTALADO}mod")
-        if recusa_fresca:
-            mensagem_fresca = (
-                RECUSA_MODULO_INSTALADO.format(
-                    recusa_fresca[0], "mod", "mod")
-                + MANDA_GRAVAR.format(APRENDIZADO_MODULO_INSTALADO))
-            caso("a recusa da instalação fresca não manda rodar "
-                 "--sincronizar, que não existe fora do repositório atlas",
-                 "--sincronizar" not in mensagem_fresca
-                 and "--atualizar" in mensagem_fresca)
+    with tempfile.TemporaryDirectory(prefix="veto-instalacao-") as tmp:
+        instalacoes = Path(tmp).resolve()
+
+        com_registro = instalacoes / "com-registro"
+        escrever_de_mentira(com_registro, INSTRUMENTO_DA_CAMADA)
+        escrever_de_mentira(com_registro, ARQUIVO_INSTALADO)
+        escrever_de_mentira(com_registro, ARQUIVO_FORA_DO_REGISTRO)
+        escrever_de_mentira(com_registro, REGISTRO_DA_INSTALACAO, json.dumps(
+            {"versao": "0", "paginas": [],
+             "modulos": {MODULO_DE_MENTIRA: [ARQUIVO_INSTALADO]}}))
+        recusa_instalada = recusa_do_pedido(
+            pedido_de_escrita("Write", ARQUIVO_INSTALADO),
+            com_registro, str(com_registro))
+        impresso_instalado = o_que_a_cerca_imprime_ao_escrever(
+            com_registro, ARQUIVO_INSTALADO)
+        caso("instalação sem modulos/ barra a cópia que o registro da "
+             "instalação lista, e a recusa nomeia o módulo, não um caminho "
+             "local inexistente",
+             impresso_instalado.get("permissionDecision") == DECISAO_DE_NEGAR
+             and recusa_instalada and recusa_instalada[1]
+             == f"{MARCA_DE_MODULO_INSTALADO}{MODULO_DE_MENTIRA}")
+        caso("na mesma instalação, arquivo que o registro não lista passa "
+             "calado",
+             not o_que_a_cerca_imprime_ao_escrever(
+                 com_registro, ARQUIVO_FORA_DO_REGISTRO))
+        motivo_instalado = impresso_instalado.get(
+            "permissionDecisionReason", "")
+        caso("a recusa da instalação não manda rodar --sincronizar, que não "
+             "existe fora do repositório atlas, e manda o --atualizar do "
+             "montar.py que mora no clone da camada",
+             motivo_instalado and "--sincronizar" not in motivo_instalado
+             and "<pasta do clone do atlas>/montar.py --atualizar"
+             in motivo_instalado)
+
+        sem_registro = instalacoes / "sem-registro"
+        escrever_de_mentira(sem_registro, INSTRUMENTO_DA_CAMADA)
+        escrever_de_mentira(sem_registro, ARQUIVO_INSTALADO)
+        escrever_de_mentira(sem_registro, INSTALADOR, CARGA_DO_INSTALADOR_ANTIGO)
+        caso("instalação sem registro, com a carga ainda no montar.py ao "
+             "lado: a cerca não lê a carga, então a escrita passa, e o aviso "
+             "nomeia o registro que falta sem decidir nada",
+             passou_avisando_do_registro(o_que_a_cerca_imprime_ao_escrever(
+                 sem_registro, ARQUIVO_INSTALADO)))
+
+        ilegivel = instalacoes / "registro-ilegivel"
+        escrever_de_mentira(ilegivel, INSTRUMENTO_DA_CAMADA)
+        escrever_de_mentira(ilegivel, ARQUIVO_INSTALADO)
+        escrever_de_mentira(ilegivel, REGISTRO_DA_INSTALACAO, "{")
+        caso("registro ilegível conta como ausente: a escrita passa e o "
+             "aviso nomeia o registro, sem exceção",
+             passou_avisando_do_registro(o_que_a_cerca_imprime_ao_escrever(
+                 ilegivel, ARQUIVO_INSTALADO)))
+
+        fora_da_forma = instalacoes / "registro-fora-da-forma"
+        escrever_de_mentira(fora_da_forma, INSTRUMENTO_DA_CAMADA)
+        escrever_de_mentira(fora_da_forma, ARQUIVO_INSTALADO)
+        escrever_de_mentira(fora_da_forma, REGISTRO_DA_INSTALACAO, json.dumps(
+            {"modulos": {MODULO_DE_MENTIRA: ARQUIVO_INSTALADO}}))
+        caso("registro fora da forma, com texto onde devia haver lista, conta "
+             "como ausente: passa e avisa",
+             passou_avisando_do_registro(o_que_a_cerca_imprime_ao_escrever(
+                 fora_da_forma, ARQUIVO_INSTALADO)))
+
+        sem_camada = instalacoes / "sem-camada"
+        escrever_de_mentira(sem_camada, ARQUIVO_INSTALADO)
+        caso("repositório sem a camada e sem registro passa calado: o aviso "
+             "só sai onde a camada está instalada",
+             not o_que_a_cerca_imprime_ao_escrever(
+                 sem_camada, ARQUIVO_INSTALADO))
 
     daqui = raiz_do_projeto_nunca_o_cwd()
     no_repositorio_da_camada = (daqui / PASTA_MODULOS_NO_DISCO).is_dir()
@@ -785,13 +1304,14 @@ def testar() -> int:
                for rotulo, passou in comportamento if not passou]
     for falha in falhas:
         print(LINHA_DE_FALHA.format(falha))
-    total = len(BARRA) + len(DEIXA_PASSAR) + len(comportamento) \
+    total = len(BARRA) + len(SO_AVISA) + len(DEIXA_PASSAR) \
+        + len(comportamento) \
         + len(DESTE_REPOSITORIO_BARRA) * 2 + len(DESTE_REPOSITORIO_PASSA)
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))
         return 1
     print(RESUMO_OK.format(
-        total, len(BARRA) + len(DESTE_REPOSITORIO_BARRA),
+        total, len(BARRA) + len(DESTE_REPOSITORIO_BARRA), len(SO_AVISA),
         len(DEIXA_PASSAR) + len(DESTE_REPOSITORIO_BARRA)
         + len(DESTE_REPOSITORIO_PASSA), len(comportamento)))
     return 0

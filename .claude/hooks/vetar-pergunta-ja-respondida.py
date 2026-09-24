@@ -30,9 +30,9 @@ APRENDIZADO = (
 
 EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
-DECISAO_DE_PERGUNTAR = "ask"
 CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
-MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
+MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO = "bypassPermissions"
+MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
 
 ACOES = {
     "push": (r"\bpush(?:es|ar|ei)?\b", r"\bempurr\w+"),
@@ -130,22 +130,29 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
-def verbo_do_veto(entrada: dict) -> str:
-    sem_quem_responda = (entrada or {}).get(
-        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_SEM_QUEM_RESPONDA
-    return DECISAO_DE_NEGAR if sem_quem_responda else DECISAO_DE_PERGUNTAR
+AVISO_QUE_NAO_SEGURA_A_PERGUNTA = (
+    "AVISO, não veto: a pergunta segue para o dono. Confira se ela não pede "
+    "o que o repositório já autorizou.\n\n")
 
 
-def vetar(entrada: dict, razao: str) -> int:
+def e_etapa_sem_ninguem(ambiente) -> bool:
+    return bool((ambiente or {}).get(MARCA_DE_ETAPA_NO_AMBIENTE))
+
+
+def avisar_ou_negar(razao: str, ambiente) -> int:
+    if not e_etapa_sem_ninguem(ambiente):
+        print(json.dumps(
+            {"systemMessage": AVISO_QUE_NAO_SEGURA_A_PERGUNTA + razao}))
+        return SILENCIO
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
-        "permissionDecision": verbo_do_veto(entrada),
+        "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": razao,
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -161,8 +168,8 @@ def decidir() -> int:
     if not acao:
         return SILENCIO
 
-    return vetar(entrada, RECUSA.format(acao=acao, arquivo=ARQUIVO_CONFIGURACAO)
-                 + MANDA_GRAVAR.format(APRENDIZADO))
+    return avisar_ou_negar(RECUSA.format(acao=acao, arquivo=ARQUIVO_CONFIGURACAO)
+                           + MANDA_GRAVAR.format(APRENDIZADO), os.environ)
 
 
 TUDO_LIGADO = {"commit": True, "push": True, "publicar": True}
@@ -192,8 +199,14 @@ DEIXA_PASSAR = [
 RAZAO_DO_TESTE = "a razão que o veto explicaria"
 MODO_DA_SESSAO_INTERATIVA = "default"
 SESSAO_INTERATIVA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_DA_SESSAO_INTERATIVA}
-SEM_CABECA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_SEM_QUEM_RESPONDA}
+SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA = {
+    CAMPO_DO_MODO_DE_PERMISSAO: MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO}
 PEDIDO_SEM_MODO_DECLARADO = {}
+AMBIENTE_SEM_A_MARCA = {}
+AMBIENTE_DA_ETAPA_SEM_NINGUEM = {MARCA_DE_ETAPA_NO_AMBIENTE: "1"}
+PERGUNTA_JA_RESPONDIDA = {"questions": [
+    {"question": "Posso commitar o que fiz?", "header": "Commit"}]}
+RAZAO_DA_PERGUNTA_JA_RESPONDIDA = "`autorizacoes.commit`"
 
 
 def testar() -> int:
@@ -221,28 +234,66 @@ def testar() -> int:
         falhas.append(TESTE_DEVIA_BARRAR.format(
             "a recusa manda gravar o aprendizado em conhecimento/"))
 
-    interativa = resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE)
-    sem_cabeca = resposta_do_veto(SEM_CABECA, RAZAO_DO_TESTE)
-    sem_modo = resposta_do_veto(PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE)
-    if interativa.get("permissionDecision") != DECISAO_DE_PERGUNTAR:
+    com_gente = resposta_do_aviso_ou_da_negativa(RAZAO_DO_TESTE,
+                                                 AMBIENTE_SEM_A_MARCA)
+    sem_ninguem = resposta_do_aviso_ou_da_negativa(
+        RAZAO_DO_TESTE, AMBIENTE_DA_ETAPA_SEM_NINGUEM)
+    if not ("hookSpecificOutput" not in com_gente
+            and RAZAO_DO_TESTE in com_gente.get("systemMessage", "")
+            and AVISO_QUE_NAO_SEGURA_A_PERGUNTA
+            in com_gente.get("systemMessage", "")):
         falhas.append(TESTE_COMPORTAMENTO.format(
-            "em sessão interativa a resposta do gancho traz `ask`: o veto "
-            "pergunta antes, em vez de negar de vez"))
-    if sem_cabeca.get("permissionDecision") != DECISAO_DE_NEGAR:
+            "sem a marca da etapa há gente: a cerca AVISA e deixa a "
+            "pergunta passar — ela lê prosa, erra em exemplo citado, e "
+            "pergunta a mais custa menos ao dono que pergunta legítima "
+            "recusada"))
+    if sem_ninguem.get("hookSpecificOutput", {}).get(
+            "permissionDecision") != DECISAO_DE_NEGAR:
         falhas.append(TESTE_COMPORTAMENTO.format(
-            "em execução sem cabeça (`--dangerously-skip-permissions`) não "
-            "há quem responda: a resposta continua `deny`"))
-    if sem_modo.get("permissionDecision") != DECISAO_DE_PERGUNTAR:
+            "com a marca da etapa no ambiente não há quem responda: a "
+            "resposta é `deny`"))
+    if sem_ninguem.get("hookSpecificOutput", {}).get(
+            "permissionDecisionReason") != RAZAO_DO_TESTE:
         falhas.append(TESTE_COMPORTAMENTO.format(
-            "pedido que não declara o modo de permissão recebe `ask` — só "
-            "o modo sem cabeça nega"))
-    if not (interativa.get("permissionDecisionReason") == RAZAO_DO_TESTE
-            and sem_cabeca.get("permissionDecisionReason") == RAZAO_DO_TESTE):
-        falhas.append(TESTE_COMPORTAMENTO.format(
-            "a razão do veto viaja na resposta, com `ask` e com `deny`: é "
-            "ela que o prompt de permissão mostra ao dono"))
+            "a razão viaja na resposta também quando nega: é ela que o "
+            "registro da etapa guarda"))
 
-    total = len(BARRA) + len(DEIXA_PASSAR) + 8
+    def so_avisa(resposta) -> bool:
+        aviso = resposta.get("systemMessage", "")
+        return ("hookSpecificOutput" not in resposta
+                and AVISO_QUE_NAO_SEGURA_A_PERGUNTA in aviso
+                and RAZAO_DA_PERGUNTA_JA_RESPONDIDA in aviso)
+
+    if not so_avisa(resposta_do_gancho(
+            pedido_da_pergunta(SESSAO_INTERATIVA), AMBIENTE_SEM_A_MARCA)):
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "pelo gancho inteiro, em modo `default` sem a marca da etapa: o "
+            "dono está, a cerca AVISA e a pergunta segue"))
+    if not so_avisa(resposta_do_gancho(
+            pedido_da_pergunta(SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA),
+            AMBIENTE_SEM_A_MARCA)):
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "pelo gancho inteiro, em `bypassPermissions` sem a marca: há "
+            "gente, e a pergunta é ela mesma o caminho até o dono — a cerca "
+            "AVISA; negar ali barraria pergunta que só citasse commit"))
+    if not so_avisa(resposta_do_gancho(
+            pedido_da_pergunta(PEDIDO_SEM_MODO_DECLARADO),
+            AMBIENTE_SEM_A_MARCA)):
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "pelo gancho inteiro, pedido sem o modo declarado e sem a marca: "
+            "a cerca AVISA"))
+    na_etapa = resposta_do_gancho(pedido_da_pergunta(SESSAO_INTERATIVA),
+                                  AMBIENTE_DA_ETAPA_SEM_NINGUEM).get(
+                                      "hookSpecificOutput", {})
+    if not (na_etapa.get("permissionDecision") == DECISAO_DE_NEGAR
+            and RAZAO_DA_PERGUNTA_JA_RESPONDIDA
+            in na_etapa.get("permissionDecisionReason", "")):
+        falhas.append(TESTE_COMPORTAMENTO.format(
+            "pelo gancho inteiro, na etapa do executor, com a marca no "
+            "ambiente, ninguém responde nem em modo `default`: a cerca NEGA, "
+            "com a razão"))
+
+    total = len(BARRA) + len(DEIXA_PASSAR) + 11
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))
         print("\n".join(falhas))
@@ -251,15 +302,50 @@ def testar() -> int:
     return 0
 
 
-def resposta_do_veto(entrada: dict, razao: str) -> dict:
+def resposta_do_aviso_ou_da_negativa(razao: str, ambiente) -> dict:
     import contextlib
     import io
     saida = io.StringIO()
     with contextlib.redirect_stdout(saida):
-        vetar(entrada, razao)
+        avisar_ou_negar(razao, ambiente)
     try:
-        return json.loads(saida.getvalue())["hookSpecificOutput"]
-    except (ValueError, KeyError):
+        return json.loads(saida.getvalue())
+    except ValueError:
+        return {}
+
+
+def pedido_da_pergunta(sessao: dict) -> dict:
+    return dict(sessao, tool_name="AskUserQuestion",
+                tool_input=PERGUNTA_JA_RESPONDIDA)
+
+
+def resposta_do_gancho(pedido: dict, ambiente: dict) -> dict:
+    import contextlib
+    import io
+    import tempfile
+    guardados = {nome: os.environ.pop(nome, None)
+                 for nome in (VARIAVEL_DA_RAIZ, MARCA_DE_ETAPA_NO_AMBIENTE)}
+    saida = io.StringIO()
+    guardada, sys.stdin = sys.stdin, io.StringIO(json.dumps(pedido))
+    try:
+        with tempfile.TemporaryDirectory(prefix="veto-pergunta-") as tmp:
+            configuracao = Path(tmp) / ARQUIVO_CONFIGURACAO
+            configuracao.parent.mkdir(parents=True)
+            configuracao.write_text(json.dumps(
+                {CHAVE_DAS_AUTORIZACOES: TUDO_LIGADO}), encoding="utf-8")
+            os.environ[VARIAVEL_DA_RAIZ] = tmp
+            os.environ.update(ambiente)
+            with contextlib.redirect_stdout(saida):
+                decidir()
+    finally:
+        sys.stdin = guardada
+        for nome, valor in guardados.items():
+            os.environ.pop(nome, None)
+            if valor is not None:
+                os.environ[nome] = valor
+    try:
+        return json.loads(saida.getvalue())
+    except ValueError:
         return {}
 
 

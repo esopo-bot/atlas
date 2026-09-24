@@ -50,8 +50,8 @@ Três coisas que você **não** decide sozinho:
 A página de aplicação não existe ainda? Crie-a a partir de
 `aplicacao-exemplo.md`; o registro de incidente nasce de
 `incidente-exemplo.md`. Um arquivo por aplicação, nome `aplicacao-<nome>.md`,
-tudo plano — sem pasta dentro de pasta, porque o site publica um nível de
-subpasta e para ali.
+tudo plano — sem pasta dentro de pasta, porque o publicador de quem instala
+pode transformar em rota só um nível de subpasta.
 
 A tabela apagar-ou-guardar do corpo vale aqui dobrado: é na escrita final
 que malsucedido se registra e errado se apaga inteiro.

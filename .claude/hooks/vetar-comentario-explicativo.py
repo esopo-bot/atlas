@@ -45,7 +45,8 @@ EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 DECISAO_DE_NEGAR = "deny"
 DECISAO_DE_PERGUNTAR = "ask"
 CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
-MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
+MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO = "bypassPermissions"
+MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
 BANDEIRA_DE_TESTE = "--testar"
 PASSA = ""
 SILENCIO = 0
@@ -323,6 +324,19 @@ def raiz_do_alvo(caminho: str, declarada: Path) -> Path:
     return donas[-1] if donas else declarada
 
 
+def fora_de_todo_repositorio(caminho: str, raiz: Path) -> bool:
+    alvo = Path(str(caminho).replace("\\", "/"))
+    if not alvo.is_absolute():
+        return False
+    try:
+        alvo.resolve().relative_to(raiz.resolve())
+        return False
+    except (ValueError, OSError):
+        pass
+    return not any((pasta / MARCA_DE_REPOSITORIO).exists()
+                   for pasta in alvo.resolve().parents)
+
+
 def raiz_do_projeto_nunca_o_cwd() -> Path:
     declarada = os.environ.get(VARIAVEL_DA_RAIZ_DO_PROJETO)
     if declarada:
@@ -336,22 +350,32 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
-def verbo_do_veto(entrada: dict) -> str:
-    sem_quem_responda = (entrada or {}).get(
-        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_SEM_QUEM_RESPONDA
-    return DECISAO_DE_NEGAR if sem_quem_responda else DECISAO_DE_PERGUNTAR
+def e_etapa_sem_ninguem(ambiente) -> bool:
+    return bool((ambiente or {}).get(MARCA_DE_ETAPA_NO_AMBIENTE))
 
 
-def vetar(entrada: dict, razao: str) -> int:
+def modo_que_nao_mostra_a_pergunta(entrada: dict) -> bool:
+    return (entrada or {}).get(
+        CAMPO_DO_MODO_DE_PERMISSAO) == MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO
+
+
+def verbo_do_veto(entrada: dict, ambiente) -> str:
+    if (e_etapa_sem_ninguem(ambiente)
+            or modo_que_nao_mostra_a_pergunta(entrada)):
+        return DECISAO_DE_NEGAR
+    return DECISAO_DE_PERGUNTAR
+
+
+def vetar(entrada: dict, razao: str, ambiente) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
-        "permissionDecision": verbo_do_veto(entrada),
+        "permissionDecision": verbo_do_veto(entrada, ambiente),
         "permissionDecisionReason": razao,
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -368,19 +392,20 @@ def decidir() -> int:
         if escreve_na_lista_das_diretivas(caminho):
             return vetar(entrada, RECUSA_DE_AFROUXAR.format(
                 ARQUIVO_DAS_DIRETIVAS) + MANDA_GRAVAR.format(
-                    APRENDIZADO_DE_AFROUXAR.format(ARQUIVO_DAS_DIRETIVAS)))
+                    APRENDIZADO_DE_AFROUXAR.format(ARQUIVO_DAS_DIRETIVAS)),
+                os.environ)
         linha = comentario_acrescentado(caminho, velho, novo, diretivas)
-        if linha:
+        if linha and not fora_de_todo_repositorio(caminho, raiz):
             return vetar(entrada, RECUSA.format(
                 Path(caminho).name, linha,
                 diretivas_para_a_mensagem(diretivas), ARQUIVO_DAS_DIRETIVAS)
-                + MANDA_GRAVAR.format(APRENDIZADO))
+                + MANDA_GRAVAR.format(APRENDIZADO), os.environ)
         dita = docstring_acrescentada(caminho, velho, novo,
                                       raiz_do_alvo(caminho, raiz))
         if dita:
             return vetar(entrada, RECUSA_DE_DOCSTRING.format(
                 Path(caminho).name, dita)
-                + MANDA_GRAVAR.format(APRENDIZADO_DA_DOCSTRING))
+                + MANDA_GRAVAR.format(APRENDIZADO_DA_DOCSTRING), os.environ)
     return SILENCIO
 
 
@@ -437,8 +462,11 @@ DEIXA_PASSAR = (
 RAZAO_DO_TESTE = "a razão que o veto explicaria"
 MODO_DA_SESSAO_INTERATIVA = "default"
 SESSAO_INTERATIVA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_DA_SESSAO_INTERATIVA}
-SEM_CABECA = {CAMPO_DO_MODO_DE_PERMISSAO: MODO_SEM_QUEM_RESPONDA}
+SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA = {
+    CAMPO_DO_MODO_DE_PERMISSAO: MODO_QUE_NAO_MOSTRA_A_PERGUNTA_DO_GANCHO}
 PEDIDO_SEM_MODO_DECLARADO = {}
+AMBIENTE_SEM_A_MARCA = {}
+AMBIENTE_DA_ETAPA_SEM_NINGUEM = {MARCA_DE_ETAPA_NO_AMBIENTE: "1"}
 
 
 def testar() -> int:
@@ -516,23 +544,35 @@ def testar() -> int:
          not escreve_na_lista_das_diretivas(
              "tmp/diretivas-de-ferramenta.txt"))
 
-    caso("em sessão interativa a resposta do gancho traz `ask`: o veto "
-         "pergunta antes, em vez de negar de vez",
-         resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+    caso("em modo `default` sem a marca da etapa a resposta do gancho "
+         "traz `ask`: o veto pergunta antes, em vez de negar de vez",
+         resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE,
+                          AMBIENTE_SEM_A_MARCA)
          .get("permissionDecision") == DECISAO_DE_PERGUNTAR)
-    caso("em execução sem cabeça (`--dangerously-skip-permissions`) não "
-         "há quem responda: a resposta continua `deny`",
-         resposta_do_veto(SEM_CABECA, RAZAO_DO_TESTE)
+    caso("em `bypassPermissions` sem a marca pode haver gente, mas o "
+         "cliente não garante mostrar a pergunta do gancho nesse modo: "
+         "`deny`, o único jeito de a regra valer",
+         resposta_do_veto(SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA,
+                          RAZAO_DO_TESTE, AMBIENTE_SEM_A_MARCA)
          .get("permissionDecision") == DECISAO_DE_NEGAR)
-    caso("pedido que não declara o modo de permissão recebe `ask` — só "
-         "o modo sem cabeça nega",
-         resposta_do_veto(PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE)
+    caso("na etapa do executor, com a marca no ambiente, ninguém "
+         "responde nem em modo `default`: `deny`",
+         resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE,
+                          AMBIENTE_DA_ETAPA_SEM_NINGUEM)
+         .get("permissionDecision") == DECISAO_DE_NEGAR)
+    caso("pedido que não declara o modo de permissão, sem a marca, "
+         "recebe `ask` — nega só a etapa sem ninguém ou o modo que não "
+         "mostra a pergunta",
+         resposta_do_veto(PEDIDO_SEM_MODO_DECLARADO, RAZAO_DO_TESTE,
+                          AMBIENTE_SEM_A_MARCA)
          .get("permissionDecision") == DECISAO_DE_PERGUNTAR)
     caso("a razão do veto viaja na resposta, com `ask` e com `deny`: é "
          "ela que o prompt de permissão mostra ao dono",
-         resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE)
+         resposta_do_veto(SESSAO_INTERATIVA, RAZAO_DO_TESTE,
+                          AMBIENTE_SEM_A_MARCA)
          .get("permissionDecisionReason") == RAZAO_DO_TESTE
-         and resposta_do_veto(SEM_CABECA, RAZAO_DO_TESTE)
+         and resposta_do_veto(SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA,
+                              RAZAO_DO_TESTE, AMBIENTE_SEM_A_MARCA)
          .get("permissionDecisionReason") == RAZAO_DO_TESTE)
 
     with tempfile.TemporaryDirectory(prefix="veto-comentario-") as tmp:
@@ -648,6 +688,17 @@ def testar() -> int:
 
         caso("docstring em caminho fora da raiz da camada passa",
              docstring(str(Path(fora) / "x.py"), "", com_docstring) == PASSA)
+        caso("comentário em caminho fora da raiz e sem repositório acima é "
+             "script descartável: a cerca de comentário cala",
+             fora_de_todo_repositorio(str(Path(fora) / "x.py"), raiz))
+        caso("caminho relativo é da raiz da camada: a cerca de comentário "
+             "continua valendo",
+             not fora_de_todo_repositorio("app/conta.py", raiz))
+        caso("caminho absoluto dentro da raiz continua valendo",
+             not fora_de_todo_repositorio(str(raiz / "app" / "conta.py"),
+                                          raiz))
+        caso("repositório fora da raiz, com .git acima, continua valendo",
+             not fora_de_todo_repositorio(str(vizinho_de_la / "x.py"), raiz))
         caso("código sem docstring na raiz passa",
              docstring("app/conta.py", "", sem_docstring) == PASSA)
         caso("`# noqa` continua passando: não é docstring nem comentário "
@@ -723,12 +774,12 @@ def testar() -> int:
     return 0
 
 
-def resposta_do_veto(entrada: dict, razao: str) -> dict:
+def resposta_do_veto(entrada: dict, razao: str, ambiente) -> dict:
     import contextlib
     import io
     saida = io.StringIO()
     with contextlib.redirect_stdout(saida):
-        vetar(entrada, razao)
+        vetar(entrada, razao, ambiente)
     try:
         return json.loads(saida.getvalue())["hookSpecificOutput"]
     except (ValueError, KeyError):

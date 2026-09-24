@@ -81,8 +81,8 @@ LOG_SEM_VOZ = (
 CONFIGURACAO_INVALIDA = "configuração inválida em {}: {}"
 RODANDO_NA_FONTE = (
     "este é o falar.py da FONTE do módulo, em modulos/{}/ — rodá-lo aqui "
-    "criaria o venv dentro da fonte, e o montar.py embutiria o venv "
-    "inteiro. Instale primeiro: python montar.py --modulo {} no "
+    "criaria o venv dentro da fonte. Instale primeiro, rodando python "
+    "<pasta do clone do atlas>/montar.py --modulo {} de dentro do "
     "repositório de destino, e rode a cópia de lá.")
 
 
@@ -365,4 +365,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv[1:] else main())

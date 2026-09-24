@@ -37,10 +37,15 @@ def _comando() -> list:
     return partir_comando(os.environ.get(VARIAVEL_DO_GH, GH_PADRAO))
 
 
+def sem_retorno_de_carro(entrada):
+    return entrada.replace("\r", "") if isinstance(entrada, str) else entrada
+
+
 def rodar(argumentos: list, ambiente: dict = None, entrada=None):
     try:
         return subprocess.run(
-            _comando() + argumentos, input=entrada, capture_output=True,
+            _comando() + argumentos, input=sem_retorno_de_carro(entrada),
+            capture_output=True,
             text=True, encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
             env=dict(os.environ, **(ambiente or {})))
     except (OSError, subprocess.SubprocessError):
@@ -74,6 +79,8 @@ CAIXA = pathlib.Path(os.environ["GH_TESTE_CAIXA"])
 argv = sys.argv[1:]
 (CAIXA / "chamadas.txt").open("a").write(
     " ".join(argv) + chr(9) + os.environ.get("GH_TOKEN", "sem-token") + chr(10))
+if "--body-file" in argv:
+    (CAIXA / "corpo-recebido.bin").write_bytes(sys.stdin.buffer.read())
 if argv[:2] == ["auth", "token"]:
     print("token-de-" + argv[-1])
 elif (CAIXA / "recusa.txt").exists():
@@ -129,6 +136,16 @@ def testar() -> int:
         caso("o comando roda com o token da conta pedida, sem trocar a ativa",
              "token-de-alguem" in chamadas)
 
+        rodar(["issue", "edit", "1", "--body-file", "-"],
+              entrada="titulo\r\r\r\nlinha\r\n\r\r\nfim\n")
+        recebido = (caixa / "corpo-recebido.bin").read_bytes()
+        caso("corpo lido do rastreador volta com retorno de carro sobrando, "
+             "e a escrita em modo texto soma mais um por linha: o que vai "
+             "pelo stdin sai LIMPO, senão cada gravação engorda o corpo até "
+             "o teto do rastreador com caractere que ninguém vê",
+             b"\r\r" not in recebido
+             and recebido.replace(b"\r", b"") == b"titulo\nlinha\n\nfim\n")
+
         (caixa / "recusa.txt").write_text("x", encoding="utf-8")
         feito = na_conta("alguem", ["issue", "comment", "1"])
         caso("recusa do gh vira berro legível, nunca silêncio",
@@ -148,6 +165,9 @@ def testar() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     if BANDEIRA_DE_TESTE in sys.argv[1:]:
         sys.exit(testar())
     print(USO)

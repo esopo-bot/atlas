@@ -1,9 +1,13 @@
 import re
+import contextlib
+import hashlib
+import io
 import json
 import re
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +20,24 @@ CHAVE_DA_INTEGRACAO = "integracao"
 
 INSTRUMENTO_DA_ENTREGA = ".agents/camada/camada.py"
 BANDEIRA_DA_ENTREGA = "--entrega"
+BANDEIRA_SEM_O_PEDIDO = "--sem-pedido"
 SAIDA_DO_INSTRUMENTO_NAO_MEDIDO = 2
+MARCA_DAS_CATEGORIAS = "CATEGORIAS DA ENTREGA:"
+CATEGORIA_DO_COMMIT_SEM_DESTINO = "commit-sem-destino"
+CATEGORIA_DA_BRANCH_POR_PODAR = "branch-por-podar"
+CATEGORIAS_DA_ENTREGA = (CATEGORIA_DO_COMMIT_SEM_DESTINO,
+                         CATEGORIA_DA_BRANCH_POR_PODAR)
+CATEGORIA_E_VALOR = re.compile(r"([a-z-]+)=(\d)")
+RELATA_PODA_PENDENTE = (
+    "Há branch já entregue por podar — rastro de entrega, não segura a "
+    "parada. `python {} {}` mostra quais e o comando que as apaga.")
+RELATA_PODA_NAO_MEDIDA = (
+    "A poda de branch já entregue NÃO FOI MEDIDA nesta parada — `python {} "
+    "{}` diz por quê, e não medido não é 'nada a podar'. É rastro de "
+    "entrega: fica dito, e não segura a parada.")
+RECUO_DA_LISTA_DO_INSTRUMENTO = "  "
+PREFIXO_DA_MARCA_DO_RELATO = "relatou-destino-"
+TAMANHO_DA_IDENTIDADE_DO_RELATO = 16
 COMANDO_DA_SUJEIRA = ["git", "status", "--porcelain"]
 COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM = [
     "git", "log", "--oneline", "--no-decorate", "{}..{}"]
@@ -75,6 +96,7 @@ COMANDO_DA_BRANCH_NO_DURAVEL = [
 COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{0}", "{1}"]
 MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO = "ATLAS_BUSCA_FEITA"
 COMANDO_DA_RAIZ_DO_REPOSITORIO = ["git", "rev-parse", "--show-toplevel"]
+MARCA_DO_REPOSITORIO = ".git"
 COMANDO_DO_QUE_NAO_ESTA_EM_REMOTO_NENHUM = [
     "git", "log", "--oneline", "--no-decorate", "HEAD", "--not", "--remotes"]
 CHAVE_DO_TRANSCRITO = "transcript_path"
@@ -113,6 +135,12 @@ DITO_DA_SESSAO_DE_PESQUISA = (
 
 EVENTO_DE_PARADA = "Stop"
 DECISAO_DE_BLOQUEAR = "block"
+AVISO_QUE_NAO_SEGURA_A_PARADA = (
+    "SÓ NO REGISTRO DE DEPURAÇÃO, sem bloqueio: com gente no terminal esta "
+    "cobrança da regra 16 não chega à conversa nem à tela, e a parada segue. "
+    "A sessão prova o destino antes de encerrar — `--entrega`, `git status` "
+    "em cada repositório tocado e os critérios da issue —, e quem segura "
+    "entrega sem destino é o portão do servidor.\n\n")
 BANDEIRA_DE_TESTE = "--testar"
 NAO_MEDIDO = None
 SILENCIO = 0
@@ -146,6 +174,8 @@ MOTIVO_TEMPO_ESGOTADO = "o teto de {} s esgotou antes de a resposta chegar"
 MOTIVO_NAO_SUBIU = "o processo não subiu ({})"
 MOTIVO_O_INSTRUMENTO_DISSE = (
     "o próprio instrumento saiu com o código de não-medido")
+MOTIVO_O_ERRO_DO_INSTRUMENTO = "o instrumento saiu {} e o erro dele diz: {}"
+MOTIVO_O_INSTRUMENTO_CALOU = "o instrumento saiu {} sem dizer nada"
 MOTIVO_NAO_DITO = "nada ficou registrado sobre a causa"
 COBRA_INTEGRACAO_SEM_PEDIDO = (
     "A integração {!r} está {} commit(s) à frente de {!r} e NÃO há pedido de "
@@ -346,6 +376,21 @@ def responde_sem_aparar(comando: list, raiz: Path, tempo: int):
     return pronto.returncode, pronto.stdout or ""
 
 
+def responde_com_o_erro(comando: list, raiz: Path, tempo: int):
+    try:
+        pronto = subprocess.run(comando, cwd=raiz, capture_output=True,
+                                text=True, encoding="utf-8", errors="replace",
+                                timeout=tempo)
+    except subprocess.TimeoutExpired:
+        RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(tempo))
+        return NAO_MEDIDO
+    except (OSError, subprocess.SubprocessError) as falha:
+        RAZAO_DE_NAO_MEDIR.append(
+            MOTIVO_NAO_SUBIU.format(type(falha).__name__))
+        return NAO_MEDIDO
+    return pronto.returncode, pronto.stdout or "", pronto.stderr or ""
+
+
 def responde(comando: list, raiz: Path, tempo: int):
     resposta = responde_sem_aparar(comando, raiz, tempo)
     if resposta is NAO_MEDIDO:
@@ -530,21 +575,76 @@ def pedido_mesclado_que_ja_contem(raiz: Path, principal: str,
     return True
 
 
-def sobra_fora_da_branch_de_entrega(raiz: Path):
+def categorias_da_entrega(dito: str):
+    for linha in (dito or "").splitlines():
+        if not linha.strip().startswith(MARCA_DAS_CATEGORIAS):
+            continue
+        achadas = dict(CATEGORIA_E_VALOR.findall(linha))
+        if set(achadas) >= set(CATEGORIAS_DA_ENTREGA):
+            return {nome: int(achadas[nome]) for nome in CATEGORIAS_DA_ENTREGA}
+    return None
+
+
+def motivo_do_instrumento(codigo: int, erro: str) -> str:
+    linhas = [linha.strip() for linha in (erro or "").splitlines()
+              if linha.strip()]
+    if linhas:
+        return MOTIVO_O_ERRO_DO_INSTRUMENTO.format(codigo, linhas[-1])
+    if codigo == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO:
+        return MOTIVO_O_INSTRUMENTO_DISSE
+    return MOTIVO_O_INSTRUMENTO_CALOU.format(codigo)
+
+
+def o_que_o_instrumento_achou(codigo: int, dito: str, erro: str = "") -> dict:
+    categorias = categorias_da_entrega(dito)
+    if categorias is None:
+        if codigo and ((erro or "").strip() or not dito.strip()
+                       or codigo == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO):
+            RAZAO_DE_NAO_MEDIR.append(motivo_do_instrumento(codigo, erro))
+            return {"sobra": NAO_MEDIDO, "poda": ""}
+        return {"sobra": dito if codigo else "", "poda": ""}
+    commit = categorias[CATEGORIA_DO_COMMIT_SEM_DESTINO]
+    poda = categorias[CATEGORIA_DA_BRANCH_POR_PODAR]
+    if commit == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO:
+        RAZAO_DE_NAO_MEDIR.append(MOTIVO_O_INSTRUMENTO_DISSE)
+        sobra = NAO_MEDIDO
+    else:
+        sobra = so_o_bloco_do_commit(dito) if commit else ""
+    return {"sobra": sobra,
+            "poda": (NAO_MEDIDO if poda == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO
+                     else dito if poda else "")}
+
+
+def poda_nao_medida(estado: dict) -> bool:
+    return "poda" in estado and estado["poda"] is NAO_MEDIDO
+
+
+def so_o_bloco_do_commit(dito: str) -> str:
+    bloco = []
+    for linha in dito.split("\n")[1:]:
+        if linha.strip().startswith(MARCA_DAS_CATEGORIAS):
+            break
+        if bloco and not linha.startswith(RECUO_DA_LISTA_DO_INSTRUMENTO):
+            break
+        bloco.append(linha)
+    return "\n".join(bloco) if bloco else dito
+
+
+def achados_da_entrega(raiz: Path) -> dict:
     if not (raiz / INSTRUMENTO_DA_ENTREGA).is_file():
-        return ""
-    resposta = responde(
-        [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA],
+        return {"sobra": "", "poda": ""}
+    resposta = responde_com_o_erro(
+        [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA,
+         BANDEIRA_SEM_O_PEDIDO],
         raiz, TEMPO_DO_GIT)
     if resposta is NAO_MEDIDO:
-        return NAO_MEDIDO
-    codigo, dito = resposta
-    if codigo == SAIDA_DO_INSTRUMENTO_NAO_MEDIDO:
-        RAZAO_DE_NAO_MEDIR.append(MOTIVO_O_INSTRUMENTO_DISSE)
-        return NAO_MEDIDO
-    if codigo == 0:
-        return ""
-    return dito
+        return {"sobra": NAO_MEDIDO, "poda": ""}
+    codigo, dito, erro = resposta
+    return o_que_o_instrumento_achou(codigo, dito.strip(), erro)
+
+
+def sobra_fora_da_branch_de_entrega(raiz: Path):
+    return achados_da_entrega(raiz)["sobra"]
 
 
 def marca_da_busca_feita(principal: str, integracao: str, agora: float) -> tuple:
@@ -760,10 +860,20 @@ def raiz_git_da_pasta(pasta: Path):
     return Path(resposta[1]).resolve()
 
 
+def pasta_com_git_mais_proxima(pasta: Path):
+    while not (pasta / MARCA_DO_REPOSITORIO).exists():
+        if pasta.parent == pasta:
+            return None
+        pasta = pasta.parent
+    return pasta
+
+
 def repositorios_tocados(escritos: set, raiz: Path) -> list:
     principal = raiz.resolve()
     pastas = {(raiz / caminho).parent for caminho in escritos}
-    raizes = {achada for achada in map(raiz_git_da_pasta, pastas)
+    com_git = {achada for achada in map(pasta_com_git_mais_proxima, pastas)
+               if achada}
+    raizes = {achada for achada in map(raiz_git_da_pasta, com_git)
               if achada and achada != principal}
     return sorted(raizes)
 
@@ -918,7 +1028,7 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
         return {
             "etapa": "", "suja": suja, "herdada": herdada,
             "nao_julgada": nao_julgada, "vizinhos": vizinhos,
-            "sobra": sobra_fora_da_branch_de_entrega(raiz),
+            **achados_da_entrega(raiz),
             "principal": principal, "integracao": integracao,
             "adiante": NAO_MEDIDO, "herdados": [], "pedido": NAO_MEDIDO,
         }
@@ -937,7 +1047,7 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
         "herdada": herdada,
         "nao_julgada": nao_julgada,
         "vizinhos": vizinhos,
-        "sobra": sobra_fora_da_branch_de_entrega(raiz),
+        **achados_da_entrega(raiz),
         "principal": principal,
         "integracao": integracao,
         "adiante": desta,
@@ -999,9 +1109,6 @@ def cobrancas(estado: dict) -> list:
     if estado.get("suja"):
         cobradas.append(COBRA_ARVORE_SUJA.format(
             len(estado["suja"]), primeiras_linhas(estado["suja"])))
-    if estado.get("herdada"):
-        cobradas.append(COBRA_SUJEIRA_HERDADA.format(
-            len(estado["herdada"]), primeiras_linhas(estado["herdada"])))
     if estado.get("nao_julgada"):
         cobradas.append(COBRA_SUJEIRA_QUE_A_CAMADA_NAO_JULGA.format(
             len(estado["nao_julgada"]),
@@ -1044,6 +1151,9 @@ def cobrancas(estado: dict) -> list:
                     estado.get("integracao"), estado.get("principal"),
                     estado.get("revisor")))
     cobradas += cobranca_do_criterio(estado)
+    if cobradas and poda_nao_medida(estado):
+        cobradas.append(RELATA_PODA_NAO_MEDIDA.format(
+            INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA))
     return cobradas
 
 
@@ -1066,6 +1176,15 @@ def cobranca_do_criterio(estado: dict) -> list:
 
 def relato(estado: dict) -> list:
     dito = []
+    if estado.get("herdada"):
+        dito.append(COBRA_SUJEIRA_HERDADA.format(
+            len(estado["herdada"]), primeiras_linhas(estado["herdada"])))
+    if estado.get("poda"):
+        dito.append(RELATA_PODA_PENDENTE.format(
+            INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA))
+    if poda_nao_medida(estado):
+        dito.append(RELATA_PODA_NAO_MEDIDA.format(
+            INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA))
     if estado.get("pedido_aberto") and estado.get("revisor_e_o_autor"):
         dito.append(RELATA_REVISOR_QUE_E_O_AUTOR.format(
             estado.get("revisor")))
@@ -1083,11 +1202,36 @@ def relato(estado: dict) -> list:
     return dito
 
 
+def identidade_do_relato(linha: str) -> str:
+    return hashlib.sha256(linha.encode("utf-8")).hexdigest()[
+        :TAMANHO_DA_IDENTIDADE_DO_RELATO]
+
+
+def relato_ainda_nao_dito(dito: list, sessao: str, temporaria: Path) -> list:
+    if not sessao:
+        return dito
+    marca = temporaria / f"{PREFIXO_DA_MARCA_DO_RELATO}{sessao}"
+    try:
+        ja_ditos = set(marca.read_text(encoding="utf-8").split())
+    except OSError:
+        ja_ditos = set()
+    novos = [linha for linha in dito
+             if identidade_do_relato(linha) not in ja_ditos]
+    if novos:
+        try:
+            with marca.open("a", encoding="utf-8") as registro:
+                registro.writelines(f"{identidade_do_relato(linha)}\n"
+                                    for linha in novos)
+        except OSError:
+            pass
+    return novos
+
+
 def o_modo_esta_posto(ambiente) -> bool:
     return bool((ambiente or {}).get(MARCA_NO_AMBIENTE))
 
 
-def decisao(entrada: dict, raiz: Path, ambiente=None):
+def decisao(entrada: dict, raiz: Path, ambiente=None, temporaria=None):
     if entrada.get("stop_hook_active"):
         return "", ""
     if o_modo_esta_posto(os.environ if ambiente is None else ambiente):
@@ -1095,9 +1239,24 @@ def decisao(entrada: dict, raiz: Path, ambiente=None):
     estado = medir(raiz, abertura_da_sessao(entrada), entrada)
     cobradas = cobrancas(estado)
     if not cobradas:
-        return "", "\n\n".join(relato(estado))
+        return "", "\n\n".join(relato_ainda_nao_dito(
+            relato(estado), str(entrada.get(CHAVE_DA_SESSAO) or ""),
+            Path(tempfile.gettempdir()) if temporaria is None
+            else temporaria))
     return "\n\n".join(
         [ABERTURA_DA_COBRANCA, *cobradas, FECHAMENTO_DA_COBRANCA]), ""
+
+
+def escrever_fora_da_conversa(texto: str) -> None:
+    sys.stdout.buffer.write((texto + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
+
+
+def relatar(dito: str) -> None:
+    if etapa_em_curso():
+        print(json.dumps({"systemMessage": dito}, ensure_ascii=True))
+        return
+    escrever_fora_da_conversa(dito)
 
 
 def main() -> int:
@@ -1108,16 +1267,18 @@ def main() -> int:
         motivo, dito = decisao(entrada, raiz_do_projeto_nunca_o_cwd())
         if not motivo:
             if dito:
-                print(json.dumps({"systemMessage": dito},
-                                 ensure_ascii=False))
+                relatar(dito)
             return SILENCIO
     except Exception:
         return FALHA_ABERTA
 
+    if not etapa_em_curso():
+        escrever_fora_da_conversa(AVISO_QUE_NAO_SEGURA_A_PARADA + motivo)
+        return COBRANCA_ENTREGUE
     print(json.dumps({"decision": DECISAO_DE_BLOQUEAR, "reason": motivo,
                       "hookSpecificOutput": {
                           "hookEventName": EVENTO_DE_PARADA}},
-                     ensure_ascii=False))
+                     ensure_ascii=True))
     return COBRANCA_ENTREGUE
 
 
@@ -1231,7 +1392,34 @@ FEITO_DE_MENTIRA = "feito.txt"
 ORIGEM_DE_MENTIRA = "origem"
 TRABALHO_DE_MENTIRA = "arvore"
 BRANCH_DE_MENTIRA = "issue/999-prova"
+PRINCIPAL_DE_MENTIRA = "main"
+BRANCH_JA_ENTREGUE_DE_MENTIRA = "caixa/velha"
+PASTAS_FORA_DO_GIT_DE_MENTIRA = (".agents", "nucleo", "conhecimento")
+COMMIT_QUE_NAO_SAIU_DE_MENTIRA = "trabalho que nao saiu"
+VARIAVEIS_DA_PASTA_TEMPORARIA = ("TMPDIR", "TEMP", "TMP")
+ARQUIVO_FORA_DO_CP1252_DE_MENTIRA = "solto-\U0001F680.txt"
+SAIDA_SEM_MODO_UTF8 = {"PYTHONUTF8": "0", "PYTHONIOENCODING": None}
 ENTRADA_DE_PARADA = "{}"
+ENTRADA_DO_EVENTO_DE_PARADA = json.dumps(
+    {"hook_event_name": EVENTO_DE_PARADA, "stop_hook_active": False})
+ENTRADA_DE_PARADA_DA_SESSAO = json.dumps({"session_id": "s-aviso"})
+DITO_DE_VERDADE_DO_INSTRUMENTO = (
+    "A ENTREGA — o que ainda não saiu da máquina, medido em /x na branch "
+    "issue/9-x\n"
+    "2 commit(s) em issue/9-x que NÃO estão em origin/issue/9-x — trabalho "
+    "que fica para trás se a sessão acabar agora:\n"
+    "  abc1234 primeiro\n"
+    "  def5678 segundo\n"
+    "2 branch(es) que não acrescentam nada a origin/main e seguem de pé — o "
+    "rastro da entrega, que se acumula porque ninguém o vê:\n"
+    "  poda local:  git branch -d caixa/velha caixa/antiga\n"
+    "  Quer guardar alguma? Declare o nome em .claude/branches-protegidas.txt\n"
+    "E origin/main já contém tudo de origin/homolog: nenhum commit espera "
+    "pedido de incorporação.\n"
+    "  5 árvores de trabalho neste repositório, medidas às 10:23:37: a, b.\n"
+    "  A medida acima é do INSTANTE em que rodou, e só desta árvore.\n"
+    "CATEGORIAS DA ENTREGA: commit-sem-destino=1 branch-por-podar=1 "
+    "integracao-sem-pedido=0")
 INSTRUMENTO_DE_MENTIRA_QUE_ACUSA = """import sys
 sys.stdout.write(" ".join(sys.argv))
 sys.exit(1)
@@ -1242,6 +1430,11 @@ sys.exit(0)
 INSTRUMENTO_DE_MENTIRA_QUE_NAO_MEDIU = """import sys
 sys.stdout.write("Branch entregue por podar: NAO MEDIDO")
 sys.exit(2)
+"""
+ERRO_DO_INSTRUMENTO_QUE_QUEBROU = "NameError: nome que sumiu"
+INSTRUMENTO_DE_MENTIRA_QUE_QUEBROU = f"""import sys
+sys.stderr.write("Traceback (most recent call last):\\n{ERRO_DO_INSTRUMENTO_QUE_QUEBROU}\\n")
+sys.exit(1)
 """
 
 
@@ -1266,17 +1459,70 @@ def trabalho_de_mentira_com_repositorio_duravel(pasta: Path) -> Path:
     return arvore
 
 
-def o_que_o_gancho_responde(arvore: Path, etapa: str) -> str:
+def o_que_o_gancho_responde(arvore: Path, etapa: str,
+                            entrada: str = ENTRADA_DE_PARADA,
+                            temporaria: Path = None,
+                            variaveis: dict = None) -> str:
+    return rodar_o_gancho_de_verdade(
+        arvore, etapa, entrada, temporaria, variaveis).stdout.strip()
+
+
+def rodar_o_gancho_de_verdade(arvore: Path, etapa: str,
+                              entrada: str = ENTRADA_DE_PARADA,
+                              temporaria: Path = None,
+                              variaveis: dict = None):
     ambiente = {**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(arvore)}
+    for variavel, valor in (variaveis or {}).items():
+        if valor is None:
+            ambiente.pop(variavel, None)
+        else:
+            ambiente[variavel] = valor
     if etapa:
         ambiente[MARCA_DE_ETAPA_NO_AMBIENTE] = etapa
     else:
         ambiente.pop(MARCA_DE_ETAPA_NO_AMBIENTE, None)
-    pronto = subprocess.run(
+    if temporaria is not None:
+        for variavel in VARIAVEIS_DA_PASTA_TEMPORARIA:
+            ambiente[variavel] = str(temporaria)
+    return subprocess.run(
         [sys.executable, str(Path(__file__).resolve())],
-        input=ENTRADA_DE_PARADA, capture_output=True, text=True,
+        input=entrada, capture_output=True, text=True,
         encoding="utf-8", errors="replace", env=ambiente)
-    return pronto.stdout.strip()
+
+
+def arvore_com_o_instrumento_de_verdade(pasta: Path, instrumento: Path) -> Path:
+    origem, arvore = pasta / ORIGEM_DE_MENTIRA, pasta / TRABALHO_DE_MENTIRA
+    origem.mkdir()
+    arvore.mkdir()
+    git_de_mentira(origem, "init", "-q", "--bare")
+    git_de_mentira(arvore, "init", "-q", "-b", PRINCIPAL_DE_MENTIRA)
+    git_de_mentira(arvore, "config", "user.email", "prova@exemplo")
+    git_de_mentira(arvore, "config", "user.name", "Prova")
+    git_de_mentira(arvore, "remote", "add", "origin", str(origem))
+    (arvore / ".git" / "info" / "exclude").write_text(
+        "".join(f"{pasta_fora}/\n" for pasta_fora in PASTAS_FORA_DO_GIT_DE_MENTIRA),
+        encoding="utf-8")
+    for pasta_fora in PASTAS_FORA_DO_GIT_DE_MENTIRA:
+        (arvore / pasta_fora).mkdir()
+    (arvore / ARQUIVO_CONFIGURACAO).parent.mkdir(parents=True, exist_ok=True)
+    (arvore / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+        {CHAVE_POR_INCORPORACAO: [PRINCIPAL_DE_MENTIRA]}), encoding="utf-8")
+    (arvore / INSTRUMENTO_DA_ENTREGA).parent.mkdir(parents=True)
+    (arvore / INSTRUMENTO_DA_ENTREGA).write_text(
+        instrumento.read_text(encoding="utf-8"), encoding="utf-8")
+    (arvore / FEITO_DE_MENTIRA).write_text("feito", encoding="utf-8")
+    git_de_mentira(arvore, "add", FEITO_DE_MENTIRA)
+    git_de_mentira(arvore, "commit", "-qm", "inicio")
+    git_de_mentira(arvore, "switch", "-q", "-c", BRANCH_JA_ENTREGUE_DE_MENTIRA)
+    git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m", "entregue")
+    git_de_mentira(arvore, "switch", "-q", PRINCIPAL_DE_MENTIRA)
+    git_de_mentira(arvore, "merge", "-q", "--no-ff", "-m", "mescla",
+                   BRANCH_JA_ENTREGUE_DE_MENTIRA)
+    git_de_mentira(arvore, "push", "-q", "origin", PRINCIPAL_DE_MENTIRA)
+    git_de_mentira(arvore, "switch", "-q", "-c", BRANCH_DE_MENTIRA)
+    git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m", "trabalho")
+    git_de_mentira(arvore, "push", "-q", "-u", "origin", BRANCH_DE_MENTIRA)
+    return arvore
 
 
 def motivo_do_gancho(arvore: Path, etapa: str) -> str:
@@ -1287,6 +1533,43 @@ def motivo_do_gancho(arvore: Path, etapa: str) -> str:
     if dito.get("decision") != DECISAO_DE_BLOQUEAR:
         return ""
     return dito.get("reason", "")
+
+
+MOTIVO_DE_MENTIRA = "motivo de mentira: a árvore está suja — \U0001F680"
+RELATO_DE_MENTIRA = "relato de mentira: há branch por podar"
+
+
+def parece_json(texto: str) -> bool:
+    limpo = texto.strip()
+    return limpo.startswith("{") and limpo.endswith("}")
+
+
+def lido_como_json(texto: str) -> dict:
+    try:
+        return json.loads(texto)
+    except ValueError:
+        return {}
+
+
+def o_que_main_imprime(motivo: str, dito: str, etapa: str) -> str:
+    global decisao
+    decisao_de_verdade, entrada_de_verdade = decisao, sys.stdin
+    etapa_de_verdade = os.environ.pop(MARCA_DE_ETAPA_NO_AMBIENTE, None)
+    impresso = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    try:
+        decisao = lambda entrada, raiz: (motivo, dito)
+        sys.stdin = io.StringIO(ENTRADA_DE_PARADA)
+        if etapa:
+            os.environ[MARCA_DE_ETAPA_NO_AMBIENTE] = etapa
+        with contextlib.redirect_stdout(impresso):
+            main()
+        impresso.flush()
+    finally:
+        decisao, sys.stdin = decisao_de_verdade, entrada_de_verdade
+        os.environ.pop(MARCA_DE_ETAPA_NO_AMBIENTE, None)
+        if etapa_de_verdade is not None:
+            os.environ[MARCA_DE_ETAPA_NO_AMBIENTE] = etapa_de_verdade
+    return impresso.buffer.getvalue().decode("utf-8")
 
 
 def testar() -> int:
@@ -1425,9 +1708,12 @@ def testar() -> int:
         instrumento.write_text(INSTRUMENTO_DE_MENTIRA_QUE_ACUSA,
                                encoding="utf-8")
         caso("a segunda condição chama o instrumento no caminho e com a "
-             "bandeira declarados, e devolve o texto dele",
+             "bandeira declarados, pede que ele pule o pedido de "
+             "incorporação, que o gancho mede por conta própria, e devolve "
+             "o texto dele",
              sobra_fora_da_branch_de_entrega(duble)
-             == f"{INSTRUMENTO_DA_ENTREGA} {BANDEIRA_DA_ENTREGA}")
+             == f"{INSTRUMENTO_DA_ENTREGA} {BANDEIRA_DA_ENTREGA} "
+                f"{BANDEIRA_SEM_O_PEDIDO}")
         instrumento.write_text(INSTRUMENTO_DE_MENTIRA_CALADO,
                                encoding="utf-8")
         caso("instrumento que sai zero não vira cobrança",
@@ -1438,10 +1724,150 @@ def testar() -> int:
              "de acusação — antes qualquer saída diferente de zero virava "
              "commit fora da branch",
              sobra_fora_da_branch_de_entrega(duble) is NAO_MEDIDO)
+        instrumento.write_text(INSTRUMENTO_DE_MENTIRA_QUE_QUEBROU,
+                               encoding="utf-8")
+        RAZAO_DE_NAO_MEDIR.clear()
+        quebrado = sobra_fora_da_branch_de_entrega(duble)
+        caso("instrumento que quebra e sai 1 com o texto só no stderr vira "
+             "NÃO MEDIDO com a última linha do erro — antes a sobra saía "
+             "vazia e o gancho calava",
+             quebrado is NAO_MEDIDO
+             and ERRO_DO_INSTRUMENTO_QUE_QUEBROU in "".join(
+                 cobrancas(com(sobra=quebrado))))
+        RAZAO_DE_NAO_MEDIR.clear()
         instrumento.unlink()
         caso("sem o instrumento no disco a segunda condição cala, em vez "
              "de estourar",
              sobra_fora_da_branch_de_entrega(duble) == "")
+
+    def dito_com(**categorias) -> str:
+        valores = {"commit-sem-destino": 0, "branch-por-podar": 0,
+                   "integracao-sem-pedido": 0, **{
+                       nome.replace("_", "-"): valor
+                       for nome, valor in categorias.items()}}
+        return ("prosa do instrumento\n" + MARCA_DAS_CATEGORIAS + " "
+                + " ".join(f"{nome}={valor}"
+                           for nome, valor in valores.items()))
+
+    so_poda = o_que_o_instrumento_achou(1, dito_com(branch_por_podar=1))
+    caso("branch entregue por podar NÃO é commit fora da branch de entrega: "
+         "o instrumento disse que ela não acrescenta nada, e o gancho abria "
+         "a cobrança dizendo o contrário",
+         so_poda["sobra"] == "" and "prosa do instrumento" in so_poda["poda"]
+         and cobrancas(com(**so_poda)) == [])
+    caso("e a poda pendente sai como RELATO, que não bloqueia a parada",
+         any("podar" in linha for linha in relato(com(**so_poda))))
+    da_poda = [linha for linha in relato(com(**so_poda)) if "podar" in linha]
+    caso("o relato da poda cabe numa linha e aponta o instrumento, sem colar "
+         "a prosa dele: repetido no fim de toda resposta, o relatório inteiro "
+         "vira ruído que ninguém lê",
+         len(da_poda) == 1 and "\n" not in da_poda[0]
+         and "prosa do instrumento" not in da_poda[0]
+         and BANDEIRA_DA_ENTREGA in da_poda[0])
+    com_lista = o_que_o_instrumento_achou(1, (
+        "1 branch(es) que não acrescentam nada a origin/main:\n"
+        "  poda local:  git branch -d caixa/velha\n")
+        + dito_com(branch_por_podar=1))
+    relatado = [linha for linha in relato(com(**com_lista)) if "podar" in linha]
+    caso("nenhuma linha da saída do instrumento entra no relato da poda — "
+         "nem a lista, nem o comando, nem as categorias, colados em qualquer "
+         "forma",
+         len(relatado) == 1 and not any(
+             pedaco.strip() in relatado[0]
+             for pedaco in com_lista["poda"].splitlines() if pedaco.strip()))
+    so_espera = o_que_o_instrumento_achou(
+        1, dito_com(integracao_sem_pedido=1))
+    caso("integração inteira à espera de pedido, vista pelo instrumento, "
+         "não bloqueia a sessão que não tem commit seu nela — quem cobra a "
+         "integração é a medida da PRÓPRIA sessão, logo adiante",
+         cobrancas(com(**so_espera)) == [])
+    caso("CONTROLE: commit que ainda não saiu da máquina segue cobrado",
+         len(cobrancas(com(**o_que_o_instrumento_achou(
+             1, dito_com(commit_sem_destino=1))))) == 1)
+    caso("CONTROLE: poda E commit sem destino juntos cobram pelo commit",
+         len(cobrancas(com(**o_que_o_instrumento_achou(
+             1, dito_com(commit_sem_destino=1, branch_por_podar=1))))) == 1)
+    commit_com_poda_nao_medida = cobrancas(com(**o_que_o_instrumento_achou(
+        1, dito_com(commit_sem_destino=1, branch_por_podar=2))))
+    caso("poda NÃO MEDIDA não apaga o commit sem destino que foi medido: a "
+         "cobrança sai pelo commit e diz a poda não medida ao lado — antes o "
+         "commit virava 'não medido' e sumia",
+         any(c.startswith(COBRA_SOBRA_DA_BRANCH[:24])
+             for c in commit_com_poda_nao_medida)
+         and any("poda" in c and "NÃO FOI MEDIDA" in c
+                 for c in commit_com_poda_nao_medida))
+    RAZAO_DE_NAO_MEDIR.clear()
+    so_poda_nao_medida = o_que_o_instrumento_achou(
+        2, dito_com(branch_por_podar=2))
+    caso("poda NÃO MEDIDA sozinha não acusa o commit que foi medido limpo: "
+         "sai no relato, dizendo que não mediu",
+         cobrancas(com(**so_poda_nao_medida)) == []
+         and any("NÃO FOI MEDIDA" in linha
+                 for linha in relato(com(**so_poda_nao_medida))))
+    RAZAO_DE_NAO_MEDIR.clear()
+    do_commit = "".join(cobrancas(com(**o_que_o_instrumento_achou(
+        1, DITO_DE_VERDADE_DO_INSTRUMENTO))))
+    caso("a cobrança de commit sem destino mostra só o bloco do commit: a "
+         "poda de branch alheia, o pedido limpo, a lista de árvores e as "
+         "categorias saíam coladas nela a cada parada, e ninguém lia o resto",
+         "abc1234 primeiro" in do_commit and "def5678 segundo" in do_commit
+         and "NÃO estão em origin/issue/9-x" in do_commit
+         and "caixa/velha" not in do_commit
+         and "nenhum commit espera" not in do_commit
+         and "árvores de trabalho" not in do_commit
+         and MARCA_DAS_CATEGORIAS not in do_commit)
+    com_separador = "".join(cobrancas(com(**o_que_o_instrumento_achou(
+        1, DITO_DE_VERDADE_DO_INSTRUMENTO.replace(
+            "abc1234 primeiro", "abc1234 primeiro continuação")))))
+    caso("assunto de commit com separador de linha Unicode não esconde o "
+         "commit seguinte: o instrumento separa linha por quebra de linha, "
+         "e só por ela",
+         "def5678 segundo" in com_separador)
+    caso("CONTROLE: dito do instrumento sem bloco de commit reconhecível "
+         "segue colado inteiro — na dúvida, a cobrança não emudece",
+         "prosa do instrumento" in "".join(cobrancas(com(
+             **o_que_o_instrumento_achou(
+                 1, dito_com(commit_sem_destino=1))))))
+    ainda_nao_dito = globals().get("relato_ainda_nao_dito")
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-relato-") as tmp:
+        marcas = Path(tmp)
+        caso("o relato do que não é da sessão sai uma vez por sessão: a "
+             "mesma poda alheia se repetia no fim de todo turno",
+             callable(ainda_nao_dito)
+             and ainda_nao_dito(["poda"], "s-1", marcas) == ["poda"]
+             and ainda_nao_dito(["poda"], "s-1", marcas) == [])
+        caso("relato que mudou sai de novo, e só a parte nova",
+             callable(ainda_nao_dito)
+             and ainda_nao_dito(["poda", "herdada"], "s-1", marcas)
+             == ["herdada"])
+        caso("a marca é da sessão: outra sessão ouve o mesmo relato",
+             callable(ainda_nao_dito)
+             and ainda_nao_dito(["poda"], "s-2", marcas) == ["poda"])
+        caso("CONTROLE: sem identificador de sessão o relato sai sempre — "
+             "sem onde lembrar, calar seria perder o relato",
+             callable(ainda_nao_dito)
+             and ainda_nao_dito(["poda"], "", marcas) == ["poda"]
+             and ainda_nao_dito(["poda"], "", marcas) == ["poda"])
+    caso("CONTROLE: instrumento antigo, sem a linha das categorias, segue "
+         "cobrado como antes — na dúvida, a cobrança não emudece",
+         len(cobrancas(com(**o_que_o_instrumento_achou(
+             1, "prosa de instrumento antigo")))) == 1)
+    caso("CONTROLE: categoria NÃO MEDIDA vira sobra não medida, nunca "
+         "silêncio",
+         o_que_o_instrumento_achou(
+             2, dito_com(commit_sem_destino=2))["sobra"] is NAO_MEDIDO)
+    RAZAO_DE_NAO_MEDIR.clear()
+    instrumento_de_verdade = (Path(__file__).resolve().parents[2]
+                              / INSTRUMENTO_DA_ENTREGA)
+    if instrumento_de_verdade.is_file():
+        fonte_do_instrumento = instrumento_de_verdade.read_text(
+            encoding="utf-8")
+        caso("o instrumento de entrega e este gancho falam a MESMA linha de "
+             "categorias: o contrato mora nos dois arquivos, e divergência "
+             "calada devolveria o gancho ao modo antigo sem ninguém ver",
+             MARCA_DAS_CATEGORIAS in fonte_do_instrumento
+             and all(f"{nome}=" in fonte_do_instrumento
+                     for nome in CATEGORIAS_DA_ENTREGA))
 
     nao_medida = "".join(cobrancas(com(sobra=NAO_MEDIDO)))
     caso("sobra não medida cobra dizendo que NÃO MEDIU, e não acusa commit "
@@ -1551,6 +1977,25 @@ def testar() -> int:
         caso("com a marca de etapa e a árvore suja, o gancho responde block e "
              "o motivo cita a árvore suja",
              "A árvore está suja" in motivo_do_gancho(arvore, "trabalhar"))
+        na_sessao = o_que_o_gancho_responde(arvore, "")
+        caso("SEM a marca de etapa, com gente no terminal, a mesma árvore "
+             "suja vira AVISO e não segura a parada: a cobrança que bloqueia "
+             "parou sessão que já tinha destino, e o portão é do servidor",
+             "decision" not in na_sessao
+             and "A árvore está suja" in na_sessao
+             and AVISO_QUE_NAO_SEGURA_A_PARADA in na_sessao)
+        caso("SAÍDA REAL: com gente, o aviso sai fora da conversa — texto "
+             "comum, que o cliente não lê como JSON, e sem systemMessage",
+             na_sessao and not parece_json(na_sessao)
+             and "systemMessage" not in na_sessao)
+        cobrado = rodar_o_gancho_de_verdade(
+            arvore, "", ENTRADA_DO_EVENTO_DE_PARADA)
+        caso("CÓDIGO REAL: com gente, o evento de parada na entrada e a "
+             "árvore suja, o gancho sai com código 0 — na parada, 2 com saída "
+             "que não é JSON vira bloqueio, e 1 vira aviso de falha na tela",
+             cobrado.returncode == 0
+             and AVISO_QUE_NAO_SEGURA_A_PARADA in cobrado.stdout
+             and "A árvore está suja" in cobrado.stdout)
         (arvore / ARQUIVO_DE_MENTIRA).unlink()
         caso("com a marca de etapa, árvore limpa e um commit na branch de "
              "trabalho não empurrado, o gancho responde block e o motivo cita "
@@ -1572,6 +2017,79 @@ def testar() -> int:
              "nunca chegou",
              chegou_ao_repositorio_duravel(arvore, BRANCH_DE_MENTIRA)
              is NAO_MEDIDO)
+
+    com_gente = o_que_main_imprime(MOTIVO_DE_MENTIRA, "", "")
+    caso("SEM a marca, com gente, a cobrança sai como texto comum, fora da "
+         "conversa: a saída não é JSON, não tem systemMessage, e leva o aviso "
+         "e o motivo inteiros, em UTF-8",
+         com_gente.strip() and not parece_json(com_gente)
+         and "systemMessage" not in com_gente
+         and com_gente.startswith(AVISO_QUE_NAO_SEGURA_A_PARADA)
+         and MOTIVO_DE_MENTIRA in com_gente)
+    caso("SEM a marca, o relato que só avisa também sai como texto comum",
+         o_que_main_imprime("", RELATO_DE_MENTIRA, "").strip()
+         == RELATO_DE_MENTIRA)
+    caso("COM a marca, o bloqueio segue igual: decision block com o motivo "
+         "inteiro, o evento de parada, e nada de systemMessage",
+         lido_como_json(o_que_main_imprime(MOTIVO_DE_MENTIRA, "", "trabalhar"))
+         == {"decision": DECISAO_DE_BLOQUEAR, "reason": MOTIVO_DE_MENTIRA,
+             "hookSpecificOutput": {"hookEventName": EVENTO_DE_PARADA}})
+    caso("COM a marca, o relato segue como hoje, no systemMessage",
+         lido_como_json(o_que_main_imprime("", RELATO_DE_MENTIRA, "trabalhar"))
+         == {"systemMessage": RELATO_DE_MENTIRA})
+
+    instrumento_para_a_arvore = (Path(__file__).resolve().parents[2]
+                                 / INSTRUMENTO_DA_ENTREGA)
+    if instrumento_para_a_arvore.is_file():
+        with tempfile.TemporaryDirectory(prefix="cobrar-destino-aviso-") as tmp:
+            pasta = Path(tmp).resolve()
+            marcas = pasta / "marcas"
+            marcas.mkdir()
+            arvore = arvore_com_o_instrumento_de_verdade(
+                pasta, instrumento_para_a_arvore)
+
+            def aviso(entrada: str) -> str:
+                return o_que_o_gancho_responde(arvore, "", entrada, marcas)
+
+            primeira = aviso(ENTRADA_DE_PARADA_DA_SESSAO)
+            segunda = aviso(ENTRADA_DE_PARADA_DA_SESSAO)
+            caso("SAÍDA REAL: com só a poda de branch alheia, a primeira "
+                 "parada da sessão relata e a segunda cala",
+                 "podar" in primeira and segunda == "")
+            caso("SAÍDA REAL, CONTROLE: sem identificador de sessão a poda "
+                 "sai nas duas paradas",
+                 "podar" in aviso(ENTRADA_DE_PARADA)
+                 and "podar" in aviso(ENTRADA_DE_PARADA))
+            relatado = rodar_o_gancho_de_verdade(
+                arvore, "", ENTRADA_DO_EVENTO_DE_PARADA, marcas)
+            caso("CÓDIGO REAL: com gente, o evento de parada na entrada e só "
+                 "o relato da poda, o gancho também sai com código 0",
+                 relatado.returncode == 0 and "podar" in relatado.stdout)
+            git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m",
+                           COMMIT_QUE_NAO_SAIU_DE_MENTIRA)
+            cobradas = [aviso(ENTRADA_DE_PARADA_DA_SESSAO) for _ in range(2)]
+            caso("SAÍDA REAL: commit que não saiu da máquina é cobrado nas "
+                 "duas paradas da mesma sessão, inteiro",
+                 all(COMMIT_QUE_NAO_SAIU_DE_MENTIRA in dito
+                     and AVISO_QUE_NAO_SEGURA_A_PARADA in dito
+                     for dito in cobradas))
+            caso("SAÍDA REAL: a cobrança do commit não carrega a poda da "
+                 "branch alheia nem a linha de categorias do instrumento",
+                 all(BRANCH_JA_ENTREGUE_DE_MENTIRA not in dito
+                     and MARCA_DAS_CATEGORIAS not in dito
+                     for dito in cobradas))
+            git_de_mentira(arvore, "config", "core.quotePath", "false")
+            (arvore / ARQUIVO_FORA_DO_CP1252_DE_MENTIRA).write_text(
+                "solto", encoding="utf-8")
+            respondeu = o_que_o_gancho_responde(
+                arvore, "", ENTRADA_DE_PARADA_DA_SESSAO, marcas,
+                SAIDA_SEM_MODO_UTF8)
+            caso("SAÍDA REAL: em máquina sem o modo UTF-8, nome de arquivo "
+                 "fora do cp1252 não cala o gancho: o print estourava, a "
+                 "cobrança sumia, e o relato já marcado como dito se perdia",
+                 "A árvore está suja" in respondeu
+                 and ARQUIVO_FORA_DO_CP1252_DE_MENTIRA in respondeu)
+            (arvore / ARQUIVO_FORA_DO_CP1252_DE_MENTIRA).unlink()
 
     with tempfile.TemporaryDirectory(prefix="cobrar-destino-regua-") as tmp:
         base = Path(tmp).resolve()
@@ -1622,9 +2140,17 @@ def testar() -> int:
              abertura_da_sessao({"transcript_path": str(transcrito)})
              == datetime(2026, 9, 1, 20, 28, 57, 754000,
                          tzinfo=timezone.utc).timestamp())
-        caso("a cobrança da herdada nomeia o arquivo e diz que não trava",
-             "NÃO trava" in "".join(cobrancas(
-                 {**ARVORE_LIMPA, "herdada": ["?? velho.txt"]})))
+        so_herdada = {**ARVORE_LIMPA, "herdada": ["?? velho.txt"]}
+        caso("sujeira herdada NÃO trava a parada de verdade: o texto dela "
+             "dizia isso e ela morava na lista que trava, então a sessão era "
+             "bloqueada pelo que não é dela",
+             cobrancas(so_herdada) == [])
+        caso("e sai como relato, nomeando o arquivo e dizendo que não trava",
+             any("velho.txt" in linha and "NÃO trava" in linha
+                 for linha in relato(so_herdada)))
+        caso("CONTROLE: sujeira DESTA sessão segue travando, com a herdada "
+             "ao lado",
+             len(cobrancas({**so_herdada, "suja": ["?? novo.py"]})) == 1)
 
     limpo_e_somente_leitura = {
         "raiz": "projetos/vizinho", "suja": [], "sem_remoto": [],
@@ -1696,7 +2222,7 @@ def testar() -> int:
         git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m",
                        "O conserto que faltava (issue 77)")
         caso("sem número no nome da branch, ele sai da mensagem do commit — "
-             "que é a convenção desta casa",
+             "o número da issue entre parênteses",
              numero_da_issue_do_trabalho(arvore, "sem-numero-no-nome", "main")
              == "77")
         caso("sem número em lugar nenhum, a cobrança não tem o que perguntar "
@@ -1851,6 +2377,31 @@ def testar() -> int:
              repositorios_tocados(
                  arquivos_que_esta_sessao_escreveu(str(transcrito), principal),
                  principal) == [vizinho])
+
+        def perguntas_ao_git_por_repositorio(escritos):
+            global raiz_git_da_pasta
+            guardada, perguntadas = raiz_git_da_pasta, []
+
+            def contada(pasta):
+                perguntadas.append(pasta)
+                return guardada(pasta)
+
+            raiz_git_da_pasta = contada
+            try:
+                return repositorios_tocados(escritos, principal), perguntadas
+            finally:
+                raiz_git_da_pasta = guardada
+
+        espalhados = {str(vizinho / "a" / "b" / "um.py"),
+                      str(vizinho / "a" / "dois.py"),
+                      str(vizinho / "c" / "tres.py"), str(tocado),
+                      str(principal / "d" / "quatro.py"),
+                      str(principal / "cinco.py")}
+        achados, perguntadas = perguntas_ao_git_por_repositorio(espalhados)
+        caso("o gancho pergunta ao git uma vez por repositório tocado, e não "
+             "uma por pasta: as pastas se agrupam pela .git mais próxima — "
+             "medido, uma chamada por pasta pesava segundos em cada parada",
+             achados == [vizinho] and len(perguntadas) == 2)
         cobradas = cobrancas(medir(principal, None, entrada_com_vizinho))
         caso("vizinho tocado nesta sessão com commit que não está em remoto "
              "nenhum é cobrado, pelo caminho dele",
@@ -1913,7 +2464,7 @@ def testar() -> int:
         cadastrar(False)
         caso("vizinho próprio com a branch de trabalho empurrada mas fora da "
              "integração do cadastro é cobrado: empurrar é sincronizar, "
-             "entregar é mesclar — o caso de 07/09",
+             "entregar é mesclar",
              any("MESCLA na integração" in c and BRANCH_DE_MENTIRA in c
                  for c in o_que_cobra_do_vizinho()))
         git_de_mentira(vizinho, "checkout", "-q", "homolog")

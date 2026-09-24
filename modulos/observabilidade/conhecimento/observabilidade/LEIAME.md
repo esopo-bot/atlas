@@ -14,8 +14,9 @@ e nunca mais toca neles.
 `aplicacao-exemplo.md` e `incidente-exemplo.md` mostram a forma preenchida
 dos dois últimos — é deles que a skill parte ao criar os seus.
 
-Tudo plano, sem pasta dentro de pasta: o site publica um nível de subpasta e
-para ali. O nome da ferramenta vai no arquivo (`consultas-datadog.md`), nunca
+Tudo plano, sem pasta dentro de pasta: se o publicador de quem instala só
+transforma em rota um nível de subpasta, a página mais funda fica sem
+endereço. O nome da ferramenta vai no arquivo (`consultas-datadog.md`), nunca
 numa pasta — assim uma segunda ferramenta entra ao lado sem renomear nada.
 
 O formato de cada peça, e o porquê de tudo ser tabela, está em

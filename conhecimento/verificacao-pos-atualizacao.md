@@ -2,16 +2,18 @@
 
 Receita para o repositório que INSTALA a camada; o bootstart aponta para ela.
 Siga-a numa sessão aberta na raiz do repositório logo depois de uma atualização da camada (o
-`montar.py` novo já rodou aqui). O objetivo: provar que a instalação está
-íntegra e que nada da versão anterior ficou para trás.
+instalador do clone já rodou daqui, com
+`python <pasta do clone do atlas>/montar.py --atualizar`). O objetivo: provar
+que a instalação está íntegra e que nada da versão anterior ficou para trás.
 
 ## O que aconteceu
 
-A camada instalada neste repositório foi atualizada e
-`python montar.py --sincronizar` já foi executado. Atualização regrava
-as cópias — nunca se edita cópia à mão — mas ela não remove sozinha o que
-a versão nova deixou de escrever: skill renomeada, gancho aposentado,
-página movida. Isso é a sujeira que esta sessão caça.
+A camada instalada neste repositório foi atualizada pelo instalador que mora
+no clone dela. Atualização regrava as cópias — nunca se edita cópia à mão —
+mas ela não remove sozinha o que a versão nova deixou de escrever: skill
+renomeada, gancho aposentado, página movida. Isso é a sujeira que esta sessão
+caça. O que a camada instalou está listado em
+`.agents/camada/registro-da-instalacao.json`.
 
 ## O checklist
 
@@ -20,13 +22,17 @@ colada não está feita.
 
 ### 1. O que mudou desta versão para a anterior
 
-- [ ] **A versão que chegou:** `grep -m1 '^VERSAO' montar.py`.
+- [ ] **A versão que chegou:** o campo `commit_da_camada` de
+      `.agents/camada/registro-da-instalacao.json`, que é o commit do clone
+      de onde a camada veio.
 - [ ] **A versão que estava aqui antes:**
-      `git log -1 --format=%H -- montar.py` e, com esse SHA,
-      `git show <SHA>^:montar.py | grep -m1 '^VERSAO'`. Se o repositório
-      não rastreia o `montar.py`, diga isso e pule — não invente o número.
+      `git log -1 --format=%H -- .agents/camada/registro-da-instalacao.json`
+      e, com esse SHA,
+      `git show <SHA>^:.agents/camada/registro-da-instalacao.json`. Se o
+      registro ainda não era rastreado, diga isso e pule — não invente o
+      número.
 - [ ] **O diff da atualização:** `git diff --stat HEAD~1 -- .agents .claude
-      conhecimento nucleo montar.py`, ou, se a atualização ainda não foi
+      conhecimento nucleo`, ou, se a atualização ainda não foi
       commitada, `git status --short`. Leia a lista inteira e agrupe em três
       colunas: **entrou**, **mudou**, **saiu**. É a coluna "saiu" que gera a
       sujeira dos passos seguintes.
@@ -36,9 +42,14 @@ colada não está feita.
 
 ### 2. A instalação está íntegra
 
-- [ ] **A carga bate com o disco:** `python montar.py --verificar` — tem de
-      sair zero. Divergência aqui é cópia editada à mão ou atualização pela
-      metade: pare e mostre ao dono antes de qualquer outra coisa.
+- [ ] **A instalação bate com o clone:**
+      `python <pasta do clone do atlas>/montar.py --verificar`, rodado daqui
+      — tem de sair zero. Divergência aqui é cópia editada à mão ou
+      atualização pela metade: pare e mostre ao dono antes de qualquer outra
+      coisa.
+- [ ] **O instalador antigo na raiz:** se a receita de antes copiou um
+      `montar.py` para a raiz daqui, ele ficou intacto e não é mais a
+      origem. Diga isso ao dono; apagar é decisão dele.
 - [ ] **Os instrumentos respondem:** rode o `--testar` de cada instrumento
       de `.agents/` (todo instrumento da camada tem o seu). Um vermelho aqui
       é defeito de instalação, não do seu repositório. **Cuidado com três:**
@@ -74,8 +85,8 @@ chama não precisa existir — e instalar por precaução é sujeira futura.
 - [ ] `claude --version` — necessário só se o executor de roteiros roda
       aqui.
 - [ ] Módulo instalado que pede serviço de fora (o `indice` pede banco
-      vetorial e servidor de modelo) — abra o `LEIAME.md` do módulo em
-      `.agents/<modulo>/` e siga a receita DELE. Não escreva receita nova:
+      vetorial e servidor de modelo) — abra a página que o módulo instalou (a
+      do `indice` é `conhecimento/indice.md`) e siga a receita DELA. Não escreva receita nova:
       se a de lá não funciona neste ambiente, isso é achado para o dono,
       não conserto seu.
 - [ ] **Ambiente corporativo trancado** (proxy que reassina TLS, registro de

@@ -1,7 +1,9 @@
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -42,6 +44,7 @@ TEMPO_DA_CHAMADA = 90
 QUANTOS_POR_PADRAO = 5
 TETO_TOTAL_POR_PADRAO = 30
 TETO_MINIMO = 1
+TETO_DO_GIT = 10
 LETRAS_DO_TRECHO = 160
 
 TETO_DE_TRECHOS_NA_AMOSTRA = 400
@@ -199,15 +202,38 @@ def pedido_hibrido(vetor: list, pergunta: str, colecao: str,
             "outputFields": CAMPOS_QUE_VOLTAM}
 
 
-def mesmo_alvo(pedido: str, caminho: str) -> bool:
+def com_barra(caminho) -> str:
+    return os.path.normcase(os.path.normpath(str(caminho))).replace(
+        "\\", "/").rstrip("/")
+
+
+def raizes_do_git() -> list:
+    try:
+        feito = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=TETO_DO_GIT)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    comum = feito.stdout.strip()
+    return [Path(comum).parent] if feito.returncode == 0 and comum else []
+
+
+def mesmo_alvo(pedido: str, caminho: str, raizes=()) -> bool:
     if not pedido:
         return True
-    absoluto = str(Path(pedido).expanduser().resolve())
-    return caminho == absoluto or caminho.endswith("/" + pedido.strip("/"))
+    candidatos = {com_barra(Path(pedido).expanduser().resolve())}
+    candidatos |= {com_barra(Path(raiz) / pedido) for raiz in raizes}
+    return com_barra(caminho) in candidatos
 
 
-def escolher_alvos(indexados: list, pedido: str) -> list:
-    return [a for a in indexados if mesmo_alvo(pedido, a[0])]
+def escolher_alvos(indexados: list, pedido: str, raizes=None) -> list:
+    raizes = raizes_do_git() if raizes is None else raizes
+    exatos = [a for a in indexados if mesmo_alvo(pedido, a[0], raizes)]
+    if exatos:
+        return exatos
+    fim = "/" + com_barra(pedido).strip("/")
+    return [a for a in indexados if com_barra(a[0]).endswith(fim)]
 
 
 def uma_linha(texto: str) -> str:
@@ -425,12 +451,25 @@ def testar() -> int:
              escolher_alvos(indexados, "skills") == [indexados[1]]
              and escolher_alvos(indexados, "/a/conhecimento")
              == [indexados[0]])
+        do_windows = [("D:\\casa\\conhecimento", "c1", 10),
+                      ("D:\\casa\\outra\\conhecimento", "c2", 5)]
+        caso("--alvo relativo, de dentro de outra árvore, bate com o alvo "
+             "da raiz principal do git, mesmo com contrabarra no índice",
+             escolher_alvos(do_windows, "conhecimento",
+                            raizes=[Path("D:/casa")]) == [do_windows[0]])
+        caso("--alvo relativo com .. no meio casa o alvo que ele nomeia",
+             escolher_alvos(do_windows, "outra/../conhecimento",
+                            raizes=[Path("D:/casa")]) == [do_windows[0]])
+        caso("sem casamento exato, o fim do caminho ainda casa, com "
+             "contrabarra no índice",
+             escolher_alvos(do_windows, "outra/conhecimento",
+                            raizes=[]) == [do_windows[1]])
         caso("--alvo que não está indexado não bate com nada — a recusa diz "
              "o que existe, em vez de devolver vazio calado",
              escolher_alvos(indexados, "fantasma") == [])
         caso("a contagem de linhas do banco NÃO decide se a coleção é vazia: "
-             "o Milvus devolve rowCount 0 em coleção recém-gravada com cem "
-             "trechos (medido em 03/09), então a busca sempre roda e só a "
+             "o Milvus devolve rowCount 0 em coleção recém-gravada com "
+             "trechos, então a busca sempre roda e só a "
              "resposta vazia diz vazia",
              "rowCount" not in buscar.__code__.co_names
              and "quantos_trechos" not in buscar.__code__.co_names)
@@ -616,4 +655,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())

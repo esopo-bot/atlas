@@ -5,7 +5,7 @@ deixando uma evidência por etapa — o motor opcional de quem quer encadear
 sessões de IA e scripts com prova em arquivo. Generaliza a receita local de rodar
 `claude -p` com ambiente preparado e soma o
 que ela não tinha: roteiro com dependências, fork/join de etapas
-independentes, ensaio que lista tudo sem executar nada, e evidências escritos
+independentes, ensaio que lista tudo sem executar nada, e evidências escritas
 só por código (o contrato mora na camada, em `.agents/evidencia/`).
 
 O que ele instala: `.agents/encadeador/encadeador.py`. Ele exige a camada
@@ -22,9 +22,29 @@ roteiro em vez de só por variável de ambiente.
 
 Por que é módulo e não camada: só serve a quem roda execuções de etapas;
 para todo o resto seria peso morto na largada. E o nome é `encadeador` por
-decisão do dono (16/08/2026): o motor daqui nunca tomou emprestada a
+decisão do dono: o motor daqui nunca tomou emprestada a
 palavra que, nas regras da camada, nomeia a automação do repositório — hoje
 chamada de integração contínua.
+
+## A bancada, inteira e por tema
+
+A bancada mora em `modulos/encadeador/.agents/encadeador/testes.py` e não
+viaja com o módulo. Inteira, ela leva dezenas de minutos. Enquanto se mexe
+num assunto só, rode o tema dele:
+
+```bash
+python modulos/encadeador/.agents/encadeador/testes.py --tema custo_da_sessao
+```
+
+- `--tema` casa por pedaço do nome da função do tema, aceita `--tema=nome` e
+  pode se repetir. Nome que não casa com nada, e bandeira sem valor, saem
+  com erro de uso e a lista dos temas que existem.
+- Os temas rodam na ordem da bancada inteira. O cadastro que o tema da
+  configuração plantaria é plantado antes, quando ele não foi pedido.
+- Tema que lê execução deixada por outro declara isso em
+  `TEMAS_QUE_O_TEMA_EXIGE`, e o filtro traz os exigidos junto.
+- O placar da rodada por tema começa com `PARCIAL`: as recusas de roteiro não
+  rodam nela. Antes da entrega, a bancada inteira continua devida.
 
 ## O que a execução desliga: `--dangerously-skip-permissions`
 
@@ -49,10 +69,10 @@ Como a pergunta some, é o gancho que fica no lugar dela. O
 decidem quais cercas existem — e só durante a etapa, porque quem levanta essa
 cerca é a marca `ENCADEADOR_ETAPA` no ambiente, posta por este motor.
 
-O mesmo vale para o gancho que PERGUNTA em vez de negar. Quatro vetos de
-julgamento respondem `ask` em sessão interativa, mas leem o `permission_mode`
-que o Claude Code entrega a todo gancho e, em `bypassPermissions`, negam de
-vez: numa etapa não haveria quem respondesse. Quais são e por quê está em
+O mesmo vale para o gancho que PERGUNTA em vez de negar. Os vetos de
+julgamento respondem `ask` em sessão interativa, mas leem a mesma marca
+`ENCADEADOR_ETAPA` e, com ela, negam de vez: numa etapa não haveria quem
+respondesse. Quais são, o que fazem em `bypassPermissions` e por quê está em
 `conhecimento/guarda-mecanica-das-regras.md`, na seção sobre o verbo de cada
 veto. A decisão que precisa do dono continua parando a execução em
 `aguardando-resposta`, e a resposta volta pela retomada.

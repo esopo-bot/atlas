@@ -10,10 +10,12 @@ import posixpath
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 DESCRICAO_DA_CLI = ("revisa a camada instalada neste repositório: o que ela "
@@ -52,11 +54,18 @@ PERGUNTA_DA_VERSAO = "import sys; print(sys.version_info[0])"
 VERSAO_QUE_SERVE = "3"
 TETO_DO_INTERPRETADOR_S = 10
 FONTE_DAS_REGRAS = "nucleo/regras.json"
-TITULO_ENTREGA = "A ENTREGA — o que ainda não saiu da máquina"
+TITULO_ENTREGA = ("A ENTREGA — o que ainda não saiu da máquina, medido em {} "
+                  "na branch {}")
 TITULO_LARGADA = "A LARGADA — o que toda sessão paga antes de trabalhar"
 TITULO_DAS_MEDIDAS = ("AS MEDIDAS DA VERSÃO — três; a versão nova é melhor "
                  "quando nenhuma piora além do ruído e uma melhora")
-VERSAO_NO_INSTALADOR = re.compile(r'^VERSAO\s*=\s*"([^"]+)"', re.M)
+REGISTRO_DA_INSTALACAO = ".agents/camada/registro-da-instalacao.json"
+MARCO_DO_COMMIT = "commit {}"
+COMANDO_DO_COMMIT_DA_ARVORE = "git rev-parse --short HEAD"
+INSTALADOR_ANTIGO_NA_RAIZ = (
+    "{} na raiz, sem modulos/: é o instalador antigo, que a receita de antes "
+    "copiava para cá, e não a origem; a instalação se verifica do clone da "
+    "camada, com python <pasta do clone do atlas>/montar.py --verificar")
 LINHA_DA_MEDIDA = "  {:<18} {}"
 MEDIDA_VERSAO = "versão"
 MEDIDA_LARGADA = "largada"
@@ -75,6 +84,10 @@ CHAVE_DO_TETO = "teto_da_largada_em_bytes"
 LARGADA_SEM_TETO = ("Largada: {} bytes. Sem teto declarado em {} ({}) — "
                     "medido, não cobrado.")
 LARGADA_NA_REGUA = "Largada: {} bytes, dentro do teto de {}."
+LARGADA_NAO_MEDIDA = ("Largada NÃO MEDIDA: {} bytes contados, e {} gancho(s) "
+                      "de abertura não responderam. A parcela que falta pode "
+                      "ser qualquer tamanho, então não há veredito: conserte "
+                      "o gancho e meça de novo.")
 LARGADA_ACIMA = ("Largada: {} bytes, ACIMA do teto de {}. Cada byte "
                  "aqui é pago por toda sessão, antes de ela trabalhar: "
                  "corte página, skill ou gancho de abertura, ou mude o teto por decisão.")
@@ -82,6 +95,10 @@ COMANDO_DA_BRANCH = "git rev-parse --abbrev-ref HEAD"
 COMANDO_DO_UPSTREAM = "git rev-parse --abbrev-ref --symbolic-full-name @{u}"
 COMANDO_DO_ESPELHO = "git rev-parse --abbrev-ref origin/{}"
 COMANDO_DO_QUE_FALTA = "git log {}..HEAD --oneline"
+COMANDO_DO_QUE_SO_EXISTE_AQUI = "git log HEAD --not --remotes --oneline"
+SEM_UPSTREAM_E_SEM_COMMIT_PROPRIO = (
+    "Nada ficou para trás: {} não tem upstream, mas todo commit dela já está "
+    "em algum remoto — não há trabalho que só exista nesta máquina.")
 ENTREGA_LIMPA = "Nada ficou para trás: {} não tem commit fora de {}."
 ENTREGA_COM_SOBRA = ("{} commit(s) em {} que NÃO estão em {} — trabalho "
                      "que fica para trás se a sessão acabar agora:")
@@ -114,6 +131,11 @@ PEDIDO_PULADO_SEM_INCORPORACAO = (
 PEDIDO_PULADO_NA_INCORPORACAO = (
     "Pedido de incorporação: pulado — {} é a própria branch de incorporação; "
     "daqui não se pede, se publica.")
+BANDEIRA_SEM_O_PEDIDO = "--sem-pedido"
+MEDIDA_PULADA = "pulada"
+PEDIDO_PULADO_A_PEDIDO = (
+    "Pedido de incorporação: pulado a pedido de quem chamou ({}), que o "
+    "mede por conta própria — a categoria dele sai 'pulada', nunca zero.")
 PEDIDO_PULADO_SEM_INTEGRACAO = (
     "Pedido de incorporação: pulado — {} não declara {}.{}, e sem a "
     "integração não dá para dizer o que espera o dono.")
@@ -167,6 +189,14 @@ MCP_SEM_ARQUIVO = (
     "  a sessão só tem as ferramentas do próprio agente. Se este repositório\n"
     "  não usa servidor, a linha é essa mesma; se usa, o arquivo faltou.")
 MCP_ILEGIVEL = "  {} não se deixou ler: {}"
+MCP_SO_NA_RAIZ_PRINCIPAL = (
+    "  {arquivo} não existe nesta worktree; a raiz principal do repositório,\n"
+    "  {principal}, declara {quantos} servidor(es): {nomes}. O que a sessão\n"
+    "  carrega depende do cliente: o de terminal lê só a pasta aberta e não\n"
+    "  os vê; o app de mesa resolve o projeto pela raiz principal e os\n"
+    "  carrega. Confira pelas ferramentas que a sessão tem, e se faltarem,\n"
+    "  copie o {arquivo} da raiz principal para cá.")
+COMANDO_DA_RAIZ_COMUM = "git rev-parse --path-format=absolute --git-common-dir"
 MCP_SEM_SERVIDOR = "  {} existe e não declara servidor nenhum em {}."
 ARQUIVO_DE_ESTADO_DO_CLIENTE = ".claude.json"
 ARQUIVO_DE_AUTENTICACAO_PENDENTE = ".claude/mcp-needs-auth-cache.json"
@@ -214,12 +244,15 @@ ARQUIVO_DAS_PROTEGIDAS = ".claude/branches-protegidas.txt"
 CHAVE_POR_INCORPORACAO = "branches_por_incorporacao"
 MARCA_DE_COMENTARIO_NA_LISTA = "#"
 PREFIXO_DO_REMOTO = "origin/"
-CABECA_DO_REMOTO = "origin/HEAD"
+CABECA_DO_REMOTO = "HEAD"
 SEPARADOR_DO_REMOTO = "/"
 COMANDO_DA_REFERENCIA = "git rev-parse --verify --quiet {}"
-COMANDO_DAS_LOCAIS = 'git branch --format="%(refname:short)"'
-COMANDO_DAS_REMOTAS = 'git branch -r --format="%(refname:short)"'
-COMANDO_DO_QUE_ACRESCENTA = "git diff --quiet {}...{}"
+COMANDO_DOS_TOPOS = ('git for-each-ref --format="%(objectname) %(refname)" '
+                     'refs/heads refs/remotes')
+PREFIXO_DAS_LOCAIS = "refs/heads/"
+PREFIXO_DAS_REMOTAS = "refs/remotes/"
+COMANDO_DO_QUE_ACRESCENTA = ("git", "diff", "--quiet", "{}...{}")
+DIFFS_EM_PARALELO = 8
 COMANDO_DO_TOPO = "git rev-parse {}"
 NAO_ACRESCENTA_NADA = 0
 PALAVRA_DE_CASO = "caso"
@@ -232,10 +265,17 @@ PODA_NAO_MEDIDA = ("Branch entregue por podar: NÃO MEDIDO — `git branch` "
                    "que o erro imprime não é nome de branch: contá-lo seria "
                    "acusar quem não existe.")
 PODA_LIMPA = "E nada sobrou do que já entregou: nenhuma branch por podar."
+CATEGORIAS_DA_ENTREGA = ("CATEGORIAS DA ENTREGA: commit-sem-destino={} "
+                         "branch-por-podar={} integracao-sem-pedido={}")
 PODA_COM_SOBRA = ("{} branch(es) que não acrescentam nada a {} e seguem de pé "
                   "— o rastro da entrega, que se acumula porque ninguém o vê:")
 PODA_LOCAL = "  poda local:  git branch -d {}"
 PODA_REMOTA = "  poda remota: git push origin --delete {}"
+PODA_EM_USO = ("  fora da poda: {} — aberta(s) numa árvore de trabalho, e o git "
+               "não apaga branch em uso; volta à poda quando a árvore fechar. "
+               "Árvore apagada à mão ainda prende a branch: `git worktree "
+               "prune` a solta.")
+MARCA_DA_BRANCH_NA_ARVORE = "branch refs/heads/"
 PODA_ESCAPE = ("  Quer guardar alguma? Declare o nome em {} — o arquivo é seu, "
                "e a atualização da camada não o sobrescreve.")
 
@@ -246,14 +286,16 @@ COMANDO_DOS_GANCHOS_RASTREADOS = 'git ls-files ".claude/hooks/*.py"'
 COMANDO_DOS_INSTRUMENTOS_RASTREADOS = 'git ls-files ".agents/*/*.py"'
 NOME_DO_ESCOPO_DA_MATRICULA = "matricula"
 NOME_DE_FONTES = "FONTES"
-NOME_DE_MODULOS = "MODULOS"
+NOME_DO_LEITOR_DA_CAMADA = "camada_da_pasta"
+INSTALADOR_SEM_LEITOR = ("o instalador não tem {}, o leitor que diz o que "
+                         "viaja por módulo")
 NOME_DO_GANCHO_DECLARADO = "GanchoDeclarado"
+EVENTO_DO_DESPACHANTE = "PreToolUse"
 CAMINHO_DE_GANCHO = re.compile(r"\.claude/hooks/[^\"'\s]+\.py")
 GANCHO_DO_DESPACHANTE = f"{PASTA_DOS_GANCHOS}/despachar-cercas.py"
 BLOCO_DAS_CERCAS = re.compile(r"^CERCAS = \((.*?)^\)", re.M | re.S)
 CERCA_DECLARADA = re.compile(r'\("([A-Za-z0-9_-]+)",\s*"([^"]*)"')
 BRIEFING_DA_SESSAO = ".agents/prompts/bootstart.md"
-LINHA_DA_CERCA_NA_TABELA = "| `{}` |"
 CARACTERES_DE_GLOB = "*?["
 INSTRUMENTOS_QUE_FICAM = {
     ".agents/camada/testes.py": (
@@ -267,6 +309,14 @@ INSTRUMENTOS_QUE_FICAM = {
     ".agents/saude/saude.py": (
         "mede este repositório contra o instalador dele; quem instala não "
         "tem montar.py para o instrumento medir"),
+    ".agents/saude/mutar.py": (
+        "a mutação no fim prova as bancadas deste repositório numa cópia "
+        "dele; ela serve a quem constrói a camada, e quem instala não tem as "
+        "bancadas que ela desfaz"),
+    ".agents/saude/ciclo.py": (
+        "mede o ciclo de edição de fonte deste repositório contra um commit "
+        "dele; quem instala não tem montar.py nem a fonte das skills para o "
+        "ciclo existir"),
     ".agents/manual/manual.py": (
         "escreve o manual desta árvore: as pastas que ele descreve — "
         "modulos/, execucoes/, os instrumentos da raiz — não existem em "
@@ -280,7 +330,8 @@ INSTALADOR_DE_MENTIRA = (
     "    'GanchoDeclarado',\n"
     "    'nome evento matcher comando arquivo_exigido')\n"
     "FONTES = ('.claude/hooks/bom.py',)\n"
-    f"MODULOS = {{'m': {{'{INSTRUMENTO_DE_MODULO_DE_MENTIRA}': ''}}}}\n"
+    "def camada_da_pasta(casa):\n"
+    f"    return {{}}, {{'m': {{'{INSTRUMENTO_DE_MODULO_DE_MENTIRA}': ''}}}}\n"
     "GANCHO_BOM = GanchoDeclarado(\n"
     "    'bom', 'SessionStart', '',\n"
     "    'python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/bom.py\"',\n"
@@ -301,9 +352,6 @@ SALDO_SEM_DECLARACAO = "ligado no settings.json sem GanchoDeclarado"
 SALDO_DESLIGADO = ("declarado no montar.py e desligado no settings.json")
 SALDO_MATCHER_DIVERGENTE = ("matcher diferente no despachante e no "
                             "instalador — um dos dois mente")
-SALDO_FORA_DO_BRIEFING = ("cerca que o despachante roda sem linha na tabela "
-                          "de ganchos do briefing — a sessão leva a recusa "
-                          "sem saber que ela existe")
 SALDO_EXCECAO_VELHA = "exceção que envelheceu — declarada e fora do git"
 INTERPRETADOR_QUE_SOME = (
     "  INTERPRETADOR QUE SOME: `{0}` está registrado no comando de gancho e "
@@ -404,6 +452,9 @@ ORDEM_DAS_PILHAS = (PILHA_CONTRATO, PILHA_PAGINA, PILHA_NAO_CLASSIFICADO,
                     PILHA_SEM_LEITOR)
 CARTAO_DA_PASTA = ("cartão da pasta: quem abre a pasta o lê, e a rotina não "
                    "mede quem abre pasta")
+PASTA_DOS_COMANDOS_DE_BARRA = ".claude/commands/"
+COMANDO_DE_BARRA = ("comando de barra: o cliente o lê quando alguém digita o "
+                    "comando, e a rotina não mede quem digita")
 VIA_DO_LINK = "via 1 (link markdown): {}"
 VIA_DO_CODIGO = "via 2 (caminho citado em código): {}"
 VIA_DA_PROSA = "via 2 (caminho citado em prosa): {}"
@@ -420,6 +471,11 @@ MARKDOWN_NAO_MEDIDO = ("Markdown NÃO MEDIDO: `{}` falhou. Sem a listagem do "
                        "seria invenção.")
 TERMO_ABERTO = "ABERTO"
 RASCUNHO = "tmp"
+MARCA_DE_PONTO_DE_DESVIO = 0x400
+ETIQUETA_DE_PONTO_DE_MONTAGEM = 0xA0000003
+ETIQUETA_DE_LINK_SIMBOLICO = 0xA000000C
+ETIQUETAS_QUE_DESVIAM_O_CAMINHO = frozenset(
+    {ETIQUETA_DE_PONTO_DE_MONTAGEM, ETIQUETA_DE_LINK_SIMBOLICO})
 TETO_DE_DIAS_NO_RASCUNHO = 7
 SEGUNDOS_DO_DIA = 86400
 PASTAS_DE_INSTRUMENTO_NO_RASCUNHO = {
@@ -427,6 +483,10 @@ PASTAS_DE_INSTRUMENTO_NO_RASCUNHO = {
                    "escreve — a rodada as reabre"),
     "encerramento-lembrado": ("a marca de uma vez por sessão do gancho que "
                              "lembra o encerramento"),
+    "relato-cobrado": ("a marca de uma vez por sessão do gancho que cobra "
+                       "o relato da sessão"),
+    "bancada": ("as rodadas do módulo bancada, que o julgamento dele "
+                "reabre"),
 }
 COMANDO_DOS_RASCUNHOS_RASTREADOS = "git ls-files tmp/"
 TITULO_RASCUNHO = "O RASCUNHO — o que envelhece em tmp/"
@@ -436,6 +496,12 @@ SEM_RASCUNHO = "Sem {} no disco — nada a medir."
 RASCUNHO_NAO_MEDIDO = (
     "Rascunho NÃO MEDIDO: `{}` falhou. Sem a listagem do git não sei o que "
     "ali é rastreado, e chamar tudo de esquecido acusaria o que viaja.")
+RASCUNHO_QUE_E_ATALHO = (
+    "Rascunho NÃO MEDIDO: `{}` é um atalho para outra pasta, e esta rotina "
+    "não atravessa atalho — seguir levaria a limpeza para dentro da "
+    "instalação de outro projeto. Zero aqui seria invenção: não é que não "
+    "haja rascunho velho, é que eu não olhei. Desfaça o atalho, ou aponte a "
+    "pasta de verdade.")
 RASCUNHO_EM_DIA = (
     "Rascunho em dia: nenhum arquivo não rastreado parado em {}/ acima de {} "
     "dias — {} olhado(s), {} rastreado(s) fora da conta.")
@@ -452,11 +518,18 @@ BANCADA_NAO_VIAJA = (
     MARCA_DE_BANCADA_AUSENTE + ": ela não viaja com a camada, e mora no "
     "repositório onde a camada é construída. Nada a rodar aqui.")
 FORA_DA_PROVA = "FORA"
+MARCA_DE_BYTE_QUE_NAO_E_UTF8 = "\ufffd"
+OPCAO_DO_MODO_UTF8_DO_GANCHO = "-X utf8"
+SAIDA_FORA_DO_UTF8 = ("a saída não é UTF-8: sem o modo UTF-8 do Python ela "
+                      "sai em cp1252, e quem a lê vê letra trocada")
 MARCA_DE_QUE_PASSOU = "OK  "
 MARCA_DE_QUE_CAIU = "CAIU"
 
 ORCAMENTO_DAS_BANCADAS_TOCADAS = 120
 TEMPO_DE_UMA_BANCADA_TOCADA = 60
+TETOS_PROPRIOS_DE_BANCADA = {
+    ".agents/camada": 180,
+}
 MARCA_DE_QUE_NAO_COUBE = "TETO"
 ARQUIVO_DA_BANCADA_DA_PASTA = "testes.py"
 IMPORTE_DA_BANCADA_DA_PASTA = "from testes import"
@@ -479,6 +552,22 @@ BANCADA_O_QUE_TOCOU = ("{} arquivo(s) tocado(s) nesta sessão, contados na "
                        "instrumento(s) com bancada e {} sem.")
 BANCADA_NENHUM_TOCADO = ("Nenhum instrumento tocado nesta sessão — não há "
                          "bancada a rodar, e fica dito.")
+BANCADA_ONDE_MEDIU = "Medido em {}, na branch {}."
+BRANCH_QUE_O_GIT_NAO_DISSE = "que o git não disse"
+BRANCH_DE_HEAD_DESTACADO = "nenhuma: o HEAD está destacado"
+MARCA_DE_ARVORE_PODAVEL = "prunable"
+BANCADA_SUJEIRA_NAO_MEDIDA = (
+    "o git não listou o que nasceu na árvore, antes ou depois das bancadas: "
+    "se elas sujaram, ninguém viu")
+COMANDO_DA_BRANCH_ATUAL = "git branch --show-current"
+COMANDO_DAS_ARVORES_DE_TRABALHO = "git worktree list --porcelain"
+MARCA_DE_ARVORE_DE_TRABALHO = "worktree "
+BANCADA_HA_OUTRA_ARVORE = (
+    "Este repositório tem outra árvore de trabalho: {}. O zero acima é desta "
+    "raiz; se o trabalho da sessão mora noutra, rode de lá ou diga --raiz.")
+BANCADA_ARVORES_NAO_MEDIDAS = (
+    "As outras árvores de trabalho NÃO FORAM MEDIDAS: o git não as listou. "
+    "O zero acima vale só para esta raiz.")
 BANCADA_SEM_TESTE = ("{} — instrumento tocado sem --testar próprio: não há "
                      "bancada para rodar, e a falta dela não reprova esta "
                      "rotina")
@@ -529,6 +618,18 @@ LINHA = "  {:<44} {}"
 LINHA_DE_CASO = "  [{}] {}"
 SEM_CLAUDE = "  (claude fora do PATH — a simulação não rodou)"
 SEM_REGRAS = "  (sem nucleo/regras.json — a simulação não tem gabarito)"
+PREFIXO_DA_COPIA_DA_SIMULACAO = "camada-simulacao-"
+TEMPO_DO_GIT_DA_SIMULACAO = 60
+COMANDO_DA_ARVORE_DA_SIMULACAO = ["git", "ls-files", "-z", "--cached",
+                                  "--others", "--exclude-standard"]
+ARQUIVOS_LOCAIS_DA_SIMULACAO = ("nucleo/executor.json", ".mcp.json",
+                                ".agents/indice/alvos.json",
+                                ".claude/settings.local.json")
+SEM_COPIA = ("  (a simulação não rodou: a árvore não se copiou — {}. A sessão "
+             "simulada escreve e roda comando, e na raiz ela mexeria no que é "
+             "de quem instalou)")
+COPIA_QUE_FICOU = ("  (AVISO: a cópia da simulação ficou em {} — {}; a medida "
+                   "acima vale, o disco ficou com sobra)")
 NUMERO_DESCONHECIDO = "Número que não existe: {}.\nOs que existem: {}."
 NUMERO_NAO_MEDIDO = "não medido"
 FORA_DA_RAIZ = "Rode na raiz do repositório: {} não encontrado aqui."
@@ -550,10 +651,17 @@ Sua ÚLTIMA mensagem tem de ser só este JSON, sem cerca de código:
   "o_que_e_pronto": "<quando a camada deixa chamar um trabalho de pronto>"}}"""
 
 
-def corre(comando, tempo=TEMPO_DE_UM_TESTE, cwd=None):
+def corre(comando, tempo=TEMPO_DE_UM_TESTE, cwd=None, ambiente=None):
     r = subprocess.run(comando, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       timeout=tempo, cwd=cwd)
+                       timeout=tempo, cwd=cwd, env=ambiente)
     return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def ambiente_sem_o_modo_utf8() -> dict:
+    ambiente = {nome: valor for nome, valor in os.environ.items()
+                if nome != "PYTHONIOENCODING"}
+    ambiente["PYTHONUTF8"] = "0"
+    return ambiente
 
 
 def corre_a_lista(argumentos: list, tempo=TEMPO_DE_UM_TESTE, cwd=None):
@@ -778,45 +886,61 @@ def nome_curto_da_branch(bruta: str) -> str:
     return sem_remoto.strip()
 
 
+def branch_da_referencia(completa: str):
+    for prefixo, e_remota in ((PREFIXO_DAS_LOCAIS, False),
+                              (PREFIXO_DAS_REMOTAS, True)):
+        if not completa.startswith(prefixo):
+            continue
+        nome = completa[len(prefixo):]
+        if e_remota and (SEPARADOR_DO_REMOTO not in nome
+                         or nome.split(SEPARADOR_DO_REMOTO, 1)[1]
+                         == CABECA_DO_REMOTO):
+            return None
+        return nome, e_remota
+    return None
+
+
+def acrescenta_a_referencia(raiz: Path, referencia: str, completa: str):
+    comando = [parte.format(referencia, completa)
+               for parte in COMANDO_DO_QUE_ACRESCENTA]
+    try:
+        codigo, _ = corre_a_lista(comando, cwd=raiz)
+    except (OSError, subprocess.SubprocessError):
+        return False, False
+    if codigo not in (NAO_ACRESCENTA_NADA, ACRESCENTA_ALGUMA_COISA):
+        return False, False
+    return codigo == NAO_ACRESCENTA_NADA, True
+
+
 def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
                           protegidas: set) -> tuple:
-    def topo(nome):
-        codigo, saida = corre(COMANDO_DO_TOPO.format(nome), cwd=raiz)
-        return saida.strip() if codigo == 0 else ""
-
-    topo_da_referencia = topo(referencia)
-
-    def e_rastro(bruta):
-        if topo(bruta) == topo_da_referencia:
-            return False, True
-        codigo, _ = corre(COMANDO_DO_QUE_ACRESCENTA.format(referencia, bruta),
-                          cwd=raiz)
-        if codigo not in (NAO_ACRESCENTA_NADA, ACRESCENTA_ALGUMA_COISA):
-            return False, False
-        return codigo == NAO_ACRESCENTA_NADA, True
-
-    def colher(comando, e_remota):
-        codigo, saida = corre(comando, cwd=raiz)
-        if codigo != 0 or not topo_da_referencia:
-            return [], False
-        colhidas, mediu = [], True
-        for bruta in saida.split("\n"):
-            bruta = bruta.strip().lstrip("* ").strip()
-            if not bruta or bruta.startswith(CABECA_DO_REMOTO):
-                continue
-            if e_remota and SEPARADOR_DO_REMOTO not in bruta:
-                continue
-            curto = nome_curto_da_branch(bruta)
-            if not curto or curto == atual or curto.lower() in protegidas:
-                continue
-            rastro, julgou = e_rastro(bruta)
-            mediu = mediu and julgou
-            if rastro:
-                colhidas.append(bruta)
-        return colhidas, mediu
-    locais, mediu_locais = colher(COMANDO_DAS_LOCAIS, False)
-    remotas, mediu_remotas = colher(COMANDO_DAS_REMOTAS, True)
-    return locais, remotas, mediu_locais and mediu_remotas
+    codigo, topo_da_referencia = corre(COMANDO_DO_TOPO.format(referencia),
+                                       cwd=raiz)
+    topo_da_referencia = topo_da_referencia.strip()
+    topos = linhas_do_git(raiz, COMANDO_DOS_TOPOS)
+    if codigo != 0 or not topo_da_referencia or topos is None:
+        return [], [], False
+    a_julgar = []
+    for linha in topos:
+        topo, _, completa = linha.partition(" ")
+        achada = branch_da_referencia(completa.strip())
+        if achada is None or topo == topo_da_referencia:
+            continue
+        nome, e_remota = achada
+        curto = nome_curto_da_branch(nome)
+        if not curto or curto == atual or curto.lower() in protegidas:
+            continue
+        a_julgar.append((nome, e_remota, completa.strip()))
+    with ThreadPoolExecutor(max_workers=DIFFS_EM_PARALELO) as grupo:
+        julgados = list(grupo.map(
+            lambda candidata: acrescenta_a_referencia(
+                raiz, referencia, candidata[2]), a_julgar))
+    locais, remotas, mediu = [], [], True
+    for (nome, e_remota, _), (rastro, julgou) in zip(a_julgar, julgados):
+        mediu = mediu and julgou
+        if rastro:
+            (remotas if e_remota else locais).append(nome)
+    return locais, remotas, mediu
 
 
 def o_que_ainda_nao_saiu(raiz: Path, atual: str) -> int:
@@ -824,6 +948,10 @@ def o_que_ainda_nao_saiu(raiz: Path, atual: str) -> int:
     if codigo != 0 or not alvo:
         codigo, alvo = corre(COMANDO_DO_ESPELHO.format(atual), cwd=raiz)
     if codigo != 0 or not alvo:
+        codigo, so_aqui = corre(COMANDO_DO_QUE_SO_EXISTE_AQUI, cwd=raiz)
+        if codigo == 0 and not so_aqui.strip():
+            print(SEM_UPSTREAM_E_SEM_COMMIT_PROPRIO.format(atual))
+            return SAIDA_LIMPA
         print(SEM_ENTREGA.format(atual, atual))
         return SAIDA_COM_ACHADO
     _, sobra = corre(COMANDO_DO_QUE_FALTA.format(alvo), cwd=raiz)
@@ -835,6 +963,12 @@ def o_que_ainda_nao_saiu(raiz: Path, atual: str) -> int:
     for linha in linhas:
         print(f"  {linha}")
     return SAIDA_COM_ACHADO
+
+
+def branches_abertas_em_arvore(raiz: Path) -> set:
+    linhas = linhas_do_git(raiz, COMANDO_DAS_ARVORES_DE_TRABALHO) or []
+    return {linha[len(MARCA_DA_BRANCH_NA_ARVORE):] for linha in linhas
+            if linha.startswith(MARCA_DA_BRANCH_NA_ARVORE)}
 
 
 def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
@@ -853,8 +987,15 @@ def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
     if not mediu:
         print(PODA_NAO_MEDIDA)
         return SAIDA_NAO_MEDIDO
+    abertas = branches_abertas_em_arvore(raiz)
+    em_uso = sorted(set(locais) & abertas)
+    locais = [branch for branch in locais if branch not in em_uso]
+    remotas = [remota for remota in remotas
+               if nome_curto_da_branch(remota) not in abertas]
     if not locais and not remotas:
         print(PODA_LIMPA)
+        if em_uso:
+            print(PODA_EM_USO.format(" ".join(em_uso)))
         return SAIDA_LIMPA
     print(PODA_COM_SOBRA.format(len(locais) + len(remotas), referencia))
     if locais:
@@ -862,6 +1003,8 @@ def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
     if remotas:
         print(PODA_REMOTA.format(
             " ".join(nome_curto_da_branch(r) for r in remotas)))
+    if em_uso:
+        print(PODA_EM_USO.format(" ".join(em_uso)))
     print(PODA_ESCAPE.format(ARQUIVO_DAS_PROTEGIDAS))
     return SAIDA_COM_ACHADO
 
@@ -992,17 +1135,28 @@ def arvores_de_trabalho(raiz: Path) -> str:
 
 
 def entrega(raiz: Path,
-            consultar_pedidos=numeros_dos_pedidos_abertos) -> int:
+            consultar_pedidos=numeros_dos_pedidos_abertos,
+            sem_pedido: bool = False) -> int:
     codigo, atual = corre(COMANDO_DA_BRANCH, cwd=raiz)
     if codigo != 0 or not atual:
         print(FORA_DE_REPOSITORIO)
         return SAIDA_LIMPA
-    print(f"\n{TITULO_ENTREGA}")
+    print(TITULO_ENTREGA.format(Path(raiz).resolve().as_posix(), atual))
     faltou = o_que_ainda_nao_saiu(raiz, atual)
     sobrou = o_que_saiu_e_ficou(raiz, atual)
-    espera = o_que_espera_incorporacao(raiz, atual, consultar_pedidos)
+    if sem_pedido:
+        print(PEDIDO_PULADO_A_PEDIDO.format(BANDEIRA_SEM_O_PEDIDO))
+        espera = MEDIDA_PULADA
+    else:
+        espera = o_que_espera_incorporacao(raiz, atual, consultar_pedidos)
     print(arvores_de_trabalho(raiz))
-    return veredito_da_entrega(faltou, sobrou, espera)
+    print(linha_das_categorias(faltou, sobrou, espera))
+    return veredito_da_entrega(faltou, sobrou,
+                               *([] if sem_pedido else [espera]))
+
+
+def linha_das_categorias(faltou: int, sobrou: int, espera: int) -> str:
+    return CATEGORIAS_DA_ENTREGA.format(faltou, sobrou, espera)
 
 
 def quadro_declarado(raiz: Path) -> tuple:
@@ -1136,10 +1290,32 @@ def servidores_barrados_pela_lista(raiz: Path, declarados: dict, casa: Path) -> 
                   and not servidor_passa_pela_lista(nome, declaracao, entradas))
 
 
+def servidores_da_raiz_principal(raiz: Path) -> str:
+    codigo, comum = corre(COMANDO_DA_RAIZ_COMUM, cwd=raiz)
+    if codigo != 0 or not comum.strip():
+        return ""
+    principal = Path(comum.strip().splitlines()[-1]).parent
+    if mesma_pasta(str(principal), raiz):
+        return ""
+    try:
+        dado = json.loads((principal / ARQUIVO_DA_DECLARACAO_DE_MCP)
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    declarados = (dado.get(CHAVE_DOS_SERVIDORES_DE_MCP)
+                  if isinstance(dado, dict) else None)
+    if not isinstance(declarados, dict) or not declarados:
+        return ""
+    return MCP_SO_NA_RAIZ_PRINCIPAL.format(
+        arquivo=ARQUIVO_DA_DECLARACAO_DE_MCP, principal=principal,
+        quantos=len(declarados), nomes=", ".join(sorted(declarados)))
+
+
 def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
     alvo = raiz / ARQUIVO_DA_DECLARACAO_DE_MCP
     if not alvo.is_file():
-        return None, MCP_SEM_ARQUIVO.format(ARQUIVO_DA_DECLARACAO_DE_MCP)
+        return None, (servidores_da_raiz_principal(raiz)
+                      or MCP_SEM_ARQUIVO.format(ARQUIVO_DA_DECLARACAO_DE_MCP))
     try:
         dado = json.loads(alvo.read_text(encoding="utf-8"))
     except (OSError, ValueError) as falha:
@@ -1215,12 +1391,41 @@ def dias_parado(arquivo: Path, agora: float) -> int:
     return int((agora - arquivo.stat().st_mtime) // SEGUNDOS_DO_DIA)
 
 
-def arquivos_do_rascunho(raiz: Path) -> list:
+def e_desvio_de_caminho(atributos: int, etiqueta: int) -> bool:
+    if not atributos & MARCA_DE_PONTO_DE_DESVIO:
+        return False
+    return etiqueta in ETIQUETAS_QUE_DESVIAM_O_CAMINHO
+
+
+def aponta_para_outro_lugar(caminho: Path) -> bool:
+    if caminho.is_symlink():
+        return True
+    try:
+        estado = caminho.lstat()
+        atributos = estado.st_file_attributes
+    except (AttributeError, OSError):
+        return False
+    return e_desvio_de_caminho(atributos, getattr(estado, "st_reparse_tag", 0))
+
+
+def arquivos_do_rascunho(raiz: Path):
     pasta = raiz / RASCUNHO
-    return sorted((a for a in pasta.rglob("*")
-                   if a.is_file() and a.relative_to(pasta).parts[0]
-                   not in PASTAS_DE_INSTRUMENTO_NO_RASCUNHO),
-                  key=lambda a: a.as_posix())
+    if aponta_para_outro_lugar(pasta):
+        return None
+    achados = []
+    for aqui, dentro, nomes in os.walk(pasta):
+        atual = Path(aqui)
+        dentro[:] = [nome for nome in dentro
+                     if not aponta_para_outro_lugar(atual / nome)]
+        for nome in nomes:
+            arquivo = atual / nome
+            if aponta_para_outro_lugar(arquivo) or not arquivo.is_file():
+                continue
+            if arquivo.relative_to(pasta).parts[0] \
+                    in PASTAS_DE_INSTRUMENTO_NO_RASCUNHO:
+                continue
+            achados.append(arquivo)
+    return sorted(achados, key=lambda a: a.as_posix())
 
 
 def esquecidos_no_rascunho(arquivos: list, rastreados: set, raiz: Path,
@@ -1284,6 +1489,9 @@ def rascunho(raiz: Path) -> int:
         print(RASCUNHO_NAO_MEDIDO.format(COMANDO_DOS_RASCUNHOS_RASTREADOS))
         return 1
     arquivos = arquivos_do_rascunho(raiz)
+    if arquivos is None:
+        print(RASCUNHO_QUE_E_ATALHO.format(RASCUNHO))
+        return 1
     esquecidos = esquecidos_no_rascunho(arquivos, set(rastreados), raiz,
                                         time.time())
     for rel, dias in esquecidos:
@@ -1305,15 +1513,15 @@ SEM_EVIDENCIAS = ("sem evidência gravada em {} — a conta não tem o que ler, 
 LINHA_DA_EXECUCAO = "  {:<22} US$ {:>7.2f}   atribuído US$ {:>7.2f}"
 CONTA_DA_RODADA = ("Somam US$ {:.2f} cobrados em {} execução(ões). Não há "
                    "teto declarado: esta rotina MEDE e não reprova, por "
-                   "decisão do dono em 30/08 — número sem procedência não "
+                   "decisão do dono — número sem procedência não "
                    "vira cobrança, e a procedência se junta rodando.")
 TITULO_POR_ETAPA = "POR ETAPA — onde o dinheiro foi parar, somando os ciclos"
 LINHA_DA_ETAPA = ("  {:<22} US$ {:>7.2f}   {:>3} execução(ões)   {:>10}")
 DURACAO_EM_MINUTOS = "{:.1f} min"
 DURACAO_NAO_MEDIDA = "sem relógio"
 SEM_ETAPA_MEDIDA = ("nenhuma evidência traz custo: a régua por etapa só vale "
-                    "para execução gravada depois de 01/09 — o que veio "
-                    "antes some aqui de propósito, e não vira zero")
+                    "para execução gravada com custo por etapa — o que veio "
+                    "antes dela some aqui de propósito, e não vira zero")
 FORA_DA_REGUA = (
     "US$ {:.2f} em {} execução(ões) ficam fora desta tabela: a evidência "
     "delas não atribuiu NADA a etapa nenhuma. Ou são anteriores à régua da "
@@ -1430,13 +1638,31 @@ def conta(raiz: Path) -> int:
     return 0
 
 
-def versao_do_instalador(raiz: Path) -> str:
+def e_a_casa_da_camada(raiz: Path) -> bool:
+    return ((raiz / PASTA_DOS_MODULOS).is_dir()
+            and not (raiz / REGISTRO_DA_INSTALACAO).is_file())
+
+
+def commit_do_registro(raiz: Path) -> str:
     try:
-        texto = (raiz / INSTALADOR).read_text(encoding="utf-8")
-    except OSError:
-        return NUMERO_NAO_MEDIDO
-    achado = VERSAO_NO_INSTALADOR.search(texto)
-    return achado.group(1) if achado else NUMERO_NAO_MEDIDO
+        registro = json.loads((raiz / REGISTRO_DA_INSTALACAO).read_text(
+            encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    commit = registro.get("commit_da_camada") if isinstance(registro, dict) \
+        else None
+    return commit if isinstance(commit, str) else ""
+
+
+def commit_da_arvore(raiz: Path) -> str:
+    codigo, saida = corre(COMANDO_DO_COMMIT_DA_ARVORE, cwd=raiz)
+    return saida.strip() if codigo == 0 else ""
+
+
+def versao_da_camada(raiz: Path) -> str:
+    commit = (commit_da_arvore(raiz) if e_a_casa_da_camada(raiz)
+              else commit_do_registro(raiz))
+    return MARCO_DO_COMMIT.format(commit) if commit else NUMERO_NAO_MEDIDO
 
 
 def custo_por_entrega(execucoes: list) -> str:
@@ -1456,7 +1682,7 @@ def medidas_da_versao(raiz: Path) -> list:
     paga = medir(raiz)[1]["largada"]
     teto = teto_da_largada(raiz)
     return [
-        (MEDIDA_VERSAO, versao_do_instalador(raiz)),
+        (MEDIDA_VERSAO, versao_da_camada(raiz)),
         (MEDIDA_LARGADA, MEDIDA_LARGADA_COM_TETO.format(paga, teto)
          if teto is not None else MEDIDA_LARGADA_SEM_TETO.format(paga)),
         (MEDIDA_CUSTO, custo_por_entrega(custo_das_execucoes(raiz))),
@@ -1484,7 +1710,11 @@ def teto_da_largada(raiz: Path):
 
 def largada(raiz: Path) -> int:
     print(f"\n{TITULO_LARGADA}")
-    paga = medir(raiz)[1]["largada"]
+    medida = medir(raiz)[1]
+    paga = medida["largada"]
+    if medida["ganchos_nao_medidos"]:
+        print(LARGADA_NAO_MEDIDA.format(paga, medida["ganchos_nao_medidos"]))
+        return SAIDA_NAO_MEDIDO
     teto = teto_da_largada(raiz)
     if teto is None:
         print(LARGADA_SEM_TETO.format(paga, ARQUIVO_DE_CONFIGURACAO,
@@ -1514,6 +1744,18 @@ def escopo_do_instalador(raiz: Path) -> tuple:
     return escopo, ""
 
 
+def modulos_pelo_leitor_do_instalador(escopo: dict, raiz: Path) -> tuple:
+    leitor = escopo.get(NOME_DO_LEITOR_DA_CAMADA)
+    if leitor is None:
+        return None, INSTALADOR_SEM_LEITOR.format(NOME_DO_LEITOR_DA_CAMADA)
+    try:
+        return leitor(raiz)[1], ""
+    except SystemExit as saida:
+        return None, str(saida.code)
+    except Exception as erro:
+        return None, f"{type(erro).__name__}: {erro}"
+
+
 def matricula_do_instalador(raiz: Path) -> tuple:
     escopo, erro = escopo_do_instalador(raiz)
     if escopo is None:
@@ -1522,8 +1764,11 @@ def matricula_do_instalador(raiz: Path) -> tuple:
     for valor in escopo.values():
         if type(valor).__name__ == NOME_DO_GANCHO_DECLARADO:
             declarados.update(CAMINHO_DE_GANCHO.findall(valor.comando))
+    modulos, erro = modulos_pelo_leitor_do_instalador(escopo, raiz)
+    if modulos is None:
+        return None, erro
     por_modulo = set()
-    for arquivos in (escopo.get(NOME_DE_MODULOS) or {}).values():
+    for arquivos in modulos.values():
         por_modulo.update(arquivos)
     return (tuple(escopo.get(NOME_DE_FONTES) or ()), declarados,
             por_modulo), ""
@@ -1576,10 +1821,15 @@ def matchers_declarados(raiz: Path) -> dict:
     escopo, _ = escopo_do_instalador(raiz)
     if escopo is None:
         return {}
-    declarado = {}
+    declarado, do_evento_do_despachante = {}, set()
     for valor in escopo.values():
-        if type(valor).__name__ == NOME_DO_GANCHO_DECLARADO:
-            for caminho in CAMINHO_DE_GANCHO.findall(valor.comando):
+        if type(valor).__name__ != NOME_DO_GANCHO_DECLARADO:
+            continue
+        for caminho in CAMINHO_DE_GANCHO.findall(valor.comando):
+            if valor.evento == EVENTO_DO_DESPACHANTE:
+                do_evento_do_despachante.add(caminho)
+                declarado[caminho] = valor.matcher
+            elif caminho not in do_evento_do_despachante:
                 declarado[caminho] = valor.matcher
     return declarado
 
@@ -1595,17 +1845,6 @@ def divergencias_do_despachante(raiz: Path) -> list:
         if esperado is not None and esperado != matcher:
             saldos.append((caminho, SALDO_MATCHER_DIVERGENTE))
     return saldos
-
-
-def cercas_fora_da_tabela_do_briefing(raiz: Path) -> list:
-    try:
-        tabela = (raiz / BRIEFING_DA_SESSAO).read_text(encoding="utf-8")
-    except OSError:
-        return []
-    return [(caminho, SALDO_FORA_DO_BRIEFING)
-            for caminho in sorted(cercas_do_despachante(raiz))
-            if LINHA_DA_CERCA_NA_TABELA.format(Path(caminho).stem)
-            not in tabela]
 
 
 def saldos_da_matricula(raiz: Path, ganchos: list, fontes: tuple,
@@ -1672,7 +1911,6 @@ def matricula(raiz: Path) -> int:
     saldos = saldos_da_matricula(raiz, ganchos, fontes, declarados)
     saldos += saldos_dos_instrumentos(raiz, instrumentos, fontes, por_modulo)
     saldos += divergencias_do_despachante(raiz)
-    saldos += cercas_fora_da_tabela_do_briefing(raiz)
     for caminho, motivo in saldos:
         print(LINHA_DO_SALDO.format(caminho, motivo))
     fora_do_git = ganchos_ligados_fora_do_git(raiz, ganchos)
@@ -1735,11 +1973,14 @@ def leitores_da_configuracao(raiz: Path) -> tuple:
     lidos = [(c, (raiz / c).read_text(encoding="utf-8", errors="replace"))
              for c in caminhos
              if c != INSTALADOR and (raiz / c).is_file()]
-    if (raiz / INSTALADOR).is_file():
+    if (raiz / INSTALADOR).is_file() and e_a_casa_da_camada(raiz):
         escopo, erro = escopo_do_instalador(raiz)
         if escopo is None:
             return None, INSTALADOR_ILEGIVEL.format(INSTALADOR, erro)
-        for arquivos in (escopo.get(NOME_DE_MODULOS) or {}).values():
+        modulos, erro = modulos_pelo_leitor_do_instalador(escopo, raiz)
+        if modulos is None:
+            return None, INSTALADOR_ILEGIVEL.format(INSTALADOR, erro)
+        for arquivos in modulos.values():
             lidos.extend(arquivos.items())
     return (len(caminhos), lidos), ""
 
@@ -1878,6 +2119,8 @@ def pilha_do_markdown(rel: str, vias: tuple) -> tuple:
             return pilha, prova
     if rel.rsplit("/", 1)[-1] in CARTOES_DE_PASTA:
         return PILHA_NAO_CLASSIFICADO, CARTAO_DA_PASTA
+    if rel.startswith(PASTA_DOS_COMANDOS_DE_BARRA):
+        return PILHA_NAO_CLASSIFICADO, COMANDO_DE_BARRA
     return PILHA_SEM_LEITOR, ""
 
 
@@ -1969,9 +2212,12 @@ def medir(raiz: Path) -> tuple:
     achados_de_subagente, subagentes_sem_coleira = subagentes(raiz)
     injetado_por_gancho, ganchos_cegos = bytes_que_os_ganchos_injetam(
         raiz)
+    briefing = (len((raiz / BRIEFING_DA_SESSAO).read_bytes())
+                if (raiz / BRIEFING_DA_SESSAO).is_file() else 0)
     dados = {
-        "largada": instrucoes + catalogo + injetado_por_gancho,
+        "largada": instrucoes + briefing + catalogo + injetado_por_gancho,
         "instrucoes": instrucoes,
+        "briefing": briefing,
         "regras_sempre": regras_sempre,
         "regras_por_caminho": regras_por_caminho,
         "catalogo": catalogo,
@@ -1993,6 +2239,8 @@ def medir(raiz: Path) -> tuple:
                      f"{dados['largada']} bytes"),
         LINHA.format("  instruções (AGENTS.md, CLAUDE.md, regras sempre)",
                      f"{dados['instrucoes']} bytes"),
+        LINHA.format("  briefing de abertura, lido inteiro por ordem do "
+                     "AGENTS.md", f"{dados['briefing']} bytes"),
         LINHA.format("  regras por caminho — só quando o arquivo tocado bate",
                      f"{dados['regras_por_caminho']} bytes, fora da largada"),
         LINHA.format(f"  catálogo de {dados['skills']} skills",
@@ -2055,9 +2303,12 @@ def provar(raiz: Path) -> tuple:
     segundos, casos, fora = 0.0, 0, 0
     for alvo in instrumentos_com_teste(raiz):
         partida = time.monotonic()
+        opcao = (OPCAO_DO_MODO_UTF8_DO_GANCHO
+                 if alvo.parent == raiz / PASTA_DOS_GANCHOS else "")
         codigo, saida = corre(
-            f'{INTERPRETADOR_NO_SHELL} "{alvo.relative_to(raiz)}" {BANDEIRA_DE_TESTE}',
-            cwd=raiz)
+            f'{INTERPRETADOR_NO_SHELL} {opcao} "{alvo.relative_to(raiz)}" '
+            f'{BANDEIRA_DE_TESTE}',
+            cwd=raiz, ambiente=ambiente_sem_o_modo_utf8())
         gasto = time.monotonic() - partida
         segundos += gasto
         if codigo == 0 and MARCA_DE_BANCADA_AUSENTE in saida:
@@ -2069,18 +2320,24 @@ def provar(raiz: Path) -> tuple:
         casos += provados
         rodados += 1
         proprio_nada = codigo == 0 and provados == 0
-        if codigo != 0 or proprio_nada:
+        fora_do_utf8 = MARCA_DE_BYTE_QUE_NAO_E_UTF8 in saida
+        if codigo != 0 or proprio_nada or fora_do_utf8:
             caidos.append(alvo.name)
         linhas.append(LINHA_DE_CASO.format(
-            "NADA" if proprio_nada else ("OK  " if codigo == 0 else "CAIU"),
+            "NADA" if proprio_nada else (
+                "OK  " if codigo == 0 and not fora_do_utf8 else "CAIU"),
             f"{alvo.relative_to(raiz)} — {gasto:.1f}s — "
-            f"{resumo_da_suite(saida)}"))
+            + (SAIDA_FORA_DO_UTF8 if fora_do_utf8
+               else resumo_da_suite(saida))))
     sem_teste = [p.name for p in sorted((raiz / PASTA_DOS_GANCHOS).glob(GLOB_PYTHON))
                  if BANDEIRA_DE_TESTE not in p.read_text(encoding="utf-8",
                                                          errors="replace")]
     for nome in sem_teste:
         linhas.append(LINHA_DE_CASO.format("CAIU", f"{nome} — sem --testar próprio"))
-    if (raiz / INSTALADOR).is_file():
+    if (raiz / INSTALADOR).is_file() and not e_a_casa_da_camada(raiz):
+        linhas.append(LINHA_DE_CASO.format(
+            FORA_DA_PROVA, INSTALADOR_ANTIGO_NA_RAIZ.format(INSTALADOR)))
+    elif (raiz / INSTALADOR).is_file():
         codigo, _ = corre(f'{INTERPRETADOR_NO_SHELL} {INSTALADOR} --verificar', cwd=raiz)
         rodados += 1
         if codigo != 0:
@@ -2094,12 +2351,14 @@ def provar(raiz: Path) -> tuple:
 
 def linhas_do_git(raiz: Path, comando: str):
     try:
-        codigo, saida = corre(comando, cwd=raiz)
+        r = subprocess.run(comando, shell=True, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=TEMPO_DE_UM_TESTE, cwd=raiz)
     except (OSError, subprocess.SubprocessError):
         return None
-    if codigo != 0:
+    if r.returncode != 0:
         return None
-    return [linha.strip() for linha in saida.splitlines() if linha.strip()]
+    return [linha.strip() for linha in r.stdout.splitlines() if linha.strip()]
 
 
 def base_dos_commits_da_sessao(raiz: Path) -> str:
@@ -2161,9 +2420,15 @@ def sem_a_bancada_repetida(raiz: Path, com: list) -> list:
             or not delega_a_bancada_da_pasta(raiz / c)]
 
 
+def pecas_na_fonte_dos_modulos(raiz: Path) -> list:
+    return sorted((raiz / PASTA_DOS_MODULOS).glob(
+        f"*/{PASTA_DOS_INSTRUMENTOS}/**/{GLOB_PYTHON}"))
+
+
 def separar_por_bancada(raiz: Path, tocados: list) -> tuple:
     pecas = {p.relative_to(raiz).as_posix(): p
-             for p in pecas_de_instrumento(raiz)}
+             for p in (pecas_de_instrumento(raiz)
+                       + pecas_na_fonte_dos_modulos(raiz))}
     escolhidas = sorted(set(tocados) & set(pecas))
     com = sem_a_bancada_repetida(
         raiz, [c for c in escolhidas if tem_bancada(pecas[c])])
@@ -2179,9 +2444,68 @@ def anunciar_o_que_ficou_de_fora(fora: list, orcamento: float) -> None:
     print(COMO_PROVAR_O_QUE_FICOU_DE_FORA)
 
 
+def teto_desta_bancada(caminho: str, teto: float, tetos: dict = None) -> float:
+    proprios = TETOS_PROPRIOS_DE_BANCADA if tetos is None else tetos
+    declarado = proprios.get(
+        caminho, proprios.get(Path(caminho).parent.as_posix(), 0))
+    return max(teto, declarado)
+
+
+def orcamento_das_bancadas(com_bancada: list, orcamento: float,
+                           teto: float, tetos: dict = None) -> float:
+    sobra = sum(teto_desta_bancada(caminho, teto, tetos) - teto
+                for caminho in com_bancada)
+    return orcamento + sobra
+
+
+def arvores_vivas_da_listagem(linhas: list, raiz: Path) -> list:
+    arvores, podaveis = [], set()
+    for linha in linhas:
+        if linha.startswith(MARCA_DE_ARVORE_DE_TRABALHO):
+            arvores.append(Path(linha[len(MARCA_DE_ARVORE_DE_TRABALHO):]))
+        elif linha.startswith(MARCA_DE_ARVORE_PODAVEL) and arvores:
+            podaveis.add(arvores[-1])
+    return [arvore.as_posix() for arvore in arvores
+            if arvore not in podaveis and arvore.resolve() != raiz.resolve()]
+
+
+def outras_arvores_de_trabalho(raiz: Path):
+    linhas = linhas_do_git(raiz, COMANDO_DAS_ARVORES_DE_TRABALHO)
+    if linhas is None:
+        return None
+    return arvores_vivas_da_listagem(linhas, raiz)
+
+
+def nome_da_branch_medida(linhas) -> str:
+    if linhas is None:
+        return BRANCH_QUE_O_GIT_NAO_DISSE
+    return linhas[0] if linhas else BRANCH_DE_HEAD_DESTACADO
+
+
+def o_que_a_bancada_sujou(nasceu_antes, nasceu_depois):
+    if nasceu_antes is None or nasceu_depois is None:
+        return None
+    return sorted(set(nasceu_depois) - set(nasceu_antes))
+
+
+def anunciar_as_outras_arvores(outras) -> None:
+    if outras is None:
+        print(BANCADA_ARVORES_NAO_MEDIDAS)
+    elif outras:
+        print(BANCADA_HA_OUTRA_ARVORE.format(", ".join(outras)))
+
+
+def anunciar_onde_mediu(raiz: Path) -> bool:
+    branch = linhas_do_git(raiz, COMANDO_DA_BRANCH_ATUAL)
+    print(BANCADA_ONDE_MEDIU.format(raiz.as_posix(),
+                                    nome_da_branch_medida(branch)))
+    return branch is not None
+
+
 def bancada_dos_tocados(raiz: Path,
                         orcamento: float = ORCAMENTO_DAS_BANCADAS_TOCADAS,
-                        teto: float = TEMPO_DE_UMA_BANCADA_TOCADA) -> int:
+                        teto: float = TEMPO_DE_UMA_BANCADA_TOCADA,
+                        tetos: dict = None) -> int:
     print(f"\n{TITULO_DA_BANCADA}")
     tocados, base = caminhos_que_a_sessao_tocou(raiz)
     if tocados is None:
@@ -2190,31 +2514,41 @@ def bancada_dos_tocados(raiz: Path,
     com_bancada, sem_bancada = separar_por_bancada(raiz, tocados)
     print(BANCADA_O_QUE_TOCOU.format(len(tocados), base, len(com_bancada),
                                      len(sem_bancada)))
+    disse_a_branch = anunciar_onde_mediu(raiz)
     for caminho in sem_bancada:
         print(LINHA_DE_CASO.format(FORA_DA_PROVA,
                                    BANCADA_SEM_TESTE.format(caminho)))
     if not com_bancada:
         print(BANCADA_NENHUM_TOCADO)
-        return SAIDA_LIMPA
+        outras = [] if tocados else outras_arvores_de_trabalho(raiz)
+        anunciar_as_outras_arvores(outras)
+        return (SAIDA_LIMPA if disse_a_branch and outras is not None
+                else SAIDA_NAO_MEDIDO)
     partida = time.monotonic()
     caidos, nao_couberam, rodadas, fora_do_orcamento = [], [], 0, []
-    nasceu_antes = set(linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU) or [])
+    nasceu_antes = linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU)
+    orcamento = orcamento_das_bancadas(com_bancada, orcamento, teto, tetos)
     with tempfile.TemporaryDirectory(prefix="bancada-fora-da-raiz-") as fora:
         for lugar, caminho in enumerate(com_bancada):
             if time.monotonic() - partida >= orcamento:
                 fora_do_orcamento = com_bancada[lugar:]
                 break
-            marca, texto = rodar_uma_bancada(raiz, caminho, teto, Path(fora))
+            marca, texto = rodar_uma_bancada(
+                raiz, caminho, teto_desta_bancada(caminho, teto, tetos),
+                Path(fora))
             print(LINHA_DE_CASO.format(marca, texto))
             rodadas += 1
             if marca == MARCA_DE_QUE_CAIU:
                 caidos.append(caminho)
             if marca == MARCA_DE_QUE_NAO_COUBE:
                 nao_couberam.append(caminho)
-    sujou = sorted(set(linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU) or [])
-                   - nasceu_antes)
+    sujou = o_que_a_bancada_sujou(
+        nasceu_antes, linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU))
     anunciar_o_que_ficou_de_fora(fora_do_orcamento, orcamento)
-    ficou_cego = bool(nao_couberam or fora_do_orcamento)
+    ficou_cego = bool(nao_couberam or fora_do_orcamento or sujou is None
+                      or not disse_a_branch)
+    if sujou is None:
+        print(BANCADA_NAO_MEDIDA.format(BANCADA_SUJEIRA_NAO_MEDIDA))
     if sujou:
         print(BANCADA_QUE_SUJOU.format(", ".join(sujou)))
     if caidos:
@@ -2315,13 +2649,58 @@ def teste_toca_o_proprio_codigo(caminho: Path) -> bool:
     return False
 
 
+def copiar_a_arvore_da_simulacao(raiz: Path, destino: Path) -> str:
+    try:
+        listagem = subprocess.run(COMANDO_DA_ARVORE_DA_SIMULACAO, cwd=raiz,
+                                  capture_output=True,
+                                  timeout=TEMPO_DO_GIT_DA_SIMULACAO)
+        if listagem.returncode != 0:
+            return (listagem.stderr.decode("utf-8", "replace").strip()
+                    or "git ls-files falhou")
+        nomes = listagem.stdout.decode("utf-8", "replace").split("\0")
+        for nome in nomes + list(ARQUIVOS_LOCAIS_DA_SIMULACAO):
+            origem = raiz / nome
+            if nome and origem.is_file():
+                (destino / nome).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(origem, destino / nome)
+        subprocess.run(["git", "init", "-q"], cwd=destino,
+                       capture_output=True, timeout=TEMPO_DO_GIT_DA_SIMULACAO)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return str(falha)
+    return ""
+
+
+def apagar_a_copia_da_simulacao(copia: Path) -> str:
+    for achado in copia.rglob("*"):
+        if achado.is_file():
+            with contextlib.suppress(OSError):
+                achado.chmod(stat.S_IWRITE | stat.S_IREAD)
+    try:
+        shutil.rmtree(copia)
+    except OSError as falha:
+        return COPIA_QUE_FICOU.format(copia, falha)
+    return ""
+
+
 def simular(raiz: Path) -> tuple:
     if not shutil.which("claude"):
         return [SEM_CLAUDE], {"rodou": False}
-    fonte = raiz / FONTE_DAS_REGRAS
-    if not fonte.is_file():
+    if not (raiz / FONTE_DAS_REGRAS).is_file():
         return [SEM_REGRAS], {"rodou": False}
+    copia = Path(tempfile.mkdtemp(prefix=PREFIXO_DA_COPIA_DA_SIMULACAO))
+    try:
+        falha = copiar_a_arvore_da_simulacao(raiz, copia)
+        if falha:
+            linhas, dados = [SEM_COPIA.format(falha)], {"rodou": False}
+        else:
+            linhas, dados = simular_na_copia(copia)
+    finally:
+        aviso = apagar_a_copia_da_simulacao(copia)
+    return (linhas + [aviso] if aviso else linhas), dados
 
+
+def simular_na_copia(raiz: Path) -> tuple:
+    fonte = raiz / FONTE_DAS_REGRAS
     quantas = len(json.loads(fonte.read_text(encoding="utf-8"))["regras"])
     alvo = raiz / ARQUIVO_PEDIDO
     alvo.parent.mkdir(parents=True, exist_ok=True)
@@ -2512,6 +2891,10 @@ def main() -> int:
                          "contexto, endereço do quadro e índice de pé")
     ap.add_argument("--entrega", action="store_true",
                     help="prova que nada ficou fora da branch de entrega")
+    ap.add_argument(BANDEIRA_SEM_O_PEDIDO, action="store_true",
+                    dest="sem_pedido",
+                    help="com --entrega, pula a medida do pedido de "
+                         "incorporação, para quem a mede por conta própria")
     ap.add_argument("--matricula", action="store_true",
                     help="cobra que todo gancho rastreado viaje no instalador")
     ap.add_argument("--bancada", action="store_true",
@@ -2561,7 +2944,7 @@ def main() -> int:
         return abertura(raiz)
 
     if a.entrega:
-        return entrega(raiz)
+        return entrega(raiz, sem_pedido=a.sem_pedido)
 
     if a.matricula:
         return matricula(raiz)
@@ -2605,4 +2988,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())

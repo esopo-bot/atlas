@@ -37,6 +37,7 @@ from encadeador import (
     CLI_FALSO_QUE_MEDE_CUSTO, CLI_FALSO_QUE_ENTREGA_SEM_CUSTO,
     CLI_FALSO_QUE_MORRE_CARO, CLI_FALSO_QUE_ACORDA_DE_NOVO,
     CLI_FALSO_QUE_FALA_E_TRAVA, CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA,
+    CLI_FALSO_QUE_RETOMA_E_ENTREGA,
     CUSTO_SEM_MEDICAO, MARCA_DE_QUEM_ESPERA_VOCE,
     CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE,
     ESPERA_MAXIMA_S,
@@ -92,8 +93,32 @@ SEM_O_ARQUIVO_QUE_O_CASO_MEDE = ("o arquivo que o caso seguinte mede não foi "
 EXECUCAO_QUE_NAO_FECHOU = ("a execução que devia materializar o arquivo do "
                            "caso seguinte não fechou completa: exit {exit}, "
                            "stderr {berro}")
-TEMA_QUE_ESTOUROU = ("o tema {tema} estourou em {onde} — {erro}; os casos "
-                     "dele não foram medidos")
+TEMA_INCOMPLETO = ("o tema {tema} NÃO MEDIU até o fim: parou em {onde} — "
+                   "{erro} [{categoria}]. Os casos que faltaram não entram "
+                   "no placar, e quantos eram não se sabe")
+PLACAR_DOS_TEMAS = "{medidos} de {existem} temas mediram até o fim"
+RESUMO_DOS_NAO_MEDIDOS = ("{quantos} de {temas} temas não mediram até o fim — "
+                          "isto não é caso reprovado, é prova que não rodou")
+BANDEIRA_DO_TEMA = "--tema"
+TEMAS_QUE_O_TEMA_EXIGE = {
+    "_sobre_o_andamento": ("_sobre_a_janela_e_o_ensaio", "_sobre_o_grafo",
+                           "_sobre_os_ciclos_e_o_disco"),
+}
+TEMA_SEM_VALOR = ""
+PLACAR_DOS_TEMAS_PEDIDOS = ("PARCIAL: {medidos} de {pedidos} temas pedidos "
+                            "mediram até o fim")
+NENHUM_TEMA_PEDIDO = ("a rodada por tema não recebeu tema nenhum — nada "
+                      "rodou, e nada rodar não é passar")
+PLACAR_PARCIAL = ("PARCIAL: {pedidos} de {existem} temas rodaram, {total} "
+                  "casos, nenhum caiu — as recusas de roteiro não rodaram, "
+                  "e a bancada inteira continua devida antes da entrega")
+TEMA_DESCONHECIDO = ("nenhum tema casa com {pedido} — nada rodou. Os temas "
+                     "que existem:\n{nomes}")
+SEM_O_ROTEIRO_DA_CAMADA = ("o roteiro {} não está na instalação da camada, "
+                           "então o resto deste tema NÃO MEDE — sair calado "
+                           "seria falso verde")
+CATEGORIA_DE_ENTRADA_E_SAIDA = "erro de E/S"
+CATEGORIA_DE_OUTRA_EXCECAO = "outra exceção"
 
 
 RECUSA = [
@@ -212,10 +237,22 @@ def _pid_de_quem_ja_morreu() -> int:
     raise RuntimeError(SEM_PID_MORTO.format(VOLTAS_ATE_O_PID_MORRER))
 
 
+def _raiz_da_camada() -> Path:
+    return Path(encadeador.CAMADA).parent
+
+
+def _lancador_da_camada() -> Path:
+    return _raiz_da_camada() / CAMINHO_DO_LANCADOR
+
+
+def _roteiro_da_camada(nome: str) -> Path:
+    return _raiz_da_camada() / "execucoes" / nome
+
+
 def _com_o_lancador_da_camada(raiz) -> Path:
     copia = Path(raiz) / CAMINHO_DO_LANCADOR
     copia.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(encadeador.RAIZ_DO_ATLAS / CAMINHO_DO_LANCADOR, copia)
+    shutil.copy2(_lancador_da_camada(), copia)
     copia.chmod(0o755)
     return copia
 
@@ -368,6 +405,106 @@ def _com_o_gh_trocado(gh, tempo, medir):
         encadeador.GH, encadeador.TEMPO_DO_GH = guardado
 
 
+def _com_o_ambiente_trocado(b, extra, medir):
+    guardado = b.ambiente
+    b.ambiente = dict(guardado, **extra)
+    try:
+        return medir()
+    finally:
+        b.ambiente = guardado
+
+
+ARQUIVO_DO_REPOSITORIO_SEM_ACESSO = "sem-acesso.txt"
+
+
+def _com_o_repositorio_sem_acesso(b, repositorio, medir):
+    marca = b.caixa / ARQUIVO_DO_REPOSITORIO_SEM_ACESSO
+    marca.write_text(repositorio, encoding="utf-8")
+    try:
+        return medir()
+    finally:
+        marca.unlink(missing_ok=True)
+
+
+class _TemaQueEstoura(Exception):
+    pass
+
+
+def _estourando_na_chamada(b, qual, tema) -> int:
+    de_verdade = b.cli_dublê
+    placar_de_verdade = b.resultados
+    evidencias_de_verdade = b.evidencias
+    chamadas_sob_troca = []
+
+    def estoura_sob_a_troca(*argumentos, **nomeados):
+        if "gh-caido" in b.ambiente.get("ENCADEADOR_GH", ""):
+            chamadas_sob_troca.append(1)
+            if len(chamadas_sob_troca) == qual:
+                raise _TemaQueEstoura()
+        return de_verdade(*argumentos, **nomeados)
+
+    evidencias_do_estouro = tempfile.mkdtemp(dir=str(b.pasta),
+                                             prefix="estouro-")
+    b.cli_dublê = estoura_sob_a_troca
+    b.resultados = []
+    b.evidencias = evidencias_do_estouro
+    try:
+        tema(b)
+    except _TemaQueEstoura:
+        pass
+    finally:
+        b.cli_dublê = de_verdade
+        b.resultados = placar_de_verdade
+        b.evidencias = evidencias_de_verdade
+    return len(chamadas_sob_troca)
+
+
+def _sobre_o_ambiente_que_um_tema_troca(b) -> None:
+    de_antes = b.ambiente
+    for qual in (1, 2):
+        chegou = _estourando_na_chamada(
+            b, qual, _sobre_os_criterios_da_issue_na_verificacao)
+        b.caso(f"o tema REAL que derruba o rastreador, estourando na chamada "
+               f"{qual} feita sob a troca, devolve o ambiente: o tema "
+               f"seguinte não herda o rastreador caído",
+               chegou == qual and b.ambiente is de_antes
+               and "gh-caido" not in b.ambiente.get("ENCADEADOR_GH", ""))
+
+    def estoura_com_a_marca():
+        raise _TemaQueEstoura()
+
+    try:
+        _com_o_repositorio_sem_acesso(b, "repos/x/y", estoura_com_a_marca)
+    except _TemaQueEstoura:
+        pass
+    b.caso("tema que estoura com o repositório marcado sem acesso tira a "
+           "marca: o dublê não responde 404 para os temas seguintes",
+           not (b.caixa / ARQUIVO_DO_REPOSITORIO_SEM_ACESSO).exists())
+    b.caso("controle: dentro da marca o arquivo existe com o repositório "
+           "pedido",
+           _com_o_repositorio_sem_acesso(
+               b, "repos/x/y",
+               lambda: (b.caixa / ARQUIVO_DO_REPOSITORIO_SEM_ACESSO)
+               .read_text(encoding="utf-8")) == "repos/x/y")
+
+    def estoura():
+        raise _TemaQueEstoura()
+
+    try:
+        _com_o_ambiente_trocado(b, {"ENCADEADOR_GH": "duble-caido"}, estoura)
+    except _TemaQueEstoura:
+        pass
+    b.caso("tema que estoura com o ambiente trocado devolve o ambiente: o "
+           "tema seguinte não mede com o rastreador caído sem saber",
+           b.ambiente is de_antes)
+    visto = _com_o_ambiente_trocado(
+        b, {"ENCADEADOR_GH": "duble-caido"},
+        lambda: b.ambiente.get("ENCADEADOR_GH"))
+    b.caso("controle: dentro da troca o tema enxerga o valor trocado, e "
+           "fora dela o ambiente é o de antes",
+           visto == "duble-caido" and b.ambiente is de_antes)
+
+
 def _quadro_com_o_duble(pasta, resposta, configuracao):
     caixa = Path(tempfile.mkdtemp(dir=str(pasta), prefix="quadro-"))
     (caixa / "resposta.json").write_text(json.dumps(resposta),
@@ -482,13 +619,12 @@ def _sobre_a_conta_que_age(b) -> None:
     b.caso("e o trabalho no --cwd roda com o token de remoto.conta_gh",
            b.texto_de(token_do_trabalho) == "token-de-do-remoto")
 
-    (b.caixa / "sem-acesso.txt").write_text("repos/dono/repo",
-                                            encoding="utf-8")
-    resposta = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
-                            "t-sem-acesso", "--dir", b.evidencias, "--cwd",
-                            str(sem_remoto), "--configuracao",
-                            str(configuracao)])
-    (b.caixa / "sem-acesso.txt").unlink()
+    resposta = _com_o_repositorio_sem_acesso(
+        b, "repos/dono/repo",
+        lambda: b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
+                             "t-sem-acesso", "--dir", b.evidencias, "--cwd",
+                             str(sem_remoto), "--configuracao",
+                             str(configuracao)]))
     b.caso("conta que não lê o repositório para a largada com exit 2",
            resposta.returncode == EXIT_ERRO_DE_USO_OU_AMBIENTE)
     b.caso("e a recusa nomeia a conta, o repositório e a resposta recebida",
@@ -541,13 +677,12 @@ def _sobre_o_repositorio_do_remoto(b) -> None:
                                 remoto={"conta_gh": "do-remoto"})
     roteiro = _roteiro(b.pasta, "m-so-o-remoto.json", {"etapas": [
         {"nome": "trabalha", "tipo": "codigo", "comando": FANTOCHE_OK}]})
-    (b.caixa / "sem-acesso.txt").write_text("repos/outro/alvo",
-                                            encoding="utf-8")
-    resposta = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
-                            "t-remoto-negado", "--dir", b.evidencias,
-                            "--cwd", str(pasta), "--configuracao",
-                            str(configuracao)])
-    (b.caixa / "sem-acesso.txt").unlink()
+    resposta = _com_o_repositorio_sem_acesso(
+        b, "repos/outro/alvo",
+        lambda: b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
+                             "t-remoto-negado", "--dir", b.evidencias,
+                             "--cwd", str(pasta), "--configuracao",
+                             str(configuracao)]))
     b.caso("o repositório sai do remoto do --cwd e chega à largada",
            "outro/alvo" in resposta.stderr)
     b.caso("negado o acesso a ele, a largada recusa nomeando a conta do "
@@ -778,10 +913,10 @@ def _sobre_a_issue(b) -> None:
          and estado.get("issue") == 42)
     b.caso("a pergunta foi postada na issue, com a marca do motor",
          (b.caixa / "postado.md").exists()
-         and MARCA_DO_MOTOR in (b.caixa / "postado.md").read_text())
+         and MARCA_DO_MOTOR in (b.caixa / "postado.md").read_text(encoding="utf-8"))
     b.caso("o motor pediu o token da conta configurada, sem trocar a ativa",
-         "auth token --user conta" in (b.caixa / "chamadas.txt").read_text())
-    chamadas = (b.caixa / "chamadas.txt").read_text()
+         "auth token --user conta" in (b.caixa / "chamadas.txt").read_text(encoding="utf-8"))
+    chamadas = (b.caixa / "chamadas.txt").read_text(encoding="utf-8")
     b.caso("parou em você: a etiqueta que acende a visão do quadro é posta",
          f"issue edit 42 --repo dono/repo --add-label {ETIQUETA_PARADO_EM_VOCE}"
          in chamadas)
@@ -791,18 +926,18 @@ def _sobre_a_issue(b) -> None:
     b.caso("a chegada do motor à issue tira a etiqueta de terceiros",
          f"--remove-label {ETIQUETA_PARADO_EM_TERCEIROS}" in chamadas)
 
-    antes = (b.caixa / "chamadas.txt").read_text()
+    antes = (b.caixa / "chamadas.txt").read_text(encoding="utf-8")
     feito = b.cli_dublê(["terceiros", "--issue", "42", "--por",
                         "--cwd", b.pasta])
-    novas = (b.caixa / "chamadas.txt").read_text()[len(antes):]
+    novas = (b.caixa / "chamadas.txt").read_text(encoding="utf-8")[len(antes):]
     b.caso("terceiros --por nasce a etiqueta no molde e a põe na issue",
          feito.returncode == 0
          and f"label create {ETIQUETA_PARADO_EM_TERCEIROS}" in novas
          and f"--add-label {ETIQUETA_PARADO_EM_TERCEIROS}" in novas)
-    antes = (b.caixa / "chamadas.txt").read_text()
+    antes = (b.caixa / "chamadas.txt").read_text(encoding="utf-8")
     feito = b.cli_dublê(["terceiros", "--issue", "42", "--tirar",
                         "--cwd", b.pasta])
-    novas = (b.caixa / "chamadas.txt").read_text()[len(antes):]
+    novas = (b.caixa / "chamadas.txt").read_text(encoding="utf-8")[len(antes):]
     b.caso("terceiros --tirar só tira, sem nascer etiqueta",
          feito.returncode == 0
          and f"--remove-label {ETIQUETA_PARADO_EM_TERCEIROS}" in novas
@@ -858,7 +993,7 @@ def _sobre_a_issue(b) -> None:
          "aguardando resposta na issue 42" in b.cli_dublê(
              ["andamento", "--trabalho", "t-issue", "--dir", b.evidencias]).stdout)
 
-    postado = (b.caixa / "postado.md").read_text()
+    postado = (b.caixa / "postado.md").read_text(encoding="utf-8")
     b.caso("cada etapa vira um comentário na issue, com o veredito",
          "`antes` — segue (1 de 4" in postado)
     b.caso("e o comentário diz o que foi testado, com o comando",
@@ -946,7 +1081,7 @@ def _sobre_a_issue(b) -> None:
          and antes_c1.stat().st_mtime == marca_de_tempo
          and not (Path(b.evidencias) / "t-issue" / "01-antes-c2.json").exists())
     b.caso("o desfecho também foi para a issue",
-         "Execução completa" in (b.caixa / "postado.md").read_text())
+         "Execução completa" in (b.caixa / "postado.md").read_text(encoding="utf-8"))
     b.caso("nem o `proximo` de uma reprovação carrega caminho absoluto",
          "/home/" not in resumo_da_etapa(
              {"etapa": "x", "veredito": "para", "provado": [],
@@ -965,9 +1100,9 @@ def _sobre_a_issue(b) -> None:
     b.caso("texto sem caminho nenhum atravessa intacto",
          sem_caminho_de_maquina("nada aqui", "/r/a") == "nada aqui")
     b.caso("e NENHUM comentário carrega caminho absoluto de máquina",
-         "/home/" not in (b.caixa / "postado.md").read_text()
+         "/home/" not in (b.caixa / "postado.md").read_text(encoding="utf-8")
          and str(Path(b.evidencias).resolve()) not in
-             (b.caixa / "postado.md").read_text())
+             (b.caixa / "postado.md").read_text(encoding="utf-8"))
     b.caso("e o estado terminal ficou gravado",
          (ler_estado(b.evidencias, "t-issue") or {}).get("situacao") == "completa")
     fechado = json.loads((Path(b.evidencias) / "t-issue" / ARQUIVO_ESTADO)
@@ -1480,7 +1615,7 @@ def _sobre_o_tempo_limite(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-meia", "--dir", b.evidencias,
          "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                  ENCADEADOR_SESSAO=_comando_de_script(fingido)))
     parede = time.monotonic() - partida
@@ -1708,6 +1843,10 @@ def _sobre_o_prompt_montado(b) -> None:
     (nucleo / "regras.json").unlink()
 
 
+ESPERA_PLANTADA_DO_DONO_S = 3600
+FOLGA_DA_ESPERA_S = 120
+
+
 def _sobre_a_aprovacao_por_comentario(b) -> None:
     from encadeador import MARCA_DO_MOTOR
 
@@ -1745,6 +1884,149 @@ def _sobre_a_aprovacao_por_comentario(b) -> None:
                              str(configuracao)], issue="99")
     b.caso("sem arquivo e sem resposta na issue: continua pergunta",
          resposta2.returncode == 6 and "Aprova a etapa" in resposta2.stdout)
+
+    espera = Path(b.pasta) / "aprovacoes" / "espera.ok"
+    roteiro_espera = _roteiro(b.pasta, "m-espera-do-dono.json", {
+        "issue": 99,
+        "etapas": [{"nome": "aprova", "tipo": "aprovacao-manual",
+                   "aprovacao": str(espera)}]})
+    disparo = ["executar", "--roteiro", roteiro_espera, "--trabalho",
+               "t-espera-do-dono", "--dir", b.evidencias, "--cwd", b.pasta,
+               "--configuracao", str(configuracao)]
+    b.cli_dublê(disparo, issue="99")
+    pasta_da_espera = Path(b.evidencias) / "t-espera-do-dono"
+    perguntou = pasta_da_espera / "01-aprova-c1.json"
+    plantado = json.loads(perguntou.read_text(encoding="utf-8"))
+    plantado["quando"] = (
+        datetime.fromisoformat(plantado["quando"])
+        - timedelta(seconds=ESPERA_PLANTADA_DO_DONO_S)
+    ).isoformat(timespec="seconds")
+    perguntou.write_text(json.dumps(plantado, ensure_ascii=False),
+                         encoding="utf-8")
+    espera.parent.mkdir(parents=True, exist_ok=True)
+    espera.write_text("ok\n", encoding="utf-8")
+    b.cli_dublê(disparo, issue="99")
+    aprovou = json.loads((pasta_da_espera / "01-aprova-c2.json")
+                         .read_text(encoding="utf-8"))
+    b.caso("a espera humana vira duração medida: o tempo entre a pergunta e "
+           "o sim do dono atravessa dois processos e não some",
+         aprovou.get("veredito") == "segue"
+         and isinstance(aprovou.get("duracao"), (int, float))
+         and aprovou["duracao"] >= ESPERA_PLANTADA_DO_DONO_S)
+
+    outra = Path(b.pasta) / "aprovacoes" / "duas-perguntas.ok"
+    roteiro_duas = _roteiro(b.pasta, "m-duas-perguntas.json", {
+        "issue": 99,
+        "etapas": [{"nome": "aprova", "tipo": "aprovacao-manual",
+                   "aprovacao": str(outra)}]})
+    disparo_duas = ["executar", "--roteiro", roteiro_duas, "--trabalho",
+                    "t-duas-perguntas", "--dir", b.evidencias, "--cwd",
+                    b.pasta, "--configuracao", str(configuracao)]
+    pasta_duas = Path(b.evidencias) / "t-duas-perguntas"
+    b.cli_dublê(disparo_duas, issue="99")
+    b.cli_dublê(disparo_duas, issue="99")
+    for ciclo, recuo in ((1, 2 * ESPERA_PLANTADA_DO_DONO_S),
+                         (2, ESPERA_PLANTADA_DO_DONO_S)):
+        recibo = pasta_duas / f"01-aprova-c{ciclo}.json"
+        dado = json.loads(recibo.read_text(encoding="utf-8"))
+        dado["quando"] = (datetime.fromisoformat(dado["quando"])
+                          - timedelta(seconds=recuo)).isoformat(
+                              timespec="seconds")
+        recibo.write_text(json.dumps(dado, ensure_ascii=False),
+                          encoding="utf-8")
+    outra.parent.mkdir(parents=True, exist_ok=True)
+    outra.write_text("ok\n", encoding="utf-8")
+    b.cli_dublê(disparo_duas, issue="99")
+    depois_de_duas = json.loads((pasta_duas / "01-aprova-c3.json")
+                                .read_text(encoding="utf-8"))
+    b.caso("perguntar de novo não zera o relógio da espera: o dono esperou "
+           "desde a PRIMEIRA pergunta, e contar da última esconde metade",
+         isinstance(depois_de_duas.get("duracao"), (int, float))
+         and depois_de_duas["duracao"] >= 2 * ESPERA_PLANTADA_DO_DONO_S)
+
+    adiantada = Path(b.pasta) / "aprovacoes" / "relogio-recuado.ok"
+    roteiro_recuado = _roteiro(b.pasta, "m-relogio-recuado.json", {
+        "issue": 99,
+        "etapas": [{"nome": "aprova", "tipo": "aprovacao-manual",
+                   "aprovacao": str(adiantada)}]})
+    disparo_recuado = ["executar", "--roteiro", roteiro_recuado, "--trabalho",
+                       "t-relogio-recuado", "--dir", b.evidencias, "--cwd",
+                       b.pasta, "--configuracao", str(configuracao)]
+    pasta_recuada = Path(b.evidencias) / "t-relogio-recuado"
+    b.cli_dublê(disparo_recuado, issue="99")
+    recibo = pasta_recuada / "01-aprova-c1.json"
+    dado = json.loads(recibo.read_text(encoding="utf-8"))
+    dado["quando"] = (datetime.fromisoformat(dado["quando"])
+                      + timedelta(seconds=ESPERA_PLANTADA_DO_DONO_S)
+                      ).isoformat(timespec="seconds")
+    recibo.write_text(json.dumps(dado, ensure_ascii=False), encoding="utf-8")
+    adiantada.parent.mkdir(parents=True, exist_ok=True)
+    adiantada.write_text("ok\n", encoding="utf-8")
+    b.cli_dublê(disparo_recuado, issue="99")
+    com_relogio_torto = json.loads((pasta_recuada / "01-aprova-c2.json")
+                                   .read_text(encoding="utf-8"))
+    b.caso("pergunta no futuro não vira espera de zero: relógio que andou "
+           "para trás é não medido, e zero seria um fato inventado",
+         com_relogio_torto.get("veredito") == "segue"
+         and "duracao" not in com_relogio_torto)
+
+    from encadeador import _quando_o_dono_comecou_a_esperar
+
+    agora_do_laboratorio = time.time()
+
+    def plantar(caixa, ordem, ciclo, veredito, atras):
+        pasta = Path(b.pasta) / "recibos-plantados" / caixa
+        pasta.mkdir(parents=True, exist_ok=True)
+        corpo = {"etapa": "aprova", "veredito": veredito}
+        if atras is not None:
+            corpo["quando"] = (
+                datetime.now().astimezone() - timedelta(seconds=atras)
+            ).isoformat(timespec="seconds")
+        (pasta / f"{ordem:02d}-aprova-c{ciclo}.json").write_text(
+            json.dumps(corpo, ensure_ascii=False), encoding="utf-8")
+
+    def desde_quando(caixa, ordem=1):
+        return _quando_o_dono_comecou_a_esperar(
+            Path(b.pasta) / "recibos-plantados" / caixa, ordem, "aprova",
+            agora_do_laboratorio)
+
+    plantar("com-segue-no-meio", 1, 1, "pergunta",
+            2 * ESPERA_PLANTADA_DO_DONO_S)
+    plantar("com-segue-no-meio", 1, 2, "segue",
+            int(1.5 * ESPERA_PLANTADA_DO_DONO_S))
+    plantar("com-segue-no-meio", 1, 3, "pergunta",
+            ESPERA_PLANTADA_DO_DONO_S)
+    comecou = desde_quando("com-segue-no-meio")
+    b.caso("a espera não atravessa um segue: pergunta anterior a uma resposta "
+           "já dada é outra espera, e emendar as duas inventa tempo",
+         comecou is not None
+         and abs((agora_do_laboratorio - comecou)
+                 - ESPERA_PLANTADA_DO_DONO_S) < FOLGA_DA_ESPERA_S)
+
+    plantar("com-lacuna", 1, 1, "pergunta", 2 * ESPERA_PLANTADA_DO_DONO_S)
+    plantar("com-lacuna", 1, 3, "pergunta", ESPERA_PLANTADA_DO_DONO_S)
+    b.caso("lacuna no meio da sequência vira não medido: o recibo que falta "
+           "pode ter sido a resposta, e atravessá-lo herda espera alheia",
+         desde_quando("com-lacuna") is None)
+
+    plantar("sem-carimbo", 1, 1, "pergunta", None)
+    plantar("sem-carimbo", 1, 2, "pergunta", ESPERA_PLANTADA_DO_DONO_S)
+    b.caso("pergunta sem carimbo de tempo derruba a medição inteira, em vez "
+           "de virar medição parcial com começo inventado",
+         desde_quando("sem-carimbo") is None)
+
+    plantar("com-futuro", 1, 1, "pergunta", -ESPERA_PLANTADA_DO_DONO_S)
+    plantar("com-futuro", 1, 2, "pergunta", ESPERA_PLANTADA_DO_DONO_S)
+    b.caso("carimbo no futuro em QUALQUER recibo da sequência derruba a "
+           "medição: relógio torto não se aproveita pela metade",
+         desde_quando("com-futuro") is None)
+
+    plantar("duas-posicoes", 1, 1, "pergunta", ESPERA_PLANTADA_DO_DONO_S)
+    plantar("duas-posicoes", 2, 9, "segue", FOLGA_DA_ESPERA_S)
+    b.caso("recibo de outra posição do roteiro não entra na conta: a gravação "
+           "numera por posição, e misturar posições deixa a ordem do disco "
+           "decidir o veredito",
+         desde_quando("duas-posicoes") is not None)
 
 
 def _sobre_o_prompt_por_arquivo(b) -> None:
@@ -1784,8 +2066,9 @@ def _sobre_o_prompt_por_arquivo(b) -> None:
     for arquivo, rotulo in (
         ("entrega.json", "trabalhar-no-workspace.md"),
         ("mexida-em-vizinho.json", "trabalhar-no-vizinho.md")):
-        caminho = RAIZ_DO_ATLAS / "execucoes" / arquivo
+        caminho = _roteiro_da_camada(arquivo)
         if not caminho.is_file():
+            b.caso(SEM_O_ROTEIRO_DA_CAMADA.format(arquivo), False)
             continue
         roteiro = json.loads(caminho.read_text(encoding="utf-8"))
         etapa = next((e for e in roteiro["etapas"]
@@ -2123,7 +2406,7 @@ def _sobre_o_teto_declarado_na_sessao(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-medicao-longa",
          "--dir", b.evidencias, "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                  ENCADEADOR_SESSAO=_comando_de_script(lento)))
     evidencia = json.loads(
@@ -2148,7 +2431,7 @@ def _sobre_a_troca_do_cli_da_sessao(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-cli", "--dir", b.evidencias,
          "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                  ENCADEADOR_SESSAO=_comando_de_script(falso)))
     b.caso("ENCADEADOR_SESSAO troca o CLI: o falso rodou no lugar do padrão",
@@ -2170,7 +2453,7 @@ def _sobre_o_custo_da_sessao(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", b.pasta],
-            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
             env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                      ENCADEADOR_SESSAO=_comando_de_script(cli)))
 
@@ -2238,7 +2521,7 @@ def _sobre_o_custo_da_sessao(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro_curto, "--trabalho", "t-fala-e-trava",
          "--dir", b.evidencias, "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                  ENCADEADOR_SESSAO=_comando_de_script(cli)))
     log_da_travada = (Path(b.evidencias) / "t-fala-e-trava"
@@ -2257,7 +2540,7 @@ def _sobre_o_custo_da_sessao(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro_teto, "--trabalho", "t-teto-e-trava",
          "--dir", b.evidencias, "--cwd", b.pasta],
-        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
         env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                  ENCADEADOR_SESSAO=_comando_de_script(cli)))
     log_do_teto = (Path(b.evidencias) / "t-teto-e-trava"
@@ -2271,6 +2554,25 @@ def _sobre_o_custo_da_sessao(b) -> None:
     b.caso("e o estouro na retomada ainda grava os turnos que a primeira "
            "tentativa já tinha devolvido",
          evidencia.get("turnos") == 5 and evidencia.get("motivo") == "morta")
+    b.caso("e preserva o custo que a primeira tentativa já tinha medido: "
+           "morrer na retomada não devolve o dinheiro gasto antes",
+         (evidencia.get("custo") or {}).get("usd") == 1.0
+         and (evidencia.get("custo") or {}).get("tokens") == {
+             "entrada": 1, "saida": 1,
+             "cache-lido": 1, "cache-criado": 1})
+
+    _executar("t-duas-pernas", CLI_FALSO_QUE_RETOMA_E_ENTREGA)
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-duas-pernas",
+                                    "mede")
+    b.caso("sessão retomada soma o custo das pernas: cada processo relata só "
+           "o que ele gastou, então guardar a última perde as anteriores",
+         (evidencia.get("custo") or {}).get("usd") == 1.5)
+    b.caso("e soma os tokens das pernas campo a campo",
+         (evidencia.get("custo") or {}).get("tokens") == {
+             "entrada": 3, "saida": 6,
+             "cache-lido": 9, "cache-criado": 12})
+    b.caso("e os turnos das duas pernas continuam somados, como já eram",
+         evidencia.get("turnos") == 8)
 
 def _sobre_a_assinatura_da_etapa(b) -> None:
     def _roteiro_com(comando):
@@ -2343,7 +2645,7 @@ def _sobre_a_assinatura_da_etapa(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", "t-prompt-editado",
              "--dir", b.evidencias, "--cwd", b.pasta, *argumentos],
-            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
             env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
                      ENCADEADOR_SESSAO=_comando_de_script(cli)))
 
@@ -2357,9 +2659,149 @@ def _sobre_a_assinatura_da_etapa(b) -> None:
 
 
 def _evidencia_da_etapa(pasta, nome):
-    for arquivo in sorted(Path(pasta).glob(f"*-{nome}-c*.json")):
-        return json.loads(arquivo.read_text(encoding="utf-8"))
-    return {}
+    melhor, escolhido = -1, None
+    for arquivo in Path(pasta).glob("*.json"):
+        casado = encadeador.PADRAO_NOME_EVIDENCIA.match(arquivo.name)
+        if not casado or casado.group(2) != nome:
+            continue
+        ciclo = int(casado.group(3))
+        if ciclo > melhor:
+            melhor, escolhido = ciclo, arquivo
+    if escolhido is None:
+        return {}
+    return json.loads(escolhido.read_text(encoding="utf-8"))
+
+
+def _sobre_o_recibo_que_a_bancada_le(b) -> None:
+    pasta = Path(b.pasta) / "recibos-de-varios-ciclos"
+    pasta.mkdir(parents=True, exist_ok=True)
+    for ciclo, marca in ((1, "a pergunta"), (2, "a resposta"),
+                         (10, "o ultimo")):
+        (pasta / f"01-fala-c{ciclo}.json").write_text(
+            json.dumps({"marca": marca}), encoding="utf-8")
+    b.caso("com mais de um ciclo a bancada lê o ÚLTIMO recibo, não o "
+           "primeiro — ler o ciclo 1 afirma sobre o arquivo errado",
+           _evidencia_da_etapa(pasta, "fala").get("marca") == "o ultimo")
+    b.caso("o ciclo é número, não texto: o 10 vem depois do 2",
+           _evidencia_da_etapa(pasta, "fala").get("marca") != "a resposta")
+    b.caso("sem recibo nenhum, o auxiliar devolve vazio em vez de estourar",
+           _evidencia_da_etapa(pasta, "fala-que-nao-houve") == {})
+    (pasta / "01-fala-c10.json").write_text("{ isto não fecha",
+                                            encoding="utf-8")
+    quebrou = False
+    try:
+        _evidencia_da_etapa(pasta, "fala")
+    except ValueError:
+        quebrou = True
+    b.caso("último recibo ilegível estoura em vez de voltar ao anterior: "
+           "cair no ciclo velho é falso verde com cara de medição",
+           quebrou)
+
+
+def _sobre_o_lancador_que_a_bancada_copia(b) -> None:
+    b.caso("o lançador se acha pela camada, rodando da cópia instalada ou da "
+           "fonte do módulo — a raiz calculada pelo lugar do arquivo erra "
+           "quando a bancada roda da fonte",
+           _lancador_da_camada().is_file())
+
+
+def _sobre_o_placar_da_propria_bancada(b) -> None:
+    def tema_que_mede(bancada):
+        bancada.caso("caso de mentira que passa", True)
+
+    def tema_que_mede_e_depois_estoura(bancada):
+        bancada.caso("verde alcançado antes do estouro", True)
+        bancada.caso("vermelho alcançado antes do estouro", False)
+        raise FileNotFoundError(2, "o arquivo não está onde o teste procura")
+
+    def tema_que_estoura_por_outra_coisa(_):
+        raise ValueError("o tema afirmou sobre o que não mediu")
+
+    def tema_que_mede_depois_do_estouro(bancada):
+        bancada.caso("o tema seguinte continua rodando", True)
+
+    temas = (tema_que_mede, tema_que_mede_e_depois_estoura,
+             tema_que_estoura_por_outra_coisa, tema_que_mede_depois_do_estouro)
+    de_mentira = Bancada(b.pasta)
+    medidos, incompletos = _rodar_os_temas(de_mentira, temas)
+    rotulos = [rotulo for rotulo, _ in de_mentira.resultados]
+    b.caso("tema que estoura não vira UM caso falso: vira tema NÃO MEDIDO",
+           len(medidos) == 2 and len(incompletos) == 2)
+    b.caso("o que o tema mediu ANTES de estourar é prova e fica no placar",
+           "verde alcançado antes do estouro" in rotulos
+           and "vermelho alcançado antes do estouro" in rotulos)
+    b.caso("estouro de um tema não interrompe os seguintes",
+           "o tema seguinte continua rodando" in rotulos)
+    b.caso("o relato separa erro de E/S de outra exceção, sem atribuir causa",
+           sorted(categoria for _, _, categoria, _ in incompletos)
+           == sorted((CATEGORIA_DE_ENTRADA_E_SAIDA,
+                      CATEGORIA_DE_OUTRA_EXCECAO)))
+    b.caso("o relato preserva tipo, mensagem e lugar do estouro",
+           all("FileNotFoundError" in erro or "ValueError" in erro
+               for _, _, _, erro in incompletos))
+    b.caso("tema não medido reprova a bancada, senão o verde mente",
+           len(falhas_dos_temas_nao_medidos(incompletos)) == 2)
+    b.caso("caso reprovado e tema não medido são contagens separadas: "
+           "somar as duas num placar só já produziu `2 de 1 casos`",
+           len([1 for _, passou in de_mentira.resultados if not passou]) == 1
+           and len(falhas_dos_temas_nao_medidos(incompletos)) == 2)
+    b.caso("o resumo dos não medidos diz que é prova que não rodou, não "
+           "caso reprovado",
+           "não rodou" in RESUMO_DOS_NAO_MEDIDOS.format(quantos=2, temas=49))
+
+
+def _sobre_o_filtro_por_tema(b) -> None:
+    pasta_do_filtro = tempfile.mkdtemp(prefix="filtro-", dir=b.pasta)
+    resultados, medidos, incompletos = _comportamento(
+        pasta_do_filtro, temas=[_sobre_a_troca_do_cli_da_sessao])
+    b.caso("tema pedido sozinho mede com o cadastro plantado: sem o tema da "
+           "configuração ninguém plantava o executor.json, e o tema caía "
+           "parecendo defeito do código medido",
+           len(medidos) == 1 and not incompletos and resultados
+           and all(passou for _, passou in resultados))
+    b.caso("a bandeira --tema se repete, e cada valor é um pedido",
+           pedidos_de_tema(["--testar", "--tema", "custo", "--tema", "grafo"])
+           == ["custo", "grafo"])
+    b.caso("sem a bandeira não há pedido, e a bancada roda inteira",
+           pedidos_de_tema(["--testar"]) == []
+           and not pediram_tema(["--testar"]))
+    b.caso("a bandeira colada ao valor por igual vale o mesmo que separada",
+           pedidos_de_tema(["--tema=custo", "--tema", "grafo"])
+           == ["custo", "grafo"])
+    b.caso("bandeira sem valor é pedido vazio, e pedido vazio não casa com "
+           "tema nenhum: cair calado na bancada inteira era rodar outro "
+           "escopo sem avisar",
+           pediram_tema(["--tema"])
+           and pedidos_de_tema(["--tema"]) == [TEMA_SEM_VALOR]
+           and temas_do_filtro([TEMA_SEM_VALOR]) == ([], [TEMA_SEM_VALOR])
+           and pedidos_de_tema(["--tema", "custo", "--tema"])
+           == ["custo", TEMA_SEM_VALOR])
+    b.caso("rodada parcial sem tema nenhum é erro de uso, nunca verde",
+           testar_so_os_temas([]) == EXIT_ERRO_DE_USO_OU_AMBIENTE)
+    b.caso("a PRIMEIRA linha da rodada parcial já diz que é parcial",
+           PLACAR_DOS_TEMAS_PEDIDOS.startswith("PARCIAL"))
+    escolhidos, desconhecidos = temas_do_filtro(["custo_da_sessao"])
+    b.caso("o pedido casa por pedaço do nome do tema",
+           escolhidos == [_sobre_o_custo_da_sessao] and not desconhecidos)
+    escolhidos, desconhecidos = temas_do_filtro(["tema-que-nao-existe"])
+    b.caso("pedido que não casa com tema nenhum é devolvido pelo nome, e "
+           "nada é escolhido — rodar zero tema e sair verde seria falso verde",
+           escolhidos == [] and desconhecidos == ["tema-que-nao-existe"])
+    escolhidos, _ = temas_do_filtro(["_sobre_o_andamento"])
+    b.caso("o tema do andamento traz junto os temas cujas execuções ele lê, "
+           "na ordem da bancada inteira",
+           escolhidos == [_sobre_a_janela_e_o_ensaio, _sobre_o_grafo,
+                          _sobre_os_ciclos_e_o_disco, _sobre_o_andamento])
+    b.caso("todo tema exigido por outro existe e vem ANTES dele na ordem",
+           all(nome in NOMES_DOS_TEMAS and exigido in NOMES_DOS_TEMAS
+               and NOMES_DOS_TEMAS.index(exigido) < NOMES_DOS_TEMAS.index(nome)
+               for nome, exigidos in TEMAS_QUE_O_TEMA_EXIGE.items()
+               for exigido in exigidos))
+    parcial = PLACAR_PARCIAL.format(pedidos=1, existem=49, total=2)
+    b.caso("o placar da rodada parcial não se confunde com o da inteira e "
+           "diz que a inteira continua devida",
+           not parcial.startswith(TESTE_OK[:3]) and "PARCIAL" in parcial
+           and "inteira" in parcial)
 
 
 def _sobre_a_branch_que_a_issue_pede(b) -> None:
@@ -2410,7 +2852,7 @@ def _sobre_a_branch_que_a_issue_pede(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", str(alvo)],
-            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
             env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso)))
 
     fora = _executar("t-branch-fora")
@@ -2467,7 +2909,7 @@ def _sobre_a_branch_do_alvo_vizinho(b) -> None:
             [sys.executable, str(ESTE_INSTRUMENTO), "executar",
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", str(raiz)],
-            capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+            capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
             env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso),
                      **{VARIAVEL_DO_ALVO: str(alvo)}))
 
@@ -2525,7 +2967,7 @@ def _sobre_as_branches_proprias_do_alvo(b) -> None:
         [sys.executable, str(ESTE_INSTRUMENTO), "executar",
          "--roteiro", roteiro, "--trabalho", "t-branches-proprias",
          "--dir", b.evidencias, "--cwd", str(raiz)],
-        capture_output=True, text=True, timeout=TETO_DO_ENVELOPE,
+        capture_output=True, text=True, encoding="utf-8", timeout=TETO_DO_ENVELOPE,
         env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso),
                  **{VARIAVEL_DO_ALVO: str(alvo)}))
     evidencia = _evidencia_da_etapa(
@@ -2536,9 +2978,9 @@ def _sobre_as_branches_proprias_do_alvo(b) -> None:
          and not any("branch" in falta
                      for falta in evidencia.get("faltas") or []))
 
-    from encadeador import RAIZ_DO_ATLAS
-    caminho = RAIZ_DO_ATLAS / "execucoes" / "mexida-em-vizinho.json"
+    caminho = _roteiro_da_camada("mexida-em-vizinho.json")
     if not caminho.is_file():
+        b.caso(SEM_O_ROTEIRO_DA_CAMADA.format(caminho.name), False)
         return
     abertura = next(e["comando"] for e in json.loads(
         caminho.read_text(encoding="utf-8"))["etapas"]
@@ -2569,7 +3011,7 @@ def _sobre_as_branches_proprias_do_alvo(b) -> None:
     _com_o_lancador_da_camada(raiz)
     feito = subprocess.run(
         [encadeador._evidencia.bash_do_sistema(), "-c", abertura],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
         cwd=str(raiz), timeout=TETO_DO_ENVELOPE,
         env=dict(b.ambiente, ISSUE="41", ASSUNTO="base-do-projeto",
                  **{VARIAVEL_DO_ALVO: str(vizinho)}))
@@ -2983,17 +3425,19 @@ def _sobre_os_criterios_da_issue_na_verificacao(b) -> None:
                      "if sys.argv[1:2] == ['api']:\n"
                      "    sys.exit(0)\n"
                      "sys.exit(1)\n", encoding="utf-8")
-    guardado = b.ambiente
-    b.ambiente = dict(guardado, ENCADEADOR_GH=f"{sys.executable} {caido}")
-    surdo = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
-                         "t-gh-caido", "--dir", b.evidencias, "--cwd",
-                         b.pasta, "--configuracao", str(configuracao)],
-                        issue="7")
-    sem_issue = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
-                             "t-sem-issue-gh-caido", "--dir", b.evidencias,
-                             "--cwd", b.pasta, "--configuracao",
-                             str(configuracao)])
-    b.ambiente = guardado
+    def com_o_gh_caido():
+        com_issue = b.cli_dublê(
+            ["executar", "--roteiro", roteiro, "--trabalho", "t-gh-caido",
+             "--dir", b.evidencias, "--cwd", b.pasta, "--configuracao",
+             str(configuracao)], issue="7")
+        sem = b.cli_dublê(
+            ["executar", "--roteiro", roteiro, "--trabalho",
+             "t-sem-issue-gh-caido", "--dir", b.evidencias, "--cwd", b.pasta,
+             "--configuracao", str(configuracao)])
+        return com_issue, sem
+
+    surdo, sem_issue = _com_o_ambiente_trocado(
+        b, {"ENCADEADOR_GH": f"{sys.executable} {caido}"}, com_o_gh_caido)
     b.caso("issue declarada e gh caído: a verificação PARA — corpo não lido "
            "não é critério cumprido",
            surdo.returncode == EXIT_PAROU_NUM_PARA)
@@ -3114,7 +3558,7 @@ def _sobre_a_sessao_que_a_acusacao_reabre(b) -> None:
              "--roteiro", roteiro, "--trabalho", trabalho,
              "--dir", b.evidencias, "--cwd", b.pasta,
              "--configuracao", str(configuracao), *extra],
-            capture_output=True, text=True, timeout=TEMPO_DO_DUBLE,
+            capture_output=True, text=True, encoding="utf-8", timeout=TEMPO_DO_DUBLE,
             env=dict(b.ambiente, ENCADEADOR_SESSAO=_comando_de_script(falso)))
 
     def _evidencia_do_ciclo(trabalho, nome) -> Path:
@@ -3584,6 +4028,7 @@ def _sobre_a_notificacao_nos_marcos(b) -> None:
 
 TEMAS = (
     _sobre_a_entrada_da_suite,
+    _sobre_o_ambiente_que_um_tema_troca,
     _sobre_a_issue_de_politica,
     _sobre_a_conta_no_remoto,
     _sobre_a_conta_que_age,
@@ -3593,6 +4038,10 @@ TEMAS = (
     _sobre_os_enderecos_no_bloco,
     _sobre_a_issue,
     _sobre_a_branch_que_a_issue_pede,
+    _sobre_o_recibo_que_a_bancada_le,
+    _sobre_o_lancador_que_a_bancada_copia,
+    _sobre_o_placar_da_propria_bancada,
+    _sobre_o_filtro_por_tema,
     _sobre_a_branch_do_alvo_vizinho,
     _sobre_as_branches_proprias_do_alvo,
     _sobre_o_veto_de_integracao_inexistente,
@@ -3640,17 +4089,76 @@ def _onde_estourou(estouro) -> str:
     return f"{Path(ultimo.filename).name}:{ultimo.lineno}"
 
 
-def _comportamento(pasta):
-    bancada = Bancada(pasta)
-    bancada.forjar_o_dublê()
-    for tema in TEMAS:
+def _categoria_do_estouro(estouro) -> str:
+    return CATEGORIA_DE_ENTRADA_E_SAIDA if isinstance(estouro, OSError) \
+        else CATEGORIA_DE_OUTRA_EXCECAO
+
+
+def _rodar_os_temas(bancada, temas):
+    medidos, incompletos = [], []
+    for tema in temas:
         try:
             tema(bancada)
         except Exception as estouro:
-            bancada.caso(TEMA_QUE_ESTOUROU.format(
-                tema=tema.__name__, onde=_onde_estourou(estouro),
-                erro=f"{type(estouro).__name__}: {estouro}"), False)
-    return bancada.resultados
+            incompletos.append((
+                tema.__name__, _onde_estourou(estouro),
+                _categoria_do_estouro(estouro),
+                f"{type(estouro).__name__}: {estouro}"))
+            continue
+        medidos.append(tema.__name__)
+    return medidos, incompletos
+
+
+def falhas_dos_temas_nao_medidos(incompletos) -> list:
+    return [TEMA_INCOMPLETO.format(tema=tema, onde=onde, erro=erro,
+                                   categoria=categoria)
+            for tema, onde, categoria, erro in incompletos]
+
+
+NOMES_DOS_TEMAS = [tema.__name__ for tema in TEMAS]
+
+
+def pediram_tema(argumentos) -> bool:
+    return any(argumento == BANDEIRA_DO_TEMA
+               or argumento.startswith(BANDEIRA_DO_TEMA + "=")
+               for argumento in argumentos)
+
+
+def pedidos_de_tema(argumentos) -> list:
+    pedidos = []
+    for posicao, argumento in enumerate(argumentos):
+        if argumento.startswith(BANDEIRA_DO_TEMA + "="):
+            pedidos.append(argumento[len(BANDEIRA_DO_TEMA) + 1:])
+        elif argumento == BANDEIRA_DO_TEMA:
+            seguinte = argumentos[posicao + 1:posicao + 2]
+            pedidos.append(seguinte[0] if seguinte
+                           and not seguinte[0].startswith("--")
+                           else TEMA_SEM_VALOR)
+    return pedidos
+
+
+def temas_do_filtro(pedidos):
+    desconhecidos = [pedido for pedido in pedidos
+                     if pedido == TEMA_SEM_VALOR
+                     or not any(pedido in nome for nome in NOMES_DOS_TEMAS)]
+    if desconhecidos:
+        return [], desconhecidos
+    pedidos_pelo_nome = {nome for nome in NOMES_DOS_TEMAS
+                         if any(pedido in nome for pedido in pedidos)}
+    exigidos = {exigido for nome in pedidos_pelo_nome
+                for exigido in TEMAS_QUE_O_TEMA_EXIGE.get(nome, ())}
+    return [tema for tema in TEMAS
+            if tema.__name__ in pedidos_pelo_nome | exigidos], []
+
+
+def _comportamento(pasta, temas=None):
+    bancada = Bancada(pasta)
+    bancada.forjar_o_dublê()
+    if temas is not None and _sobre_a_configuracao not in temas:
+        bancada.configurar(bancada.pasta)
+    medidos, incompletos = _rodar_os_temas(bancada,
+                                           TEMAS if temas is None else temas)
+    return bancada.resultados, medidos, incompletos
 
 
 VOLTAS_DA_LIMPEZA = 3
@@ -3682,7 +4190,39 @@ def apagar_a_pasta_de_teste(pasta) -> None:
         pasta=pasta, voltas=VOLTAS_DA_LIMPEZA, erro=preso), file=sys.stderr)
 
 
+def testar_so_os_temas(pedidos) -> int:
+    escolhidos, desconhecidos = temas_do_filtro(pedidos)
+    if not pedidos:
+        print(NENHUM_TEMA_PEDIDO, file=sys.stderr)
+        return EXIT_ERRO_DE_USO_OU_AMBIENTE
+    if desconhecidos:
+        print(TEMA_DESCONHECIDO.format(pedido=", ".join(
+                                           repr(d) for d in desconhecidos),
+                                       nomes="\n".join(NOMES_DOS_TEMAS)),
+              file=sys.stderr)
+        return EXIT_ERRO_DE_USO_OU_AMBIENTE
+    pasta = tempfile.mkdtemp(prefix="encadeador-teste-")
+    try:
+        comportamento, medidos, incompletos = _comportamento(pasta, escolhidos)
+    finally:
+        apagar_a_pasta_de_teste(pasta)
+    falhas = [FALHA_DE_COMPORTAMENTO.format(rotulo)
+              for rotulo, passou in comportamento if not passou]
+    nao_medidos = falhas_dos_temas_nao_medidos(incompletos)
+    print(PLACAR_DOS_TEMAS_PEDIDOS.format(medidos=len(medidos),
+                                          pedidos=len(escolhidos)))
+    if falhas or nao_medidos:
+        for linha in falhas + nao_medidos:
+            print(FALHOU.format(linha))
+        return EXIT_TESTE_CAIU
+    print(PLACAR_PARCIAL.format(pedidos=len(escolhidos), existem=len(TEMAS),
+                                total=len(comportamento)))
+    return EXIT_COMPLETA
+
+
 def testar() -> int:
+    if pediram_tema(sys.argv[1:]):
+        return testar_so_os_temas(pedidos_de_tema(sys.argv[1:]))
     falhas = []
     pasta = tempfile.mkdtemp(prefix="encadeador-teste-")
     try:
@@ -3698,18 +4238,24 @@ def testar() -> int:
                 falhas.append(FALHA_DE_RECUSA_PELO_MOTIVO_ERRADO.format(
                     rotulo=rotulo,
                     stderr=berro[:LIMITE_DO_STDERR_NA_FALHA]))
-        comportamento = _comportamento(pasta)
+        comportamento, medidos, incompletos = _comportamento(pasta)
     finally:
         apagar_a_pasta_de_teste(pasta)
     falhas += [FALHA_DE_COMPORTAMENTO.format(rotulo)
                for rotulo, passou in comportamento if not passou]
+    nao_medidos = falhas_dos_temas_nao_medidos(incompletos)
+    print(PLACAR_DOS_TEMAS.format(medidos=len(medidos), existem=len(TEMAS)))
 
     total = len(RECUSA) + len(comportamento)
-    if falhas:
-        for falha in falhas:
-            print(FALHOU.format(falha))
-        print(FALHOU.format(FALHOU_QUANTOS.format(falhas=len(falhas),
-                                                  total=total)))
+    if falhas or nao_medidos:
+        for linha in falhas + nao_medidos:
+            print(FALHOU.format(linha))
+        if falhas:
+            print(FALHOU.format(FALHOU_QUANTOS.format(falhas=len(falhas),
+                                                      total=total)))
+        if nao_medidos:
+            print(FALHOU.format(RESUMO_DOS_NAO_MEDIDOS.format(
+                quantos=len(nao_medidos), temas=len(TEMAS))))
         return EXIT_TESTE_CAIU
     print(TESTE_OK.format(total=total, recusados=len(RECUSA),
                           comportamento=len(comportamento)))
@@ -3717,4 +4263,7 @@ def testar() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar())

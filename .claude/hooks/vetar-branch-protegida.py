@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 PROTEGIDAS_EMBUTIDAS = {
@@ -30,11 +31,16 @@ BANDEIRAS_GLOBAIS_QUE_COMEM_O_TOKEN_SEGUINTE = {
 
 SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
 EXPANSAO_QUE_ASPA_DUPLA_NAO_SEGURA = re.compile(r"\$\(|`|\)")
+SUBSTITUICAO_QUE_A_ASPA_DUPLA_NAO_SEGURA = re.compile(r"\$\(|`")
 DOCUMENTO_LITERAL_QUE_NAO_EXPANDE = re.compile(
     r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
 ASPA_SIMPLES = "'"
 ASPA_DUPLA = '"'
 ASPAS = "\"'"
+CONTRABARRA = "\\"
+ABRE_ASPA_ANSI = "$'"
+FECHA_A_ASPA = {ASPA_SIMPLES: ASPA_SIMPLES, ASPA_DUPLA: ASPA_DUPLA,
+                ABRE_ASPA_ANSI: ASPA_SIMPLES}
 
 VERBO_PUSH = "push"
 VERBO_BRANCH = "branch"
@@ -49,6 +55,13 @@ PREFIXO_DE_FORCAR_POR_REFSPEC = "+"
 ACAO_APAGAR = "apagar"
 ACAO_RENOMEAR = "renomear"
 ACAO_COMMIT = "commit"
+VERBO_COMMIT = "commit"
+BANDEIRAS_DO_COMMIT_QUE_NAO_GRAVAM = {"--dry-run", "--help", "-h"}
+OPCOES_DO_COMMIT_QUE_COMEM_O_SEGUINTE = {
+    "-m", "--message", "-F", "--file", "-C", "--reuse-message", "-c",
+    "--reedit-message", "-t", "--template", "--author", "--date",
+    "--cleanup", "--trailer", "--fixup", "--squash", "--pathspec-from-file"}
+LETRAS_DO_COMMIT_QUE_COMEM_O_SEGUINTE = "mFCct"
 VERBO_MERGE = "merge"
 VERBO_PULL = "pull"
 VERBOS_QUE_PODEM_MESCLAR = {VERBO_MERGE, VERBO_PULL}
@@ -140,6 +153,12 @@ MOTIVO_REESCREVER_A_BRANCH_ATUAL = (
 MOTIVO_SEM_AUTORIZACAO = (
     "{} sem autorização declarada — `autorizacoes.{}` não está ligado em {}")
 MARCA_DA_RECUSA_POR_AUTORIZACAO = "sem autorização declarada"
+MARCA_DA_RECUSA_PELO_CADASTRO = "declara como integração ou base"
+MOTIVO_COMMIT_NA_INTEGRACAO = (
+    "commit direto na branch '{}', que `nucleo/executor.json` "
+    + MARCA_DA_RECUSA_PELO_CADASTRO + " deste repositório "
+    "(`projetos.<nome>.branches`, ou o bloco `branches` da raiz para quem "
+    "não declara)")
 
 MANDA_GRAVAR = (
     "\nGrave o aprendizado antes de tentar de novo — regra 4, a memória "
@@ -167,6 +186,21 @@ RECUSA_POR_BRANCH_PROTEGIDA = (
     "caminho: trabalhe na sua branch e peça a promoção ao dono, que roda o "
     "comando ele mesmo. Se esta branch não deveria estar protegida, tire o "
     "nome de .claude/branches-protegidas.txt."
+)
+RECUSA_POR_COMMIT_NA_INTEGRACAO = (
+    "Regra 12 da camada: isto quer {}. A integração, da raiz ou de um "
+    "vizinho, recebe o trabalho pela mescla `git merge --no-ff` de uma "
+    "branch de trabalho, nunca por commit direto. O caminho: crie a branch "
+    "de trabalho com o nome que `branches.padrao_de_trabalho` de "
+    "`nucleo/executor.json` monta, a partir da base declarada, commite nela "
+    "e mescle na integração com `--no-ff`; a mescla que parou em conflito se "
+    "conclui com `git merge --continue`. Se a integração declarada está "
+    "errada, corrija o cadastro em `nucleo/executor.json`."
+)
+APRENDIZADO_DA_INTEGRACAO = (
+    "a integração, da raiz ou de vizinho, recebe trabalho pela mescla "
+    "`--no-ff` de uma branch de trabalho; commit direto nela é recusado "
+    "pelo que `nucleo/executor.json` declara."
 )
 
 FALHA_DEVIA_BARRAR = "  DEVIA BARRAR e passou — {}: {}"
@@ -365,9 +399,38 @@ def branch_pedida_ao_checkout(resto: list):
     return "", False
 
 
+def texto_que_o_shell_interpreta(comando: str) -> str:
+    sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
+    lido, aspa_aberta, i = [], None, 0
+    while i < len(sem_documento):
+        c = sem_documento[i]
+        if c == CONTRABARRA and aspa_aberta != ASPA_SIMPLES:
+            i += 2
+            continue
+        substituicao = (SUBSTITUICAO_QUE_A_ASPA_DUPLA_NAO_SEGURA.match(
+            sem_documento, i) if aspa_aberta == ASPA_DUPLA else None)
+        if substituicao:
+            lido.append(substituicao.group())
+            i = substituicao.end()
+            continue
+        if aspa_aberta is None and sem_documento.startswith(ABRE_ASPA_ANSI, i):
+            aspa_aberta = ABRE_ASPA_ANSI
+            i += len(ABRE_ASPA_ANSI)
+            continue
+        if aspa_aberta is None and c in ASPAS:
+            aspa_aberta = c
+        elif aspa_aberta is None:
+            lido.append(c)
+        elif c == FECHA_A_ASPA[aspa_aberta]:
+            aspa_aberta = None
+        i += 1
+    return comando if aspa_aberta else "".join(lido)
+
+
 def a_linha_so_encadeia(comando: str) -> bool:
     return not SEPARADORES_DE_COMANDO.search(
-        comando.replace(SEPARADOR_QUE_ENCADEIA, " "))
+        texto_que_o_shell_interpreta(comando).replace(
+            SEPARADOR_QUE_ENCADEIA, " "))
 
 
 def branch_depois_do_segmento(tokens: list, aqui: str, conhecidas: set) -> str:
@@ -492,6 +555,28 @@ def so_avanca_para_o_proprio_espelho(tokens: list, aqui: str) -> bool:
     return True
 
 
+def opcao_do_commit_come_o_seguinte(token: str) -> bool:
+    if token in OPCOES_DO_COMMIT_QUE_COMEM_O_SEGUINTE:
+        return True
+    grupo_de_letras = (token.startswith("-") and not token.startswith("--")
+                       and len(token) > 2)
+    return grupo_de_letras and token[-1] in LETRAS_DO_COMMIT_QUE_COMEM_O_SEGUINTE
+
+
+def commit_que_nao_grava(resto: list) -> bool:
+    valor_da_opcao_anterior = False
+    for token in resto:
+        if valor_da_opcao_anterior:
+            valor_da_opcao_anterior = False
+            continue
+        if token == FIM_DAS_BANDEIRAS:
+            return False
+        if token in BANDEIRAS_DO_COMMIT_QUE_NAO_GRAVAM:
+            return True
+        valor_da_opcao_anterior = opcao_do_commit_come_o_seguinte(token)
+    return False
+
+
 def acao_do_comando(tokens: list, aqui: str = "") -> str:
     if not tokens:
         return SEM_ACAO
@@ -510,6 +595,9 @@ def acao_do_comando(tokens: list, aqui: str = "") -> str:
         if so_avanca_para_o_proprio_espelho(tokens, aqui):
             return SEM_ACAO
         return ACAO_COMMIT
+    if (primeiro == VERBO_COMMIT and e_do_git
+            and commit_que_nao_grava(tokens[i + 1:])):
+        return SEM_ACAO
     for acao, verbos in VERBOS_POR_ACAO.items():
         if primeiro in verbos:
             return acao
@@ -571,7 +659,8 @@ def branches_por_incorporacao(raiz: Path) -> set:
 
 def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
                      permitido: dict = None, aqui: str = None,
-                     por_incorporacao: set = None, conhecidas: set = None):
+                     por_incorporacao: set = None, conhecidas: set = None,
+                     sem_commit_direto: set = frozenset()):
     permitido = OMISSAO_NAO_E_PERMISSAO if permitido is None else permitido
     aqui = branch_atual(alvo) if aqui is None else aqui
     por_incorporacao = (branches_por_incorporacao(alvo)
@@ -590,12 +679,15 @@ def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
         acao = acao_do_comando(tokens, aqui)
         if acao == ACAO_COMMIT and aqui in por_incorporacao:
             return MOTIVO_GRAVA_EM_PROTEGIDA.format(acao, aqui)
+        verbo, resto = verbo_e_resto(tokens)
+        if (acao == ACAO_COMMIT and verbo == VERBO_COMMIT
+                and e_git(tokens[0]) and aqui in sem_commit_direto):
+            return MOTIVO_COMMIT_NA_INTEGRACAO.format(aqui)
         if (acao and not permitido.get(acao, False)
                 and not recusa_por_autorizacao_pendente):
             recusa_por_autorizacao_pendente = MOTIVO_SEM_AUTORIZACAO.format(
                 acao, acao, ARQUIVO_CONFIGURACAO)
 
-        verbo, resto = verbo_e_resto(tokens)
         if verbo not in VERBOS_QUE_MEXEM_EM_BRANCH:
             continue
 
@@ -618,24 +710,73 @@ CHAVE_DOS_PROJETOS = "projetos"
 CHAVE_DO_REPOSITORIO = "repositorio"
 CHAVE_DO_SO_LEITURA = "somente_leitura"
 CHAVE_DAS_AUTORIZACOES_DO_VIZINHO = "autorizacoes"
+CHAVE_DAS_BRANCHES_DO_CADASTRO = "branches"
+CHAVE_DA_BASE = "base"
+CHAVE_DA_INTEGRACAO = "integracao"
+CHAVES_DAS_BRANCHES_SEM_COMMIT_DIRETO = (CHAVE_DA_INTEGRACAO, CHAVE_DA_BASE)
+REPOSITORIO_DA_PROPRIA_RAIZ = "."
+COMANDO_DO_REMOTO = ["git", "-C", "{alvo}", "remote", "get-url", "origin"]
+NOME_DO_REPOSITORIO_NO_FIM_DA_URL = re.compile(r"([^/\\:]+?)(?:\.git)?[/\\]*$")
 
 
-def _projetos(raiz: Path) -> dict:
+def _executor(raiz: Path) -> dict:
     try:
         dado = json.loads(
             (raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    projetos = (dado or {}).get(CHAVE_DOS_PROJETOS) or {}
+    return dado if isinstance(dado, dict) else {}
+
+
+def _projetos(raiz: Path) -> dict:
+    projetos = _executor(raiz).get(CHAVE_DOS_PROJETOS) or {}
     return projetos if isinstance(projetos, dict) else {}
 
 
-def _projeto_do_repositorio(raiz: Path, nome: str) -> dict:
-    for projeto in _projetos(raiz).values():
+def _projeto_pelo_nome(projetos: dict, nome: str) -> dict:
+    if not nome:
+        return {}
+    for projeto in projetos.values():
         if isinstance(projeto, dict) \
                 and projeto.get(CHAVE_DO_REPOSITORIO) == nome:
             return projeto
     return {}
+
+
+def _projeto_do_repositorio(raiz: Path, nome: str) -> dict:
+    return _projeto_pelo_nome(_projetos(raiz), nome)
+
+
+@lru_cache(maxsize=None)
+def endereco_do_remoto(alvo: Path) -> str:
+    comando = [parte.format(alvo=alvo) for parte in COMANDO_DO_REMOTO]
+    try:
+        r = subprocess.run(comando, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=TEMPO_LIMITE_DO_GIT)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def nome_do_repositorio_no_remoto(alvo: Path) -> str:
+    casou = NOME_DO_REPOSITORIO_NO_FIM_DA_URL.search(endereco_do_remoto(alvo))
+    return casou.group(1) if casou else ""
+
+
+def e_a_propria_raiz(raiz: Path, alvo: Path) -> bool:
+    if Path(alvo) == Path(raiz):
+        return True
+    do_alvo = endereco_do_remoto(Path(alvo))
+    return bool(do_alvo) and do_alvo == endereco_do_remoto(Path(raiz))
+
+
+def projeto_do_alvo(raiz: Path, alvo: Path) -> dict:
+    projetos = _projetos(raiz)
+    pela_pasta = _projeto_pelo_nome(projetos, Path(alvo).name)
+    if pela_pasta or not projetos or Path(alvo) == Path(raiz):
+        return pela_pasta
+    return _projeto_pelo_nome(projetos, nome_do_repositorio_no_remoto(alvo))
 
 
 def e_somente_leitura(raiz: Path, alvo: Path) -> bool:
@@ -643,11 +784,32 @@ def e_somente_leitura(raiz: Path, alvo: Path) -> bool:
     return bool(projeto.get(CHAVE_DO_SO_LEITURA))
 
 
-def autorizacoes_do_alvo(raiz: Path, alvo: Path) -> dict:
+def branches_sem_commit_direto(raiz: Path, alvo: Path,
+                               projeto: dict = None) -> set:
+    projeto = projeto_do_alvo(raiz, alvo) if projeto is None else projeto
+    if not projeto:
+        if not e_a_propria_raiz(raiz, alvo):
+            return set()
+        projeto = _projeto_pelo_nome(_projetos(raiz),
+                                     REPOSITORIO_DA_PROPRIA_RAIZ)
+    do_projeto = projeto.get(CHAVE_DAS_BRANCHES_DO_CADASTRO)
+    do_topo = _executor(raiz).get(CHAVE_DAS_BRANCHES_DO_CADASTRO)
+    nomes = set()
+    for chave in CHAVES_DAS_BRANCHES_SEM_COMMIT_DIRETO:
+        declarada = ((do_projeto.get(chave)
+                      if isinstance(do_projeto, dict) else None)
+                     or (do_topo.get(chave)
+                         if isinstance(do_topo, dict) else None))
+        if isinstance(declarada, str) and declarada.strip():
+            nomes.add(declarada.strip().lower())
+    return nomes
+
+
+def autorizacoes_do_alvo(raiz: Path, alvo: Path, projeto: dict = None) -> dict:
     if Path(alvo) == Path(raiz):
         return autorizacoes(alvo)
-    declarado = _projeto_do_repositorio(raiz, Path(alvo).name).get(
-        CHAVE_DAS_AUTORIZACOES_DO_VIZINHO)
+    projeto = projeto_do_alvo(raiz, alvo) if projeto is None else projeto
+    declarado = projeto.get(CHAVE_DAS_AUTORIZACOES_DO_VIZINHO)
     if isinstance(declarado, dict):
         permitido = dict(OMISSAO_NAO_E_PERMISSAO)
         for acao in permitido:
@@ -669,7 +831,7 @@ def recusa_por_nao_medir_o_alvo(alvo: str) -> int:
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_MEDIR_O_ALVO.format(alvo),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -679,7 +841,7 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -702,27 +864,34 @@ def decidir() -> int:
     alvo = repositorio_que_o_comando_muda(onde, raiz, comando)
     if e_somente_leitura(raiz, alvo):
         return SILENCIO
+    projeto = projeto_do_alvo(raiz, alvo)
     motivo = motivo_da_recusa(
         comando, nomes_protegidos(alvo), alvo,
-        autorizacoes_do_alvo(raiz, alvo), None,
-        branches_por_incorporacao(alvo))
+        autorizacoes_do_alvo(raiz, alvo, projeto), None,
+        branches_por_incorporacao(alvo), None,
+        branches_sem_commit_direto(raiz, alvo, projeto))
     if not motivo:
         return SILENCIO
     if nao_expandido := expansao_que_o_gancho_nao_resolve(comando):
         return recusa_por_nao_medir_o_alvo(nao_expandido)
 
-    e_recusa_por_autorizacao = MARCA_DA_RECUSA_POR_AUTORIZACAO in motivo
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
-        "permissionDecisionReason": (
-            RECUSA_POR_AUTORIZACAO.format(motivo)
-            + MANDA_GRAVAR.format(APRENDIZADO_DA_AUTORIZACAO)
-            if e_recusa_por_autorizacao
-            else RECUSA_POR_BRANCH_PROTEGIDA.format(motivo)
-            + MANDA_GRAVAR.format(APRENDIZADO_DA_BRANCH)),
+        "permissionDecisionReason": recusa_que_ensina_o_caminho(motivo),
     }}))
     return SILENCIO
+
+
+def recusa_que_ensina_o_caminho(motivo: str) -> str:
+    if MARCA_DA_RECUSA_POR_AUTORIZACAO in motivo:
+        return (RECUSA_POR_AUTORIZACAO.format(motivo)
+                + MANDA_GRAVAR.format(APRENDIZADO_DA_AUTORIZACAO))
+    if MARCA_DA_RECUSA_PELO_CADASTRO in motivo:
+        return (RECUSA_POR_COMMIT_NA_INTEGRACAO.format(motivo)
+                + MANDA_GRAVAR.format(APRENDIZADO_DA_INTEGRACAO))
+    return (RECUSA_POR_BRANCH_PROTEGIDA.format(motivo)
+            + MANDA_GRAVAR.format(APRENDIZADO_DA_BRANCH))
 
 
 BARRA = [
@@ -1093,6 +1262,200 @@ def _a_branch_julgada_e_a_do_alvo(falhas):
                 "negou sem nomear a branch declarada pelo vizinho"))
 
 
+FALHA_DO_CADASTRO = (
+    "[o cadastro guarda a integração da raiz e do vizinho] {} — esperado {}; "
+    "saiu {!r}")
+REMOTO_DE_TESTE = "https://exemplo.invalido/dono/{}.git"
+NEGA = True
+CALA = False
+RECUSA_QUE_ENSINA_A_MESCLA = ("homolog", "--no-ff")
+CASOS_DO_CADASTRO = (
+    ("commit direto na integração do vizinho", "atlas", "vizinho",
+     "git commit -m x", NEGA, RECUSA_QUE_ENSINA_A_MESCLA),
+    ("a mescla --no-ff de uma branch de trabalho é o caminho da entrega",
+     "atlas", "vizinho", "git merge --no-ff issue/1-x", CALA, ()),
+    ("commit na branch de trabalho do vizinho passa", "atlas", "vizinho",
+     "git switch issue/1-x && git commit -m x", CALA, ()),
+    ("commit pela bandeira -C, de fora do vizinho", "atlas", "atlas",
+     "git -C {vizinho} commit -m x", NEGA, RECUSA_QUE_ENSINA_A_MESCLA),
+    ("worktree com outro nome e o remoto certo vale o cadastro: commit na "
+     "branch de trabalho passa", "atlas", "vizinho-2", "git commit -m x",
+     CALA, ()),
+    ("worktree com outro nome e o remoto certo vale o cadastro: a base "
+     "declarada também não recebe commit direto", "atlas", "vizinho-3",
+     "git commit -m x", NEGA, ("develop", "--no-ff")),
+    ("vizinho cadastrado sem branches herda o padrão do topo", "atlas",
+     "herdeiro", "git commit -m x", NEGA, RECUSA_QUE_ENSINA_A_MESCLA),
+    ("vizinho sem cadastro fica como antes, sem lista inventada", "atlas",
+     "estranho", "git commit -m x", CALA, ()),
+    ("no vizinho, trocar para a integração e commitar na mesma linha",
+     "atlas", "vizinho-2", 'git switch homolog && git commit -m "x y"',
+     NEGA, RECUSA_QUE_ENSINA_A_MESCLA),
+    ("no vizinho, o ponto e vírgula dentro da mensagem não é separador do "
+     "shell e não desliga a troca de branch", "atlas", "vizinho-2",
+     'git switch homolog && git commit -m "x; y"', NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("no vizinho, a quebra de linha do documento literal também não "
+     "desliga a troca de branch", "atlas", "vizinho-2",
+     "git switch homolog && git commit -F - <<'FIM'\nx\nFIM", NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("a raiz também não recebe commit direto na integração que o bloco "
+     "branches declara", "atlas", "atlas", 'git commit -m "x y"', NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("a mescla --no-ff na integração da raiz passa", "atlas", "atlas",
+     "git merge --no-ff issue/1-x", CALA, ()),
+    ("HEAD destacado da raiz: trocar para a integração e commitar na "
+     "mesma linha", "atlas-destacada", "atlas-destacada",
+     'git switch homolog && git commit -m "x y"', NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("ponto e vírgula dentro da mensagem do commit, na raiz",
+     "atlas-destacada", "atlas-destacada",
+     'git switch homolog && git commit -m "x; y"', NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("a worktree destacada da raiz, vista de outra raiz, é achada pelo "
+     "remoto", "atlas", "atlas-destacada",
+     'git switch homolog && git commit -m "x y"', NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("commit em HEAD destacado da raiz não cai na integração", "atlas",
+     "atlas-destacada", "git commit -m x", CALA, ()),
+    ("--dry-run mostra o que entraria e não cria commit", "atlas",
+     "vizinho", "git commit --dry-run -m x", CALA, ()),
+    ("--help abre o manual e não cria commit", "atlas", "vizinho",
+     "git commit --help", CALA, ()),
+    ("-h mostra o uso e não cria commit", "atlas", "vizinho",
+     "git commit -h", CALA, ()),
+    ("a mensagem que se chama --dry-run não livra o commit", "atlas",
+     "vizinho", "git commit -m --dry-run", NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("a mescla com conflito se conclui por git merge --continue", "atlas",
+     "vizinho", "git merge --continue", CALA, ()),
+    ("no vizinho, a aspa escapada dentro da aspa dupla não fecha a "
+     "mensagem, e o ponto e vírgula seguinte ainda é texto", "atlas",
+     "vizinho-2", 'git switch homolog && git commit -m "x\\"; y"', NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("no vizinho, o '\\'' fecha a aspa simples, escapa uma aspa e reabre",
+     "atlas", "vizinho-2",
+     "git switch homolog && git commit -m 'x'\\''; y'", NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+    ("no vizinho, dentro de $'...' a contrabarra escapa a aspa simples",
+     "atlas", "vizinho-2",
+     "git switch homolog && git commit -m $'x\\'; y'", NEGA,
+     RECUSA_QUE_ENSINA_A_MESCLA),
+)
+
+FALHA_DO_ENCADEAMENTO = (
+    "  [a troca de branch se acompanha pelo que o shell encadeia] {} — "
+    "esperado {}, saiu {}: {!r}")
+CASOS_DO_ENCADEAMENTO = (
+    ("a contrabarra escapada fecha a aspa dupla, e o ponto e vírgula "
+     "seguinte é do shell",
+     'git switch homolog && git commit -m "x\\\\"; git status', False),
+    ("dentro da aspa simples a contrabarra não escapa, e a aspa fecha",
+     "git switch homolog && git commit -m 'x\\'; git status", False),
+    ("fora das aspas a contrabarra torna o ponto e vírgula literal",
+     "git switch homolog && git commit -m x\\; y", True),
+    ("fora das aspas a aspa escapada não abre aspa, e o ponto e vírgula "
+     "seguinte é do shell",
+     'git switch homolog && git commit -m x\\" ; git status', False),
+    ("a aspa escapada dentro de $'...' não fecha, e a aspa seguinte fecha",
+     "git switch homolog && git commit -m $'x\\''; git status", False),
+)
+
+
+def _o_encadeamento_le_o_escape_do_shell(falhas):
+    for rotulo, comando, esperado in CASOS_DO_ENCADEAMENTO:
+        saiu = a_linha_so_encadeia(comando)
+        if saiu != esperado:
+            falhas.append(FALHA_DO_ENCADEAMENTO.format(
+                rotulo, esperado, saiu, comando))
+
+
+def _o_cadastro_guarda_a_integracao(falhas):
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+
+    def _git(onde, *args):
+        _subprocess.run(["git", "-C", str(onde), "-c", "user.name=Prova",
+                         "-c", "user.email=t@t", *args],
+                        check=True, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
+
+    def _hook(projeto_dir, cwd, comando):
+        entrada = json.dumps({"tool_input": {"command": comando},
+                              "cwd": str(cwd)})
+        r = _subprocess.run(
+            [sys.executable, str(Path(__file__).resolve())],
+            input=entrada, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            env={**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(projeto_dir)})
+        return r.stdout
+
+    with _tempfile.TemporaryDirectory(prefix="vetar-cadastro-") as pasta:
+        raiz = Path(pasta).resolve()
+        pastas = {nome: raiz / nome for nome in (
+            "atlas", "atlas-destacada", "vizinho", "vizinho-2", "vizinho-3",
+            "herdeiro", "estranho")}
+        for nome in ("atlas", "vizinho", "herdeiro", "estranho"):
+            pastas[nome].mkdir()
+            _git(pastas[nome], "init", "-q", "-b", "homolog", ".")
+            _git(pastas[nome], "commit", "-q", "--allow-empty", "-m", "x")
+        atlas = pastas["atlas"]
+        (atlas / "nucleo").mkdir()
+        (atlas / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+            {CHAVE_DAS_AUTORIZACOES: {"commit": True}}), encoding="utf-8")
+        _git(atlas, "add", ARQUIVO_CONFIGURACAO)
+        _git(atlas, "commit", "-q", "-m", "configuracao")
+        _git(atlas, "remote", "add", "origin", REMOTO_DE_TESTE.format("atlas"))
+        _git(atlas, "worktree", "add", "-q", "--detach",
+             str(pastas["atlas-destacada"]))
+        vizinho = pastas["vizinho"]
+        _git(vizinho, "remote", "add", "origin",
+             REMOTO_DE_TESTE.format("vizinho"))
+        _git(vizinho, "branch", "issue/1-x")
+        _git(vizinho, "branch", "develop")
+        _git(vizinho, "worktree", "add", "-q", str(pastas["vizinho-2"]),
+             "issue/1-x")
+        _git(vizinho, "worktree", "add", "-q", str(pastas["vizinho-3"]),
+             "develop")
+        (atlas / ARQUIVO_EXECUTOR).write_text(json.dumps({
+            CHAVE_DAS_BRANCHES_DO_CADASTRO: {CHAVE_DA_BASE: "homolog",
+                                             CHAVE_DA_INTEGRACAO: "homolog"},
+            CHAVE_DOS_PROJETOS: {
+                "v": {CHAVE_DO_REPOSITORIO: "vizinho",
+                      CHAVE_DAS_BRANCHES_DO_CADASTRO: {
+                          CHAVE_DA_BASE: "develop",
+                          CHAVE_DA_INTEGRACAO: "homolog"},
+                      CHAVE_DAS_AUTORIZACOES_DO_VIZINHO: {"commit": True}},
+                "h": {CHAVE_DO_REPOSITORIO: "herdeiro",
+                      CHAVE_DAS_AUTORIZACOES_DO_VIZINHO: {"commit": True}},
+            }}), encoding="utf-8")
+        (pastas["atlas-destacada"] / ARQUIVO_EXECUTOR).write_text(
+            (atlas / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"),
+            encoding="utf-8")
+        (pastas["estranho"] / "nucleo").mkdir()
+        (pastas["estranho"] / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+            {CHAVE_DAS_AUTORIZACOES: {"commit": True}}), encoding="utf-8")
+
+        for (rotulo, da_sessao, onde, comando, nega,
+             trechos) in CASOS_DO_CADASTRO:
+            saida = _hook(pastas[da_sessao], pastas[onde],
+                          comando.format(vizinho=vizinho))
+            negou = DECISAO_DE_NEGAR in saida
+            faltou_trecho = any(t not in saida for t in trechos)
+            if negou != nega or faltou_trecho:
+                falhas.append(FALHA_DO_CADASTRO.format(
+                    rotulo, "negar citando " + ", ".join(trechos) if nega
+                    else "calar", saida.strip()[:240]))
+
+    ensina = recusa_que_ensina_o_caminho(
+        MOTIVO_COMMIT_NA_INTEGRACAO.format("homolog"))
+    if not all(trecho in ensina for trecho in (
+            "Regra 12", "--no-ff", ARQUIVO_EXECUTOR, "regra 4",
+            "`conhecimento/`")):
+        falhas.append(FALHA_RECUSA_NAO_ENSINA.format(
+            "commit direto na integração"))
+
+
 def _as_duas_recusas_ensinam(falhas):
     por_autorizacao = (RECUSA_POR_AUTORIZACAO.format("empurrar")
                        + MANDA_GRAVAR.format(APRENDIZADO_DA_AUTORIZACAO))
@@ -1232,8 +1595,11 @@ def testar() -> int:
     _as_duas_recusas_ensinam(falhas)
     _a_branch_julgada_e_a_do_alvo(falhas)
     _o_init_encadeado_e_julgado_no_bercario(falhas)
+    _o_cadastro_guarda_a_integracao(falhas)
+    _o_encadeamento_le_o_escape_do_shell(falhas)
 
-    total = (6 + len(GRAVA_EM_PROTEGIDA)
+    total = (6 + len(CASOS_DO_CADASTRO) + 1 + len(CASOS_DO_ENCADEAMENTO)
+             + len(GRAVA_EM_PROTEGIDA)
              * (len(BRANCHES_POR_INCORPORACAO_DO_TESTE) + 2)
              + len(SO_PEDEM) + len(BARRA) + len(DEIXA_PASSAR)
              + len(BARRA_SEM_AUTORIZACAO) * 2 + 1

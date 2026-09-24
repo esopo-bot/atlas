@@ -5,9 +5,11 @@ Módulo só chega onde alguém pedir pelo nome, e são três comandos:
 
 | Comando | O que faz |
 | --- | --- |
-| `python montar.py --modulos` | lista os módulos que o instalador carrega |
-| `python montar.py --modulo <nome>` | instala esse módulo no repositório de destino |
-| `python montar.py --atualizar` | atualiza o que já está instalado, sem trazer módulo novo |
+| `python <pasta do clone do atlas>/montar.py --modulos` | lista os módulos que o instalador leva |
+| `python <pasta do clone do atlas>/montar.py --modulo <nome>` | instala esse módulo no repositório de destino |
+| `python <pasta do clone do atlas>/montar.py --atualizar` | atualiza o que já está instalado, sem trazer módulo novo |
+
+Os três rodam de dentro do repositório de destino.
 
 Onde cada coisa mora:
 [mapa do repositório](../conhecimento/mapa-do-repositorio.md).

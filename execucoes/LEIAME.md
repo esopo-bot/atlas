@@ -202,9 +202,10 @@ a camada não tem opinião sobre a topologia do seu repositório.
 
 #### O que ele demonstra
 
-Nove estágios: abrir a branch de trabalho a partir da base declarada →
-trabalhar → medir se o trabalho foi commitado → **empurrar a branch para o
-repositório durável** → **revisar o diff pela régua da stack** → medir se o
+Os estágios, na ordem do `entrega.json`: abrir a branch de trabalho a partir
+da base declarada → trabalhar → medir se o trabalho foi commitado →
+**empurrar a branch para o repositório durável** → **revisar o diff pela
+régua da stack** → **revisão geral do diff, por sessão independente** → medir se o
 resultado entra na branch de integração declarada → verificação → escrever o
 corpo do pedido de revisão → aprovação manual.
 
@@ -536,9 +537,9 @@ Para cada peça que você encontrar, pergunte nesta ordem:
 - [ ] Cerca que reconhece uma **lista fechada de programas**: liste todo
       programa que o parser de comando conhece e pergunte o que produz o
       mesmo efeito e NÃO está na lista. A falha mora dentro do mesmo canal,
-      não entre canais — em 03/09/2026 foi `curl -o`, `wget -O`, `rsync`,
-      `perl -i` e `dd of=` atravessando quatro cercas de escrita que só
-      conheciam `rm`, `mv`, `cp`, `tee` e `sed -i`.
+      não entre canais — `curl -o`, `wget -O`, `rsync`, `perl -i` e
+      `dd of=` escrevem tanto quanto `rm`, `mv`, `cp`, `tee` e `sed -i`, e
+      atravessam a cerca de escrita que só conhece estes.
 - [ ] **Antes de atacar um gancho, leia a issue mais recente que o tocou**
       (`gh issue list --search "<nome do gancho>"`). Achado que a issue já
       discutiu e deixou fora de propósito não é achado — é comentário nela.

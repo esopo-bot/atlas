@@ -121,7 +121,7 @@ def recusar(razao: str) -> int:
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": razao,
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -131,7 +131,7 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 

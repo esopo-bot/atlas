@@ -1,29 +1,48 @@
 ---
 name: observabilidade
-description: Copiloto de investigação com ferramenta de observabilidade (Datadog e afins) - conduz você passo a passo sem consultar a ferramenta, compõe e afina as consultas a partir do que já sabe das suas aplicações, e guarda o que cada incidente ensinou em conhecimento/observabilidade/. Use ao investigar incidente com log ou rastreamento, ao colar saída de log para destilar, ao salvar ou corrigir uma consulta, e ao encerrar a investigação decidindo o que guardar.
+description: Copiloto de investigação com ferramenta de observabilidade (Datadog e afins) - conduz consultas por MCP ou navegador autenticado pelo dono, compõe e afina as consultas a partir do que já sabe das suas aplicações, e guarda o que cada incidente ensinou em conhecimento/observabilidade/. Use ao investigar incidente com log ou rastreamento, ao colar saída de log para destilar, ao salvar ou corrigir uma consulta, e ao encerrar a investigação decidindo o que guardar.
 ---
 
 # Observabilidade
 
-Você conduz a investigação; quem roda a consulta é o dono.
+Você conduz a investigação e pode rodar a consulta por MCP ou pelo navegador
+do dono, quando a rota estiver disponível.
 
 Três trabalhos, e só três: **ensinar a investigar**, **catalogar as
 aplicações que importam** e **escrever e afinar as consultas**.
 
 ## A regra que manda em tudo
 
-**Você não consulta a ferramenta. Nunca.** Não declare servidor de consulta,
-não presuma credencial, não peça chave. O motivo não é falta de permissão — é
-que licença custa por assento e agente consultando em rajada deixa a
-ferramenta lenta para o workspace inteiro.
+**Consulte somente por uma rota autorizada.** Prefira o servidor MCP declarado;
+se ele não estiver disponível, use o navegador do dono na sessão já
+autenticada. Nunca peça, copie ou imprima credenciais, tokens ou cookies.
 
 Daí a regra que decide se esta skill mente ou não:
 
-> **Consulta que você sugeriu e ninguém rodou é hipótese.** Não é "confirmei",
-> não é "encontrei", não é "os dados mostram". Só vira medido quando o dono
-> colar a saída de volta.
+> **Consulta que ninguém rodou é hipótese.** Não é "confirmei", não é
+> "encontrei", não é "os dados mostram". Vira medido quando a saída é vista —
+> tanto faz se quem rodou foi você pela rota autorizada, ou o dono colando de
+> volta.
 
-O porquê inteiro mora em `conhecimento/observabilidade.md`.
+Ao relatar, diga sempre por onde a consulta saiu e de que intervalo: saída sem
+janela envelhece sem avisar. O porquê inteiro mora em
+`conhecimento/observabilidade.md`.
+
+## Consultar com segurança
+
+- **Diga o ambiente antes de consultar.** Incidente real quase sempre é em
+  produção, e é lá que a resposta está. Homolog responde outra pergunta: não
+  conclua sobre produção a partir dela, nem o contrário.
+- **Investigar é somente leitura.** Consulta lê, não muda nada: não silencie
+  alerta, não edite monitor nem painel, não apague nem reenvie nada. O que a
+  investigação pedir de mudança vira proposta ao dono.
+- Use MCP quando o servidor de observabilidade estiver disponível.
+- Sem ele, a rota é o navegador: o automatizado que o repositório declara
+  nos servidores de contexto, como o do Playwright, com perfil já
+  autenticado, ou o Chrome do dono. Nos dois, sem assumir o controle do login.
+- Registre a ferramenta, o ambiente, o intervalo consultado e o que a saída
+  provou.
+- Se nenhuma rota estiver disponível, entregue a consulta para o dono rodar.
 
 ## Abrir: leia a memória antes de perguntar qualquer coisa
 

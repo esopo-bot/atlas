@@ -137,8 +137,11 @@ NAO_COUBE_NO_TETO = ("não terminou em {} — a coleção pela metade foi desfei
                      "e o alvo entra inteiro na próxima ronda; se ele é "
                      "grande, rode com `--tempo-limite` maior")
 ANDANDO = "andando"
-MARCA_DE_CONCLUSAO_NO_REGISTRO = "Indexing completed successfully"
+CONCLUSAO_QUE_NAO_DIZ_DE_QUEM = "Indexing completed successfully"
+MARCA_DE_CONCLUSAO_DO_ALVO = "Background indexing completed for '"
+FECHO_DA_CONCLUSAO_DO_ALVO = "' using"
 MARCA_DE_FALHA_NO_REGISTRO = "Indexing failed for"
+FECHO_DA_FALHA_DO_ALVO = ":"
 MARCAS_DE_SINCRONIZACAO_FEITA = ("Index sync completed for all codebases",
                                  "No codebases indexed. Skipping sync")
 MARCA_DE_SINCRONIZACAO_PULADA = "Another MCP process is already syncing"
@@ -401,11 +404,35 @@ def ambiente_que_nao_atrapalha(ambiente: dict, refazer: bool = False) -> dict:
     return completo
 
 
-def veredito_do_registro(linhas: list):
+def forma_comparavel(caminho: str) -> str:
+    return os.path.normcase(os.path.normpath(caminho.strip()))
+
+
+def a_linha_nomeia_o_alvo(linha: str, marca: str, fecho: str,
+                          caminho: str, o_resto_pode_trazer_o_fecho: bool
+                          ) -> bool:
+    if marca not in linha:
+        return False
+    depois_da_marca = linha.split(marca, 1)[1]
+    esperado = forma_comparavel(caminho)
+    corte = len(depois_da_marca)
+    while (corte := depois_da_marca.rfind(fecho, 0, corte)) >= 0:
+        if forma_comparavel(depois_da_marca[:corte]) == esperado:
+            return True
+        if not o_resto_pode_trazer_o_fecho:
+            return False
+    return False
+
+
+def veredito_do_registro(linhas: list, caminho: str):
     for linha in linhas:
-        if MARCA_DE_CONCLUSAO_NO_REGISTRO in linha:
+        if a_linha_nomeia_o_alvo(linha, MARCA_DE_CONCLUSAO_DO_ALVO,
+                                 FECHO_DA_CONCLUSAO_DO_ALVO, caminho,
+                                 o_resto_pode_trazer_o_fecho=False):
             return FEITO, linha.strip()
-        if MARCA_DE_FALHA_NO_REGISTRO in linha:
+        if a_linha_nomeia_o_alvo(linha, MARCA_DE_FALHA_NO_REGISTRO + " ",
+                                 FECHO_DA_FALHA_DO_ALVO, caminho,
+                                 o_resto_pode_trazer_o_fecho=True):
             return FALHOU, linha.strip()
     return None, ""
 
@@ -613,7 +640,9 @@ class Servidor:
     def espera_terminar(self, caminho: str, teto: int, intervalo: int):
         comeco = time.monotonic()
         while time.monotonic() - comeco < teto:
-            dito, linha = veredito_do_registro(self.desde_a_partida())
+            dito, linha = veredito_do_registro(
+                self.desde_a_partida(),
+                str(Path(caminho).expanduser().resolve()))
             if dito:
                 return dito, linha
             time.sleep(intervalo)
@@ -1064,8 +1093,8 @@ def testar() -> int:
         caso("e ele diz como levantar, em vez de deixar a sessão adivinhar",
              "docker compose" in dito.getvalue())
 
-        concluiu = ("[LOG] [BACKGROUND-INDEX] ✅ Indexing completed "
-                    "successfully! Files: 20, Chunks: 310\n")
+        concluiu = ("[LOG] [BACKGROUND-INDEX] Background indexing completed "
+                    "for 'D:\\acervo' using AST splitter.\n")
         falhou_no_lote = ("[ERROR] [BACKGROUND-INDEX] Indexing failed for "
                           "D:\\acervo: Embedding API error (batch size: "
                           "100): fetch failed\n")
@@ -1073,12 +1102,15 @@ def testar() -> int:
         caso("o registro do servidor diz que concluiu — e e SO por ele que a "
              "ronda sabe: a consulta de estado roda a recuperacao, que grava "
              "como completo o alvo em curso que ja tem linhas no banco",
-             veredito_do_registro([progresso, concluiu]) == (FEITO,
-                                                             concluiu.strip()))
-        caso("registro com falha e falha, com a linha do servidor",
-             veredito_do_registro([progresso, falhou_no_lote])[0] == FALHOU)
+             veredito_do_registro([progresso, concluiu], "D:\\acervo")
+             == (FEITO, concluiu.strip()))
+        caso("registro com falha e falha, com a linha do servidor — e a "
+             "mensagem do servidor pode trazer dois-pontos sem confundir o "
+             "caminho",
+             veredito_do_registro([progresso, falhou_no_lote],
+                                  "D:\\acervo")[0] == FALHOU)
         caso("registro so com progresso ainda nao decide",
-             veredito_do_registro([progresso]) == (None, ""))
+             veredito_do_registro([progresso], "D:\\acervo") == (None, ""))
         caso("a sincronizacao inicial fecha por qualquer das duas marcas",
              sincronizacao_terminou(["[LOG] [SYNC-DEBUG] Index sync completed "
                                      "for all codebases in 812ms\n"])
@@ -1165,6 +1197,92 @@ def testar() -> int:
 
             def encerra(self):
                 self.chamadas.append(("encerra", ""))
+
+        class ServidorSoComORegistro(Servidor):
+            def __init__(self, registro):
+                self.registro = list(registro)
+                self.partida = 0
+                self.perguntou_por = []
+
+            def estado(self, caminho, teto):
+                self.perguntou_por.append(caminho)
+                return None
+
+        alvo_lento = str(raiz / "alvo-lento")
+        alvo_rapido = str(raiz / "alvo-rapido")
+        concluiu_sem_dizer_quem = (
+            f"[BACKGROUND-INDEX] {CONCLUSAO_QUE_NAO_DIZ_DE_QUEM}! Files: 2")
+
+        def concluiu_o(caminho):
+            return (f"[BACKGROUND-INDEX] {MARCA_DE_CONCLUSAO_DO_ALVO}"
+                    f"{caminho}{FECHO_DA_CONCLUSAO_DO_ALVO} AST splitter.")
+
+        so_o_rapido = ServidorSoComORegistro(
+            [concluiu_sem_dizer_quem, concluiu_o(alvo_rapido)])
+        caso("a conclusao de OUTRO alvo nao encerra a espera deste: a linha "
+             "que nao diz de quem e nao decide nada, e a que diz nomeia outro",
+             so_o_rapido.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
+        caso("e a espera NUNCA pergunta o estado: a consulta roda a "
+             "recuperacao, que grava como completo o alvo ainda em curso",
+             so_o_rapido.perguntou_por == [])
+        depois_o_lento = ServidorSoComORegistro(
+            [concluiu_sem_dizer_quem, concluiu_o(alvo_rapido),
+             concluiu_sem_dizer_quem, concluiu_o(alvo_lento)])
+        dito_do_lento, linha_do_lento = depois_o_lento.espera_terminar(
+            alvo_lento, 5, 0)
+        caso("quando chega a conclusao que nomeia ESTE alvo, a espera devolve "
+             "feito com a linha dele",
+             dito_do_lento == FEITO and "alvo-lento" in linha_do_lento)
+        vizinho_concluiu = ServidorSoComORegistro(
+            [concluiu_o(alvo_lento + "-2")])
+        caso("conclusao de um alvo cujo caminho so COMECA igual nao e a deste",
+             vizinho_concluiu.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
+        falhou_o_outro = ServidorSoComORegistro(
+            [f"{MARCA_DE_FALHA_NO_REGISTRO} {alvo_rapido}: sem espaco"])
+        caso("a falha de OUTRO alvo nao derruba este",
+             falhou_o_outro.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
+        nome_com_o_fecho = ServidorSoComORegistro(
+            [concluiu_o(alvo_lento + FECHO_DA_CONCLUSAO_DO_ALVO + " outro")])
+        caso("pasta cujo NOME traz o fecho da linha nao se passa pelo alvo "
+             "de nome mais curto: na conclusao so o ultimo fecho separa o "
+             "caminho do resto",
+             nome_com_o_fecho.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
+        o_proprio_com_o_fecho = ServidorSoComORegistro(
+            [concluiu_o(alvo_lento + FECHO_DA_CONCLUSAO_DO_ALVO + " outro")])
+        caso("e essa mesma pasta, quando e ela a esperada, conclui",
+             o_proprio_com_o_fecho.espera_terminar(
+                 alvo_lento + FECHO_DA_CONCLUSAO_DO_ALVO + " outro",
+                 5, 0)[0] == FEITO)
+        cita_o_outro = ServidorSoComORegistro(
+            [f"{MARCA_DE_FALHA_NO_REGISTRO} {alvo_rapido}: nao li "
+             f"{alvo_lento}: acesso negado"])
+        caso("falha de outro alvo cuja MENSAGEM cita este nao e falha deste: "
+             "o caminho se compara inteiro, nao por pedaco de texto",
+             cita_o_outro.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
+        vizinho_de_nome = ServidorSoComORegistro(
+            [f"{MARCA_DE_FALHA_NO_REGISTRO} {alvo_lento}-2: sem espaco"])
+        caso("nem a falha de um alvo cujo caminho so COMECA igual",
+             vizinho_de_nome.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
+        com_outra_barra = alvo_lento.replace(os.sep, "/")
+        falhou_este = ServidorSoComORegistro(
+            [f"{MARCA_DE_FALHA_NO_REGISTRO} {com_outra_barra}: sem espaco"])
+        dito_da_falha, linha_da_falha = falhou_este.espera_terminar(
+            alvo_lento, 1, 0)
+        caso("a falha DESTE alvo derruba, mesmo com o caminho escrito com a "
+             "outra barra, e a linha volta para o relato",
+             dito_da_falha == FALHOU and "sem espaco" in linha_da_falha)
+        concluiu_com_outra_barra = ServidorSoComORegistro(
+            [concluiu_o(com_outra_barra)])
+        caso("e a conclusao deste alvo vale com o caminho escrito com a "
+             "outra barra",
+             concluiu_com_outra_barra.espera_terminar(
+                 alvo_lento, 5, 0)[0] == FEITO)
+        antes_da_partida = ServidorSoComORegistro(
+            [concluiu_o(alvo_lento), "linha de depois"])
+        antes_da_partida.partida = 1
+        caso("conclusao do mesmo alvo ANTERIOR ao disparo nao vale para a "
+             "rodada de agora: a espera le so desde a partida",
+             antes_da_partida.espera_terminar(alvo_lento, 1, 0)[0] == ANDANDO)
 
         fingido = ServidorFingido(desfaz_ok=False)
         saida = io.StringIO()
@@ -1302,4 +1420,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())

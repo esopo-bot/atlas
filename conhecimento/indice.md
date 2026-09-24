@@ -3,12 +3,13 @@
 Busca por significado no código dos repositórios: a sessão pergunta "onde a
 autenticação decide quem entra" e recebe o trecho, sem depender de acertar a
 palavra que o autor usou. Chega pelo módulo `indice`
-(`python montar.py --modulo indice`); o cartão do módulo diz como subir.
+(`python <pasta do clone do atlas>/montar.py --modulo indice`, rodado de
+dentro do repositório que o recebe); o cartão do módulo diz como subir.
 
 ## Quando ele vale a pena — a régua medida
 
-Índice cobra manutenção e disco; `grep` é de graça. A régua, medida em
-31/08/2026 sobre um workspace real de 10 repositórios:
+Índice cobra manutenção e disco; `grep` é de graça. A régua, medida sobre um
+workspace real de vários repositórios:
 
 - Abaixo de ~2 mil arquivos rastreados, o `grep` ganha — o acervo cabe em
   poucas varreduras.
@@ -33,10 +34,10 @@ git ls-files | wc -l
 | `buscar.py` | a porta de busca da sessão: HTTP puro, busca híbrida, biblioteca padrão | `.agents/indice/buscar.py` |
 | `subir.py` | sobe as duas peças e liga a placa de vídeo quando o docker a entrega | `.agents/indice/subir.py` |
 
-**A porta normal para o acervo é o `buscar.py`, não o cliente MCP.** Medido em
-02/09/2026: a política de uma organização passou a barrar todo servidor MCP
-fora de uma lista fechada, e os servidores sumiram da sessão sem aviso — o
-índice continuou de pé, mas inalcançável. O buscador fala HTTP com o banco e
+**A porta normal para o acervo é o `buscar.py`, não o cliente MCP.** A
+política de uma organização pode barrar todo servidor MCP fora de uma lista
+fechada, e os servidores somem da sessão sem aviso — o índice continua de
+pé, mas inalcançável. O buscador fala HTTP com o banco e
 com o gerador de vetores, usa só a biblioteca padrão do Python e faz a mesma
 busca híbrida que o MCP fazia. Onde a política deixar, o MCP segue funcionando
 ao lado; não há nada a desfazer.
@@ -55,13 +56,14 @@ Um comando: ele sobe as duas peças, baixa o modelo se faltar, e **liga a placa
 de vídeo sozinho quando houver uma que o docker entregue**. `--ensaio` mostra a
 decisão e o comando sem subir nada.
 
-**Quem já tinha o módulo instalado roda `python montar.py --modulo indice` de
-novo para receber o `subir.py`.** O `--sincronizar` regrava cópia que já está
+**Quem já tinha o módulo instalado roda
+`python <pasta do clone do atlas>/montar.py --modulo indice` de novo para
+receber o `subir.py`.** O `--sincronizar` regrava cópia que já está
 em uso e não instala peça que o módulo ganhou depois — instalar é do
 `--modulo`. Sem esse passo, o módulo fica meio atualizado e calado.
 
-**Por que a placa não é opcional na prática — medido em 07/09/2026**, na mesma
-máquina, com o mesmo modelo e o mesmo acervo:
+**Por que a placa não é opcional na prática — medido** na mesma máquina, com
+o mesmo modelo e o mesmo acervo:
 
 | | pedaços por minuto | um alvo de 408 pedaços |
 | --- | --- | --- |
@@ -99,7 +101,8 @@ calado. O `subir.py` nomeia o ajuste quando ele existe; à mão, nomeie você.
 O registro dá à sessão a ferramenta `search_code` do MCP. Sem ele, ou onde
 a política o barrar, a busca é pelo `buscar.py` e nada mais muda.
 
-**Quem registra é o instalador.** `python montar.py --atualizar` escreve o
+**Quem registra é o instalador.**
+`python <pasta do clone do atlas>/montar.py --atualizar` escreve o
 servidor `indice` no `.mcp.json` da raiz se ele ainda não estiver lá — no
 Windows, por `cmd /c npx`, senão o servidor não sobe — e nunca sobrescreve
 uma entrada `indice` que você já tenha. Na mesma passada ele faz duas coisas
@@ -128,8 +131,7 @@ A versão do servidor MCP vai presa, nunca `@latest`: o `npx` baixa a versão
 que estiver publicada a cada abertura de sessão, e uma versão nova que mude o
 formato do índice derruba a busca calada. Para subir de versão, troque o
 número aqui, remova e registre de novo (`claude mcp remove indice` antes do
-`add`), e reindexe se a nota de versão pedir. Medido em 02/09/2026: a versão
-publicada era a 0.1.15.
+`add`), e reindexe se a nota de versão pedir.
 
 As portas saem de `${INDICE_PORTA_MILVUS}`, `${INDICE_PORTA_SAUDE}` e
 `${INDICE_PORTA_OLLAMA}` se as padrão estiverem ocupadas. As ferramentas que o
@@ -282,7 +284,7 @@ de sessão.
 
 ### 5. O servidor está declarado e some da sessão sem aviso — a lista branda
 
-Medido em 03/09/2026: a organização empurra, por configuração gerenciada do
+Uma organização pode empurrar, por configuração gerenciada do
 Claude Code, uma lista `allowedMcpServers` só com nomes e URLs dos
 conectores dela. Efeito: **todo servidor local declarado no `.mcp.json` some
 da sessão em silêncio**, e servidor HTTP fora das URLs também — mesmo com o
@@ -346,10 +348,10 @@ entra em git:
 **`EMBEDDING_BATCH_SIZE` é obrigatório onde o Ollama roda em CPU.** O
 servidor manda os pedaços ao Ollama em lotes de 100 por padrão, numa
 chamada só, e o `fetch` do Node desiste de esperar cabeçalho em 5 minutos.
-Medido em 07/09/2026, em CPU: lote de 100 levava de 3 a 5 minutos e
-estourava — o servidor registra `Embedding API error (batch size: 100):
-fetch failed`, dá a indexação por falha, e a coleção fica com o que os
-lotes anteriores gravaram. Com lote de 10, cada chamada leva segundos. O
+Em CPU, lote de 100 chega a esse limite e estoura — o servidor registra
+`Embedding API error (batch size: 100): fetch failed`, dá a indexação por
+falha, e a coleção fica com o que os lotes anteriores gravaram. Com lote de
+10, cada chamada leva segundos. O
 valor entra no `ambiente` do `alvos.json`, e o `indexar.py` o passa ao
 servidor que ele sobe; o servidor registrado como MCP no `.mcp.json` lê o
 mesmo nome no bloco `env` dele.
@@ -404,22 +406,24 @@ devolve na hora e indexa em segundo plano. Quem dispara e encerra o processo
 segundo e o índice fica pela metade. O instrumento consulta o estado até o
 servidor dizer `Status: completed`.
 
-**E a consulta de estado é o que mente.** Medido em 07/09/2026, lendo o
-registro do servidor: cada `get_indexing_status` (e cada `index_codebase`)
+**E a consulta de estado é o que mente.** Lido no registro do servidor:
+cada `get_indexing_status` (e cada `index_codebase`)
 roda antes uma "recuperação" que compara o banco com o snapshot local, e
 qualquer alvo que já tenha linhas no banco e não conste como concluído —
 inclusive o que está sendo indexado naquele instante — é gravado como
 `completed`, com a contagem de linhas repetida em "N files, N chunks". Quem
 consulta o estado durante a indexação recebe "completed" depois do primeiro
-lote, encerra o servidor, e a coleção fica pela metade — foi assim que seis
-de treze alvos pararam em múltiplos de 100 pedaços, um repositório de 10.748
-arquivos com 18. A sincronização periódica do servidor (a cada 5 min) faz o
-mesmo, e ainda reindexa por mudança em cima do alvo em curso. Por isso o
-indexador:
+lote, encerra o servidor, e a coleção fica pela metade — o sinal é o alvo
+parado num múltiplo de 100 pedaços. A sincronização periódica do servidor
+(a cada 5 min) faz o mesmo, e ainda reindexa por mudança em cima do alvo em
+curso. Por isso o indexador:
 
 - **espera pelo registro (stderr) do servidor**, nunca pela consulta de
-  estado: as marcas são `Indexing completed successfully` e `Indexing failed
-  for`; a consulta só entra depois, para a linha de contagem;
+  estado: as marcas são `Background indexing completed for '<alvo>'` e
+  `Indexing failed for <alvo>`, e só vale a linha que nomeia o alvo
+  esperado — a linha `Indexing completed successfully` não diz de quem é, e
+  a de um alvo que estourou o teto e concluiu depois encerraria a espera do
+  seguinte; a consulta só entra depois, para a linha de contagem;
 - **indexa um alvo por vez** — alvo em paralelo é o que a recuperação grava
   como completo antes da hora;
 - **empurra a sincronização periódica para 24 h** (`CLAUDE_CONTEXT_SYNC_INTERVAL_MS`,
@@ -434,8 +438,8 @@ indexador:
 
 **Servidor MCP órfão faz a mesma coisa por fora.** O `.mcp.json` registra o
 servidor por `npx`, e no Windows a sessão estoura o tempo de conexão e deixa
-o processo vivo, sem pai, sincronizando a cada 5 min com lote de 100 — foram
-quatro numa manhã, disputando o Ollama e reescrevendo o snapshot. Ao
+o processo vivo, sem pai, sincronizando a cada 5 min com lote de 100 — e
+vários órfãos juntos disputam o Ollama e reescrevem o snapshot. Ao
 investigar lentidão, liste os processos `claude-context-mcp` cujo pai já
 morreu antes de culpar a ronda; onde a busca é pelo `buscar.py`, o registro
 no `.mcp.json` é dispensável. Servidor morto de fora ainda deixa a trava
@@ -518,15 +522,15 @@ que cortou** (`cortado no teto de N: havia M`): silêncio aqui seria pior que o
 despejo, porque a sessão acharia que viu tudo. Teto zero ou negativo é
 recusado com razão, em vez de desligar a conta calado.
 
-Medido em 09/09/2026 num acervo de 13 coleções, contando as linhas de achado
-antes e depois do teto entrar:
+Para ver o efeito no seu acervo, conte as linhas de achado de uma pergunta:
 
 ```bash
 python .agents/indice/buscar.py "onde se decide o teto de contexto" \
   | grep -c '^    \['
 ```
 
-Sem teto, 65 trechos numa pergunta; com o padrão, 30 e a linha do corte.
+Sem teto, a conta cresce com cada acervo indexado; com o padrão, ela para no
+teto e a resposta traz a linha do corte.
 
 **A busca é híbrida, e isso é medido, não gosto.** Cada pergunta corre em duas
 pernas na mesma coleção — o vetor denso, que acha por significado, e o BM25 no
@@ -536,11 +540,10 @@ de função, palavra rara. A medição é reprodutível e mora no instrumento:
 `--medir` tira do próprio acervo perguntas por termo único com resposta
 conhecida (arquivo:linha), roda cada uma nos dois modos, repete para medir o
 ruído e exige que o híbrido vença ou empate no topo e nos três primeiros — o
-`--testar` falha se não vencer. Medido em 02/09/2026 num acervo de 9 coleções,
-59 perguntas: o híbrido acertou o topo em 34 contra 13 do denso, e os três
-primeiros em 48 contra 22, com ruído zero em 236 chamadas. Em dez perguntas em
-linguagem natural, escritas à mão, o híbrido acertou o topo em 6 contra 3 — e
-perdeu uma: a fusão não é ganho em toda pergunta, é ganho no total.
+`--testar` falha se não vencer. O placar do seu acervo sai do `--medir`. Em
+pergunta de linguagem natural, escrita à mão, o híbrido também vence no
+total, mas perde uma ou outra: a fusão não é ganho em toda pergunta, é ganho
+no total.
 
 **O que ele devolve, e o que a pontuação significa:**
 
@@ -585,13 +588,9 @@ python .agents/indice/subir.py --saude
 
 Ele sonda as duas peças e sai 0 só quando as duas respondem **e** o modelo
 está no contêiner; senão sai 1 nomeando qual faltou e por quê. A sonda fala
-HTTP pela biblioteca padrão do Python, de propósito: `curl` está na lista de
-negação de máquina corporativa, e prova que depende de ferramenta externa não
-viaja. As portas saem das mesmas `${INDICE_PORTA_SAUDE}` e
+HTTP pela biblioteca padrão do Python, de propósito: `curl` pode estar negado
+na máquina, e prova que depende de ferramenta externa não viaja. As portas saem das mesmas `${INDICE_PORTA_SAUDE}` e
 `${INDICE_PORTA_OLLAMA}` do compose, com as padrão como reserva.
-
-Medido em 09/09/2026 com `python .agents/indice/subir.py --saude`: as duas
-peças de pé, saída 0.
 
 Os serviços declaram `restart: unless-stopped`: quando o daemon do Docker
 sobe junto com a máquina, os containers voltam sozinhos depois da

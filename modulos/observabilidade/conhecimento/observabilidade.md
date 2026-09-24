@@ -1,42 +1,62 @@
 # Observabilidade
 
-O agente não abre a sua ferramenta de observabilidade. Ele te ensina a abrir,
-e guarda o que cada incidente ensinou — para que a investigação de daqui a
-três meses comece onde esta terminou.
+O agente consulta a sua ferramenta de observabilidade quando existe rota
+autorizada, ensina a investigar quando não existe, e guarda o que cada
+incidente ensinou — para que a investigação de daqui a três meses comece onde
+esta terminou.
 
 Esta página tem o método (vale para qualquer ferramenta) e a tradução para a
 ferramenta que o módulo hospeda hoje. A skill `observabilidade` conduz; a
 memória mora em [`observabilidade/`](observabilidade/LEIAME.md) e nunca sai
 da sua máquina.
 
-## O agente não consulta a ferramenta — e isso é desenho
+## O agente consulta por rota autorizada — e isso é desenho
 
-**Não é falta de permissão.** Quem investiga tem acesso pleno; o agente é que
-fica de fora, por dois motivos que valem em quase todo workspace:
+Rota autorizada é uma de duas: o **servidor de consulta declarado** no
+workspace, ou o **navegador do dono**, na sessão que ele já abriu. Fora
+delas, o agente compõe a consulta e entrega para quem tem acesso rodar.
 
-- **Licença custa por assento.** Um agente consultando não é um leitor a mais
-  de graça.
-- **Agente consulta em rajada.** Ferramenta de observabilidade fica lenta para
-  o workspace inteiro quando alguém a martela — é a [regra 7 da
-  camada](regras-da-camada.md) aplicada onde ela dói.
+Em nenhuma das duas o agente pede, copia ou imprime credencial, token ou
+cookie: ele usa a porta que já está aberta, nunca a chave.
 
 O que isso muda na prática:
 
 | Quem faz | O quê |
 | --- | --- |
 | o agente | compõe a consulta, explica por que é aquela, diz o que esperar |
-| você | roda, e cola o resultado se quiser |
-| o agente | lê o que você colou — e só isso conta como medido |
+| o agente, se houver rota | roda, lê a saída e diz de que intervalo ela saiu |
+| você, se não houver | roda, e cola o resultado se quiser |
 
-**Consulta que o agente sugeriu e ninguém rodou é hipótese.** Ele não pode
-chamá-la de prova, nem de "confirmado", nem de "encontrei": é a [regra 2 da
-camada](regras-da-camada.md) num lugar onde errar é barato e caro ao mesmo
-tempo — barato de escrever, caro de acreditar.
+**Consulta que ninguém rodou é hipótese.** Sugerida e não executada, ela não
+pode ser chamada de prova, nem de "confirmado", nem de "encontrei": é a [regra
+2 da camada](regras-da-camada.md) num lugar onde errar é barato e caro ao
+mesmo tempo — barato de escrever, caro de acreditar. O que conta como medido é
+a saída vista, tanto faz quem a rodou.
 
-Uma linha honesta sobre o outro caminho: o que você colar vai para o modelo.
-Tire identificador de cliente e dado pessoal antes. Não usar servidor de
-consulta automática **não** torna nada seguro — muda quem escolhe o quê, não
-o destino.
+**O limite que continua valendo: rajada.** Ferramenta de observabilidade fica
+lenta para o workspace inteiro quando alguém a martela — é a [regra 7 da
+camada](regras-da-camada.md) aplicada onde ela dói. Consulta larga se faz uma
+vez, com janela declarada, não em sequência para tatear.
+
+Uma linha honesta sobre os dois caminhos: o que você colar vai para o modelo,
+e o que o agente consultar também. Tire identificador de cliente e dado
+pessoal antes. Consultar por servidor **não** é mais nem menos seguro que
+colar log — muda quem escolhe o quê, não o destino.
+
+### Por que o agente consulta, e o que ficou de pé
+
+A regra aqui já foi o oposto: o agente **não** consultava, por dois motivos.
+Um caiu e o outro ficou.
+
+| O motivo antigo | Onde está hoje |
+| --- | --- |
+| licença custa por assento | **caiu**: a consulta sai pela credencial de quem já tem assento, e não cria um novo |
+| agente consulta em rajada | **ficou**, como limite de uso, não como proibição |
+
+O que derrubou o primeiro foi a prática ao lado: a própria camada já consulta
+o serviço de log da nuvem por servidor declarado, somente leitura, pelo módulo
+`insights`. A regra dizia "nunca" enquanto o módulo vizinho dizia "sim, e está
+provado".
 
 ## O log se descarta; o conhecimento se guarda
 
@@ -73,9 +93,10 @@ Cinco peças, cada uma por um motivo diferente:
 | `incidente-<data>-<slug>.md` | a skill, ao encerrar | o que era, como se achou, o que não deu em nada |
 | `LEIAME.md` | a skill, na criação | o índice: o que mora ali, em uma linha |
 
-**Tudo plano, sem pasta dentro de pasta.** Medido: o site publica um nível de
-subpasta de `conhecimento/` e para ali — página no terceiro nível existe no
-disco e não vira rota. O nome da ferramenta vai no arquivo, nunca na pasta.
+**Tudo plano, sem pasta dentro de pasta.** Se o publicador de quem instala
+só transforma em rota um nível de subpasta de `conhecimento/`, a página mais
+funda existe no disco e fica sem endereço; plana, a pasta serve a qualquer
+publicador. O nome da ferramenta vai no arquivo, nunca na pasta.
 
 **E tudo em tabela e lista, não em prosa.** Isto contraria o estilo do resto
 do guia de propósito: as páginas do guia são para gente ler; a memória é para
@@ -185,8 +206,8 @@ para log, rastreamento, monitores, auditoria e documentação.
 
 Se um dia você quiser automatizar de verdade, o endereço é esse — não este
 módulo. E leve o custo junto: o servidor oficial trabalha com limite de
-rajada e teto mensal de chamadas, que é exatamente o motivo de o copiloto
-daqui não consultar nada.
+rajada e teto mensal de chamadas, que é exatamente o motivo de a consulta
+daqui ser uma por pergunta, com janela declarada, e não um laço que tateia.
 
 Este módulo faz a outra metade, a que ninguém publica: **conhecer a sua
 arquitetura**.

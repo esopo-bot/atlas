@@ -4,7 +4,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "bash \"$DEVIN_PROJECT_DIR/.claude/hooks/interpretador.sh\" \"$DEVIN_PROJECT_DIR/.agents/travessia/ponte.py\""
+          "command": "bash \"$DEVIN_PROJECT_DIR/.claude/hooks/interpretador.sh\" -X utf8 \"$DEVIN_PROJECT_DIR/.agents/travessia/ponte.py\""
         }
       ]
     }

@@ -191,7 +191,7 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -215,7 +215,7 @@ def decidir() -> int:
                     RECUSA.format(
                         motivo, ARQUIVO_DE_CAMINHOS_DE_AUTOMACAO)
                     + MANDA_GRAVAR.format(APRENDIZADO)),
-            }}, ensure_ascii=False))
+            }}))
             return SILENCIO
     return SILENCIO
 

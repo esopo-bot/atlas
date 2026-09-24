@@ -15,21 +15,19 @@ USO = ("mede se a descrição de cada skill dispara: abre uma sessão por "
        "o mesmo placar duas vezes —, então uma volta não prova diferença "
        "nenhuma: peça --voltas e compare medianas, não rodadas. E a "
        "DERIVA entre blocos medidos em momentos diferentes é maior que a "
-       "amplitude dentro de um bloco: medido em 10/09/2026, o mesmo texto "
-       "deu mediana 2, 1 e 1 em três blocos de cinco voltas. Antes e "
+       "amplitude dentro de um bloco: o mesmo texto muda de mediana de um "
+       "bloco de voltas para o outro. Antes e "
        "depois medidos em horas diferentes não se comparam — meça os dois "
        "braços na mesma sessão de medição, ou agrupe as voltas dos dois. "
        "Quando o ganho na mediana tem o tamanho do piso do ruído, o que "
        "prova o efeito é o TETO que se rompeu: zero de quinze voltas "
        "chegando ao placar cheio contra seis de quinze é prova; mediana "
        "um ponto acima, sozinha, não é. E ANTES de tudo isso: o placar é do "
-       "MODELO que mediu. As mesmas descrições deram mediana 1 de 3 no "
-       "modelo padrão, que é o barato, e 3 de 3 com amplitude ZERO num "
-       "modelo grande, na mesma tarde; um pedido que perdeu 54 voltas no "
-       "padrão ganhou as 6 do grande. Placar baixo é hipótese sobre o "
-       "roteador antes de ser sobre o texto — cinco consertos de descrição "
-       "foram medidos e refutados em 10/09/2026 por não se ter repetido "
-       "com o modelo da sessão de verdade primeiro")
+       "MODELO que mediu. As mesmas descrições podem ficar abaixo do teto "
+       "no modelo padrão, que é o barato, e no teto, sem amplitude, num "
+       "modelo grande. Placar baixo é hipótese sobre o roteador antes de "
+       "ser sobre o texto — conserto de descrição que não se repetiu com o "
+       "modelo da sessão de verdade primeiro se refuta sozinho")
 
 PASTA_ESPELHADA = ".claude/skills"
 PASTA_FONTE = ".agents/skills"
@@ -84,11 +82,11 @@ SEM_COLISAO = "  colisões: nenhuma"
 LINHA_DO_TEMPO = "  tempo de parede: {:.1f} s"
 SUSPEITE_DO_ROTEADOR = (
     "  placar abaixo do teto NO MODELO PADRÃO, que é o barato: repita com "
-    "--modelo\n  <o da sua sessão> antes de mexer em descrição. Medido em 10/09/2026,\n"
-    "  as MESMAS descrições deram mediana 1 de 3 no padrão e 3 de 3 com "
-    "amplitude\n  ZERO num modelo grande — e o pedido que perdeu 54 voltas no padrão\n"
-    "  ganhou as 6 do grande. Placar baixo aqui é hipótese sobre o "
-    "ROTEADOR, não\n  sobre o texto: cinco consertos de descrição foram medidos e refutados\n  por não se ter olhado isto primeiro")
+    "--modelo\n  <o da sua sessão> antes de mexer em descrição. As MESMAS "
+    "descrições podem\n  ficar abaixo do teto no padrão e no teto num modelo "
+    "grande. Placar baixo aqui\n  é hipótese sobre o ROTEADOR, não sobre o "
+    "texto: conserto de descrição que não\n  olhou isto primeiro se refuta "
+    "sozinho")
 LINHA_DO_MODELO = "  modelo: {}"
 UMA_COLISAO = "{}→{} ({})"
 NENHUMA = "nenhuma"
@@ -626,4 +624,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

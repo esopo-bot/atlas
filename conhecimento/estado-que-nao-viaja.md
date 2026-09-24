@@ -80,7 +80,7 @@ por nome o que a máquina precisa ter. Uma lista por tipo:
 ```json
 {
   "receita": "conhecimento/estado-que-nao-viaja.md",
-  "comando": ["git", "gh", "python3"],
+  "comando": ["git", "gh", "python"],
   "pasta": ["~/.config/ferramenta-x"],
   "arquivo": ["scripts/preparar.sh"],
   "variavel": ["FERRAMENTA_X_TOKEN"]

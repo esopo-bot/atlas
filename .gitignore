@@ -16,8 +16,8 @@ nucleo/bancada.json
 
 # Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
 # lado do log quando o verificador roda com --debug-file: artefato dela, não
-# nosso. Entrou no git uma vez por acidente, quando core.symlinks=false o fazia
-# parecer um arquivo de texto com o caminho dentro.
+# nosso. Com core.symlinks=false ele parece um arquivo de texto com o caminho
+# dentro, e entra no git por acidente.
 *.log
 latest
 __pycache__/

@@ -60,6 +60,12 @@ de consulta, não de sessão.
       cobrança de guarda: a que falha por motivo que a sessão nunca remove
       ensina a ignorar a cobrança inteira — cale-a com a razão escrita, nunca
       insista.
+    - Caso novo nasce vermelho, e se roda ANTES do conserto para ver falhar.
+      Caso que já passa antes do conserto não prova nada, e a bancada verde o
+      esconde.
+    - Suíte verde não prova fronteira. Trabalho que muda o que se instala ou o
+      que uma cerca recusa só se dá por pronto depois do crítico; pular o
+      crítico se escreve na issue como risco aceito.
     - Estado que se relata se lê na hora: antes de dizer a alguém o que falta
       numa issue, num pedido de incorporação ou num arquivo, abra e leia.
       Resumo de memória envelhece calado, e o que sai dele é dedução vestida de
@@ -89,7 +95,9 @@ de consulta, não de sessão.
       acaso: ela devolve um número, e número sozinho parece fato. Medição sob
       carga não cala o instrumento: faz ele responder por outro instante.
       Repetir com a máquina livre é parte da prova, e o exit que se declara é o
-      do comando medido, nunca o do cano nem o do `tail`.
+      do comando medido, nunca o do cano nem o do `tail`. Quando a máquina não
+      fica livre, compare os dois lados na mesma janela, alternando as rodadas,
+      e decida pela mediana.
     - Conserto de máquina se faz nas ferramentas que a máquina de destino tem.
       Onde a camada se instala, o shell nativo do sistema e o subsistema Linux
       podem estar bloqueados por política: a régua que sobra é o shell POSIX do
@@ -151,6 +159,14 @@ de consulta, não de sessão.
       roda uma vez, detalhada, antes da entrega final — não a cada arquivo
       mexido. Repetir a mesma verificação sem mudança nova desde a última vez é
       releitura, não prova.
+    - Uma issue é um pacote de entregas, não uma tarefa: o que a mesma bateria
+      de provas cobre entra junto, e cada entrega é um critério com a prova
+      dele. Pedido pequeno vira linha de um pacote aberto ou da caixa do
+      projeto, nunca issue solta; e o perfil do repositório declara quantas
+      issues abertas ele comporta — passou do teto, funde antes de abrir. O
+      custo que o pacote corta é rodar a mesma bateria lenta uma vez por issue;
+      o que ele devolve é um quadro que cabe no olho de quem controla. A skill
+      `trabalho-por-issue` diz como montar o pacote.
 
 7. **Rede com cortesia.**
     - Chamada externa e MCP só quando a tarefa exigir, espaçadas.
@@ -279,9 +295,9 @@ de consulta, não de sessão.
       nome errado que sobrou num canto.
 
 15. **Editou a fonte, regenere a cópia e prove — antes de entregar.**
-    - Onde existe cópia gerada — carga embutida do instalador, espelho de
-      skills, página escrita a partir de dado —, editar a fonte e não regenerar
-      entrega a cópia velha. Quem instala recebe a cópia, não a sua fonte.
+    - Onde existe cópia gerada — espelho de skills, página escrita a partir de
+      dado —, editar a fonte e não regenerar entrega a cópia velha. Quem
+      instala recebe a cópia, não a sua fonte.
     - Regenerar é consertar; provar é outra coisa. O que prova verifica sem
       escrever e sai diferente de zero quando divergiu — `python montar.py
       --verificar`. O `--sincronizar` escreve e não acusa: rodar só ele deixa a
@@ -292,11 +308,11 @@ de consulta, não de sessão.
       recusa comentário em código rastreado. Onde não há marca, a relação é
       pelo caminho, e são estes: a cópia em `.claude/skills/X` tem fonte em
       `.agents/skills/X`; a cópia em `.agents/<módulo>/…` tem fonte em
-      `modulos/<módulo>/.agents/<módulo>/…`; e o que o instalador carrega
-      embutido é cópia de tudo isso, nunca a fonte de nada. Na dúvida, PERGUNTE
-      AO GANCHO em vez de deduzir: a recusa dele nomeia a fonte. E o teste que
-      engana: editar a cópia e ver a sincronização desfazer não prova que você
-      achou a fonte — prova o contrário.
+      `modulos/<módulo>/.agents/<módulo>/…`; e o instalador não carrega cópia:
+      ele lê a camada desta pasta. Na dúvida, PERGUNTE AO GANCHO em vez de
+      deduzir: a recusa dele nomeia a fonte. E o teste que engana: editar a
+      cópia e ver a sincronização desfazer não prova que você achou a fonte —
+      prova o contrário.
     - **Arquivo novo que precisa viajar se matricula, e a matrícula se prova
       instalando.** O `--verificar` checa a carga dos arquivos que conhece e
       cala sobre o que ninguém matriculou: a regra pega quem edita fonte
@@ -319,8 +335,9 @@ de consulta, não de sessão.
       vários prova o destino em cada um, inclusive no vizinho sem camada, onde
       a leitura é `git log HEAD --not --remotes` — vazio é a prova. Fechar um
       repositório inteiro dá a sensação de ter fechado tudo, e é assim que o
-      outro fica para trás; o gancho `cobrar-destino-da-entrega.py` cobra cada
-      um.
+      outro fica para trás; o gancho `cobrar-destino-da-entrega.py` mede cada
+      um, bloqueia a etapa do executor e, com gente no terminal, só grava no
+      registro de depuração.
     - Commit em branch que ninguém vai incorporar não existe para o resto do
       mundo, e some no dia em que a branch for podada.
     - Este é o achado que depende de lembrar no fim da sessão mais longa do dia

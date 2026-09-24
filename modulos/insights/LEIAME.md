@@ -7,19 +7,22 @@ igual para consulta de `stats` e de `fields`, o formato que voltava vazio sem
 erro nenhum.
 
 ```bash
-python montar.py --modulo insights
+python <pasta do clone do atlas>/montar.py --modulo insights
 ```
 
-Ele **conecta e roda** — ao contrário do módulo `observabilidade`, que ensina
-a consultar sem tocar na ferramenta. Por isso é um módulo à parte: quem quer o
-copiloto que não se conecta instala aquele; quem quer o atalho que dispara
-instala este.
+Ele **traz a rota pronta** para o serviço de log da nuvem: o instrumento, o
+servidor de consulta e a bancada dos dois. O módulo `observabilidade` é o
+outro lado da mesma moeda — ele conduz a investigação e consulta pela rota que
+o workspace já declarou, sem trazer rota nenhuma. Por isso são módulos à
+parte: quem quer o método instala aquele; quem quer a porta aberta para o log
+da nuvem instala este; quem quer os dois instala os dois.
 
 ## O que ele instala
 
 | Destino | O que é |
 | --- | --- |
 | `.agents/insights/insights.py` | o instrumento: recebe grupo, região, consulta e janela por argumento, e devolve colunas |
+| `.agents/insights/servidor.py` | servidor MCP somente leitura para consultar o CloudWatch Logs Insights |
 
 ## A linha vermelha
 
@@ -43,6 +46,30 @@ omitido, e `--desde` aceita uma duração para trás (`30m`, `2h`, `1d`), além
 de ISO 8601 e epoch em segundos. `--json` troca as colunas por JSON. `--teto`
 sobe o tempo de espera quando a janela é larga. A credencial é a que o `aws`
 já usa nesta máquina — o instrumento não a toca.
+
+## O servidor de contexto, e a credencial que ele não herda
+
+O `servidor.py` expõe a mesma consulta como ferramenta de servidor de
+contexto. Ele **não** escolhe perfil: usa a cadeia padrão da AWS do processo
+que o cliente iniciou. Numa máquina sem perfil `default`, esse processo abre
+sem credencial nenhuma, e a consulta morre antes de sair para a rede.
+
+Por isso a entrada dele no arquivo de servidores declara o perfil:
+
+```json
+"aws-logs-insights": {
+  "command": "python",
+  "args": [".agents/insights/servidor.py"],
+  "env": { "AWS_PROFILE": "${PERFIL_DA_AWS}" }
+}
+```
+
+O modo de falhar também é do desenho: o instrumento recusa na fronteira com
+`SystemExit`, que num processo de servidor **mataria o processo** e chegaria
+ao cliente como queda de conexão — a causa verdadeira sumiria. O servidor
+traduz essa recusa em texto devolvido, e a mensagem do `aws` chega inteira a
+quem perguntou. `python .agents/insights/servidor.py --testar` prova os dois
+casos.
 
 ## As três idas que ele economiza
 

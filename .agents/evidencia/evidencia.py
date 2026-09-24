@@ -427,7 +427,9 @@ def materializar(dir_base, trabalho, etapa, ordem, teto, texto, esquema,
         erro = "; ".join(erros[:QUANTOS_ERROS_NO_DETALHE])
 
     caminho = sintetizar(dir_base, trabalho, etapa, ordem, teto,
-                         MOTIVO_RECIBO_INVALIDO, erro, esquema)
+                         MOTIVO_RECIBO_INVALIDO, erro, esquema,
+                         turnos=turnos, custo=custo, duracao=duracao,
+                         assinatura=assinatura)
     return caminho, 3
 
 
@@ -957,6 +959,20 @@ def _entrada_ruim_vira_para_sintetico(pasta, caso):
          resposta.returncode == 3 and escrito["motivo"] == "recibo-invalido"
          and "veredito" in escrito["faltas"][0])
 
+    custo_ja_medido = ('{"usd": 0.75, "tokens": {"entrada": 10, "saida": 2, '
+                       '"cache-lido": 100, "cache-criado": 50}}')
+    resposta = _cli(["materializar", "--dir", pasta,
+                     "--trabalho", "t-quebra-com-carimbo", "--etapa", "alfa",
+                     "--ordem", "1", "--teto", "3", "--turnos", "7",
+                     "--custo", custo_ja_medido, "--duracao", "12.5"],
+                    entrada="{ isto nao e json")
+    escrito = _ler(pasta, "t-quebra-com-carimbo", "01-alfa-c1.json")
+    caso("recibo inválido não apaga o que o código já mediu: a queda para o "
+         "sintético carrega turnos, custo e duração",
+         resposta.returncode == 3 and escrito["motivo"] == "recibo-invalido"
+         and escrito.get("turnos") == 7 and escrito.get("duracao") == 12.5
+         and (escrito.get("custo") or {}).get("usd") == 0.75)
+
 
 def _a_escrita_nao_deixa_temporario(pasta, caso):
     caso("nenhum temporário sobra no diretório",
@@ -1192,6 +1208,9 @@ def testar() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     if "--testar" in sys.argv:
         sys.exit(testar())
     try:

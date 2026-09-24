@@ -369,6 +369,7 @@ def _escrever(pasta: Path, ordem, etapa, **troca) -> None:
 FALSO_VERIFICADOR = """import os
 import sys
 
+sys.stdout.reconfigure(encoding="utf-8")
 sys.stdout.write(os.environ["AUDITOR_TESTE_SAIDA"])
 sys.exit(4)
 """
@@ -718,4 +719,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

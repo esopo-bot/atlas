@@ -41,12 +41,13 @@ TEMPO_DA_SONDA_HTTP = 10
 LETRAS_DO_ERRO = 120
 
 RECUSA_SEM_COMPOSE = ("não achei {} — instale o módulo antes: "
-                      "python montar.py --modulo indice")
+                      "python <pasta do clone do atlas>/montar.py --modulo "
+                      "indice")
 RECUSA_SEM_DOCKER = ("o docker não respondeu: `{}`. O índice sobe em "
                      "contêiner, e sem o docker não há o que subir")
 COM_PLACA = ("placa de vídeo ligada: {} — quem gera os vetores roda nela. "
-             "Medido em 07/09/2026 numa placa de entrada: 232 pedaços por "
-             "minuto contra 32 em CPU")
+             "Medido numa placa de entrada: 232 pedaços por minuto contra 32 "
+             "em CPU")
 SEM_PLACA = ("sem placa que o docker entregue ({}) — sobe em CPU, que é o "
              "normal e funciona. Repare que placa nenhuma aparece aqui até "
              "o docker conseguir entregá-la, e não só existir na máquina")
@@ -397,9 +398,9 @@ def testar() -> int:
                 saida = saude(ambiente, MODELO_PADRAO)
             return saida, dito.getvalue()
 
-        caso("a sonda fala HTTP pela biblioteca padrao: na maquina desta "
-             "receita o `curl` esta na lista de negacao, e prova que depende "
-             "de binario externo nao roda la",
+        caso("a sonda fala HTTP pela biblioteca padrao: em maquina que "
+             "nega o `curl`, prova que depende "
+             "de binario externo nao roda",
              "urlopen" in sondar.__code__.co_names
              and "subprocess" not in sondar.__code__.co_names)
         caso("porta declarada por variavel substitui a padrao, como no "
@@ -465,4 +466,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(main())

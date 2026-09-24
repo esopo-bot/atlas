@@ -26,6 +26,8 @@ lugar. Este bloco guarda o resto:
 - **Branches protegidas** — não apagar, não renomear, não forçar, não
   reescrever: <os nomes das de longa duração. Na dúvida, é protegida.>
 - **Quem encerra a issue:** <o papel, nunca o nome de uma pessoa>
+- **Teto de issues abertas:** <quantas o repositório comporta; passou, funde
+  antes de abrir — regra 6>
 - **Onde moram os procedimentos:** <a documentação de como se sobe, publica e
   libera acesso — é aqui que se procura antes de inventar passo>
 ```

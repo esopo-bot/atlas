@@ -1,7 +1,10 @@
+import contextlib
+import io
 import json
 import os
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +28,8 @@ PREFIXO_DAS_FERRAMENTAS_DO_NAVEGADOR_DO_DONO = "mcp__claude-in-chrome__"
 FERRAMENTAS_DE_SHELL = ("Bash", "PowerShell")
 FERRAMENTAS_QUE_ESCREVEM = ("Write", "Edit", "NotebookEdit")
 CAMPO_DO_COMANDO = "command"
+VERBOS_DO_GIT_QUE_ESCREVEM = ("commit", "merge", "push", "rebase", "revert",
+                              "cherry-pick", "reset", "am", "apply", "stash")
 MARCA_DO_INSTRUMENTO_DE_VOZ = "falar.py"
 COMANDO_DE_BUSCA_DA_INTEGRACAO = ["git", "fetch", "--quiet", "origin", "{}"]
 COMANDO_DAS_MESCLAS_DESDE = [
@@ -51,6 +56,10 @@ COBRA = (
     "prova pede pelo login que a camada já sabe fazer, percorra o que foi "
     "entregue{voz}, e defenda por que pode ir a produção. Só então o relato "
     "escrito. Apresentação anunciada e não feita conta como falta.")
+AVISO_QUE_NAO_SEGURA_A_PARADA_POR_APRESENTACAO = (
+    "SÓ NO REGISTRO DE DEPURAÇÃO, sem bloqueio: com gente no terminal esta "
+    "cobrança da apresentação não chega à conversa nem à tela, e a parada "
+    "segue.\n\n")
 FALTOU_NAVEGACAO = "uma navegação ao endereço declarado pelo navegador do dono"
 FALTOU_VOZ = "a narração por voz (`falar.py`)"
 FALTOU_OS_DOIS = FALTOU_NAVEGACAO + " nem " + FALTOU_VOZ
@@ -141,11 +150,18 @@ def caminhos_escritos(linhas, raiz: Path) -> set:
             elif bloco.get("name") in FERRAMENTAS_DE_SHELL:
                 comando = (bloco.get("input") or {}).get(CAMPO_DO_COMANDO)
                 if isinstance(comando, str):
-                    escritos |= pastas_de_vizinho_no_comando(comando, raiz)
+                    escritos |= pastas_de_vizinho_escritas_no_comando(comando, raiz)
     return escritos
 
 
-def pastas_de_vizinho_no_comando(comando: str, raiz: Path) -> set:
+def comando_que_escreve(comando: str) -> bool:
+    palavras = comando.replace("\\", "/").split()
+    return any(palavra in VERBOS_DO_GIT_QUE_ESCREVEM for palavra in palavras)
+
+
+def pastas_de_vizinho_escritas_no_comando(comando: str, raiz: Path) -> set:
+    if not comando_que_escreve(comando):
+        return set()
     achados = set()
     marca = "projetos/"
     for pedaco in comando.replace("\\", "/").split():
@@ -286,6 +302,11 @@ def decisao(entrada: dict, raiz: Path) -> str:
     return "\n\n".join(cobrancas)
 
 
+def escrever_fora_da_conversa(texto: str) -> None:
+    sys.stdout.buffer.write((texto + "\n").encode("utf-8"))
+    sys.stdout.buffer.flush()
+
+
 def main() -> int:
     try:
         entrada = json.load(sys.stdin)
@@ -297,9 +318,8 @@ def main() -> int:
     except Exception:
         return FALHA_ABERTA
 
-    print(json.dumps({"decision": DECISAO_DE_BLOQUEAR, "reason": motivo,
-                      "hookSpecificOutput": {"hookEventName": EVENTO_DE_PARADA}},
-                     ensure_ascii=False))
+    escrever_fora_da_conversa(
+        AVISO_QUE_NAO_SEGURA_A_PARADA_POR_APRESENTACAO + motivo)
     return COBRANCA_ENTREGUE
 
 
@@ -307,6 +327,86 @@ def linha_de_transcrito(instante: str, nome: str, entrada: dict) -> dict:
     return {CHAVE_DO_INSTANTE: instante,
             "message": {"content": [{"type": "tool_use", "name": nome,
                                      "input": entrada}]}}
+
+
+VIZINHO_DE_MENTIRA = Path("vizinho-x")
+MARCAS_QUE_MUDAM_A_PARADA = (MARCA_DE_ETAPA_NO_AMBIENTE,
+                             MARCA_DE_PESQUISA_NO_AMBIENTE)
+
+
+def o_que_o_gancho_imprime(declarada: dict, mesclas: list, etapa: str = "",
+                           codificacao: str = "utf-8") -> str:
+    global vizinhos_tocados, apresentacao_declarada, mesclas_desta_sessao
+    de_verdade = (vizinhos_tocados, apresentacao_declarada,
+                  mesclas_desta_sessao, sys.stdin)
+    ambiente_de_verdade = {marca: os.environ.pop(marca, None)
+                           for marca in MARCAS_QUE_MUDAM_A_PARADA}
+    impresso = io.TextIOWrapper(io.BytesIO(), encoding=codificacao)
+    try:
+        vizinhos_tocados = lambda escritos, raiz: [VIZINHO_DE_MENTIRA]
+        apresentacao_declarada = lambda raiz, vizinho: declarada
+        mesclas_desta_sessao = lambda vizinho, integracao, abertura: mesclas
+        sys.stdin = io.StringIO("{}")
+        if etapa:
+            os.environ[MARCA_DE_ETAPA_NO_AMBIENTE] = etapa
+        with contextlib.redirect_stdout(impresso):
+            main()
+        impresso.flush()
+    finally:
+        (vizinhos_tocados, apresentacao_declarada, mesclas_desta_sessao,
+         sys.stdin) = de_verdade
+        for marca, valor in ambiente_de_verdade.items():
+            if valor is None:
+                os.environ.pop(marca, None)
+            else:
+                os.environ[marca] = valor
+    return impresso.buffer.getvalue().decode("utf-8")
+
+
+INTEGRACAO_DE_MENTIRA = "homolog"
+ABERTURA_DE_MENTIRA = "2020-01-01T00:00:00Z"
+
+
+def git_de_mentira(arvore: Path, *argumentos) -> None:
+    subprocess.run(["git", *argumentos], cwd=arvore, check=True,
+                   capture_output=True)
+
+
+def raiz_com_vizinho_mesclado(pasta: Path, endereco: str) -> tuple:
+    origem, raiz = pasta / "origem", pasta / "raiz"
+    vizinho = raiz / "projetos" / VIZINHO_DE_MENTIRA.name
+    origem.mkdir()
+    git_de_mentira(origem, "init", "-q", "-b", INTEGRACAO_DE_MENTIRA)
+    git_de_mentira(origem, "config", "user.email", "prova@exemplo")
+    git_de_mentira(origem, "config", "user.name", "Prova")
+    git_de_mentira(origem, "commit", "-q", "--allow-empty", "-m", "mescla")
+    vizinho.parent.mkdir(parents=True)
+    git_de_mentira(pasta, "clone", "-q", str(origem), str(vizinho))
+    (raiz / ARQUIVO_EXECUTOR).parent.mkdir(parents=True)
+    (raiz / ARQUIVO_EXECUTOR).write_text(json.dumps({CHAVE_DOS_PROJETOS: {
+        VIZINHO_DE_MENTIRA.name: {
+            CHAVE_DO_REPOSITORIO: VIZINHO_DE_MENTIRA.name,
+            CHAVE_DA_APRESENTACAO: {CHAVE_DO_ENDERECO: endereco},
+            CHAVE_DAS_BRANCHES: {CHAVE_DA_INTEGRACAO: INTEGRACAO_DE_MENTIRA}}}}),
+        encoding="utf-8")
+    transcrito = pasta / "transcrito.jsonl"
+    transcrito.write_text(json.dumps(linha_de_transcrito(
+        ABERTURA_DE_MENTIRA, "Write",
+        {"file_path": str(vizinho / "tela.txt")})) + "\n", encoding="utf-8")
+    return raiz, transcrito
+
+
+def rodar_o_gancho_sobre_o_transcrito(raiz: Path, transcrito: Path):
+    ambiente = {**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(raiz)}
+    for marca in MARCAS_QUE_MUDAM_A_PARADA:
+        ambiente.pop(marca, None)
+    entrada = json.dumps({"hook_event_name": EVENTO_DE_PARADA,
+                          "stop_hook_active": False,
+                          CHAVE_DO_TRANSCRITO: str(transcrito)})
+    return subprocess.run(
+        [sys.executable, str(Path(__file__).resolve())],
+        input=entrada, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=ambiente)
 
 
 def testar() -> int:
@@ -352,12 +452,69 @@ def testar() -> int:
                   apresentacao_no_transcrito([navega, fala], endereco, mescla)) == "")
     caso("sem mescla desta sessao cala, mesmo sem apresentacao",
          cobranca("x", com_voz, [], {"navegou": False, "falou": False}) == "")
-    caso("comando de shell que toca projetos/<nome> aponta o vizinho",
+    caso("comando de shell que ESCREVE em projetos/<nome> aponta o vizinho",
          any("projetos" in c and "vizinho-x" in c for c in
-             pastas_de_vizinho_no_comando("git -C D:/raiz/projetos/vizinho-x/ status", Path("D:/raiz"))))
+             pastas_de_vizinho_escritas_no_comando(
+                 "git -C D:/raiz/projetos/vizinho-x/ merge --no-ff frente",
+                 Path("D:/raiz"))))
+    caso("comando que so LE o vizinho nao aponta ninguem: ler nao e entregar",
+         pastas_de_vizinho_escritas_no_comando(
+             "grep -ril feedback D:/raiz/projetos/vizinho-x", Path("D:/raiz")) == set())
+    caso("git de leitura no vizinho tambem nao aponta ninguem",
+         pastas_de_vizinho_escritas_no_comando(
+             "git -C D:/raiz/projetos/vizinho-x status --short", Path("D:/raiz")) == set())
+    caso("push da branch de trabalho no vizinho aponta o vizinho",
+         pastas_de_vizinho_escritas_no_comando(
+             "git -C D:/raiz/projetos/vizinho-x push origin issue/9-x",
+             Path("D:/raiz")) != set())
+    caso("silenciar o erro nao e escrever: leitura com 2>/dev/null nao aponta",
+         pastas_de_vizinho_escritas_no_comando(
+             "grep -ril feedback D:/raiz/projetos/vizinho-x 2>/dev/null | head -40",
+             Path("D:/raiz")) == set())
+    caso("mandar a saida para o nada tambem nao aponta",
+         pastas_de_vizinho_escritas_no_comando(
+             "ls D:/raiz/projetos/vizinho-x >/dev/null", Path("D:/raiz")) == set())
     caso("a cobranca diz o endereco e a receita",
          endereco in cobranca("x", com_voz, uma_mescla, {"navegou": False, "falou": False})
          and "Regra 2" in cobranca("x", com_voz, uma_mescla, {"navegou": False, "falou": False}))
+
+    def parece_json(texto: str) -> bool:
+        limpo = texto.strip()
+        return limpo.startswith("{") and limpo.endswith("}")
+
+    esperada = cobranca(VIZINHO_DE_MENTIRA.name, com_voz, uma_mescla,
+                        {"navegou": False, "falou": False})
+    com_gente = o_que_o_gancho_imprime(com_voz, uma_mescla)
+    caso("com gente, a cobranca sai como texto comum, fora da conversa: a "
+         "saida nao e JSON e nao tem systemMessage",
+         com_gente.strip() and not parece_json(com_gente)
+         and "systemMessage" not in com_gente)
+    caso("a cobranca sai como aviso e nao segura a parada: o motivo vai "
+         "inteiro no texto, sem decision e sem block",
+         "decision" not in com_gente and "block" not in com_gente
+         and com_gente.startswith(
+             AVISO_QUE_NAO_SEGURA_A_PARADA_POR_APRESENTACAO)
+         and esperada in com_gente)
+    caso("com a marca de etapa, a mesma cobranca cala como hoje: nada na "
+         "saida",
+         o_que_o_gancho_imprime(com_voz, uma_mescla, etapa="trabalhar") == "")
+    fora_do_cp1252 = dict(com_voz, endereco=endereco + "/\U0001F680")
+    caso("em maquina sem o modo UTF-8, endereco fora do cp1252 sai inteiro "
+         "em UTF-8: o JSON escapava tudo para ASCII, o texto comum nao escapa",
+         "\U0001F680" in o_que_o_gancho_imprime(
+             fora_do_cp1252, uma_mescla, codificacao="cp1252"))
+    with tempfile.TemporaryDirectory(prefix="cobrar-apresentacao-") as tmp:
+        raiz, transcrito = raiz_com_vizinho_mesclado(Path(tmp).resolve(),
+                                                     endereco)
+        cobrado = rodar_o_gancho_sobre_o_transcrito(raiz, transcrito)
+    caso("CODIGO REAL: com gente, o evento de parada na entrada e a mescla "
+         "no vizinho sem apresentacao, o gancho sai com codigo 0 - na "
+         "parada, 2 com saida que nao e JSON vira bloqueio, e 1 vira aviso "
+         "de falha na tela",
+         cobrado.returncode == 0
+         and cobrado.stdout.startswith(
+             AVISO_QUE_NAO_SEGURA_A_PARADA_POR_APRESENTACAO)
+         and endereco in cobrado.stdout)
 
     falhas = [rotulo for rotulo, passou in casos if not passou]
     for rotulo, passou in casos:

@@ -36,10 +36,10 @@ coisas que o instalador não traz — isso está em
 
 ## As páginas, uma a uma
 
-Outras páginas foram escritas e saíram para serem refeitas uma a uma;
-enquanto não voltarem, elas não são citadas aqui, porque sumário que nomeia
-página inexistente manda procurar o que ninguém escreveu.
-
+- [o mapa do repositório](mapa-do-repositorio.md) — onde escrever cada
+  coisa, e o que viaja para quem instala.
+- [os motores auxiliares](motores-auxiliares.md) — que papel vai para que
+  motor, e como se despacha.
 - [o estado que não viaja](estado-que-nao-viaja.md) — o que a máquina precisa
   ter e o instalador não traz.
 - [um navegador por projeto](navegador-por-projeto.md) — como a sessão ganha
@@ -53,6 +53,9 @@ página inexistente manda procurar o que ninguém escreveu.
   — as duas pastas do workspace na forma que as regras pedem, sem perder
   uma linha do dono.
 
+Módulo instalado traz a própria página para esta pasta — aqui, a do
+[índice](indice.md) e a da [voz](voz.md).
+
 Receitas que moram fora desta pasta, junto da peça que as usa:
 
 - a prova de que o agente lê a camada, no
@@ -64,6 +67,3 @@ Receitas que moram fora desta pasta, junto da peça que as usa:
 - o auditor de evidências, no [cartão do auditor](../modulos/auditor/LEIAME.md);
 - a investigação de incidente, na
   [página do módulo de observabilidade](../modulos/observabilidade/conhecimento/observabilidade.md).
-
-O que segura cada regra na prática — gancho, rotina ou nada:
-[a guarda mecânica das regras](guarda-mecanica-das-regras.md).

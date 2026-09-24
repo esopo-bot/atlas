@@ -6,7 +6,7 @@ seguiram, quais pararam, quais repetiram ciclo, e se a prova de cada uma
 **o que aconteceu, o que ainda reproduz, e o que isso sugere.**
 
 ```bash
-python montar.py --modulo auditor
+python <pasta do clone do atlas>/montar.py --modulo auditor
 python .agents/auditor/auditor.py <pasta-de-evidências>/<trabalho>
 ```
 

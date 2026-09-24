@@ -9,11 +9,10 @@ ensina como se trabalha aqui; a partida prova que a máquina que vai trabalhar
 está inteira. Ele não ensina nada e não conserta nada — mede, e devolve um
 veredito. Ela roda **sob demanda**, em qualquer agente: quando o dono pede,
 ou quando a abertura acusa peça em falta. Não é o primeiro ato de toda
-sessão, porque custa caro: medido em 15/09/2026 no Codex, a partida inteira
-levou quase três minutos e dezenas de milhares de tokens antes de o pedido
-começar. Os ganchos de abertura e as cercas já guardam o dia a dia; a partida
-serve para provar a máquina quando há dúvida, depois de mudar a camada ou ao
-estrear um agente. No Claude Code ela é `/partida`.
+sessão, porque custa caro: a partida inteira leva minutos e muitos tokens
+antes de o pedido começar. Os ganchos de abertura e as cercas já guardam o
+dia a dia; a partida serve para provar a máquina quando há dúvida, depois
+de mudar a camada ou ao estrear um agente. No Claude Code ela é `/partida`.
 
 A forma vem da cabine e do box. Da aviação: fluxo antes, checklist depois;
 desafio e resposta; itens que matam primeiro; lista de equipamento mínimo; e
@@ -117,7 +116,7 @@ conector que não existe neste agente.
 | 12 | NAVEGADOR | o servidor de navegador do `.mcp.json` e os perfis salvos: `ls .credenciais/playwright` | o servidor vivo por uma chamada que lista abas, e os NOMES dos perfis, nunca o conteúdo. A receita de tela de cada vizinho mora no perfil dele em `conhecimento/projetos/`. A pasta de perfis é local e não viaja para worktree nem nuvem: lá, AUSENTE declarado | pedido de tela com navegador INOPERANTE ou perfil ausente: NO-GO para dar por pronto, porque a régua do pronto inclui abrir a tela |
 | 13 | ÍNDICE | `python .agents/indice/indexar.py --estado`, depois a contraprova `python .agents/indice/buscar.py "<termo do pedido>" --alvo <alvo do pedido> --quantos 3`; sem pedido ainda, `--alvo conhecimento` e um termo que existe na camada, como `regra 16` | `LIGADO`, as duas portas respondendo, a linha de falhas, e três trechos com caminho e linha. O alvo é uma chave de `.agents/indice/alvos.json`, nunca `.`: vizinho fora da lista devolve vazio, e vazio não é ausência. Em worktree o alvo resolve para a pasta da worktree, que a ronda não indexou: INOPERANTE esperado, e a busca vale na raiz principal. Não busque durante a ronda | `INOPERANTE índice para <alvo>, sem a busca por significado, alternativa grep -rn, limite esta sessão`; alvo que falhou na ronda ou está fora da lista vai ao dono com a linha do `--estado` |
 | 14 | SKILLS | `python -c "import os; pastas = lambda p: sorted(d for d in os.listdir(p) if os.path.isdir(os.path.join(p, d))); print(pastas('.agents/skills')); print(pastas('.claude/skills'))"`, contra a lista que o seu agente carregou | as duas listas iguais, só pastas, e a sua lista com todas as da pasta que o seu agente lê (seção por aeronave). Dois-pontos na descrição invalida a skill em silêncio | falta uma: degradado, nomeando qual. Lista vazia: raiz errada, volte ao item 3 |
-| 15 | CÓPIA | `python montar.py --verificar` | `Tudo em dia — nada a sincronizar.` Editou a fonte, regenere e prove (regra 15) | degradado na partida; obrigatório verde antes de entregar |
+| 15 | CÓPIA | na casa da camada, `python montar.py --verificar`; numa instalação, `python <pasta do clone do atlas>/montar.py --verificar`, rodado daqui | na casa, `Tudo em dia — nada a sincronizar.`; numa instalação, `A camada instalada aqui está em dia com a origem.` Editou a fonte, regenere e prove (regra 15) | degradado na partida; obrigatório verde antes de entregar |
 | 16 | AMBIENTE | `python -c "import json, shutil; d = json.load(open('nucleo/ambiente.json', encoding='utf-8')); print({c: bool(shutil.which(c)) for c in d['comando'] + ['python', 'npx', 'docker']})"` e `python -c "import os, re; t = open('.mcp.json', encoding='utf-8').read(); print({v: v in os.environ for v in sorted(set(re.findall('[$][{]([A-Za-z0-9_]+)[}]', t)))})"` | só `True` nos dois: cada comando que `nucleo/ambiente.json` declara, mais os três de que índice e navegador dependem, para o ambiente que ainda não os declara, e cada variável que o `.mcp.json` pede, por NOME. Nome se verifica; valor nunca se imprime | peça `False`: INOPERANTE no item que dela depende; sem `git` em sessão que commita é NO-GO |
 | 17 | REGRA POR CAMINHO | `ls .claude/rules` | a regra do padrão de código, que o Claude Code carrega ao abrir arquivo de código. Nos outros agentes, `AUSENTE (não existe neste agente)`: lá o padrão chega pela skill `padrao-de-codigo`, invocada | informativo |
 
@@ -161,10 +160,10 @@ seção do seu agente substitui só o que ela nomeia.
   não revisou é ignorado sem linha de log. Ela se dá só pelo `/hooks` do Codex
   de terminal: o aplicativo de mesa não tem esse comando. Fica em
   `~/.codex/config.toml`, uma entrada por gancho em `[hooks.state]` com o
-  hash do arquivo, e vale também para o aplicativo de mesa (medido em
-  15/09/2026). Mudou o `.codex/hooks.json`, a confiança se dá de novo. Só o
+  hash do arquivo, e vale também para o aplicativo de mesa (medido). Mudou o
+  `.codex/hooks.json`, a confiança se dá de novo. Só o
   dono confia.
-- Item 8 soma `python montar.py --codex` (ensaio): o espelho do `.mcp.json`
+- Item 8 soma `python <pasta do clone do atlas>/montar.py --codex` (ensaio): o espelho do `.mcp.json`
   em `~/.codex/config.toml` tem de estar em dia. `codex mcp list` mostra
   declaração; vivo é a chamada do item 10.
 - Item 14: `/skills` contra a lista de `.agents/skills` do item 14: o Codex
@@ -172,8 +171,8 @@ seção do seu agente substitui só o que ela nomeia.
 - Item 10: no aplicativo de mesa, os comandos passam por uma ferramenta de
   execução, e os servidores ficam no objeto `tools` dela, com nomes
   `mcp__<servidor_com_sublinhado>__<ferramenta>`. Procure ali antes de dizer
-  que servidor nenhum está disponível: medido em 15/09/2026, a sessão disse
-  "nenhum" com os cinco vivos. Sem cabeça, `codex exec` só chama ferramenta
+  que servidor nenhum está disponível: quem não procura ali diz "nenhum"
+  com todos vivos. Sem cabeça, `codex exec` só chama ferramenta
   de servidor aprovada: `-c 'mcp_servers.<nome>.tools.<ferramenta>.approval_mode="approve"'`
   libera uma só, sem soltar shell nem escrita.
 - Item 11: o aplicativo pode trazer conectores próprios como ferramenta;
@@ -190,7 +189,8 @@ seção do seu agente substitui só o que ela nomeia.
   do disco, não prova de carga; a prova é o efeito, nos itens 7, 10 e 14.
 - Item 7: `.devin/hooks.v1.json` presente é ponte ligada; ausente, as
   cercas não valem aqui, e escrita segue só com o dono no terminal. Ligar a
-  ponte é decisão do dono: `python montar.py --devin` só ensaia, e com
+  ponte é decisão do dono: `python <pasta do clone do atlas>/montar.py
+  --devin` só ensaia, e com
   `--escrever` monta a camada na pasta e liga a ponte. Na nuvem os ganchos
   falham abertos por desenho: nunca contam como muro.
 - Sem cabeça (`devin -p`), a recusa do item 7 encerra a sessão antes do
@@ -212,8 +212,8 @@ seção do seu agente substitui só o que ela nomeia.
   carregado. No terminal, `/instructions`.
 - Item 7: com a pasta confiada, o Copilot roda direto as cercas do
   `.claude/settings.json`, sem ponte: ele entrega `CLAUDE_PROJECT_DIR` no
-  ambiente e a entrada no formato do Claude (medido no CLI oficial em
-  15/09/2026). A recusa da sonda prova tudo. Sem recusa, a primeira suspeita
+  ambiente e a entrada no formato do Claude (medido no CLI oficial). A
+  recusa da sonda prova tudo. Sem recusa, a primeira suspeita
   é a pasta fora de `trustedFolders` em `~/.copilot/config.json`: pasta não
   confiada não carrega gancho nenhum do repositório, em silêncio, e o item é
   INOPERANTE, com escrita só com o dono no terminal.
@@ -238,7 +238,7 @@ há gente no terminal para responder a uma pergunta; é `não` em `claude -p`,
 ```
 PARTIDA <carimbo> · agente <claude|codex|devin|copilot> · cabeça <sim|não> · conjunto <comum|pesquisa|etapa> · sessão <escreve|pesquisa>
 | n | desafio | comando | saída colada | resposta | quem age |
-| 1 | CARIMBO | date -u ... | 2026-09-15T12:00:00Z | PRESENTE | ninguém |
+| 1 | CARIMBO | python -c ... | 2026-09-15T12:00:00Z | PRESENTE | ninguém |
 | ... | | | | | |
 PARTIDA COMPLETA
 | 10 | SERVIDORES | ... | ... | PRESENTE 4 de 5; INOPERANTE <nome> desde <hora>, sem <o que dependia>, alternativa <...>, limite esta sessão | dono |

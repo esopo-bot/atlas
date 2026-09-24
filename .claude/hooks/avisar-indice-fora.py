@@ -77,7 +77,7 @@ def main() -> int:
     if aviso:
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": EVENTO_DE_INICIO_DE_SESSAO,
-            "additionalContext": aviso}}, ensure_ascii=False))
+            "additionalContext": aviso}}))
     return SILENCIO
 
 

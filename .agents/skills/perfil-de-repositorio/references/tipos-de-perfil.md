@@ -37,7 +37,7 @@ Repositório misto: registre o tipo principal e cite o secundário no perfil.
 - **dossiê de caso**: `README.md`, a pasta de dados brutos, a de entregas e o
   relatório mais recente. Repositório de caso guarda o TRABALHO sobre um
   cliente, não código que roda: o perfil diz onde os dados entram, o que já
-  foi entregue e o que está esperando resposta. Cuidado medido em 10/09/2026:
+  foi entregue e o que está esperando resposta. Cuidado medido:
   a pasta de dados brutos pode ser junção do sistema de arquivos apontando
   para fora do repositório, e varredura que desce ali sai da pasta do caso
   sem avisar.

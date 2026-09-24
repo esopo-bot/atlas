@@ -132,7 +132,7 @@ def negar(caminho: str, sugestao: str) -> int:
         "hookEventName": EVENTO_ANTES_DA_FERRAMENTA,
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA.format(caminho, sugestao),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 

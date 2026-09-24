@@ -10,7 +10,7 @@ pior régua possível. Prompt bem escrito parece bom; regra clara parece que vai
 ser seguida. Só medindo se descobre que não.
 
 ```bash
-python montar.py --modulo bancada
+python <pasta do clone do atlas>/montar.py --modulo bancada
 cp nucleo/bancada.exemplo.json nucleo/bancada.json   # e preencha
 python .agents/bancada/bancada.py tudo --versao v1 --ref <commit>
 ```

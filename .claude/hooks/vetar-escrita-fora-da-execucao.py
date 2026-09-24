@@ -56,6 +56,42 @@ REDIRECIONAMENTO_DE_DENTRO = re.compile(
     r">>?\s*[\"']([^\"']+)[\"']")
 BANDEIRA_DE_ESCRITA_NO_LUGAR = "-i"
 BANDEIRA_DE_ESCRITA_NO_LUGAR_POR_EXTENSO = "--in-place"
+FIM_DAS_OPCOES = "--"
+LETRAS_QUE_TRAZEM_O_ROTEIRO = {"sed": "ef", "perl": "eE"}
+LETRAS_QUE_TRAZEM_OUTRO_VALOR = {"sed": "l", "perl": ""}
+NOMES_LONGOS_QUE_TRAZEM_O_ROTEIRO = {"sed": {"expression": "e", "file": "f"},
+                                     "perl": {}}
+PROGRAMAS_CUJAS_OPCOES_ACABAM_NO_PRIMEIRO_OPERANDO = ("perl",)
+LETRA_DO_ROTEIRO_EM_ARQUIVO = "f"
+PROGRAMAS_CUJO_ROTEIRO_ESCREVE_ARQUIVO = ("sed",)
+MARCA_DE_ESCRITA_NO_ROTEIRO = re.compile(
+    r"(?<![A-Za-z\\])[wW]|(?<=[^A-Za-z0-9\s\\])[gpiImMe0-9]*w")
+TETO_DO_ROTEIRO_EM_ARQUIVO = 65536
+QUEBRA_DE_LINHA = "\n"
+ESCAPE_DO_SED = "\\"
+ENDERECO_POR_EXPRESSAO = "/"
+CARACTERES_DE_ENDERECO_POR_NUMERO = "0123456789$~+"
+BANDEIRAS_DO_ENDERECO = "IM"
+SEPARADOR_DE_ENDERECOS = ","
+NEGACAO_DO_ENDERECO = "!"
+ESPACOS_DO_SED = " \t"
+ENTRE_COMANDOS_DO_SED = " \t\n;"
+FIM_DO_ROTULO = ";\n"
+DIGITOS = "0123456789"
+COMANDOS_DO_SED_QUE_ESCREVEM = "wW"
+COMANDOS_DO_SED_COM_DUAS_PARTES = "sy"
+COMANDO_DO_SED_QUE_SUBSTITUI = "s"
+BANDEIRAS_DO_SUBSTITUIR = "gpiImMe0123456789"
+BANDEIRA_DO_SUBSTITUIR_QUE_ESCREVE = "w"
+COMANDOS_DO_SED_COM_O_RESTO_DA_LINHA = "aicrRe#"
+COMANDOS_DO_SED_COM_ROTULO = "btT:v"
+COMANDOS_DO_SED_COM_NUMERO = "qQlL"
+COMANDOS_DO_SED_SEM_ARGUMENTO = "=dDgGhHnNpPxzF{}"
+ABRE_COLCHETE = "["
+FECHA_COLCHETE = "]"
+NEGACAO_DO_COLCHETE = "^"
+ABERTURAS_DE_CLASSE = ("[:", "[.", "[=")
+LEITURAS_DO_COLCHETE = (True, False)
 
 COMANDO_DD = "dd"
 PREFIXO_DA_SAIDA_DO_DD = "of="
@@ -197,12 +233,15 @@ def sem_o_par_de_aspas_que_envolve(token: str) -> str:
 
 
 def partir_em_tokens(segmento: str) -> list:
+    import shlex
+    analisador = shlex.shlex(segmento, posix=True)
+    analisador.whitespace_split = True
+    analisador.escape = ""
+    analisador.commenters = ""
     try:
-        import shlex
-        tokens = shlex.split(segmento, posix=False)
+        return list(analisador)
     except ValueError:
-        tokens = segmento.split()
-    return [sem_o_par_de_aspas_que_envolve(t) for t in tokens]
+        return [sem_o_par_de_aspas_que_envolve(t) for t in segmento.split()]
 
 
 def e_git(token: str) -> bool:
@@ -337,6 +376,234 @@ def escreve_no_lugar(tokens: list) -> bool:
                for t in tokens[1:] if t.startswith(PREFIXO_DE_OPCAO))
 
 
+def letra_que_leva_valor(aglomerado: str, letras_com_valor: str):
+    for posicao, letra in enumerate(aglomerado):
+        if letra == LETRA_DE_ESCRITA_NO_LUGAR:
+            return SEM_NOME, SEM_NOME, False
+        if letra in letras_com_valor:
+            valor = aglomerado[posicao + 1:]
+            return letra, valor, bool(valor)
+    return SEM_NOME, SEM_NOME, False
+
+
+def nome_longo_que_traz_o_roteiro(programa: str, token: str):
+    nome, igual, valor = token[len(BANDEIRA_LONGA):].partition(IGUAL)
+    letra = next((letra for longo, letra
+                  in NOMES_LONGOS_QUE_TRAZEM_O_ROTEIRO[programa].items()
+                  if nome and longo.startswith(nome)), SEM_NOME)
+    return letra, valor, bool(igual)
+
+
+def opcao_que_leva_valor(programa: str, token: str, letras_com_valor: str):
+    if token.startswith(BANDEIRA_LONGA):
+        return nome_longo_que_traz_o_roteiro(programa, token)
+    return letra_que_leva_valor(token[len(PREFIXO_DE_OPCAO):],
+                                letras_com_valor)
+
+
+def roteiro_que_o_arquivo_traz(caminho: str, onde: str):
+    alvo = resolver(caminho, onde)
+    try:
+        if alvo is None or not alvo.is_file() \
+                or alvo.stat().st_size > TETO_DO_ROTEIRO_EM_ARQUIVO:
+            return None
+        return alvo.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def alvos_depois_de_cada_marca_de_escrita(texto: str) -> list:
+    alvos = [texto[marca.end():].split(QUEBRA_DE_LINHA, 1)[0].strip()
+             for marca in MARCA_DE_ESCRITA_NO_ROTEIRO.finditer(texto)]
+    return [alvo for alvo in alvos if alvo]
+
+
+def depois_de(texto: str, posicao: int, caracteres: str) -> int:
+    while posicao < len(texto) and texto[posicao] in caracteres:
+        posicao += 1
+    return posicao
+
+
+def ate_um_de(texto: str, posicao: int, caracteres: str) -> int:
+    while posicao < len(texto) and texto[posicao] not in caracteres:
+        posicao += 1
+    return posicao
+
+
+def depois_do_colchete(texto: str, posicao: int):
+    posicao += texto.startswith(NEGACAO_DO_COLCHETE, posicao)
+    posicao += texto.startswith(FECHA_COLCHETE, posicao)
+    while posicao < len(texto):
+        par = texto[posicao:posicao + 2]
+        if texto[posicao] == FECHA_COLCHETE:
+            return posicao + 1
+        if par in ABERTURAS_DE_CLASSE:
+            fim = texto.find(par[1] + FECHA_COLCHETE, posicao + 2)
+            if fim < 0:
+                return None
+            posicao = fim + 2
+        else:
+            posicao += 1
+    return None
+
+
+def depois_do_delimitado(texto: str, posicao: int, delimitador: str,
+                         colchete_conta: bool):
+    while posicao is not None and posicao < len(texto):
+        if texto[posicao] == ESCAPE_DO_SED:
+            posicao += 2
+        elif texto[posicao] == delimitador:
+            return posicao + 1
+        elif colchete_conta and texto[posicao] == ABRE_COLCHETE:
+            posicao = depois_do_colchete(texto, posicao + 1)
+        else:
+            posicao += 1
+    return None
+
+
+def depois_do_endereco(texto: str, posicao: int, colchete_conta: bool):
+    if texto.startswith(ESCAPE_DO_SED, posicao):
+        delimitador = texto[posicao + 1:posicao + 2]
+        posicao = depois_do_delimitado(
+            texto, posicao + 2, delimitador, colchete_conta) \
+            if delimitador else None
+    elif texto.startswith(ENDERECO_POR_EXPRESSAO, posicao):
+        posicao = depois_do_delimitado(texto, posicao + 1,
+                                       ENDERECO_POR_EXPRESSAO, colchete_conta)
+    else:
+        return depois_de(texto, posicao, CARACTERES_DE_ENDERECO_POR_NUMERO)
+    return None if posicao is None \
+        else depois_de(texto, posicao, BANDEIRAS_DO_ENDERECO)
+
+
+def depois_dos_enderecos(texto: str, posicao: int, colchete_conta: bool):
+    posicao = depois_do_endereco(texto, posicao, colchete_conta)
+    if posicao is not None \
+            and texto.startswith(SEPARADOR_DE_ENDERECOS, posicao):
+        posicao = depois_do_endereco(
+            texto, depois_de(texto, posicao + 1, ESPACOS_DO_SED),
+            colchete_conta)
+    if posicao is None:
+        return None
+    return depois_de(texto, posicao, ESPACOS_DO_SED + NEGACAO_DO_ENDERECO)
+
+
+def resto_da_linha(texto: str, posicao: int):
+    fim = ate_um_de(texto, posicao, QUEBRA_DE_LINHA)
+    return texto[posicao:fim].strip(), fim
+
+
+def argumento_de_duas_partes(comando: str, texto: str, posicao: int,
+                             colchete_conta: bool):
+    delimitador = texto[posicao:posicao + 1]
+    substitui = comando == COMANDO_DO_SED_QUE_SUBSTITUI
+    if not delimitador or delimitador in QUEBRA_DE_LINHA + ESCAPE_DO_SED:
+        return SEM_NOME, None
+    posicao = depois_do_delimitado(texto, posicao + 1, delimitador,
+                                   colchete_conta and substitui)
+    if posicao is not None:
+        posicao = depois_do_delimitado(texto, posicao, delimitador, False)
+    if posicao is None or not substitui:
+        return SEM_NOME, posicao
+    posicao = depois_de(texto, posicao, BANDEIRAS_DO_SUBSTITUIR)
+    if texto.startswith(BANDEIRA_DO_SUBSTITUIR_QUE_ESCREVE, posicao):
+        return resto_da_linha(texto, posicao + 1)
+    return SEM_NOME, posicao
+
+
+def argumento_do_comando(comando: str, texto: str, posicao: int,
+                         colchete_conta: bool):
+    if comando in COMANDOS_DO_SED_QUE_ESCREVEM:
+        return resto_da_linha(texto, posicao)
+    if comando in COMANDOS_DO_SED_COM_DUAS_PARTES:
+        return argumento_de_duas_partes(comando, texto, posicao,
+                                        colchete_conta)
+    if comando in COMANDOS_DO_SED_COM_O_RESTO_DA_LINHA:
+        return SEM_NOME, ate_um_de(texto, posicao, QUEBRA_DE_LINHA)
+    if comando in COMANDOS_DO_SED_COM_ROTULO:
+        return SEM_NOME, ate_um_de(texto, posicao, FIM_DO_ROTULO)
+    if comando in COMANDOS_DO_SED_COM_NUMERO:
+        return SEM_NOME, depois_de(
+            texto, depois_de(texto, posicao, ESPACOS_DO_SED), DIGITOS)
+    if comando in COMANDOS_DO_SED_SEM_ARGUMENTO:
+        return SEM_NOME, posicao
+    return SEM_NOME, None
+
+
+def alvos_numa_leitura(texto: str, colchete_conta: bool):
+    alvos, posicao = [], depois_de(texto, 0, ENTRE_COMANDOS_DO_SED)
+    while posicao < len(texto):
+        posicao = depois_dos_enderecos(texto, posicao, colchete_conta)
+        if posicao is None or posicao >= len(texto):
+            return None
+        alvo, posicao = argumento_do_comando(texto[posicao], texto,
+                                             posicao + 1, colchete_conta)
+        if posicao is None:
+            return None
+        alvos += [alvo] if alvo else []
+        posicao = depois_de(texto, posicao, ENTRE_COMANDOS_DO_SED)
+    return alvos
+
+
+def alvos_que_o_roteiro_escreve(texto: str):
+    leituras = [alvos_numa_leitura(texto, colchete_conta)
+                for colchete_conta in LEITURAS_DO_COLCHETE]
+    if None in leituras:
+        return None
+    return list(dict.fromkeys(
+        alvo for leitura in leituras for alvo in leitura))
+
+
+def escritas_de_dentro_dos_roteiros(programa: str, roteiros: list,
+                                    onde: str) -> list:
+    if programa not in PROGRAMAS_CUJO_ROTEIRO_ESCREVE_ARQUIVO:
+        return []
+    escritas = []
+    for letra, roteiro in roteiros:
+        texto = roteiro_que_o_arquivo_traz(roteiro, onde) \
+            if letra == LETRA_DO_ROTEIRO_EM_ARQUIVO else roteiro
+        alvos = alvos_que_o_roteiro_escreve(texto) \
+            if texto is not None else None
+        if alvos is not None:
+            escritas += alvos
+        elif texto is None:
+            escritas.append(roteiro)
+        elif na_duvida := alvos_depois_de_cada_marca_de_escrita(texto):
+            escritas += [roteiro] + na_duvida
+    return escritas
+
+
+def arquivos_editados_no_lugar(programa: str, tokens: list,
+                               onde: str) -> list:
+    letras_do_roteiro = LETRAS_QUE_TRAZEM_O_ROTEIRO[programa]
+    letras_com_valor = letras_do_roteiro + LETRAS_QUE_TRAZEM_OUTRO_VALOR[programa]
+    operandos, roteiros = [], []
+    letra_que_espera, so_operandos = SEM_NOME, False
+    for token in tokens[1:]:
+        if letra_que_espera:
+            roteiros.append((letra_que_espera, token))
+            letra_que_espera = SEM_NOME
+        elif so_operandos or not token.startswith(PREFIXO_DE_OPCAO) \
+                or token == PREFIXO_DE_OPCAO:
+            operandos.append(token)
+            so_operandos = so_operandos or \
+                programa in PROGRAMAS_CUJAS_OPCOES_ACABAM_NO_PRIMEIRO_OPERANDO
+        elif token == FIM_DAS_OPCOES:
+            so_operandos = True
+        else:
+            letra, valor, colado = opcao_que_leva_valor(
+                programa, token, letras_com_valor)
+            if letra and colado:
+                roteiros.append((letra, valor))
+            letra_que_espera = SEM_NOME if colado else letra
+    roteiros = [(letra, valor) for letra, valor in roteiros
+                if letra and letra in letras_do_roteiro]
+    if not roteiros and operandos:
+        roteiros, operandos = [(SEM_NOME, operandos[0])], operandos[1:]
+    return operandos + escritas_de_dentro_dos_roteiros(programa, roteiros,
+                                                       onde)
+
+
 def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
     bandeiras = COMANDOS_QUE_ESCREVEM_NA_OPCAO.get(programa)
     if not bandeiras:
@@ -351,7 +618,8 @@ def caminhos_escritos_na_opcao(programa: str, tokens: list) -> list:
 
 
 
-def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
+def caminhos_escritos_pelo_segmento(segmento: str, tokens: list,
+                                    onde: str) -> list:
     escritos = [m.group(1)
                 for m in REDIRECIONAMENTO_DE_SHELL.finditer(segmento)]
     if tokens:
@@ -367,7 +635,7 @@ def caminhos_escritos_pelo_segmento(segmento: str, tokens: list) -> list:
             escritos.append(posicionais[-1])
         elif programa in COMANDOS_QUE_ESCREVEM_NO_LUGAR \
                 and escreve_no_lugar(tokens):
-            escritos += posicionais
+            escritos += arquivos_editados_no_lugar(programa, tokens, onde)
         escritos += caminhos_escritos_por_bandeira(programa, tokens)
         escritos += caminhos_escritos_na_opcao(programa, tokens)
     return [sem_o_par_de_aspas_que_envolve(e) for e in escritos if e]
@@ -393,7 +661,8 @@ def escritas_do_comando(comando: str, onde: str) -> list:
     escritas = []
     for segmento in separar(comando):
         tokens = partir_em_tokens(segmento.strip())
-        for caminho in caminhos_escritos_pelo_segmento(segmento, tokens):
+        for caminho in caminhos_escritos_pelo_segmento(segmento, tokens,
+                                                       onde):
             escritas.append((caminho, resolver(caminho, onde)))
         if tokens and Path(tokens[0]).name == COMANDO_CD and len(tokens) > 1:
             destino = resolver(sem_o_par_de_aspas_que_envolve(tokens[1]), onde)
@@ -446,7 +715,7 @@ def recusa_por_nao_entender(falha) -> int:
         "permissionDecision": DECISAO_DE_NEGAR,
         "permissionDecisionReason": RECUSA_SEM_ENTENDER.format(
             type(falha).__name__, falha),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -473,7 +742,7 @@ def decidir() -> int:
             RECUSA.format(declarado, alvo, raiz,
                           MARCA_DE_ETAPA_NO_AMBIENTE)
             + MANDA_GRAVAR.format(APRENDIZADO)),
-    }}, ensure_ascii=False))
+    }}))
     return SILENCIO
 
 
@@ -493,6 +762,9 @@ def montar_arvores_de_mentira(pasta: Path) -> None:
     (pasta / "raiz-vizinha" / "sub").mkdir(parents=True, exist_ok=True)
     (pasta / "fora").mkdir(parents=True, exist_ok=True)
     (pasta / "fora" / "x.py").write_text("velho", encoding="utf-8")
+    (pasta / "fora" / "roteiro.sed").write_text("s/a/b/\n", encoding="utf-8")
+    (pasta / "raiz" / "sub" / "escreve.sed").write_text(
+        f"w {(pasta / 'fora' / 'x.py').as_posix()}\n", encoding="utf-8")
 
 
 def casos_que_barram(fora: str, vizinha: str) -> list:
@@ -535,6 +807,47 @@ def casos_que_barram(fora: str, vizinha: str) -> list:
          pedido_de_shell(f"cd {fora} && echo oi > anotacao.txt")),
         ("pasta vizinha de nome parecido é fora, não dentro",
          pedido_de_escrita("Write", f"{vizinha}/sub/novo.py")),
+        ("sed -i com o roteiro por -e e o arquivo fora",
+         pedido_de_shell(f"sed -i -e 's/a/b/' {fora}/x.py")),
+        ("sed -ie: o e colado ao i é sufixo, não roteiro",
+         pedido_de_shell(f"sed -ie 's/a/b/' {fora}/x.py")),
+        ("sed -i com um arquivo dentro e outro fora, os dois como arquivo",
+         pedido_de_shell(f"sed -i 's/a/b/' sub/x.py {fora}/x.py")),
+        ("sed -i com --expression= e o arquivo fora",
+         pedido_de_shell(f"sed -i --expression='s/a/b/' {fora}/x.py")),
+        ("sed -i com -- antes do arquivo fora",
+         pedido_de_shell(f"sed -i -e 's/a/b/' -- {fora}/x.py")),
+        ("sed -ni: o n antes do i não esconde o alvo",
+         pedido_de_shell(f"sed -ni 's/a/b/p' {fora}/x.py")),
+        ("perl para de ler opção no primeiro arquivo: o -e depois dele é "
+         "arquivo, e o de fora também",
+         pedido_de_shell(f"perl -pi -e 's/a/b/' sub/x.py -e {fora}/x.py")),
+        ("o mesmo com o roteiro em arquivo e sem -e",
+         pedido_de_shell(f"perl -pi roteiro.pl sub/x.py -e {fora}/x.py")),
+        ("o comando w do roteiro escreve no arquivo que ele nomeia",
+         pedido_de_shell(f"sed -i 'w {fora}/x.py' sub/x.py")),
+        ("o mesmo com o comando W",
+         pedido_de_shell(f"sed -i 'W {fora}/x.py' sub/x.py")),
+        ("o mesmo com a bandeira w do s",
+         pedido_de_shell(f"sed -i 's/a/b/w {fora}/x.py' sub/x.py")),
+        ("o roteiro do -f que se lê e escreve com w",
+         pedido_de_shell("sed -i -f sub/escreve.sed sub/x.py")),
+        ("o roteiro do -f que não se lê volta a ser julgado como antes",
+         pedido_de_shell(f"sed -i -f {fora}/ausente.sed sub/x.py")),
+        ("a bandeira w do s depois de outra bandeira",
+         pedido_de_shell(f"sed -i 's/a/b/gw {fora}/x.py' sub/x.py")),
+        ("o comando w depois de um endereço por número",
+         pedido_de_shell(f"sed -i '1w {fora}/x.py' sub/x.py")),
+        ("o comando w depois de um endereço por expressão",
+         pedido_de_shell(f"sed -i '/x/w {fora}/x.py' sub/x.py")),
+        ("a / dentro do colchete não fecha a expressão do s",
+         pedido_de_shell(f"sed -i 's/[/]/a/w {fora}/x.py' sub/x.py")),
+        ("o ] logo depois do [ é literal e não fecha o colchete",
+         pedido_de_shell(f"sed -i 's/[]/]/a/w {fora}/x.py' sub/x.py")),
+        ("a contrabarra escapa o delimitador da expressão do s",
+         pedido_de_shell(f"sed -i 's/\\/x/a/w {fora}/x.py' sub/x.py")),
+        ("a / dentro do colchete não fecha o endereço por expressão",
+         pedido_de_shell(f"sed -i '/[/]/w {fora}/x.py' sub/x.py")),
     ]
 
 
@@ -616,6 +929,37 @@ def casos_que_passam(raiz: str, fora: str) -> list:
          pedido_de_shell(f"dd if={fora}/x.py of=sub/copia.py")),
         ("cp DE fora para dentro com destino por -t",
          pedido_de_shell(f"cp -t sub {fora}/x.py")),
+        ("roteiro do sed -i que começa com barra é roteiro, não caminho",
+         pedido_de_shell("sed -i '/^#/d' sub/x.py")),
+        ("o arquivo de roteiro do -f fora é lido, não escrito",
+         pedido_de_shell(f"sed -i -f {fora}/roteiro.sed sub/x.py")),
+        ("o mesmo com o -f depois de um -e",
+         pedido_de_shell(f"sed -i -e 's/a/b/' -f {fora}/roteiro.sed sub/x.py")),
+        ("o mesmo com --file e o valor separado",
+         pedido_de_shell(f"sed -i --file {fora}/roteiro.sed sub/x.py")),
+        ("perl -ni com o roteiro que começa com barra",
+         pedido_de_shell("perl -ni -e '/^#/ or print' sub/x.py")),
+        ("no sed a opção depois do arquivo continua opção: o -f de fora só "
+         "é lido", pedido_de_shell(
+             f"sed -i -e 's/a/b/' sub/x.py -f {fora}/roteiro.sed")),
+        ("a bandeira w do s para a saída padrão não escreve em arquivo",
+         pedido_de_shell("sed -i 's/a/b/w /dev/stdout' sub/x.py")),
+        ("roteiro com palavra que tem w no meio não é o comando w",
+         pedido_de_shell("sed -i 's/old/new/' sub/x.py")),
+        ("o w no texto de substituição não é o comando w",
+         pedido_de_shell("sed -i 's/a/w/' sub/x.py")),
+        ("o w na expressão do s não é o comando w",
+         pedido_de_shell("sed -i 's/w/x/' sub/x.py")),
+        ("bandeira do s que não escreve",
+         pedido_de_shell("sed -i 's/a/b/g' sub/x.py")),
+        ("o w no y não é o comando w",
+         pedido_de_shell("sed -i 'y/abc/wxy/' sub/x.py")),
+        ("o w num endereço por expressão não é o comando w",
+         pedido_de_shell("sed -i '/w/d' sub/x.py")),
+        ("o comando w que escreve dentro da raiz",
+         pedido_de_shell("sed -i '/^#/w sub/comentarios.txt' sub/x.py")),
+        ("o colchete com a / dentro, num s que não escreve",
+         pedido_de_shell("sed -i 's/[/]/x/g' sub/x.py")),
     ]
 
 

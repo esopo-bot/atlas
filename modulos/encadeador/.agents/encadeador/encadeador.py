@@ -227,18 +227,19 @@ FONTE_DO_DUBLE_DO_GH = '''#!/usr/bin/env python3
 import json, os, sys, pathlib
 caixa = pathlib.Path({caixa})
 argv = sys.argv[1:]
-(caixa / "chamadas.txt").open("a").write(
+sys.stdout.reconfigure(encoding="utf-8")
+(caixa / "chamadas.txt").open("a", encoding="utf-8").write(
     " ".join(argv) + "\\t" + os.environ.get("GH_TOKEN", "sem-token") + "\\n")
 if argv[:2] == ["auth", "token"]:
     print("token-de-" + argv[-1])
 elif argv[:2] == ["issue", "comment"]:
-    (caixa / "postado.md").open("a").write(sys.stdin.read())
+    (caixa / "postado.md").open("ab").write(sys.stdin.buffer.read())
 elif argv[:2] == ["issue", "view"]:
-    print((caixa / "comentarios.json").read_text()
+    print((caixa / "comentarios.json").read_text(encoding="utf-8")
           if (caixa / "comentarios.json").exists() else '{{"comments": []}}')
 elif argv[:1] == ["api"] and len(argv) > 1:
     negados = caixa / "sem-acesso.txt"
-    if negados.exists() and argv[1] in negados.read_text().split():
+    if negados.exists() and argv[1] in negados.read_text(encoding="utf-8").split():
         sys.stderr.write("Not Found (HTTP 404)\\n")
         sys.exit(1)
 sys.exit(0)
@@ -247,7 +248,8 @@ FONTE_DO_DUBLE_DO_QUADRO = '''#!/usr/bin/env python3
 import json, os, pathlib, sys
 caixa = pathlib.Path({caixa})
 argv = sys.argv[1:]
-(caixa / "chamadas.txt").open("a").write(
+sys.stdout.reconfigure(encoding="utf-8")
+(caixa / "chamadas.txt").open("a", encoding="utf-8").write(
     " ".join(argv[:2]) + "\\t" + os.environ.get("GH_TOKEN", "sem-token")
     + "\\n")
 if argv[:2] == ["auth", "token"]:
@@ -256,7 +258,7 @@ if argv[:2] == ["auth", "token"]:
 roteiro = caixa / "resposta.json"
 if not roteiro.exists():
     sys.exit(0)
-dito = json.loads(roteiro.read_text())
+dito = json.loads(roteiro.read_text(encoding="utf-8"))
 consulta = " ".join(argv)
 for gatilho, resposta in dito.get("por_consulta", {{}}).items():
     if gatilho in consulta:
@@ -273,14 +275,15 @@ FONTE_DO_DUBLE_DA_FILA = '''#!/usr/bin/env python3
 import os, pathlib, sys
 caixa = pathlib.Path({caixa})
 argv = sys.argv[1:]
-(caixa / "chamadas.txt").open("a").write(" ".join(argv) + "\\n")
+sys.stdout.reconfigure(encoding="utf-8")
+(caixa / "chamadas.txt").open("a", encoding="utf-8").write(" ".join(argv) + "\\n")
 if argv[:2] == ["auth", "token"]:
     print("token-de-" + argv[-1])
     sys.exit(0)
 if (caixa / "recusa.txt").exists():
     sys.stderr.write("sem acesso\\n")
     sys.exit(1)
-print((caixa / "issues.json").read_text())
+print((caixa / "issues.json").read_text(encoding="utf-8"))
 sys.exit(0)
 '''
 
@@ -391,6 +394,24 @@ CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA = (
     '"session_id":"s-teto","result":"teto","total_cost_usd":1.0,'
     '"usage":{"input_tokens":1,"output_tokens":1,'
     '"cache_read_input_tokens":1,"cache_creation_input_tokens":1}}\\n\'\n')
+CLI_FALSO_QUE_RETOMA_E_ENTREGA = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'case "$*" in\n'
+    '  *resume*)\n'
+    '    printf \'{"type":"result","subtype":"success","num_turns":3,'
+    '"session_id":"s-duas-pernas","result":"pronto","total_cost_usd":0.5,'
+    '"usage":{"input_tokens":2,"output_tokens":4,'
+    '"cache_read_input_tokens":6,"cache_creation_input_tokens":8},'
+    '"structured_output":{"veredito":"segue","provado":[],"suposto":[],'
+    '"faltas":[]}}\\n\'\n'
+    '    exit 0\n'
+    '    ;;\n'
+    'esac\n'
+    'printf \'{"type":"result","subtype":"error_max_turns","num_turns":5,'
+    '"session_id":"s-duas-pernas","result":"teto","total_cost_usd":1.0,'
+    '"usage":{"input_tokens":1,"output_tokens":2,'
+    '"cache_read_input_tokens":3,"cache_creation_input_tokens":4}}\\n\'\n')
 CLI_FALSO_QUE_FALA_E_TRAVA = (
     '#!/bin/sh\n'
     'cat > /dev/null\n'
@@ -409,6 +430,7 @@ ERRO_SITUACAO_DESCONHECIDA = ("defeito no encadeador: situação {!r} "
 ERRO_ETAPA_SEM_EVIDENCIA = (
     "defeito no encadeador: uma etapa terminou sem evidência no disco — "
     "corrija encadeador.py")
+CICLO_ANTES_DO_PRIMEIRO = 0
 ERRO_TEMPO_ESTOURADO = "tempo-limite de {}s estourado"
 ERRO_NAO_E_OBJETO_DE_EVIDENCIA = "não é um objeto de evidência"
 ERRO_RAIZ_DO_ROTEIRO = "roteiro: a raiz precisa ser um objeto JSON"
@@ -1242,6 +1264,7 @@ class TempoEstourado(Exception):
         super().__init__(ERRO_TEMPO_ESTOURADO.format(tempo))
         self.tempo = tempo
         self.turnos = 0
+        self.custo = None
 
 
 def _resumo_do_evento(dado: dict) -> str:
@@ -1274,6 +1297,7 @@ def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
     tempo = etapa.get("tempo-limite", TEMPO_SESSAO)
     entrada = _prompt_da_sessao(etapa, cwd)
     retomar, ditos, turnos = "", [], 0
+    custo_das_pernas = None
     for tentativa in range(RETOMADAS + 1):
         if tentativa:
             _anotar_retomada_no_log(log, tentativa)
@@ -1287,11 +1311,15 @@ def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
                              else ABRE_O_LOG_DO_ZERO))
         except TempoEstourado as estouro:
             estouro.turnos = turnos
+            estouro.custo = custo_das_pernas
             raise
         ditos += marcas.get("ditos", [])
         marcas["ditos"] = ditos
         turnos += marcas.get("turnos", 0)
         marcas["turnos"] = turnos
+        custo_das_pernas = _custo_somado(custo_das_pernas,
+                                         _custo_da_sessao(saida))
+        marcas["custo"] = custo_das_pernas
         if (espera := _espera_do_limite(saida, marcas.get("limite"))):
             _dormir_ate_a_janela_abrir(espera, etapa, rotulo)
             retomar = marcas.get("sessao") or retomar
@@ -1613,9 +1641,9 @@ def _evidencia_sintetica(base: list, motivo: str, detalhe=None,
     return _cli_evidencia(argumentos + list(medidas)).stdout.strip()
 
 
-def _materializar_envelope(base: list, envelope: dict) -> str:
+def _materializar_envelope(base: list, envelope: dict, medidas=()) -> str:
     completo = {**CAMPOS_QUE_O_MATERIALIZAR_REESCREVE, **envelope}
-    feito = _cli_evidencia(["materializar"] + base,
+    feito = _cli_evidencia(["materializar"] + base + list(medidas),
                            entrada=json.dumps(completo, ensure_ascii=False))
     return feito.stdout.strip()
 
@@ -1998,7 +2026,7 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                                   ambiente, materializados)
     if etapa["tipo"] == "aprovacao-manual":
         return _rodar_aprovacao_manual(etapa, base, cwd, trabalho,
-                                       configuracao, issue)
+                                       configuracao, issue, dir_base, ordem)
     if etapa["tipo"] == "sessao" and (parada := _recusa_da_branch(
             cwd, ambiente)):
         return _materializar_envelope(base, parada)
@@ -2027,6 +2055,7 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                                     DETALHE_TEMPO_ESTOURADO.format(
                                         estouro=estouro, log=log),
                                     _bandeira_de_turnos("", estouro.turnos)
+                                    + _bandeira_de_custo("", estouro.custo)
                                     + _bandeira_de_duracao(comecou))
 
     _guardar_no_log(log, etapa["tipo"], saida, erro)
@@ -2040,10 +2069,12 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                                     detalhe[:LIMITE_DO_DETALHE],
                                     _o_que_a_sessao_gastou(
                                         saida, comecou,
-                                        marcas.get("turnos", 0)))
+                                        marcas.get("turnos", 0),
+                                        marcas.get("custo")))
     feito = _cli_evidencia(["materializar"] + base
                            + _o_que_a_sessao_gastou(
-                               saida, comecou, marcas.get("turnos", 0)),
+                               saida, comecou, marcas.get("turnos", 0),
+                               marcas.get("custo")),
                            entrada=saida)
     return feito.stdout.strip()
 
@@ -2053,9 +2084,11 @@ def _bandeira_de_duracao(comecou: float) -> list:
 
 
 def _o_que_a_sessao_gastou(saida: str, comecou: float,
-                           turnos_colhidos: int = 0) -> list:
+                           turnos_colhidos: int = 0,
+                           custo_das_pernas=None) -> list:
     return (_bandeira_de_turnos(saida, turnos_colhidos)
-            + _bandeira_de_custo(saida) + _bandeira_de_duracao(comecou))
+            + _bandeira_de_custo(saida, custo_das_pernas)
+            + _bandeira_de_duracao(comecou))
 
 
 def _bandeira_de_turnos(saida: str, turnos_colhidos: int = 0) -> list:
@@ -2106,8 +2139,20 @@ def _custo_da_sessao(saida: str):
     return {"usd": usd, "tokens": tokens}
 
 
-def _bandeira_de_custo(saida: str) -> list:
-    custo = _custo_da_sessao(saida)
+def _custo_somado(acumulado, da_perna):
+    if da_perna is None:
+        return acumulado
+    if acumulado is None:
+        return da_perna
+    chaves = set(acumulado["tokens"]) | set(da_perna["tokens"])
+    return {"usd": acumulado["usd"] + da_perna["usd"],
+            "tokens": {chave: (acumulado["tokens"].get(chave, 0)
+                               + da_perna["tokens"].get(chave, 0))
+                       for chave in chaves}}
+
+
+def _bandeira_de_custo(saida: str, ja_medido=None) -> list:
+    custo = ja_medido if ja_medido is not None else _custo_da_sessao(saida)
     return ([BANDEIRA_DO_CUSTO, json.dumps(custo, ensure_ascii=False)]
             if custo else [])
 
@@ -2364,9 +2409,63 @@ def _rodar_verificacao(etapa, base, ordem, trabalho, dir_base, cwd, ambiente,
     return _materializar_envelope(base, envelope)
 
 
+def _instante_do_marco(quando):
+    try:
+        return datetime.fromisoformat(quando).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _recibos_da_etapa_por_ciclo(pasta, ordem, nome_da_etapa) -> dict:
+    colhidos = {}
+    for arquivo in Path(pasta).glob("*.json"):
+        casado = PADRAO_NOME_EVIDENCIA.match(arquivo.name)
+        if not casado or casado.group(2) != nome_da_etapa:
+            continue
+        if int(casado.group(1)) != int(ordem):
+            continue
+        try:
+            dado = json.loads(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(dado, dict):
+            colhidos[int(casado.group(3))] = dado
+    return colhidos
+
+
+def _quando_o_dono_comecou_a_esperar(pasta, ordem, nome_da_etapa, agora):
+    recibos = _recibos_da_etapa_por_ciclo(pasta, ordem, nome_da_etapa)
+    if not recibos:
+        return None
+    comecou, ciclo = None, max(recibos)
+    while True:
+        recibo = recibos.get(ciclo)
+        if recibo is None:
+            return comecou if ciclo == CICLO_ANTES_DO_PRIMEIRO else None
+        if recibo.get("veredito") != "pergunta":
+            return comecou
+        marco = _instante_do_marco(recibo.get("quando"))
+        if marco is None or marco > agora:
+            return None
+        comecou = marco
+        ciclo -= 1
+
+
+def _espera_do_dono(dir_base, trabalho, ordem, nome_da_etapa) -> list:
+    if not dir_base:
+        return []
+    agora = time.time()
+    desde = _quando_o_dono_comecou_a_esperar(Path(dir_base) / trabalho, ordem,
+                                             nome_da_etapa, agora)
+    if desde is None:
+        return []
+    return [BANDEIRA_DA_DURACAO, f"{agora - desde:.3f}"]
+
+
 def _rodar_aprovacao_manual(etapa, base, cwd, trabalho, configuracao=None,
-                            issue=None):
+                            issue=None, dir_base=None, ordem=0):
     arquivo = Path(cwd) / etapa["aprovacao"]
+    esperou = _espera_do_dono(dir_base, trabalho, ordem, etapa["nome"])
     if arquivo.is_file():
         envelope = {"veredito": "segue",
                     "provado": [{
@@ -2375,7 +2474,7 @@ def _rodar_aprovacao_manual(etapa, base, cwd, trabalho, configuracao=None,
                             shlex.quote(str(arquivo))),
                         "saida": SAIDA_APROVADO}],
                     "suposto": [], "faltas": []}
-        return _materializar_envelope(base, envelope)
+        return _materializar_envelope(base, envelope, esperou)
 
     corpo, autor, _ = resposta_na_issue(configuracao, issue)
     if corpo:
@@ -2388,7 +2487,7 @@ def _rodar_aprovacao_manual(etapa, base, cwd, trabalho, configuracao=None,
                         .format(issue=issue, repositorio=repositorio),
                         "saida": autor}],
                     "suposto": [], "faltas": []}
-        return _materializar_envelope(base, envelope)
+        return _materializar_envelope(base, envelope, esperou)
 
     relativo = (Path(arquivo).name if Path(arquivo).is_absolute()
                 else arquivo)
@@ -4185,6 +4284,9 @@ def _cli_verificar(alvo, cwd):
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     if "--testar" in sys.argv:
         try:
             from testes import testar

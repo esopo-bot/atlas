@@ -593,6 +593,7 @@ from pathlib import Path
 CORPO = Path(os.environ["CAIXA_TESTE_CORPO"])
 LOG = Path(os.environ["CAIXA_TESTE_LOG"])
 COMENTARIOS = Path(os.environ["CAIXA_TESTE_COMENTARIOS"])
+sys.stdin.reconfigure(encoding="utf-8")
 
 with LOG.open("a", encoding="utf-8") as registro:
     registro.write(" ".join(sys.argv[1:]) + chr(10))
@@ -785,8 +786,7 @@ def testar() -> int:
         cheio = corpo_com_fechamento(cheio, f"- 2026-09-12 · podado: {n:02d}")
     guardados = fechamentos_do_miolo(partes_dos_fechamentos(cheio)[1])
     caso("a seção de fechamentos tem teto: fica o mais novo e sai o mais "
-         "velho — decisão do dono de 12/09/2026, quadro fixo com 1 corpo e "
-         "no máximo 3 comentários",
+         "velho, porque o quadro fixo tem corpo e comentários contados",
          len(guardados) == TETO_DE_FECHAMENTOS
          and guardados[0].endswith("05")
          and guardados[-1].endswith(f"{TETO_DE_FECHAMENTOS + 4:02d}"))
@@ -998,8 +998,7 @@ def testar() -> int:
             codigo, recado = relatar(outro, cwd=str(base))
             escrito = comentarios.read_text(encoding="utf-8")
             caso("relatar de novo REESCREVE o comentário fixo, em vez de "
-                 "abrir outro — o quadro fixo tem 1 corpo e no máximo 3 "
-                 "comentários, decisão do dono de 12/09/2026",
+                 "abrir outro — o relatório ocupa um comentário só",
                  codigo == 0 and chamadas("issue comment") == 1
                  and chamadas("PATCH") == 1
                  and escrito.count(MARCA_DO_RELATORIO) == 1
@@ -1172,4 +1171,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv else main())

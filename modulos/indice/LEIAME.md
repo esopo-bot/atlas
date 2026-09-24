@@ -12,7 +12,7 @@ conduzido pelo `indexar.py`; quem busca é o `buscar.py`, por HTTP puro — a
 porta normal, porque política de organização pode barrar todo MCP sem aviso.
 
 ```bash
-python montar.py --modulo indice
+python <pasta do clone do atlas>/montar.py --modulo indice
 python .agents/indice/subir.py
 ```
 
@@ -23,11 +23,11 @@ e diz por quê. `--ensaio` mostra a decisão sem subir nada.
 
 **O banco é sempre derivado.** Nada nasce dentro dele: apagar os volumes e
 reindexar reconstrói tudo. A receita inteira — subir, indexar, buscar, e o registro
-do MCP, que o `montar.py --atualizar` faz sozinho no `.mcp.json` — está na página
+do MCP, que a atualização da camada faz sozinha no `.mcp.json` — está na página
 `conhecimento/indice.md`, que viaja junto.
 
 **Ambiente corporativo trancado recusa as três linhas acima.** Proxy que
 reassina TLS, registro de pacote bloqueado por política e CLI barrado por
-regra de empresa têm contorno — os quatro estão na seção "Quando o ambiente
-é trancado" da mesma página. Não invente um quinto: o que travar fora da
+regra de empresa têm contorno — todos estão na seção "Quando o ambiente
+é trancado" da mesma página. Não invente outro: o que travar fora da
 lista é achado para o dono, com a mensagem de erro exata.

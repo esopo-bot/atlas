@@ -66,8 +66,9 @@ PROBLEMA_INTERPRETADOR_DO_GANCHO = (
     "o interpretador {0!r}, que as linhas de gancho do settings.json chamam "
     "DIRETO, não responde nesta máquina — então NENHUMA cerca roda, e o que "
     "elas barram passa. O nome foi medido na instalação e não é fato do "
-    "mundo: se o Python mudou de lugar, rode `python montar.py --atualizar` "
-    "para remedir, ou troque o nome na linha do gancho")
+    "mundo: se o Python mudou de lugar, rode, da raiz, `python <pasta do "
+    "clone do atlas>/montar.py --atualizar` para remedir, ou troque o nome "
+    "na linha do gancho")
 AVISO = (
     "AVISO do gancho verificar-ambiente: esta máquina não tem tudo o que o "
     "repositório declara precisar. Perda de migração é silenciosa — este é o "

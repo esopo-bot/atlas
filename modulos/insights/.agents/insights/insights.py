@@ -58,11 +58,10 @@ def instante_em_epoch(valor: str, rotulo: str, referencia: int = None) -> int:
         quantos, unidade = duracao.groups()
         return referencia - int(quantos) * SEGUNDOS_POR_UNIDADE[unidade]
     try:
-        texto = valor.replace("Z", "+00:00")
-        return int(datetime.fromisoformat(texto)
-                   .replace(tzinfo=timezone.utc if "+" not in texto
-                            and "T" in texto else None)
-                   .timestamp())
+        instante = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+        if instante.tzinfo is None:
+            instante = instante.replace(tzinfo=timezone.utc)
+        return int(instante.timestamp())
     except ValueError:
         raise SystemExit(ERRO_JANELA.format(rotulo=rotulo, valor=valor))
 
@@ -227,8 +226,19 @@ def testar() -> int:
          and len(saida.splitlines()) == 3)
     caso("epoch em segundos atravessa como número",
          instante_em_epoch("1756713600", "--desde") == 1756713600)
-    caso("ISO com Z vira epoch",
-         instante_em_epoch("2026-09-01T00:00:00Z", "--desde") > 0)
+    meia_noite_utc = int(datetime(2026, 9, 1, tzinfo=timezone.utc).timestamp())
+    caso("ISO com Z é UTC, qualquer que seja o fuso da máquina",
+         instante_em_epoch("2026-09-01T00:00:00Z", "--desde")
+         == meia_noite_utc)
+    caso("ISO com +00:00 é UTC, qualquer que seja o fuso da máquina",
+         instante_em_epoch("2026-09-01T00:00:00+00:00", "--desde")
+         == meia_noite_utc)
+    caso("ISO com fuso negativo guarda o fuso escrito",
+         instante_em_epoch("2026-09-01T00:00:00-03:00", "--desde")
+         == meia_noite_utc + 3 * 3600)
+    caso("ISO sem fuso é lido como UTC",
+         instante_em_epoch("2026-09-01T00:00:00", "--desde")
+         == meia_noite_utc)
     try:
         instante_em_epoch("ontem de manhã", "--desde")
         caso("janela inválida é recusada na fronteira", False)
@@ -270,5 +280,8 @@ def testar() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv[1:2]
              else main(sys.argv[1:]))

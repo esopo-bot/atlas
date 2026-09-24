@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import camada as a_camada
 from camada import (
     regras_da_pasta, PASTA_DE_REGRAS,
     medidas_da_versao, custo_por_entrega,
@@ -16,6 +18,7 @@ from camada import (
     MEDIDA_CUSTO_SEM_EXECUCAO, MEDIDA_CUSTO_MEDIDO,
     MARCA_DE_BANCADA_AUSENTE,
     FORA_DA_PROVA,
+    REGISTRO_DA_INSTALACAO,
     ARQUIVO_DE_CONFIGURACAO,
     ARQUIVO_SETTINGS,
     BANDEIRA_DE_TESTE,
@@ -51,9 +54,8 @@ from camada import (
     GANCHO_DO_DESPACHANTE,
     PASTA_DOS_GANCHOS,
     SALDO_MATCHER_DIVERGENTE,
-    SALDO_FORA_DO_BRIEFING,
     BRIEFING_DA_SESSAO,
-    cercas_fora_da_tabela_do_briefing,
+    SAIDA_FORA_DO_UTF8,
     divergencias_do_despachante,
     PASTA_DOS_INSTRUMENTOS,
     PASTA_DOS_MODULOS,
@@ -84,6 +86,12 @@ from camada import (
     VIA_DO_ROTEIRO,
     arquivos_do_rascunho,
     bancada_dos_tocados,
+    orcamento_das_bancadas,
+    teto_desta_bancada,
+    e_desvio_de_caminho,
+    MARCA_DE_PONTO_DE_DESVIO,
+    ETIQUETA_DE_PONTO_DE_MONTAGEM,
+    ETIQUETA_DE_LINK_SIMBOLICO,
     branch_de_incorporacao,
     branches_de_longa_duracao,
     branches_ja_entregues,
@@ -142,6 +150,7 @@ from camada import (
     matricula_do_instalador,
     medir,
     nome_curto_da_branch,
+    o_que_ainda_nao_saiu,
     o_que_saiu_e_ficou,
     onde_a_marca_aparece,
     pecas_de_instrumento,
@@ -158,6 +167,7 @@ from camada import (
     teste_toca_o_proprio_codigo,
     teto_da_largada,
     um_numero,
+    versao_da_camada,
 )
 
 
@@ -210,6 +220,11 @@ INSTRUMENTO_QUE_DEMORA = (
     "import sys\n"
     "import time\n"
     f"time.sleep(30 if '{BANDEIRA_DE_TESTE}' in sys.argv else 0)\n")
+INSTRUMENTO_UM_POUCO_LERDO = (
+    "import sys\n"
+    "import time\n"
+    f"time.sleep(2 if '{BANDEIRA_DE_TESTE}' in sys.argv else 0)\n"
+    "print('OK: 1 casos')\n")
 INSTRUMENTO_SEM_BANCADA = "valor = 1\n"
 ORCAMENTO_QUE_SO_DA_PARA_UMA = 0.001
 TETO_QUE_NENHUMA_BANCADA_LENTA_ALCANCA = 1
@@ -232,6 +247,19 @@ def arvore_com_instrumentos_de_mentira(onde: Path) -> Path:
     return pecas
 
 
+def criar_atalho_de_pasta(destino: Path, atalho: Path) -> bool:
+    try:
+        os.symlink(destino, atalho, target_is_directory=True)
+        return True
+    except (OSError, NotImplementedError, AttributeError):
+        pass
+    if os.name != "nt":
+        return False
+    feito = subprocess.run(["cmd", "/c", "mklink", "/J", str(atalho),
+                            str(destino)], capture_output=True, text=True)
+    return feito.returncode == 0 and atalho.exists()
+
+
 def testar() -> int:
     falhas, casos = [], []
 
@@ -252,13 +280,45 @@ def testar() -> int:
             encoding="utf-8")
 
         (raiz / INSTALADOR).write_text('VERSAO = "1.2"\n', encoding="utf-8")
+        (raiz / PASTA_DOS_MODULOS).mkdir()
         medidas_medidas = dict(medidas_da_versao(raiz))
-        caso("as medidas da versão leem a versão do instalador, mede a largada e confessa "
-             "o que não mediu — custo sem execução e rota sem rodada",
-             medidas_medidas[MEDIDA_VERSAO] == "1.2"
+        caso("as medidas da versão medem a largada e confessam o que não "
+             "mediram — versão sem git, custo sem execução e rota sem rodada; "
+             "a VERSAO que sobrou no montar.py não conta",
+             medidas_medidas[MEDIDA_VERSAO] == NUMERO_NAO_MEDIDO
              and medidas_medidas[MEDIDA_LARGADA].endswith("sem teto declarado")
              and medidas_medidas[MEDIDA_CUSTO] == MEDIDA_CUSTO_SEM_EXECUCAO
              and medidas_medidas[MEDIDA_ROTA].startswith("não medido"))
+        (raiz / PASTA_DOS_MODULOS).rmdir()
+        registro = raiz / REGISTRO_DA_INSTALACAO
+        registro.parent.mkdir(parents=True)
+        registro.write_text(json.dumps({"versao": "0.9",
+                                        "commit_da_camada": "abc1234"}),
+                            encoding="utf-8")
+        caso("numa instalação, sem modulos/, a versão é o commit que o "
+             "registro da instalação guarda, e não o montar.py antigo que "
+             "sobrou na raiz nem o número velho do registro",
+             dict(medidas_da_versao(raiz))[MEDIDA_VERSAO]
+             == "commit abc1234")
+        (raiz / PASTA_DOS_MODULOS).mkdir()
+        caso("destino com registro segue destino mesmo tendo pasta própria "
+             "chamada modulos/: a versão continua saindo do registro",
+             dict(medidas_da_versao(raiz))[MEDIDA_VERSAO]
+             == "commit abc1234")
+        (raiz / PASTA_DOS_MODULOS).rmdir()
+        registro.unlink()
+        with tempfile.TemporaryDirectory(
+                prefix="camada-versao-na-casa-") as outra_pasta:
+            casa = Path(outra_pasta)
+            (casa / PASTA_DOS_MODULOS).mkdir()
+            (casa / PASTA_DOS_MODULOS / "LEIAME.md").write_text(
+                "m\n", encoding="utf-8")
+            corre(f'git init -q && git add -A '
+                  f'&& git {ASSINATURA_DE_MENTIRA} commit -qm um', cwd=casa)
+            _, ponta = corre("git rev-parse --short HEAD", cwd=casa)
+            caso("na casa da camada, a versão é o commit da árvore",
+                 bool(ponta.strip())
+                 and versao_da_camada(casa) == f"commit {ponta.strip()}")
         caso("o custo por entrega é a mediana do cobrado por execução, com o "
              "buraco de atribuição em porcentagem — nunca a soma, que cresce "
              "com o número de execuções",
@@ -354,6 +414,23 @@ def testar() -> int:
             encoding="utf-8")
         caso("gancho que NÃO RODOU é contado como não medido",
              medir(raiz)[1]["ganchos_nao_medidos"] == 1)
+        with contextlib.redirect_stdout(io.StringIO()):
+            cega = largada(raiz)
+        caso("largada com gancho de abertura que não respondeu não dá "
+             "veredito: sai não medida, nem dentro nem acima do teto",
+             cega == SAIDA_NAO_MEDIDO)
+        sem_briefing = medir(raiz)[1]
+        briefing = raiz / BRIEFING_DA_SESSAO
+        briefing.parent.mkdir(parents=True, exist_ok=True)
+        briefing.write_text("b" * 700, encoding="utf-8")
+        com_briefing = medir(raiz)[1]
+        caso("o briefing que o AGENTS.md manda ler inteiro entra na "
+             "largada, byte a byte",
+             com_briefing["briefing"] == 700
+             and com_briefing["largada"] == sem_briefing["largada"] + 700)
+        briefing.unlink()
+        (raiz / ".claude" / "settings.json").write_text(
+            json.dumps({"hooks": {}}), encoding="utf-8")
         caso("o corpo da skill fica no adiado", dados["adiado"] > 0)
         caso("conta as skills", dados["skills"] == 1)
 
@@ -394,6 +471,29 @@ def testar() -> int:
             encoding="utf-8")
         _, prova = provar(raiz)
         caso("gancho com --testar que passa não é acusado", prova["caem"] == 0)
+        (raiz / INSTALADOR).write_text("import sys\nsys.exit(1)\n",
+                                       encoding="utf-8")
+        linhas_da_prova, prova = provar(raiz)
+        caso("numa instalação, sem modulos/, a prova não roda o montar.py "
+             "antigo que sobrou na raiz: ele não é a origem, e cairia por "
+             "estar velho; a linha diz de onde a instalação se verifica",
+             prova["caem"] == 0
+             and any(FORA_DA_PROVA in l and INSTALADOR in l
+                     for l in linhas_da_prova))
+        (raiz / PASTA_DOS_MODULOS).mkdir()
+        registro_da_prova = raiz / REGISTRO_DA_INSTALACAO
+        registro_da_prova.parent.mkdir(parents=True, exist_ok=True)
+        registro_da_prova.write_text(
+            json.dumps({"commit_da_camada": "abc1234"}), encoding="utf-8")
+        linhas_da_prova, prova = provar(raiz)
+        caso("destino com registro e pasta própria modulos/ também não roda "
+             "o montar.py antigo da raiz",
+             prova["caem"] == 0
+             and any(FORA_DA_PROVA in l and INSTALADOR in l
+                     for l in linhas_da_prova))
+        registro_da_prova.unlink()
+        (raiz / PASTA_DOS_MODULOS).rmdir()
+        (raiz / INSTALADOR).write_text('VERSAO = "1.2"\n', encoding="utf-8")
 
         bancada_que_ficou = raiz / PASTA_DOS_INSTRUMENTOS / "i" / "i.py"
         bancada_que_ficou.parent.mkdir(parents=True)
@@ -420,6 +520,39 @@ def testar() -> int:
             encoding="utf-8")
         _, prova = provar(raiz)
         caso("gancho com --testar que cai é acusado", prova["caem"] == 1)
+        gancho.write_text(
+            "import sys\nif '--testar' in sys.argv:\n"
+            "    print('OK: 1 caso')\n", encoding="utf-8")
+        sem_o_modo = raiz / PASTA_DOS_INSTRUMENTOS / "modo" / "modo.py"
+        sem_o_modo.parent.mkdir(parents=True)
+        sem_o_modo.write_text(
+            "import sys\nif '--testar' in sys.argv:\n"
+            "    sys.exit(1 if sys.flags.utf8_mode else print('OK: 1 caso'))\n",
+            encoding="utf-8")
+        _, prova = provar(raiz)
+        caso("a prova roda cada instrumento sem o modo UTF-8 do Python, como "
+             "a máquina que não o liga", prova["caem"] == 0)
+        sem_o_modo.unlink()
+        sem_o_modo.parent.rmdir()
+        gancho.write_text(
+            "import sys\nif '--testar' in sys.argv:\n"
+            "    print('OK: 1 caso, ação')\n", encoding="utf-8")
+        _, prova = provar(raiz)
+        caso("gancho roda na prova com o -X utf8 da linha dele, e a saída "
+             "com acento sai inteira", prova["caem"] == 0)
+        acentuado = raiz / PASTA_DOS_INSTRUMENTOS / "acento" / "acento.py"
+        acentuado.parent.mkdir(parents=True)
+        acentuado.write_text(
+            "import sys\nif '--testar' in sys.argv:\n"
+            "    print('OK: 1 caso, ação')\n", encoding="utf-8")
+        linhas_da_prova, prova = provar(raiz)
+        caso("instrumento que passa mas escreve fora do UTF-8 cai na prova, "
+             "e a linha diz por quê",
+             prova["caem"] == 1
+             and any(SAIDA_FORA_DO_UTF8 in l and "acento.py" in l
+                     for l in linhas_da_prova))
+        acentuado.unlink()
+        acentuado.parent.rmdir()
 
         pasta_de_subagentes = raiz / PASTA_DOS_SUBAGENTES
         pasta_de_subagentes.mkdir(parents=True, exist_ok=True)
@@ -762,6 +895,21 @@ def testar() -> int:
         caso("declaração de servidor ausente NÃO é falta: repositório que não "
              "usa servidor de contexto abre íntegro",
              servidores_de_contexto(onde)[0] is None)
+        principal = onde / "principal"
+        principal.mkdir()
+        corre("git init -q -b main && git -c user.name=t -c user.email=t@t "
+              "-c commit.gpgsign=false commit -q --allow-empty -m um",
+              cwd=principal)
+        (principal / ARQUIVO_DA_DECLARACAO_DE_MCP).write_text(
+            json.dumps({"mcpServers": {"do-projeto": {}}}), encoding="utf-8")
+        ligada = onde / "ligada"
+        corre(f'git worktree add -q --detach "{ligada}"', cwd=principal)
+        sem_arquivo_na_ligada, dito_na_ligada = servidores_de_contexto(ligada)
+        caso("worktree sem declaração, com a raiz principal declarando, não "
+             "é falta, e a linha diz os servidores de lá e que o que a "
+             "sessão carrega depende do cliente",
+             sem_arquivo_na_ligada is None and "do-projeto" in dito_na_ligada
+             and "raiz principal" in dito_na_ligada)
         alvo_do_mcp = onde / ARQUIVO_DA_DECLARACAO_DE_MCP
         alvo_do_mcp.write_text("{ isto nao e json", encoding="utf-8")
         caso("declaração ilegível é falta, e a razão nomeia o arquivo",
@@ -822,8 +970,8 @@ def testar() -> int:
             encoding="utf-8")
         _, com_lista = servidores_de_contexto(onde, casa=casa)
         caso("a lista permitida casa o comando exato: servidor cujo comando não "
-             "casa é acusado como barrado, e o que casa não — medido em 15/09, "
-             "o caminho absoluto sumiu em silêncio contra o relativo da lista",
+             "casa é acusado como barrado, e o que casa não — o caminho "
+             "absoluto some em silêncio contra o relativo da lista",
              "barra" in com_lista and "absoluto" in com_lista
              and "relativo" not in com_lista.split("barra", 1)[1].split("\n", 1)[0])
         (onde / ".claude" / "settings.local.json").unlink()
@@ -919,6 +1067,39 @@ def testar() -> int:
         corre(f'echo b > b.txt && git add -A && git {assinatura} commit -qm dois', cwd=repositorio)
         caso("commit que não saiu da máquina reprova",
              entrega(repositorio) == 1)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            entrega(repositorio)
+        primeira_linha = dito.getvalue().strip().splitlines()[0]
+        caso("a PRIMEIRA linha da entrega diz a raiz que ela mediu: com "
+             "várias árvores de trabalho, veredito sem endereço é lido como "
+             "se fosse da árvore de quem perguntou",
+             Path(repositorio).name in primeira_linha)
+        caso("a entrega diz em DADOS qual das três medidas achou o quê: "
+             "fundidas num código só, quem a chama não distingue commit sem "
+             "destino de branch por podar e acusa um pelo outro",
+             "CATEGORIAS DA ENTREGA: commit-sem-destino=1 "
+             "branch-por-podar=0" in dito.getvalue())
+        caso("a linha das categorias carrega o NÃO MEDIDO de cada medida, "
+             "sem fundi-lo no achado de outra",
+             a_camada.linha_das_categorias(
+                 SAIDA_LIMPA, SAIDA_NAO_MEDIDO, SAIDA_COM_ACHADO)
+             == "CATEGORIAS DA ENTREGA: commit-sem-destino=0 "
+                "branch-por-podar=2 integracao-sem-pedido=1")
+
+        corre('git push -q origin HEAD:refs/heads/main', cwd=repositorio)
+        corre('git checkout -q -b claude/vazia', cwd=repositorio)
+        with contextlib.redirect_stdout(io.StringIO()):
+            vazia = o_que_ainda_nao_saiu(repositorio, "claude/vazia")
+        caso("branch sem upstream e sem commit próprio, como a que o app cria "
+             "para a sessão, não é commit sem destino: tudo o que ela tem já "
+             "está no remoto",
+             vazia == SAIDA_LIMPA)
+        corre(f'echo c > c.txt && git add -A && git {assinatura} commit -qm tres', cwd=repositorio)
+        with contextlib.redirect_stdout(io.StringIO()):
+            com_commit = o_que_ainda_nao_saiu(repositorio, "claude/vazia")
+        caso("a mesma branch, com um commit que só existe aqui, segue acusada",
+             com_commit == SAIDA_COM_ACHADO)
 
     with tempfile.TemporaryDirectory(prefix="camada-poda-") as sozinho:
         repositorio = Path(sozinho) / "repositorio"
@@ -947,10 +1128,25 @@ def testar() -> int:
         corre('git push -q origin entregue', cwd=repositorio)
         corre(f'git checkout -q main && git {assinatura} merge -q --no-ff -m mescla entregue && git push -q origin main', cwd=repositorio)
         corre(f'git checkout -q -b viva && echo c > c.txt && git add -A && git {assinatura} commit -qm tres && git checkout -q main', cwd=repositorio)
-        locais, remotas, mediu = branches_ja_entregues(
-            repositorio, referencia_que_existe(repositorio, "main"),
-            "main", protegidas)
+        chamadas_ao_git, rodar_de_verdade = [], a_camada.subprocess.run
+
+        def rodar_contando(*argumentos, **nomeados):
+            chamadas_ao_git.append(str(argumentos[0]))
+            return rodar_de_verdade(*argumentos, **nomeados)
+
+        a_camada.subprocess.run = rodar_contando
+        try:
+            locais, remotas, mediu = branches_ja_entregues(
+                repositorio, referencia_que_existe(repositorio, "main"),
+                "main", protegidas)
+        finally:
+            a_camada.subprocess.run = rodar_de_verdade
         caso("a listagem se declara medida quando o git respondeu", mediu)
+        caso("a poda lê o topo de toda branch num for-each-ref só, e o "
+             "rev-parse fica só para a referência — medido, um rev-parse por "
+             "branch pesava segundos em cada parada",
+             sum("for-each-ref" in c for c in chamadas_ao_git) == 1
+             and sum("rev-parse" in c for c in chamadas_ao_git) == 2)
         corre('git remote set-head origin main', cwd=repositorio)
         caso("o ponteiro origin/HEAD, que encurta para o nome do remoto, "
              "não vira branch acusada",
@@ -983,6 +1179,28 @@ def testar() -> int:
         caso("o no de mescla orfao, cujos pais ja estao na incorporacao, "
              "e acusado — nada dele falta la",
              "garfo" in orfaos)
+        corre('git tag garfo garfo', cwd=repositorio)
+        com_tag = branches_ja_entregues(
+            repositorio, referencia_que_existe(repositorio, "main"),
+            "main", protegidas)[0]
+        corre('git tag -d garfo', cwd=repositorio)
+        caso("branch com tag de mesmo nome sai com o nome da branch, que o "
+             "git branch -d aceita e que casa com a branch em uso",
+             "garfo" in com_tag and "heads/garfo" not in com_tag)
+        corre('git branch -q heads/tarefa main~1 && git tag garfo garfo',
+              cwd=repositorio)
+        com_prefixo_no_nome = branches_ja_entregues(
+            repositorio, referencia_que_existe(repositorio, "main"),
+            "main", protegidas)[0]
+        corre('git tag -d garfo && git branch -q -D heads/tarefa',
+              cwd=repositorio)
+        caso("branch que se chama de fato heads/tarefa sai com o nome "
+             "inteiro, ao lado da branch com tag homônima: tirar heads/ de "
+             "todo nome local que começa com ele cortava o nome dela",
+             "heads/tarefa" in com_prefixo_no_nome
+             and "tarefa" not in com_prefixo_no_nome
+             and "garfo" in com_prefixo_no_nome
+             and "heads/garfo" not in com_prefixo_no_nome)
         corre('git checkout -q -b recem-criada && git checkout -q main', cwd=repositorio)
         caso("branch recem-criada, identica ao topo da incorporacao, NAO e "
              "acusada — ali nao ha rastro, ha comeco",
@@ -1006,11 +1224,76 @@ def testar() -> int:
              "viva" not in branches_ja_entregues(
                  repositorio, referencia_que_existe(repositorio, "main"),
                  "main", protegidas)[0])
+        corre('git checkout -q --detach main', cwd=repositorio)
+        destacada = branches_ja_entregues(
+            repositorio, referencia_que_existe(repositorio, "main"),
+            "HEAD", protegidas)
+        with contextlib.redirect_stdout(io.StringIO()):
+            poda_destacada = o_que_saiu_e_ficou(repositorio, "HEAD")
+        corre('git checkout -q main', cwd=repositorio)
+        caso("em HEAD destacado a poda MEDE: a listagem do git traz uma "
+             "linha que não é branch, e antes ela ia ao git diff, falhava e "
+             "a poda inteira saía NÃO MEDIDA",
+             destacada[2] is True and poda_destacada != SAIDA_NAO_MEDIDO
+             and "garfo" in destacada[0])
+        corre('git branch -q em-uso main~1', cwd=repositorio)
+        arvore_em_uso = Path(sozinho) / "arvore-em-uso"
+        corre(f'git worktree add -q "{arvore_em_uso.as_posix()}" em-uso',
+              cwd=repositorio)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            o_que_saiu_e_ficou(repositorio, "main")
+        linhas_da_poda = dito.getvalue().splitlines()
+        caso("branch entregue mas aberta numa árvore de trabalho sai do "
+             "comando de poda e é nomeada à parte: o git não apaga branch "
+             "em uso, e o comando que a mandava apagar falhava",
+             not any("em-uso" in linha for linha in linhas_da_poda
+                     if "git branch -d" in linha)
+             and any("em-uso" in linha and "árvore de trabalho" in linha
+                     for linha in linhas_da_poda))
+        corre(f'git worktree remove --force "{arvore_em_uso.as_posix()}"',
+              cwd=repositorio)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            o_que_saiu_e_ficou(repositorio, "main")
+        caso("fechada a árvore, a mesma branch volta ao comando de poda",
+             any("em-uso" in linha for linha in dito.getvalue().splitlines()
+                 if "git branch -d" in linha))
+        corre('git branch -q -D em-uso', cwd=repositorio)
         (repositorio / "nucleo" / "configuracao.json").write_text(
             json.dumps({}), encoding="utf-8")
         caso("sem incorporação declarada é NÃO MEDIDO, nunca zero calado",
              o_que_saiu_e_ficou(repositorio, "main") == 0
              and branch_de_incorporacao(repositorio) == "")
+
+    with tempfile.TemporaryDirectory(prefix="camada-poda-so-em-uso-") as sozinho:
+        repositorio = Path(sozinho) / "repositorio"
+        (repositorio / "nucleo").mkdir(parents=True)
+        (repositorio / "nucleo" / "configuracao.json").write_text(
+            json.dumps({CHAVE_POR_INCORPORACAO: ["main"]}), encoding="utf-8")
+        assinatura = ("-c user.name=t -c user.email=t@t "
+                      "-c commit.gpgsign=false")
+        corre(f'git init -q -b main && git add -A && git {assinatura} commit -qm um', cwd=repositorio)
+        corre(f'git {assinatura} commit -q --allow-empty -m dois', cwd=repositorio)
+        remoto = Path(sozinho) / "remoto.git"
+        corre(f'git init -q --bare "{remoto}"')
+        corre(f'git remote add origin "{remoto}" && git push -q origin main', cwd=repositorio)
+        corre('git branch -q so-em-uso main~1', cwd=repositorio)
+        corre('git push -q origin so-em-uso', cwd=repositorio)
+        arvore = Path(sozinho) / "arvore-so-em-uso"
+        corre(f'git worktree add -q "{arvore.as_posix()}" so-em-uso',
+              cwd=repositorio)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            veredito = o_que_saiu_e_ficou(repositorio, "main")
+        caso("quando a única branch entregue está aberta numa árvore, a poda "
+             "sai limpa E ainda nomeia a branch em uso — calada, ela some "
+             "do relatório justo quando não há mais nada a podar; e a "
+             "remota dela também não vira ordem de apagar",
+             veredito == SAIDA_LIMPA
+             and any("so-em-uso" in linha and "árvore de trabalho" in linha
+                     for linha in dito.getvalue().splitlines())
+             and "push origin --delete" not in dito.getvalue())
 
     with tempfile.TemporaryDirectory(prefix="camada-incorporacao-") as sozinho:
         repositorio = Path(sozinho) / "repositorio"
@@ -1072,6 +1355,16 @@ def testar() -> int:
         caso("a pergunta ao gh leva a incorporação como base e a integração "
              "como cabeça",
              perguntas_ao_gh == [("main", "homolog")])
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            pulado = entrega(repositorio, gh_sem_pedido, sem_pedido=True)
+        caso("pedido pulado por quem chama não vai ao gh, diz que pulou, e a "
+             "categoria sai 'pulada', nunca zero; o veredito fica com as "
+             "outras duas medidas",
+             perguntas_ao_gh == [("main", "homolog")]
+             and "integracao-sem-pedido=pulada" in dito.getvalue()
+             and "pulado a pedido" in dito.getvalue()
+             and pulado == SAIDA_LIMPA)
         do_camada = __import__("camada")
         ja_buscou = getattr(do_camada, "quem_chamou_ja_buscou", None)
         caso("existe a marca pela qual quem chama avisa que acabou de buscar",
@@ -1162,10 +1455,74 @@ def testar() -> int:
         caso("subpasta de instrumento declarada fica fora da conta",
              rascunho(raiz) == 0)
 
+        pastas_de_marcas = set()
+        for fonte in [*(RAIZ_DA_CAMADA / ".claude" / "hooks").glob("*.py"),
+                      *(RAIZ_DA_CAMADA / PASTA_DOS_MODULOS).glob(
+                          f"*/{PASTA_DOS_INSTRUMENTOS}/**/*.py")]:
+            pastas_de_marcas |= set(re.findall(
+                r'(?m)^(?:PASTA_MARCAS|CASA) = (?:Path\()?"tmp/([^"/]+)"',
+                fonte.read_text(encoding="utf-8", errors="replace")))
+        caso("toda pasta que gancho ou módulo declara em tmp/ para as "
+             "próprias marcas fica fora da conta do rascunho — fora da "
+             "lista, as marcas envelhecem e viram esquecido falso",
+             bool(pastas_de_marcas)
+             and pastas_de_marcas <= set(PASTAS_DE_INSTRUMENTO_NO_RASCUNHO))
+
         sem_pasta = raiz / "sem-rascunho"
         sem_pasta.mkdir()
         caso("sem a pasta no disco a rotina cala e não inventa acusação",
              rascunho(sem_pasta) == 0)
+
+    with tempfile.TemporaryDirectory(prefix="camada-rascunho-atalho-") as pasta:
+        raiz = Path(pasta)
+        (raiz / RASCUNHO).mkdir()
+        (raiz / RASCUNHO / "meu.md").write_text("um só\n", encoding="utf-8")
+        alheio = raiz / "pasta-de-outro-projeto"
+        alheio.mkdir()
+        for indice in range(5):
+            (alheio / f"{indice}.js").write_text("x", encoding="utf-8")
+        atalho = raiz / RASCUNHO / "atalho-para-o-alheio"
+        criou = criar_atalho_de_pasta(alheio, atalho)
+        caso("esta máquina sabe criar atalho de pasta — sem isso o caso "
+             "abaixo não mede nada, e passar seria falso verde",
+             criou)
+        caso("a contagem do rascunho NÃO atravessa atalho de pasta: contar "
+             "através dele inflou 658 arquivos para 90.320, e limpeza que o "
+             "siga apaga instalação real de outro projeto",
+             [a.name for a in arquivos_do_rascunho(raiz)] == ["meu.md"])
+        caso("ponto de desvio é o que REDIRECIONA o caminho, e só isso: "
+             "atributo de desvio com etiqueta de outra coisa, como arquivo "
+             "guardado na nuvem, continua sendo arquivo que existe",
+             e_desvio_de_caminho(MARCA_DE_PONTO_DE_DESVIO,
+                                 ETIQUETA_DE_PONTO_DE_MONTAGEM)
+             and e_desvio_de_caminho(MARCA_DE_PONTO_DE_DESVIO,
+                                     ETIQUETA_DE_LINK_SIMBOLICO)
+             and not e_desvio_de_caminho(MARCA_DE_PONTO_DE_DESVIO, 0x9000001A)
+             and not e_desvio_de_caminho(0, ETIQUETA_DE_PONTO_DE_MONTAGEM))
+        caso("o que não é arquivo comum fica fora da conta: soquete e cano "
+             "nomeado parados há dias não são rascunho esquecido",
+             all(a.is_file() for a in arquivos_do_rascunho(raiz)))
+
+    with tempfile.TemporaryDirectory(prefix="camada-rascunho-raiz-") as pasta:
+        raiz = Path(pasta)
+        alheio = raiz / "pasta-de-outro-projeto"
+        alheio.mkdir()
+        for indice in range(3):
+            (alheio / f"{indice}.js").write_text("x", encoding="utf-8")
+        criou = criar_atalho_de_pasta(alheio, raiz / RASCUNHO)
+        caso("a própria pasta de rascunho sendo um atalho também não se "
+             "atravessa — o detector olhava só os filhos dela",
+             criou and arquivos_do_rascunho(raiz) is None)
+        corre("git init -q && git add -A", cwd=raiz)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            veredito = rascunho(raiz)
+        caso("e não atravessar NÃO é rascunho em dia: a rotina diz NÃO MEDIDO "
+             "e reprova, porque zero aqui seria invenção — lista vazia por "
+             "não ter olhado tem a mesma cara de lista vazia por não haver "
+             "nada",
+             veredito == 1 and "NÃO MEDIDO" in dito.getvalue()
+             and "atalho" in dito.getvalue())
 
     with tempfile.TemporaryDirectory(prefix="camada-rascunho-cego-") as pasta:
         raiz = Path(pasta)
@@ -1183,7 +1540,7 @@ def testar() -> int:
         gancho.write_text("", encoding="utf-8")
         ligar_ganchos(raiz, [f"{PASTA_DOS_GANCHOS}/bom.py"])
         for caminho in INSTRUMENTOS_QUE_FICAM:
-            (raiz / caminho).parent.mkdir(parents=True)
+            (raiz / caminho).parent.mkdir(parents=True, exist_ok=True)
             (raiz / caminho).write_text("", encoding="utf-8")
         corre('git init -q && git add -A', cwd=raiz)
         caso("gancho rastreado, embutido e declarado não vira saldo",
@@ -1207,6 +1564,16 @@ def testar() -> int:
         corre('git add -A', cwd=raiz)
         caso("instrumento que chega por módulo não vira saldo",
              matricula(raiz) == 0)
+        (raiz / INSTALADOR).write_text(
+            INSTALADOR_DE_MENTIRA
+            + "MODULOS = {'m': {'.agents/mod/outro.py': ''}}\n",
+            encoding="utf-8")
+        caso("a matrícula segue o leitor da camada, não a carga embutida: "
+             "quando os dois discordam, o instrumento que o leitor põe no "
+             "módulo não vira saldo",
+             matricula(raiz) == 0)
+        (raiz / INSTALADOR).write_text(INSTALADOR_DE_MENTIRA,
+                                       encoding="utf-8")
         instrumento.rename(instrumento.with_name("fora.py"))
         corre('git add -A', cwd=raiz)
         caso("instrumento rastreado fora do FONTES é acusado de não viajar",
@@ -1286,20 +1653,31 @@ def testar() -> int:
             'CERCAS = (\n    ("bom", ""),\n)\n', encoding="utf-8")
         caso("matcher igual nos dois lugares não é acusado",
              divergencias_do_despachante(raiz) == [])
-        caso("sem briefing no disco, a tabela não tem o que cobrar",
-             cercas_fora_da_tabela_do_briefing(raiz) == [])
-        briefing = raiz / BRIEFING_DA_SESSAO
-        briefing.parent.mkdir(parents=True, exist_ok=True)
-        briefing.write_text("| Gancho | Morde quando | O caminho |\n"
-                            "| `outra` | x | y |\n", encoding="utf-8")
-        caso("cerca que o despachante roda e a tabela do briefing não traz "
-             "é acusada",
-             cercas_fora_da_tabela_do_briefing(raiz)
-             == [(f"{PASTA_DOS_GANCHOS}/bom.py", SALDO_FORA_DO_BRIEFING)])
-        briefing.write_text("| `bom` | morde | caminho |\n", encoding="utf-8")
-        caso("cerca com linha na tabela do briefing não é acusada",
-             cercas_fora_da_tabela_do_briefing(raiz) == [])
-        briefing.unlink()
+        (raiz / INSTALADOR).write_text(
+            INSTALADOR_DE_MENTIRA
+            + "GANCHO_BOM_ANTES_DA_FERRAMENTA = GanchoDeclarado(\n"
+              "    'bom', 'PreToolUse', 'Read',\n"
+              "    'python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/bom.py\"',\n"
+              "    '.claude/hooks/bom.py')\n"
+              "GANCHO_BOM_NO_FIM_DE_TURNO = GanchoDeclarado(\n"
+              "    'bom', 'Stop', '',\n"
+              "    'python \"${CLAUDE_PROJECT_DIR}/.claude/hooks/bom.py\"',\n"
+              "    '.claude/hooks/bom.py')\n", encoding="utf-8")
+        (raiz / GANCHO_DO_DESPACHANTE).write_text(
+            'CERCAS = (\n    ("bom", "Read"),\n)\n', encoding="utf-8")
+        caso("gancho declarado em DOIS eventos se compara com o despachante "
+             "pela declaração de antes da ferramenta: o matcher vazio do fim "
+             "de turno não é divergência, é outro evento",
+             divergencias_do_despachante(raiz) == [])
+        (raiz / GANCHO_DO_DESPACHANTE).write_text(
+            'CERCAS = (\n    ("bom", "Bash"),\n)\n', encoding="utf-8")
+        caso("e a divergência de verdade, no evento certo, segue acusada",
+             divergencias_do_despachante(raiz)
+             == [(f"{PASTA_DOS_GANCHOS}/bom.py", SALDO_MATCHER_DIVERGENTE)])
+        (raiz / INSTALADOR).write_text(INSTALADOR_DE_MENTIRA,
+                                       encoding="utf-8")
+        (raiz / GANCHO_DO_DESPACHANTE).write_text(
+            'CERCAS = (\n    ("bom", ""),\n)\n', encoding="utf-8")
         (raiz / GANCHO_DO_DESPACHANTE).unlink()
         caso("sem despachante no disco não há divergência a acusar",
              divergencias_do_despachante(raiz) == [])
@@ -1326,6 +1704,7 @@ def testar() -> int:
         leitor = raiz / PASTA_DOS_INSTRUMENTOS / "mod" / "leitor.py"
         leitor.parent.mkdir(parents=True)
         (raiz / "nucleo").mkdir()
+        (raiz / PASTA_DOS_MODULOS).mkdir()
 
         def declarar(chaves_do_arquivo: dict, excecoes: list = None):
             if excecoes is not None:
@@ -1400,6 +1779,15 @@ def testar() -> int:
             encoding="utf-8")
         caso("chave lida só pelo que chega por módulo não vira saldo",
              chaves(raiz) == 0)
+
+        declarar({"lida": 1})
+        (raiz / PASTA_DOS_MODULOS).rmdir()
+        (raiz / INSTALADOR).write_text(
+            "MODULOS = {'m': {'.agents/mod/mod.py': ''}}\n", encoding="utf-8")
+        caso("numa instalação, sem modulos/, as chaves se medem sem pedir "
+             "nada ao montar.py antigo que sobrou na raiz",
+             chaves(raiz) == 0)
+        (raiz / PASTA_DOS_MODULOS).mkdir()
 
         declarar({"so_o_instalador_cita": 4})
         (raiz / INSTALADOR).write_text(
@@ -1531,6 +1919,27 @@ def testar() -> int:
         caso("apagado o `.md` sem quem o leia, a pilha encolhe",
              len(pilhas_do_markdown(raiz)[PILHA_SEM_LEITOR]) == 1)
 
+        caso("comando de barra em .claude/commands/ não cai na pilha sem "
+             "quem o leia: quem o lê é o cliente, quando alguém digita o "
+             "comando; o `.md` solto em outra pasta segue sem leitor",
+             a_camada.pilha_do_markdown(".claude/commands/partida.md", ())[0]
+             == PILHA_NAO_CLASSIFICADO
+             and a_camada.pilha_do_markdown("conhecimento/solta.md", ())[0]
+             == PILHA_SEM_LEITOR)
+
+    with tempfile.TemporaryDirectory(prefix="camada-git-com-aviso-") as pasta:
+        falante = Path(pasta) / "falante.py"
+        falante.write_text(
+            "import sys\n"
+            "print('a.txt')\n"
+            "print(\"warning: in the working copy of 'a.txt', LF will be "
+            "replaced by CRLF\", file=sys.stderr)\n", encoding="utf-8")
+        caso("o aviso que o git escreve no stderr não vira caminho: com um "
+             "arquivo LF numa cópia CRLF, a bancada contava 4 tocados onde "
+             "havia 3",
+             a_camada.linhas_do_git(
+                 Path(pasta), f'"{sys.executable}" "{falante}"') == ["a.txt"])
+
     with tempfile.TemporaryDirectory(prefix="camada-markdown-cego-") as pasta:
         raiz = Path(pasta)
         caso("git que não responde vira markdown NÃO MEDIDO, não zero",
@@ -1556,10 +1965,12 @@ def testar() -> int:
         vermelho = ".agents/pecas/vermelho.py"
 
         def rodar_a_bancada_da_sessao(orcamento=ORCAMENTO_DAS_BANCADAS_TOCADAS,
-                                      teto=TEMPO_DE_UMA_BANCADA_TOCADA):
+                                      teto=TEMPO_DE_UMA_BANCADA_TOCADA,
+                                      tetos=None):
             dito = io.StringIO()
             with contextlib.redirect_stdout(dito):
-                veredito = bancada_dos_tocados(repositorio, orcamento, teto)
+                veredito = bancada_dos_tocados(repositorio, orcamento, teto,
+                                               tetos)
             return veredito, dito.getvalue()
 
         def limpar_a_arvore():
@@ -1570,6 +1981,98 @@ def testar() -> int:
              "— rotina que cala no caso comum ensina a ignorar rotina",
              veredito == SAIDA_LIMPA
              and "Nenhum instrumento tocado" in dito)
+
+        _, branch_medida = corre("git branch --show-current", cwd=repositorio)
+        caso("a rotina diz QUE raiz e QUE branch mediu — rodada da raiz com "
+             "o trabalho noutra árvore, o zero dela é verdade sobre o lugar "
+             "errado, e sem o lugar dito ninguém percebe",
+             repositorio.as_posix() in dito
+             and branch_medida.strip() and branch_medida.strip() in dito)
+
+        ao_lado = Path(sozinho) / "arvore-ao-lado"
+        corre(f'git worktree add -q -b frente-ao-lado "{ao_lado.as_posix()}"',
+              cwd=repositorio)
+        veredito, dito = rodar_a_bancada_da_sessao()
+        caso("sem nada tocado E com outra árvore de trabalho viva, a rotina "
+             "nomeia a outra árvore: é lá que o trabalho pode estar",
+             veredito == SAIDA_LIMPA and "arvore-ao-lado" in dito)
+        corre(f'git worktree remove --force "{ao_lado.as_posix()}"',
+              cwd=repositorio)
+        veredito, dito = rodar_a_bancada_da_sessao()
+        caso("sem outra árvore de trabalho, a rotina não inventa aviso",
+             "arvore-ao-lado" not in dito and "outra árvore" not in dito)
+
+        leitor_de_verdade = a_camada.linhas_do_git
+
+        def cego_para(comando_cego):
+            def leitor(raiz_lida, comando):
+                if comando == comando_cego:
+                    return None
+                return leitor_de_verdade(raiz_lida, comando)
+            return leitor
+
+        a_camada.linhas_do_git = cego_para(
+            a_camada.COMANDO_DAS_ARVORES_DE_TRABALHO)
+        try:
+            veredito, dito = rodar_a_bancada_da_sessao()
+        finally:
+            a_camada.linhas_do_git = leitor_de_verdade
+        caso("git que não lista as árvores de trabalho é rotina NÃO MEDIDA: "
+             "dizer que não mediu e sair zero é verde de quem não olhou",
+             veredito == SAIDA_NAO_MEDIDO and "NÃO FORAM MEDIDAS" in dito)
+
+        caso("git que não responde pela branch não é HEAD destacado: são "
+             "dois estados, e cada um ganha o nome dele",
+             a_camada.nome_da_branch_medida(None)
+             != a_camada.nome_da_branch_medida([])
+             and "destacado" in a_camada.nome_da_branch_medida([])
+             and a_camada.nome_da_branch_medida(["frente"]) == "frente")
+
+        porcelana = ["worktree " + repositorio.as_posix(), "HEAD abc",
+                     "branch refs/heads/x",
+                     "worktree " + (Path(sozinho) / "viva").as_posix(),
+                     "HEAD def", "branch refs/heads/y",
+                     "worktree " + (Path(sozinho) / "sumiu").as_posix(),
+                     "HEAD 123", "detached",
+                     "prunable gitdir file points to non-existent location"]
+        vivas = a_camada.arvores_vivas_da_listagem(porcelana, repositorio)
+        caso("árvore de trabalho PODÁVEL não é lugar onde o trabalho possa "
+             "estar: a pasta dela sumiu, e mandar rodar de lá é mandar ao "
+             "vazio",
+             len(vivas) == 1 and vivas[0].endswith("viva"))
+
+        a_camada.linhas_do_git = cego_para(a_camada.COMANDO_DA_BRANCH_ATUAL)
+        try:
+            veredito, dito = rodar_a_bancada_da_sessao()
+        finally:
+            a_camada.linhas_do_git = leitor_de_verdade
+        caso("git que não responde pela branch é rotina NÃO MEDIDA de ponta "
+             "a ponta: dizer que o git não disse e sair zero é o mesmo verde "
+             "de quem não olhou",
+             veredito == SAIDA_NAO_MEDIDO)
+
+        corre("git checkout -q --detach", cwd=repositorio)
+        veredito, dito = rodar_a_bancada_da_sessao()
+        corre("git checkout -q -", cwd=repositorio)
+        caso("HEAD destacado é dito pela ROTINA, não só pelo ajudante, e "
+             "não reprova: é estado legítimo, medido",
+             "destacado" in dito and veredito == SAIDA_LIMPA)
+
+        sumida = Path(sozinho) / "arvore-que-sumiu"
+        corre(f'git worktree add -q -b frente-que-sumiu "{sumida.as_posix()}"',
+              cwd=repositorio)
+        shutil.rmtree(sumida)
+        veredito, dito = rodar_a_bancada_da_sessao()
+        corre("git worktree prune", cwd=repositorio)
+        caso("árvore de trabalho cuja pasta sumiu não é anunciada pela "
+             "ROTINA como lugar onde o trabalho pode estar",
+             "arvore-que-sumiu" not in dito)
+
+        caso("falha ao listar o que nasceu, antes OU depois das bancadas, é "
+             "sujeira NÃO MEDIDA, nunca árvore limpa",
+             a_camada.o_que_a_bancada_sujou(None, ["a"]) is None
+             and a_camada.o_que_a_bancada_sujou(["a"], None) is None
+             and a_camada.o_que_a_bancada_sujou(["a"], ["a", "b"]) == ["b"])
 
         (pecas / "testes.py").write_text(INSTRUMENTO_QUE_PASSA + "\n",
                                          encoding="utf-8")
@@ -1648,6 +2151,40 @@ def testar() -> int:
              and time.monotonic() - partida < 20)
         lenta.unlink()
 
+        limpar_a_arvore()
+        propria = pecas / "com-teto-proprio.py"
+        propria.write_text(INSTRUMENTO_UM_POUCO_LERDO, encoding="utf-8")
+        caminho_da_propria = ".agents/pecas/com-teto-proprio.py"
+        veredito, dito = rodar_a_bancada_da_sessao(
+            teto=TETO_QUE_NENHUMA_BANCADA_LENTA_ALCANCA)
+        caso("sem teto próprio declarado, a bancada mais lenta que o teto "
+             "geral deixa a rotina NÃO MEDIDA — foi o que aconteceu com o "
+             "medidor da camada, que leva 66 s contra um teto de 60 s",
+             veredito == SAIDA_NAO_MEDIDO and "não coube no teto" in dito)
+        veredito, dito = rodar_a_bancada_da_sessao(
+            teto=TETO_QUE_NENHUMA_BANCADA_LENTA_ALCANCA,
+            tetos={caminho_da_propria: 30})
+        caso("com teto próprio declarado, ela RODA e a rotina volta a medir",
+             veredito == SAIDA_LIMPA and "não coube no teto" not in dito
+             and caminho_da_propria in dito)
+        caso("o orçamento cresce com o teto próprio, senão o corte por "
+             "orçamento faria o mesmo estrago que o teto",
+             orcamento_das_bancadas([caminho_da_propria], 120, 60,
+                                    {caminho_da_propria: 180}) == 240
+             and orcamento_das_bancadas([caminho_da_propria], 120, 60, {})
+             == 120)
+        caso("teto próprio menor que o geral não encurta ninguém",
+             teto_desta_bancada(caminho_da_propria, 60,
+                                {caminho_da_propria: 10}) == 60)
+        caso("o teto próprio se declara por PASTA, senão vale só quando o "
+             "testes.py da pasta é o tocado: tocar só o instrumento que "
+             "delega recebia o teto geral e voltava a não caber",
+             teto_desta_bancada(".agents/pecas/com-teto-proprio.py", 60,
+                                {".agents/pecas": 180}) == 180
+             and teto_desta_bancada(".agents/pecas/testes.py", 60,
+                                    {".agents/pecas": 180}) == 180)
+        propria.unlink()
+
         novo = pecas / "recem-nascido.py"
         novo.write_text(INSTRUMENTO_QUE_PASSA, encoding="utf-8")
         veredito, dito = rodar_a_bancada_da_sessao()
@@ -1671,6 +2208,19 @@ def testar() -> int:
              "não — é ela que separa o mudo do que nem instrumento é",
              {p.name for p in pecas_de_instrumento(repositorio)}
              == {"verde.py", "vermelho.py", "mudo.py"})
+
+        fonte_do_modulo = (repositorio / PASTA_DOS_MODULOS / "mod"
+                           / PASTA_DOS_INSTRUMENTOS / "mod")
+        fonte_do_modulo.mkdir(parents=True)
+        (fonte_do_modulo / "mod.py").write_text(INSTRUMENTO_QUE_CAI,
+                                                encoding="utf-8")
+        veredito, dito = rodar_a_bancada_da_sessao()
+        caso("instrumento tocado na FONTE de um módulo, em "
+             "modulos/<módulo>/.agents/, roda a bancada dele como qualquer "
+             "outro — fora da conta, ele não entrava nem com bancada nem sem",
+             veredito == SAIDA_COM_ACHADO
+             and "modulos/mod/.agents/mod/mod.py" in dito)
+        shutil.rmtree(repositorio / PASTA_DOS_MODULOS)
 
     with tempfile.TemporaryDirectory(prefix="camada-bancada-cega-") as pasta:
         raiz = Path(pasta)
@@ -1720,6 +2270,66 @@ def testar() -> int:
              rodada.returncode in (0, 1)
              and "Rode na raiz" not in rodada.stdout + rodada.stderr)
 
+    with tempfile.TemporaryDirectory(prefix="camada-simular-") as pasta:
+        raiz = Path(pasta)
+        corre("git init -q", cwd=raiz)
+        (raiz / "AGENTS.md").write_text("camada\n", encoding="utf-8")
+        (raiz / "nucleo").mkdir()
+        (raiz / "nucleo" / "regras.json").write_text(
+            json.dumps({"regras": []}), encoding="utf-8")
+        (raiz / ".gitignore").write_text("/nucleo/executor.json\n/tmp/*\n",
+                                         encoding="utf-8")
+        (raiz / "nucleo" / "executor.json").write_text("{}", encoding="utf-8")
+        evidencia = raiz / "tmp" / "evidencias" / "etapa.json"
+        evidencia.parent.mkdir(parents=True)
+        evidencia.write_text("{}", encoding="utf-8")
+        vistas = []
+
+        def sessao_que_apaga_o_rascunho(argumentos, tempo=None, cwd=None):
+            onde = Path(cwd)
+            vistas.append((onde, (onde / "AGENTS.md").is_file(),
+                           (onde / "nucleo" / "executor.json").is_file()))
+            shutil.rmtree(onde / "tmp", ignore_errors=True)
+            return 0, json.dumps({"type": "result", "result": "{}"})
+
+        rodar_de_verdade = a_camada.corre_a_lista
+        achar_de_verdade = a_camada.shutil.which
+        a_camada.corre_a_lista = sessao_que_apaga_o_rascunho
+        a_camada.shutil.which = lambda nome: nome
+        try:
+            a_camada.simular(raiz)
+        finally:
+            a_camada.corre_a_lista = rodar_de_verdade
+            a_camada.shutil.which = achar_de_verdade
+        caso("a sessão simulada roda numa cópia: a sessão que apaga tmp/ "
+             "não leva a evidência de quem a chamou",
+             evidencia.is_file())
+        caso("a cópia leva a camada, e a sessão lê o AGENTS.md dela",
+             len(vistas) == 1 and vistas[0][1]
+             and vistas[0][0].resolve() != raiz.resolve())
+        caso("a cópia sai do disco quando a simulação termina",
+             len(vistas) == 1 and not vistas[0][0].exists())
+        caso("a cópia leva a configuração local que o git ignora, como a "
+             "sessão a teria na raiz",
+             len(vistas) == 1 and vistas[0][2])
+
+        estouradas = []
+
+        def sessao_que_estoura_o_tempo(argumentos, tempo=None, cwd=None):
+            estouradas.append(Path(cwd))
+            raise subprocess.TimeoutExpired(argumentos, tempo or 1)
+
+        a_camada.corre_a_lista = sessao_que_estoura_o_tempo
+        a_camada.shutil.which = lambda nome: nome
+        try:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                a_camada.simular(raiz)
+        finally:
+            a_camada.corre_a_lista = rodar_de_verdade
+            a_camada.shutil.which = achar_de_verdade
+        caso("a cópia sai do disco mesmo quando a sessão estoura o tempo",
+             len(estouradas) == 1 and not estouradas[0].exists())
+
     total = len(casos)
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
@@ -1731,4 +2341,7 @@ def testar() -> int:
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar())

@@ -78,7 +78,7 @@ def sessoes_vivas_ao_lado(pasta: Path, minha: str, agora: float) -> list:
     return sorted(vivas)[:QUANTAS_SESSOES_NOMEADAS]
 
 
-def texto_do_aviso(vivas: list) -> str:
+def texto_do_aviso_de_sessao_viva(vivas: list) -> str:
     if not vivas:
         return ""
     if len(vivas) == 1:
@@ -120,7 +120,7 @@ def decisao(entrada: dict, raiz: Path, lar: Path, agora: float,
         return ""
     if ja_avisou(temporaria / f"{PREFIXO_DA_MARCA}{minha}"):
         return ""
-    return texto_do_aviso(vivas)
+    return texto_do_aviso_de_sessao_viva(vivas)
 
 
 def main() -> int:
@@ -133,7 +133,7 @@ def main() -> int:
     except Exception:
         return SILENCIO
     if aviso:
-        print(json.dumps({"systemMessage": aviso}, ensure_ascii=False))
+        print(json.dumps({"systemMessage": aviso}))
     return SILENCIO
 
 

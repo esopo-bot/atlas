@@ -123,6 +123,37 @@ pacote de histórias declarado como pacote.
 
 Trabalho já entendido, com escopo pronto, pula esta seção.
 
+### O pacote de entregas
+
+A regra 6 diz que uma issue é um pacote de entregas, não uma tarefa. O que
+junta as entregas num pacote **não é o assunto parecido: é a mesma bateria
+de provas** — os mesmos arquivos, as mesmas suítes, o mesmo ritual no fim.
+Agrupar por assunto não corta custo nenhum; agrupar por bateria faz a suíte
+lenta rodar uma vez por pacote em vez de uma por issue.
+
+Como se monta:
+
+- **Comece pela pergunta "que suíte prova isto?"** e agrupe por resposta
+  igual. Cada entrega vira um critério do pacote, com a prova dele ao lado.
+- **Passo zero é o commit pronto e não mesclado** que toca o mesmo arquivo:
+  entra antes de tudo, não como item da lista, senão o pacote reescreve
+  trabalho pronto e cria conflito de graça.
+- **Ficam de fora**, com o motivo escrito: estudo, decisão do dono, espera
+  de terceiro e execução de máquina. Nenhum deles é conserto, e misturá-los
+  só faz a sessão esperar. Espera de terceiro é linha da caixa do projeto,
+  não issue.
+- **Pedido pequeno não abre issue**: vira critério de um pacote aberto da
+  mesma bateria, ou linha da caixa do projeto. Issue solta é a que ninguém
+  volta a olhar.
+- **O teto mora no perfil**: o bloco do passo zero declara quantas issues
+  abertas o repositório comporta. Passou do teto, a sessão funde antes de
+  abrir — e diz ao dono qual absorveu qual.
+- **O pacote se registra na issue prioritária**, com a ordem obrigatória das
+  entregas, a tabela "entrega / por que junta / prova compartilhada" e a
+  lista do que ficou de fora com o motivo. Cada issue absorvida recebe um
+  comentário curto com o link e fecha como duplicada, para nenhuma delas ser
+  atacada sozinha por engano.
+
 ### Quando a resposta é de domínio, e não de código
 
 Às vezes a entrevista trava numa regra de negócio que nenhum instrumento
@@ -200,7 +231,7 @@ sobre elas:
   sem ter lido esta conversa: o que ler antes, o que fazer, em que ordem, o
   que provar, e o que não tocar.
 - **Issue de política não vai ao executor.** Se "Onde mexer" cita gancho,
-  `settings.json`, lista de cerca ou os arquivos de regra e vocabulário — os
+  `settings.json`, lista de cerca ou os arquivos de regra e de configuração — os
   caminhos de `.claude/caminhos-de-politica.txt` —, a cerca recusa a escrita
   durante a etapa e a execução morre para descobrir a parede. O executor de
   roteiros já recusa essa issue antes de abrir etapa; o certo é nem
@@ -283,11 +314,18 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 - **Entregar é a integração conter o trabalho.** Onde o repositório autoriza
   push, a branch de trabalho entrega **mesclando** na integração declarada;
   empurrá-la é sincronizar. Da branch de trabalho para a integração não cabe
-  pedido de incorporação: o pedido é o caminho da integração para a branch
-  por incorporação, e o do vizinho somente leitura, onde exige autorização
-  expressa do dono. Onde o cadastro nega push, a entrega é do dono — diga a
+  pedido de incorporação. O pedido cabe em dois casos: da integração para a
+  branch de publicação, que só recebe trabalho por ele; e no vizinho somente
+  leitura, onde ainda exige autorização expressa do dono. Onde o cadastro nega push, a entrega é do dono — diga a
   ele o que ficou commitado e pare. O gancho de destino cobra a integração de
   cada vizinho tocado pelo cadastro do projeto.
+- **Integração aberta em outra árvore de trabalho não impede a mescla.** O
+  `git switch <integração>` recusa ("already used by worktree"). Mescle em
+  HEAD destacado: `git switch --detach origin/<integração>`, depois
+  `git merge --no-ff -F <arquivo> <branch de trabalho>`. Confira que a árvore
+  da mescla é a que a bancada provou (`git rev-parse HEAD^{tree}` igual ao da
+  branch) e empurre `HEAD:<integração>`. A mensagem vai por arquivo, porque
+  o `git merge` não lê `-F -`.
 - **O corpo do pedido de revisão cobre o que o diff entrega.** Antes de
   pedir revisão, confira as seções do corpo contra a lista real de commits:
   o que o diff tem e o corpo não conta, o revisor aprova sem ver.

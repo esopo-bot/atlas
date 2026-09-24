@@ -43,7 +43,7 @@ GLOB_DE_INSTRUMENTO = "*.py"
 INSTALADOR = "montar.py"
 INTERPRETADOR = sys.executable
 INTERPRETADOR_NO_SHELL = f'"{sys.executable}"'
-CHAVE_DAS_PAGINAS = "PAGINAS"
+LEITOR_DA_CAMADA = "camada_da_pasta"
 
 TITULO_COMENTARIOS = "COMENTÁRIO E DOCSTRING — o alvo é zero"
 TITULO_TESTES = "TESTES — contagem e tempo de parede"
@@ -177,7 +177,7 @@ def paginas_instaladas():
     escopo = {"__name__": "saude"}
     exec(compile(Path(INSTALADOR).read_text(encoding="utf-8"),
                  INSTALADOR, "exec"), escopo)
-    return sorted(escopo[CHAVE_DAS_PAGINAS])
+    return sorted(escopo[LEITOR_DA_CAMADA](Path.cwd())[0])
 
 
 def medir_formato():
@@ -232,6 +232,30 @@ def guardar_o_artefato_se_reprovou(alvo: Path, acertos: list) -> str:
     return ""
 
 
+def textos_do_assistente(bruto: str) -> list:
+    if "[" not in bruto:
+        return []
+    try:
+        eventos = json.loads(bruto[bruto.find("["):bruto.rfind("]") + 1])
+    except ValueError:
+        return []
+    if not isinstance(eventos, list):
+        return []
+    return [bloco.get("text", "") for evento in eventos
+            if isinstance(evento, dict) and evento.get("type") == "assistant"
+            for bloco in (evento.get("message") or {}).get("content") or []
+            if isinstance(bloco, dict) and bloco.get("type") == "text"]
+
+
+def resposta_da_sessao(bruto: str, chaves: list) -> dict:
+    final = str(_colher_json(bruto).get("result", ""))
+    for texto in [final] + textos_do_assistente(bruto)[::-1]:
+        dado = _colher_json(texto)
+        if any(chave in dado for chave in chaves):
+            return dado
+    return {}
+
+
 def _pontuar_a_sessao(pasta: str, quantas: int) -> dict:
     partida = time.monotonic()
     _, bruto = corre_a_lista(
@@ -241,11 +265,11 @@ def _pontuar_a_sessao(pasta: str, quantas: int) -> dict:
         tempo=TEMPO_DA_SIMULACAO, cwd=pasta)
     parede = time.monotonic() - partida
 
-    sessao = _colher_json(bruto)
-    resposta = _colher_json(str(sessao.get("result", "")))
+    perguntas = _perguntas(quantas)
+    resposta = resposta_da_sessao(bruto, [chave for _, chave, _ in perguntas])
     acertos = [(rotulo, bool(prova(resposta)),
                 "" if prova(resposta) else str(resposta.get(chave, ""))[:50])
-               for rotulo, chave, prova in _perguntas(quantas)]
+               for rotulo, chave, prova in perguntas]
 
     alvo = Path(pasta) / ARQUIVO_PEDIDO
     if alvo.is_file():
@@ -388,6 +412,22 @@ def testar() -> int:
         if not condicao:
             falhas.append(rotulo)
 
+    empurrada = json.dumps([
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": '{"onde_abrir": "na raiz"}'}]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "relato da entrega"}]}},
+        {"type": "result", "result": "relato da entrega"}])
+    caso("a resposta que uma cobrança de parada empurrou para trás da última "
+         "mensagem ainda se lê",
+         resposta_da_sessao(empurrada, ["onde_abrir"]).get("onde_abrir")
+         == "na raiz")
+    no_fim = json.dumps([{"type": "result",
+                          "result": '{"onde_abrir": "no fim"}'}])
+    caso("e a resposta na última mensagem continua valendo",
+         resposta_da_sessao(no_fim, ["onde_abrir"]).get("onde_abrir")
+         == "no fim")
+
     with tempfile.TemporaryDirectory(prefix="saude-teste-") as pasta:
         sujo = Path(pasta) / "sujo.py"
         sujo.write_text(COM_SUJEIRA, encoding="utf-8")
@@ -512,5 +552,8 @@ def main():
 
 
 if __name__ == "__main__":
+    for canal in (sys.stdin, sys.stdout, sys.stderr):
+        if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
+            canal.reconfigure(encoding="utf-8", errors="replace")
     sys.exit(testar() if BANDEIRA_DE_TESTE in sys.argv
              else main())
