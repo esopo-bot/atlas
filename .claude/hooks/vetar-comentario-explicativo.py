@@ -72,7 +72,7 @@ RECUSA = (
     "Comentário explicativo é sinal de nome errado: o nome tem de dizer o "
     "que o comentário diria. Renomeie a função, a variável ou o arquivo até "
     "a linha se explicar sozinha, ou extraia o trecho para uma função com "
-    "nome que conte a história. O POR QUÊ de uma decisão não mora no "
+    "nome que conte a história. O porquê de uma decisão não mora no "
     "código: mora na issue, na mensagem do commit ou em `conhecimento/`, "
     "onde quem decide procura. Arquivo de teste não é exceção.\n"
     "Passam só as exceções mecânicas: shebang e diretiva de ferramenta "
@@ -89,7 +89,7 @@ RECUSA_DE_DOCSTRING = (
     "Docstring é comentário explicativo na régua desta casa: o nome tem de "
     "dizer o que ela diria. Renomeie o módulo, a classe ou a função até o "
     "nome contar a história, ou extraia o trecho para uma função com nome "
-    "que a conte. O POR QUÊ de uma decisão não mora no código: mora na "
+    "que a conte. O porquê de uma decisão não mora no código: mora na "
     "issue, na mensagem do commit ou em `conhecimento/`. Fora da raiz da "
     "camada, e dentro de repositório vizinho (projetos/<nome>), docstring é "
     "normal e passa."
@@ -422,7 +422,7 @@ BARRA = (
      "", "<template>\n  <!-- a lista dos itens -->\n</template>"),
     ("comentário de linha em .sh", "publicar.sh",
      "", "set -e\n# limpa a pasta temporária"),
-    ("arquivo de teste NÃO é exceção", "src/laco.spec.ts",
+    ("arquivo de teste não é exceção", "src/laco.spec.ts",
      "", "// arruma o dublê antes do caso\nit('soma', () => {})"),
     ("comentário acrescentado a arquivo que já tinha código",
      "src/laco.ts", "const total = 1", "const total = 2\n// agora é dois"),
@@ -449,7 +449,7 @@ DEIXA_PASSAR = (
      "", "<!-- explica o repositório -->"),
     ("marca dentro de literal, não no começo da linha", "src/laco.ts",
      "", 'const endereco = "https://exemplo.invalido"'),
-    ("comentário que JÁ estava no texto velho", "src/laco.ts",
+    ("comentário que já estava no texto velho", "src/laco.ts",
      "// explica o laço\nconst total = 1",
      "// explica o laço\nconst total = 2"),
     ("diretiva de compilação em .cs, que não é comentário", "Servico.cs",
@@ -499,7 +499,7 @@ def testar() -> int:
                 and type(falha).__name__ in
                 dado.get("permissionDecisionReason", ""))
 
-    caso("gancho que veta e não entende o pedido RECUSA, e nomeia a falha — "
+    caso("gancho que veta e não entende o pedido recusa, e nomeia a falha — "
          "quem não consegue julgar não pode dizer sim",
          recusou_sem_entender(TypeError("forma que o gancho não conhece")))
 
@@ -525,7 +525,7 @@ def testar() -> int:
     caso("a lista de diretivas é lida do disco — o falha-fechado abaixo "
          "não é arquivo faltando nesta árvore",
          bool(diretivas))
-    caso("sem a lista no disco o gancho falha FECHADO: a diretiva que a "
+    caso("sem a lista no disco o gancho falha fechado: a diretiva que a "
          "lista libera passa a ser negada",
          comentario_acrescentado("app/conta.py", "",
                                  "# pragma: no cover", SEM_DIRETIVAS)
@@ -660,9 +660,9 @@ def testar() -> int:
         (arvore / MARCA_DE_REPOSITORIO_VIZINHO).write_text(
             "gitdir: /outro/lugar/.git/worktrees/arvore-de-trabalho\n",
             encoding="utf-8")
-        caso("vizinho cujo .git é ARQUIVO — árvore de trabalho do git, ou "
+        caso("vizinho cujo .git é arquivo — árvore de trabalho do git, ou "
              "submódulo — também é território de terceiro: o julgamento "
-             "pergunta se o caminho EXISTE, nunca se é pasta",
+             "pergunta se o caminho existe, nunca se é pasta",
              docstring("projetos/arvore-de-trabalho/x.py", "", com_docstring)
              == PASSA
              and not dentro_da_raiz_da_camada(
@@ -674,12 +674,12 @@ def testar() -> int:
         vizinho_de_la = ao_lado / "projetos" / "vizinho"
         vizinho_de_la.mkdir(parents=True, exist_ok=True)
         (vizinho_de_la / MARCA_DE_REPOSITORIO).mkdir(exist_ok=True)
-        caso("docstring em OUTRA árvore de trabalho da camada barra — a raiz "
+        caso("docstring em outra árvore de trabalho da camada barra — a raiz "
              "sai do alvo, e antes disso a cerca calava em toda worktree",
              docstring_acrescentada(
                  str(ao_lado / "app" / "conta.py"), "", com_docstring,
                  raiz_do_alvo(str(ao_lado / "app" / "conta.py"), raiz)))
-        caso("e o vizinho com git próprio DENTRO da outra árvore continua "
+        caso("e o vizinho com git próprio dentro da outra árvore continua "
              "livre: território de terceiro não muda de dono por estar numa "
              "worktree",
              not docstring_acrescentada(
@@ -746,7 +746,7 @@ def testar() -> int:
              docstring("app/conta.py", '"""\nlinha velha\n"""',
                        '"""\nlinha nova\n"""') == PASSA)
         no_disco.write_text(com_docstring, encoding="utf-8")
-        caso("Write que repete a docstring que JÁ estava no disco não é "
+        caso("Write que repete a docstring que já estava no disco não é "
              "acréscimo",
              docstring("app/conta.py", com_docstring, com_docstring) == PASSA)
         caso("a recusa da docstring nomeia a regra 14, diz que é comentário "

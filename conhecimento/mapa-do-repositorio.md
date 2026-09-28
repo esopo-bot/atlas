@@ -12,8 +12,9 @@ máquina, fica fora do git.
 
 | Pasta | O que mora ali | Viaja para quem instala? |
 | --- | --- | --- |
-| `conhecimento/` | página que gente lê | só as que a tupla `FONTES` do `montar.py` nomeia: `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json` —, as duas receitas de quem instala, `verificacao-pos-atualizacao.md` e `organizar-conhecimento-e-projetos.md`, `motores-auxiliares.md` e [`windows-e-git-bash.md`](windows-e-git-bash.md), as armadilhas do Windows com Git Bash e o conserto de cada uma. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
+| `conhecimento/` | página que gente lê | só as que a tupla `FONTES` do `montar.py` nomeia: `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json` —, as duas receitas de quem instala, `verificacao-pos-atualizacao.md` e `organizar-conhecimento-e-projetos.md`, [`windows-e-git-bash.md`](windows-e-git-bash.md), as armadilhas do Windows com Git Bash e o conserto de cada uma. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
 | `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `perfil-de-repositorio` | não: é conteúdo do workspace, fora do git |
+| `conhecimento/issues_encerradas/` | o histórico do trabalho feito: um `.md` por issue fechada, numa pasta por projeto, escrito pelo módulo `historico` na árvore principal | o mecanismo, sim, porque o módulo vem ligado; o histórico, não: fica na máquina, fora do git |
 | `.agents/` | instrumentos (Python), as skills (fonte) e dois prompts: `.agents/prompts/bootstart.md`, o briefing de abertura para qualquer agente — o que a sessão vai encontrar, o que os ganchos recusam, e que skill ou receita atende cada pedido — e [`.agents/prompts/partida.md`](../.agents/prompts/partida.md), o checklist de partida, que roda sob demanda, em qualquer agente, e devolve o relatório GO ou NO-GO | os instrumentos, as skills e os dois prompts, sim. Quem tem comando de barra chega neles por `/bootstart` e `/partida`; quem só carrega o arquivo de instruções da raiz chega pelo `AGENTS.md`, que manda ler o briefing e aponta a partida para quando o dono pedir; e o primeiro comando do briefing é a saúde da abertura |
 | `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills e a regra por caminho do padrão de código, gerada da skill | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |
@@ -56,10 +57,12 @@ Quando o mesmo fato interessa aos dois, ele nasce como dado e a página é
 acontece com `conhecimento/regras-da-camada.md`: editar essa página é
 trabalho perdido, porque a próxima sincronização a reescreve.
 
-Depois de mexer em página, skill, módulo ou `nucleo/`, rode:
+Depois de mexer em página, skill, módulo ou `nucleo/`, rode os dois — o
+primeiro regenera, o segundo prova (regra 15):
 
 ```bash
 python montar.py --sincronizar
+python montar.py --verificar
 ```
 
 ## Fonte e cópia: edite sempre a fonte
@@ -290,11 +293,13 @@ linha nas issues permanentes, escritas pelo `.agents/caixa/caixa.py` — e não
 trabalho fora do assunto de agora. Cada linha leva a etiqueta do seu tipo, e
 por isso as duas caixas podem apontar para a MESMA issue: um quadro só. Linha
 que acabou sai por `caixa.py podar --id <identidade>`, que tira a linha do
-quadro e deixa o registro do fechamento em comentário da caixa.
+quadro e deixa o registro do fechamento na seção de fechamentos do próprio
+corpo, com teto.
 
 O relatório de fim de rodada não é linha: `caixa.py relatar --corpo <texto>`
-abre um comentário NOVO na mesma caixa, um por rodada. Linha se reescreve por
-desenho, e por isso o quadro só guardaria a última — o comentário guarda todas.
+reescreve o bloco dele no corpo da caixa, o último por cima do anterior — as
+rodadas velhas ficam no histórico de edição do corpo. O que da rodada espera
+pelo dono vai em `--seu`, e abre um comentário que o marca.
 
 Para **ler** essas issues use `gh api ... -q .body`, nunca `gh issue view`. O
 `view` renderiza o markdown e come as marcas HTML que delimitam o bloco do
@@ -330,56 +335,6 @@ A primeira linha **não abre sessão nenhuma**: ela conversa com a ponte no
 dialeto da outra ferramenta e compara com o que a camada deveria responder. É
 de graça e se repete quando quiser. A segunda abre duas sessões, com e sem a
 camada, e diz a diferença — essa paga, e avisa que paga.
-
-### A bancada dos motores auxiliares
-
-A travessia pergunta se a camada chega ao outro agente. A bancada pergunta o
-contrário: se o outro agente serve de **motor auxiliar** para esta sessão —
-pesquisa, tarefa somente leitura, ou o papel de crítico.
-
-```bash
-python .agents/motores/motores.py --sondar <motor>     # as cinco sondas
-python .agents/motores/motores.py --cadastrar <motor>  # sonda e grava
-python .agents/motores/motores.py --listar             # o que já foi provado
-python .agents/motores/motores.py --credito <motor>    # quanto sobrou
-```
-
-São cinco sondas: se responde e está logado, se devolve resultado
-estruturado, se a trava de escrita segura, se responde dentro do tempo, e se
-o código de saída acusa a tarefa não cumprida. **Só a primeira é de graça** —
-as outras abrem sessão no motor e consomem o que ele cobrar, e é por isso que
-`--sem-gastar` existe.
-
-Quem reprova é a **trava de escrita**: motor que escreve com a trava ligada
-não entra, porque quem o chamar não sabe o que ele garante. As demais viram
-**ressalva**, e a ressalva viaja junto com o motor — ela existe para quem vai
-chamá-lo.
-
-Duas coisas que a bancada mediu e que valem para qualquer motor. A primeira:
-**a trava de escrita não é da mesma natureza em todos** — num motor quem nega
-é o sistema operacional, noutro é o próprio agente, e só o primeiro é parede.
-A segunda: **o código de saída diz se o processo rodou, não se a tarefa foi
-cumprida**. Quem chama confere o resultado; confiar no código de saída trata
-tarefa abortada como sucesso.
-
-O `--cadastrar` grava o placar no arquivo local do executor, chave `motores`,
-com os papéis do motor, a garantia de escrita, a forma de cobrança, a data da
-prova e as ressalvas. **O cadastro é local de propósito**: ele diz o que ESTA
-máquina tem e quem está logado nela, e isso não viaja para quem instala a
-camada. Data de prova antiga é cadastro envelhecido — o motor muda de versão
-e a garantia muda com ele.
-
-O cadastro por si não faz a sessão usar o motor: quem conta a ela o que esta
-máquina tem é um gancho de abertura, e quem diz a ela QUANDO despachar é
-[Motores auxiliares — quando a sessão despacha, e para quem](motores-auxiliares.md).
-O aviso sai do cadastro, então motor novo aparece sem que o gancho mude.
-
-Antes de despachar, `--credito` diz quanto do limite já foi gasto, **sem
-gastar chamada**, quando o motor grava isso em disco. Nem todo motor grava:
-os que cobram por token não têm fonte local, e aí o instrumento responde
-"desconhecido" em vez de inventar número — a diferença importa, porque
-estourar um motor de assinatura custa espera e estourar um pré-pago custa
-dinheiro.
 
 **O agente sem comando de barra ignora gancho não revisado, em silêncio.**
 Com `.codex/hooks.json` escrito e `hooks = true`, a escrita na cópia gerada

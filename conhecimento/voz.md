@@ -78,7 +78,7 @@ isso, para a decisão não sumir calada.
 
 ### Narração de execução
 
-Falar nos pontos em que o motor já posta na issue, e em nenhum outro:
+Falar nos pontos em que o motor já escreve na issue, e em nenhum outro:
 parou, aguardando aprovação, execução completa, verificação verde.
 
 **O gancho no encadeador não está neste módulo.** Ele ficou de fora de

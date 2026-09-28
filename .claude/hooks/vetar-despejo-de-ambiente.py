@@ -1,3 +1,6 @@
+import ast
+import io
+import itertools
 import json
 import os
 import re
@@ -23,7 +26,7 @@ DOCUMENTO_LITERAL = re.compile(
     r"[^\n]*)\n(?P<corpo>.*?)(?:^(?P=marca)\s*$|\Z)", re.S | re.M)
 INTERPRETADORES_QUE_EXECUTAM_O_DOCUMENTO = (
     "python", "python3", "node", "nodejs", "ruby", "perl", "php",
-    "sh", "bash", "zsh", "dash", "ksh", "pwsh", "powershell")
+    "sh", "bash", "zsh", "dash", "ksh", "pwsh", "powershell", "py")
 INTERPRETADORES_DE_SHELL = ("sh", "bash", "zsh", "dash", "ksh")
 SUBSTITUICAO_QUE_EXECUTA = ("$(", "`")
 ABRE_SUBSTITUICAO = "$("
@@ -34,6 +37,7 @@ CONTRABARRA = "\\"
 ASPA_SIMPLES = "'"
 ASPA_DUPLA = '"'
 FECHA_GRUPO = ")"
+O_QUE_A_CONTRABARRA_ESCAPA_NA_ASPA_DUPLA = "$`\"\\\n"
 PALAVRA_QUE_O_SHELL_TROCA = "''"
 NO_CORPO = "corpo do documento"
 NA_SUBSTITUICAO = "substituição"
@@ -71,6 +75,39 @@ CHAMADAS_QUE_SO_LISTAM_NOMES = frozenset({
     "list", "sorted", "len", "set", "frozenset", "tuple", "iter",
     "enumerate", "bool"})
 
+NOMES_DO_PYTHON = ("python", "python3", "py")
+SUFIXO_DE_EXECUTAVEL = ".exe"
+ENTRADA_PADRAO = "-"
+OPCAO_LONGA = "--"
+OPCOES_LONGAS_DO_PYTHON_COM_VALOR = ("--check-hash-based-pycs",)
+LETRA_DO_CODIGO = "c"
+LETRAS_QUE_ENCERRAM_AS_OPCOES = "cm"
+LETRAS_QUE_LEVAM_VALOR = "WX"
+RODA_O_ARQUIVO = "arquivo"
+RODA_O_CODIGO = "código"
+SEPARAM_OS_COMANDOS = ";&|\n\r"
+QUEBRAS_DE_LINHA = ("\r\n", "\n", "\r")
+ABREM_REDIRECIONAMENTO = ("<", ">")
+DIGITOS = "0123456789"
+MARCAS_QUE_EXECUTAM_NA_PALAVRA = SUBSTITUICAO_QUE_EXECUTA + ("<(", ">(")
+ARGUMENTO_QUE_SAI = ""
+
+MODULO_DO_AMBIENTE = "os"
+ATRIBUTO_DO_AMBIENTE = "environ"
+PARAMETRO_DO_AMBIENTE_DO_FILHO = "env"
+PARAMETRO_DO_COMANDO_DO_FILHO = "args"
+POSICAO_DO_AMBIENTE_NO_LANCADOR = {
+    "run": None, "Popen": None, "call": None, "check_call": None,
+    "check_output": None, "create_subprocess_exec": None,
+    "create_subprocess_shell": None, "execve": 2, "execvpe": 2,
+    "spawnve": 3, "spawnvpe": 3, "posix_spawn": 2, "posix_spawnp": 2}
+CONSTRUTOR_QUE_COPIA = "dict"
+METODO_QUE_COPIA = "copy"
+METODOS_QUE_MEXEM_PELO_NOME = frozenset({"update", "pop", "setdefault", "get"})
+O_AMBIENTE_DO_FILHO = "..."
+FALHAS_DE_LEITURA_DO_CODIGO = (
+    SyntaxError, ValueError, TypeError, RecursionError, MemoryError)
+
 LISTAGEM_DO_AMBIENTE_NO_POWERSHELL = re.compile(
     r"\b(?:Get-ChildItem|gci|dir|ls|Get-Item|gi)\s+(?:-Path\s+)?env:\\?"
     r"(?:[\w*?]*[*?][\w*?]*)?\s*(?:$|\||;)", re.I | re.M)
@@ -79,12 +116,12 @@ TODAS_AS_VARIAVEIS_NO_POWERSHELL = re.compile(
 
 RECUSA = (
     "Regra 8 da camada: este comando despeja o ambiente sem nomear a variável "
-    "— `{}`. Ambiente se lê por variável NOMEADA: `echo \"$NOME\"`, "
+    "— `{}`. Ambiente se lê por variável nomeada: `echo \"$NOME\"`, "
     "`printenv NOME`, `os.environ.get('NOME')`, `$env:NOME`. Despejo largo "
     "põe credencial no transcript, que não se apaga — o token de mensageria "
     "da sessão já foi impresso assim uma vez, e filtrar por "
     "padrão de nome (`if 'X' in k`) não muda nada, porque o valor vai junto. "
-    "Se o que falta é o nome, liste só NOMES — `compgen -e` no bash, "
+    "Se o que falta é o nome, liste só nomes — `compgen -e` no bash, "
     "`(gci env:).Name` no PowerShell, `sorted(os.environ)` no Python — e "
     "depois leia a variável pelo nome."
 )
@@ -95,7 +132,7 @@ MANDA_GRAVAR = (
     "    {}"
 )
 APRENDIZADO = (
-    "ambiente se lê por variável NOMEADA; despejo largo (`env`, `printenv`, "
+    "ambiente se lê por variável nomeada; despejo largo (`env`, `printenv`, "
     "`os.environ` inteiro, `gci env:`) põe credencial no transcript, que não "
     "se apaga (regra 8)."
 )
@@ -179,6 +216,39 @@ BARRA_O_COMANDO = [
      "cat <<EOF\n\\\\$(declare -p)\nEOF"),
     ("substituição entre aspas duplas dentro da substituição executa",
      "cat <<EOF\n$(echo \"$(declare -p)\")\nEOF"),
+    ("o filho que imprime o ambiente não passa por receber o env=",
+     "python -c \"import os, subprocess; subprocess.run(['printenv'], "
+     "env=dict(os.environ, A='1'))\""),
+    ("o ambiente dado ao filho não esconde o print do ambiente ao lado",
+     "python -c \"import os, subprocess; subprocess.run(['x'], "
+     "env=dict(os.environ)); print(dict(os.environ))\""),
+    ("o mesmo print ao lado do filho, num documento literal do python",
+     "python - <<'PY'\nimport os, subprocess\nsubprocess.run(['x'], "
+     "env=dict(os.environ))\nprint(dict(os.environ))\nPY"),
+    ("env= de uma chamada que não abre processo não é o ambiente do filho",
+     "python -c \"import os; print(dict(env=dict(os.environ)))\""),
+    ("o apelido que vai ao filho e também ao print segue barrado",
+     "python -c \"import os, subprocess; e = dict(os.environ); "
+     "subprocess.run(['x'], env=e); print(e)\""),
+    ("código que o Python não consegue ler fica como está e segue julgado",
+     "python -c \"import os, subprocess; subprocess.run(['x'], "
+     "env=dict(os.environ, A='1')\""),
+    ("opção antes do -c não faz do código um argumento de texto",
+     "python -u -c \"import os; print(dict(os.environ))\""),
+    ("o valor do -W não é o arquivo: o -c depois dele segue código",
+     "python -W ignore -c \"import os; print(dict(os.environ))\""),
+    ("substituição dentro do argumento de texto executa",
+     "python x.py --assunto \"$(python -c 'import os; "
+     "print(dict(os.environ))')\""),
+    ("texto que desce por pipe para o python é código",
+     "echo \"import os; print(os.environ)\" | python"),
+    ("o lançador py do Windows executa o documento",
+     "py - <<'PY'\nimport os\nprint(dict(os.environ))\nPY"),
+    ("o git na frente não esconde o python que despeja ao lado",
+     "git status; python -c \"import os; print(dict(os.environ))\""),
+    ("a contrabarra antes do nome não esconde o declare", "\\declare -p"),
+    ("a contrabarra no meio do nome não esconde o env", "e\\nv"),
+    ("a aspa no meio do nome não esconde o env", "e\"n\"v"),
 ]
 DEIXA_PASSAR = [
     ("echo de variável nomeada", "echo $CLAUDE_PROJECT_DIR"),
@@ -247,6 +317,32 @@ DEIXA_PASSAR = [
      "cat <<EOF\n\\$(env)\nEOF"),
     ("dentro da substituição, o que está entre aspas simples é literal",
      "cat <<EOF\n$(printf '%s' '$(declare -p)')\nEOF"),
+    ("o ambiente copiado por dict() e entregue ao filho por env=",
+     "python -c \"import os, subprocess; subprocess.run(['x'], "
+     "env=dict(os.environ, A='1'))\""),
+    ("o mesmo ambiente do filho num documento literal do python",
+     "python - <<'PY'\nimport os, subprocess\nsubprocess.run(['x'], "
+     "env=dict(os.environ, A='1'))\nPY"),
+    ("o apelido do ambiente que só é mexido pelo nome e vai ao filho",
+     "python - <<'PY'\nimport os, subprocess\n"
+     "ambiente = dict(os.environ, A='1')\nambiente['B'] = '2'\n"
+     "subprocess.run(['x'], env=ambiente)\nPY"),
+    ("o ambiente entregue ao filho pela posição, no os.execve",
+     "python -c \"import os; os.execve('/usr/bin/python3', "
+     "['python3', 'x.py'], dict(os.environ, A='1'))\""),
+    ("argumento de texto de um instrumento que cita o padrão",
+     "python .agents/caixa/caixa.py melhoria --id x --assunto \"a cerca "
+     "perguntava em env=dict(os.environ, A=1) e em print(os.environ)\""),
+    ("argumento de texto com ; e env dentro não é comando do shell",
+     "python x.py --assunto \"medido; env; declare -p seguem vetados\""),
+    ("o redirecionamento depois do texto não devolve o texto à análise",
+     "python x.py --assunto \"cita print(os.environ)\" 2>&1 | tail -3"),
+    ("texto entre aspas com ; env ; dentro não é comando do shell",
+     "echo \"medido; env; declare -p seguem vetados\""),
+    ("mensagem de commit com ; env ; dentro não é comando do shell",
+     "git commit -m \"a cerca; env; pergunta\""),
+    ("a busca pelo código que despeja, depois de outro comando, é busca",
+     "cd /tmp && grep -rn \"print(os.environ)\" D:/x/src"),
 ]
 
 
@@ -256,11 +352,55 @@ def sem_aspas(token: str) -> str:
     return token
 
 
-def tokens_de(segmento: str) -> list:
+def palavra_como_o_shell_le(palavra: str) -> str:
+    lida, aspa, i = [], None, 0
+    while i < len(palavra):
+        c, seguinte = palavra[i], palavra[i + 1:i + 2]
+        if aspa == ASPA_SIMPLES:
+            aspa = None if c == ASPA_SIMPLES else aspa
+            lida += [c] if aspa else []
+        elif c == CONTRABARRA and seguinte and (
+                aspa is None
+                or seguinte in O_QUE_A_CONTRABARRA_ESCAPA_NA_ASPA_DUPLA):
+            lida.append(seguinte)
+            i += 1
+        elif aspa == ASPA_DUPLA:
+            aspa = None if c == ASPA_DUPLA else aspa
+            lida += [c] if aspa else []
+        elif c in ASPAS:
+            aspa = c
+        else:
+            lida.append(c)
+        i += 1
+    return "".join(lida)
+
+
+def palavras_como_o_shell_le_no_segmento(segmento: str) -> list:
     try:
-        return [sem_aspas(t) for t in shlex.split(segmento, posix=False)]
+        crus = shlex.split(segmento, posix=False)
     except ValueError:
-        return [sem_aspas(t) for t in segmento.split()]
+        crus = segmento.split()
+    return [palavra_como_o_shell_le(t) for t in crus]
+
+
+def cortar_fora_das_aspas(texto: str) -> list:
+    pedacos, inicio, aspa, i = [], 0, None, 0
+    while i < len(texto):
+        c, passo = texto[i], 1
+        if aspa == ASPA_SIMPLES:
+            aspa = None if c == ASPA_SIMPLES else aspa
+        elif c == CONTRABARRA:
+            passo = 2
+        elif aspa == ASPA_DUPLA:
+            aspa = None if c == ASPA_DUPLA else aspa
+        elif c in ASPAS:
+            aspa = c
+        elif corte := SEPARADORES_DE_COMANDO.match(texto, i):
+            pedacos.append(texto[inicio:i])
+            inicio = corte.end()
+            passo = corte.end() - i
+        i += passo
+    return pedacos + [texto[inicio:]]
 
 
 def comando_e_argumentos(tokens: list) -> tuple:
@@ -289,8 +429,8 @@ def despeja_sem_nomear(nome: str, argumentos: list) -> bool:
 
 
 def despejo_de_shell(linhas_do_shell: str, comando: str) -> str:
-    for segmento in SEPARADORES_DE_COMANDO.split(linhas_do_shell):
-        tokens = tokens_de(segmento)
+    for segmento in cortar_fora_das_aspas(linhas_do_shell):
+        tokens = palavras_como_o_shell_le_no_segmento(segmento)
         nome, argumentos = comando_e_argumentos(tokens)
         if nome and despeja_sem_nomear(nome, argumentos):
             return segmento.strip()
@@ -301,15 +441,19 @@ def despejo_de_shell(linhas_do_shell: str, comando: str) -> str:
     return achado.group(0) if achado else PASSA
 
 
-def primeiro_comando(comando: str) -> str:
-    primeiro = SEPARADORES_DE_COMANDO.split(comando, 1)[0]
-    nome, _ = comando_e_argumentos(tokens_de(primeiro))
-    return nome
+def sem_as_buscas(comando: str) -> str:
+    trocas = []
+    for palavras in comandos_e_palavras(comando):
+        nome, _ = comando_e_argumentos(
+            [palavra_como_o_shell_le(comando[inicio:fim])
+             for inicio, fim in palavras])
+        if nome in FERRAMENTAS_DE_BUSCA:
+            trocas.append((palavras[0][0], palavras[-1][1], PASSA))
+    return com_as_trocas(comando, trocas)
 
 
 def despejo_de_python(comando: str) -> str:
-    if primeiro_comando(comando) in FERRAMENTAS_DE_BUSCA:
-        return PASSA
+    comando = sem_as_buscas(comando)
     achado = ITERACAO_DO_AMBIENTE.search(comando)
     if achado:
         return achado.group(0).strip()
@@ -331,7 +475,7 @@ def despejo_de_powershell(comando: str) -> str:
 
 def leitor_do_documento(achado) -> str:
     abertura = SEPARADORES_DE_COMANDO.split(achado.group("abertura"))[-1]
-    nome, _ = comando_e_argumentos(tokens_de(abertura))
+    nome, _ = comando_e_argumentos(palavras_como_o_shell_le_no_segmento(abertura))
     return nome
 
 
@@ -343,7 +487,7 @@ def o_documento_e_executado(achado) -> bool:
                            for marca in SUBSTITUICAO_QUE_EXECUTA)
 
 
-def sem_os_documentos_que_sao_dado(comando: str) -> str:
+def sem_os_documentos_literais(comando: str) -> str:
     def corpo_ou_nada(achado):
         if o_documento_e_executado(achado):
             return achado.group(0)
@@ -412,11 +556,273 @@ def so_o_que_o_shell_executa(comando: str) -> str:
     return DOCUMENTO_LITERAL.sub(corpo_so_se_um_shell_le, comando)
 
 
+def nome_sem_pasta_nem_sufixo(nome: str) -> str:
+    return nome.rsplit(CONTRABARRA, 1)[-1].removesuffix(SUFIXO_DE_EXECUTAVEL)
+
+
+def nome_da_funcao(chamada) -> str:
+    funcao = chamada.func
+    if isinstance(funcao, ast.Attribute):
+        return funcao.attr
+    return getattr(funcao, "id", "")
+
+
+def e_o_ambiente_inteiro(no) -> bool:
+    return (isinstance(no, ast.Attribute) and no.attr == ATRIBUTO_DO_AMBIENTE
+            and isinstance(no.value, ast.Name)
+            and no.value.id == MODULO_DO_AMBIENTE)
+
+
+def lugar_na_chamada(no, pais) -> tuple:
+    pai = pais.get(no)
+    if isinstance(pai, ast.keyword):
+        return pai.arg, pais.get(pai)
+    if isinstance(pai, ast.Call) and no in pai.args:
+        return pai.args.index(no), pai
+    return None, None
+
+
+def e_o_ambiente_do_lancador(lugar, chamada) -> bool:
+    nome = nome_da_funcao(chamada)
+    return (nome in POSICAO_DO_AMBIENTE_NO_LANCADOR and lugar is not None
+            and lugar in (PARAMETRO_DO_AMBIENTE_DO_FILHO,
+                          POSICAO_DO_AMBIENTE_NO_LANCADOR[nome]))
+
+
+def copia_o_ambiente(lugar, chamada) -> bool:
+    return (nome_da_funcao(chamada) == CONSTRUTOR_QUE_COPIA
+            and not isinstance(lugar, str))
+
+
+def o_metodo_copia(no, pais) -> bool:
+    pai = pais.get(no)
+    chamada = pais.get(pai)
+    return (isinstance(pai, ast.Attribute) and pai.attr == METODO_QUE_COPIA
+            and isinstance(chamada, ast.Call) and chamada.func is pai)
+
+
+def junta_ao_dicionario(no, pai) -> bool:
+    if isinstance(pai, ast.BinOp):
+        return isinstance(pai.op, ast.BitOr)
+    return isinstance(pai, ast.Dict) and any(
+        chave is None and valor is no
+        for chave, valor in zip(pai.keys, pai.values))
+
+
+def o_filho_despeja(chamada) -> bool:
+    comando_do_filho = next(iter(chamada.args), None) or next(
+        (argumento.value for argumento in chamada.keywords
+         if argumento.arg == PARAMETRO_DO_COMANDO_DO_FILHO), None)
+    if comando_do_filho is None:
+        return False
+    try:
+        literal = ast.literal_eval(comando_do_filho)
+    except FALHAS_DE_LEITURA_DO_CODIGO:
+        return False
+    if isinstance(literal, (list, tuple)) and all(
+            isinstance(parte, str) for parte in literal):
+        literal = shlex.join(literal)
+    return isinstance(literal, str) and bool(despejo_no_comando(literal))
+
+
+def so_mexe_pelo_nome(no, pais) -> bool:
+    pai = pais.get(no)
+    if isinstance(pai, ast.Subscript):
+        return pai.value is no
+    chamada = pais.get(pai)
+    return (isinstance(pai, ast.Attribute)
+            and pai.attr in METODOS_QUE_MEXEM_PELO_NOME
+            and isinstance(chamada, ast.Call) and chamada.func is pai)
+
+
+def o_apelido_vai_ao_filho(alvos, pais, arvore, vistos) -> bool:
+    if (len(alvos) != 1 or not isinstance(alvos[0], ast.Name)
+            or alvos[0].id in vistos):
+        return False
+    nome = alvos[0].id
+    usos = [no for no in ast.walk(arvore)
+            if isinstance(no, ast.Name) and no.id == nome]
+    leituras = [no for no in usos if not isinstance(no.ctx, ast.Store)]
+    if len(usos) - len(leituras) != 1:
+        return False
+    ao_filho = [no for no in leituras
+                if vai_ao_filho(no, pais, arvore, vistos | {nome})]
+    return bool(ao_filho) and all(
+        no in ao_filho or so_mexe_pelo_nome(no, pais) for no in leituras)
+
+
+def vai_ao_filho(no, pais, arvore, vistos=frozenset()) -> bool:
+    while True:
+        lugar, chamada = lugar_na_chamada(no, pais)
+        pai = pais.get(no)
+        if chamada is not None and e_o_ambiente_do_lancador(lugar, chamada):
+            return not o_filho_despeja(chamada)
+        if chamada is not None and copia_o_ambiente(lugar, chamada):
+            no = chamada
+        elif o_metodo_copia(no, pais):
+            no = pais[pai]
+        elif junta_ao_dicionario(no, pai):
+            no = pai
+        elif isinstance(pai, ast.Assign) and pai.value is no:
+            return o_apelido_vai_ao_filho(pai.targets, pais, arvore, vistos)
+        else:
+            return False
+
+
+def com_as_trocas(texto: str, trocas: list) -> str:
+    partes, fim = [], 0
+    for inicio, termino, novo in sorted(trocas):
+        partes += [texto[fim:inicio], novo]
+        fim = termino
+    return "".join(partes) + texto[fim:]
+
+
+def codigo_sem_o_ambiente_do_filho(codigo: str) -> str:
+    if ATRIBUTO_DO_AMBIENTE not in codigo:
+        return codigo
+    try:
+        arvore = ast.parse(codigo)
+    except FALHAS_DE_LEITURA_DO_CODIGO:
+        return codigo
+    pais = {filho: pai for pai in ast.walk(arvore)
+            for filho in ast.iter_child_nodes(pai)}
+    linhas = io.StringIO(codigo, newline="").readlines()
+    inicios = list(itertools.accumulate(map(len, linhas), initial=0))
+
+    def posicao(linha, coluna):
+        return inicios[linha - 1] + len(
+            linhas[linha - 1].encode()[:coluna].decode())
+    return com_as_trocas(codigo, [
+        (posicao(no.lineno, no.col_offset),
+         posicao(no.end_lineno, no.end_col_offset), O_AMBIENTE_DO_FILHO)
+        for no in ast.walk(arvore)
+        if e_o_ambiente_inteiro(no) and vai_ao_filho(no, pais, arvore)])
+
+
+def comandos_e_palavras(trecho: str) -> list:
+    comandos, inicio, aspa, i = [[]], None, None, 0
+    while i < len(trecho):
+        c, passo = trecho[i], 1
+        if aspa:
+            if c == aspa:
+                aspa = None
+            elif c == CONTRABARRA and aspa == ASPA_DUPLA:
+                passo = 2
+        elif c == CONTRABARRA:
+            quebra = next((marca for marca in QUEBRAS_DE_LINHA
+                           if trecho.startswith(marca, i + 1)), "")
+            if not quebra and inicio is None:
+                inicio = i
+            passo = 1 + (len(quebra) or 1)
+        elif c.isspace() or c in SEPARAM_OS_COMANDOS:
+            if inicio is not None:
+                comandos[-1].append((inicio, i))
+                inicio = None
+            if c in SEPARAM_OS_COMANDOS:
+                comandos.append([])
+        else:
+            inicio = i if inicio is None else inicio
+            aspa = c if c in ASPAS else None
+        i += passo
+    if aspa:
+        return []
+    if inicio is not None:
+        comandos[-1].append((inicio, len(trecho)))
+    return [palavras for palavras in comandos if palavras]
+
+
+def modo_do_python(argumentos: list) -> tuple:
+    i = 0
+    while i < len(argumentos):
+        opcao = argumentos[i]
+        if opcao == ENTRADA_PADRAO:
+            return None, i
+        if not opcao.startswith(MARCA_DE_OPCAO):
+            return RODA_O_ARQUIVO, i
+        if opcao.startswith(OPCAO_LONGA):
+            i += 2 if opcao in OPCOES_LONGAS_DO_PYTHON_COM_VALOR else 1
+            continue
+        for posicao, letra in enumerate(opcao[1:], 2):
+            if letra in LETRAS_QUE_ENCERRAM_AS_OPCOES:
+                codigo_na_seguinte = (letra == LETRA_DO_CODIGO
+                                      and posicao == len(opcao))
+                return (RODA_O_CODIGO if codigo_na_seguinte else None), i
+            if letra in LETRAS_QUE_LEVAM_VALOR:
+                i += 1 if posicao == len(opcao) else 0
+                break
+        i += 1
+    return None, i
+
+
+def argumentos_de_texto(trecho: str, posicoes: list) -> list:
+    texto = []
+    for inicio, fim in posicoes:
+        if trecho[inicio:fim].lstrip(DIGITOS).startswith(
+                ABREM_REDIRECIONAMENTO):
+            break
+        texto.append((inicio, fim, ARGUMENTO_QUE_SAI))
+    return texto
+
+
+def troca_do_codigo(trecho: str, inicio: int, fim: int) -> list:
+    try:
+        partes = shlex.split(trecho[inicio:fim])
+    except ValueError:
+        return []
+    if len(partes) != 1:
+        return []
+    sem_o_filho = codigo_sem_o_ambiente_do_filho(partes[0])
+    if sem_o_filho == partes[0]:
+        return []
+    return [(inicio, fim, shlex.quote(sem_o_filho))]
+
+
+def trocas_no_python(trecho: str, posicoes: list) -> list:
+    crus = [trecho[inicio:fim] for inicio, fim in posicoes]
+    nome, argumentos = comando_e_argumentos([sem_aspas(cru) for cru in crus])
+    if nome_sem_pasta_nem_sufixo(nome) not in NOMES_DO_PYTHON or any(
+            marca in cru for cru in crus
+            for marca in MARCAS_QUE_EXECUTAM_NA_PALAVRA):
+        return []
+    modo, indice = modo_do_python(argumentos)
+    seguinte = len(crus) - len(argumentos) + indice + 1
+    if modo == RODA_O_CODIGO and seguinte < len(posicoes):
+        return troca_do_codigo(trecho, *posicoes[seguinte])
+    if modo == RODA_O_ARQUIVO:
+        return argumentos_de_texto(trecho, posicoes[seguinte:])
+    return []
+
+
+def trecho_sem_o_ambiente_do_filho_nem_o_texto(trecho: str) -> str:
+    return com_as_trocas(trecho, [
+        troca for posicoes in comandos_e_palavras(trecho)
+        for troca in trocas_no_python(trecho, posicoes)])
+
+
+def corpo_sem_o_ambiente_do_filho(achado) -> str:
+    corpo = achado.group("corpo")
+    if nome_sem_pasta_nem_sufixo(leitor_do_documento(achado)) in NOMES_DO_PYTHON:
+        return codigo_sem_o_ambiente_do_filho(corpo)
+    return corpo
+
+
+def sem_o_ambiente_do_filho_nem_o_texto(comando: str) -> str:
+    partes, fim = [], 0
+    for achado in DOCUMENTO_LITERAL.finditer(comando):
+        partes += [trecho_sem_o_ambiente_do_filho_nem_o_texto(
+            comando[fim:achado.start("corpo")]),
+            corpo_sem_o_ambiente_do_filho(achado)]
+        fim = achado.end("corpo")
+    return "".join(partes) + trecho_sem_o_ambiente_do_filho_nem_o_texto(
+        comando[fim:])
+
+
 def despejo_no_comando(comando) -> str:
     if not isinstance(comando, str) or not comando.strip():
         return PASSA
+    comando = sem_o_ambiente_do_filho_nem_o_texto(comando)
     linhas_do_shell = so_o_que_o_shell_executa(comando)
-    comando = sem_os_documentos_que_sao_dado(comando)
+    comando = sem_os_documentos_literais(comando)
     return (despejo_de_shell(linhas_do_shell, comando)
             or despejo_de_python(comando) or despejo_de_powershell(comando))
 
@@ -527,7 +933,7 @@ def testar() -> int:
 
     recusa = saida_em_json(recusa_por_nao_entender,
                            TypeError("forma que o gancho não conhece"))
-    caso("gancho que veta e não entende o pedido RECUSA, e nomeia a falha — "
+    caso("gancho que veta e não entende o pedido recusa, e nomeia a falha — "
          "quem não consegue julgar não pode dizer sim",
          recusa.get("permissionDecision") == DECISAO_DE_NEGAR
          and "TypeError" in recusa.get("permissionDecisionReason", ""))
@@ -560,9 +966,9 @@ def testar() -> int:
                            RAZAO_DO_TESTE, AMBIENTE_SEM_A_MARCA)
          .get("permissionDecisionReason") == RAZAO_DO_TESTE)
     razao_inteira = RECUSA.format("env") + MANDA_GRAVAR.format(APRENDIZADO)
-    caso("a recusa nomeia a regra 8, ensina a leitura NOMEADA, cita o "
+    caso("a recusa nomeia a regra 8, ensina a leitura nomeada, cita o "
          "despejo que barrou e manda gravar o aprendizado (regra 4)",
-         "Regra 8" in razao_inteira and "NOMEADA" in razao_inteira
+         "Regra 8" in razao_inteira and "nomeada" in razao_inteira
          and "`env`" in razao_inteira and "regra 4" in razao_inteira
          and "`conhecimento/`" in razao_inteira)
     caso("o que a recusa cita é o trecho que despejou, não o comando inteiro",

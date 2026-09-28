@@ -1,7 +1,21 @@
 Senhas, chaves e tokens.
 
 Esta pasta fica fora de todo git, inclusive de repositorio privado.
-Nenhum agente abre arquivo daqui.
+Nenhum agente abre arquivo daqui para ler na tela.
+
+A EXCECAO: O FECHAMENTO DE ISSUE
+
+O ritual que fecha uma issue le e escreve aqui, sempre por roteiro: o valor
+entra pelo stdin e sai direto para o arquivo, nunca pela tela, pelo echo,
+pelo transcript, pelo git, pela issue ou pelo historico. O que se diz em
+voz alta e o nome, nunca o valor.
+
+  acessos/        o valor de cada credencial, um arquivo por acesso
+  INVENTARIO.md   uma linha por conta, conta de teste ou estado salvo de
+                  navegador: o papel, o ambiente e o arquivo de acessos/
+                  onde o valor mora. Nunca o valor.
+
+O historico da issue guarda so o ponteiro para a linha do INVENTARIO.md.
 
 TOKENS DE MCP
 

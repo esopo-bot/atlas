@@ -11,6 +11,10 @@ NOME_DE_CREDENCIAL = re.compile(
     r"|id_rsa|id_ed25519|\.netrc|\.git-credentials|\.npmrc|\.pypirc"
     r"|credentials|secrets?\.json)$")
 PASTA_DE_CREDENCIAL = ".credenciais"
+ARQUIVO_DO_GITIGNORE = ".gitignore"
+MARCA_DE_EXCECAO_DO_GITIGNORE = "!"
+CARACTERES_DE_PADRAO = set("*?[")
+UNIDADE_DO_WINDOWS = re.compile(r"^[A-Za-z]:")
 GAVETAS_DE_CREDENCIAL = (PASTA_DE_CREDENCIAL, ".ssh", ".aws", ".azure",
                          ".kube", ".docker", ".config/gcloud", ".config/gh")
 MARCAS_DE_CREDENCIAL = (".env", "appsettings", PASTA_DE_CREDENCIAL, ".ssh",
@@ -48,8 +52,8 @@ PREFIXOS_QUE_EXCLUEM = ("!", "#", ":(exclude)", ":!", ":^")
 ESCREVE_NO_GITIGNORE = re.compile(r">>?\s*(?:\S*[/\\])?\.gitignore\b")
 
 SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\n|\||&")
-DOCUMENTO_LITERAL_QUE_NAO_EXPANDE = re.compile(
-    r"<<-?\s*(['\"])(\w+)\1([^\n]*)\n.*?(?:^\2\s*$|\Z)", re.S | re.M)
+MODULO_QUE_DESEMBRULHA = "desembrulhar-comando.py"
+CACHE_DO_DESEMBRULHADOR = []
 SUBSTITUICAO_QUE_EXECUTA = re.compile(r"\$\(|`")
 MENSAGEM_COLADA = re.compile(
     r"""(?:--message|--body|-m)=(?:"([^"]*)"|'([^']*)'|(\S*))""")
@@ -132,9 +136,9 @@ APRENDIZADO = (
 VETO = (
     "Regra 8 da camada: isto levaria o conteúdo de '{alvo}', que é arquivo "
     "de credencial, para "
-    "onde NÃO SE DESFAZ (git grava história; gh publica). Segredo que sobe "
+    "onde não se desfaz (git grava história; gh publica). Segredo que sobe "
     "fica exposto, e o conserto vira trocar o segredo. Refaça sem o valor: "
-    "referencie pelo NOME (${{VARIAVEL}}); para citar o arquivo num texto, a "
+    "referencie pelo nome (${{VARIAVEL}}); para citar o arquivo num texto, a "
     "bandeira de mensagem (-m \"explica o .env\") e o documento com "
     "delimitador entre aspas (<<'FIM') passam. Ler localmente também passa — "
     "este gancho só barra o que sai."
@@ -168,7 +172,7 @@ AFIRMACAO_POR_RESPOSTA = {
 COMANDO_DA_PROVA = ("bash .claude/hooks/interpretador.sh "
                     ".claude/hooks/orientar-credencial.py {} {}")
 PROXIMO_DO_VETO = (
-    "Refaça o comando sem o valor da credencial: referencie pelo NOME "
+    "Refaça o comando sem o valor da credencial: referencie pelo nome "
     "(${VARIAVEL}) ou use a bandeira de mensagem — o conteúdo não sobe para "
     "git nem gh.")
 PROXIMO_DO_VETO_DE_METADATA = (
@@ -259,12 +263,51 @@ def esta_numa_gaveta_de_credencial(partes: list) -> bool:
                for gaveta in GAVETAS_DE_CREDENCIAL)
 
 
+def declarados_rastreados_na_gaveta(raiz: Path) -> set:
+    try:
+        linhas = (raiz / ARQUIVO_DO_GITIGNORE).read_text(
+            encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+    declarados = set()
+    for linha in linhas:
+        limpa = linha.strip()
+        if not limpa.startswith(MARCA_DE_EXCECAO_DO_GITIGNORE):
+            continue
+        caminho = limpa[len(MARCA_DE_EXCECAO_DO_GITIGNORE):].lstrip("/")
+        partes = [p for p in caminho.split("/") if p]
+        if (len(partes) == 2 and partes[0] == PASTA_DE_CREDENCIAL
+                and not set(caminho) & CARACTERES_DE_PADRAO):
+            declarados.add(caminho.lower())
+    return declarados
+
+
+def sem_unidade(caminho: str) -> str:
+    return UNIDADE_DO_WINDOWS.sub("", caminho.replace("\\", "/"))
+
+
+def e_declarado_rastreado(candidato: str) -> bool:
+    raiz = raiz_do_projeto_nunca_o_cwd()
+    declarados = declarados_rastreados_na_gaveta(raiz)
+    if not declarados:
+        return False
+    normal = sem_unidade(candidato)
+    while normal.startswith("./"):
+        normal = normal[2:]
+    prefixo = sem_unidade(raiz.resolve().as_posix()).rstrip("/") + "/"
+    if normal.lower().startswith(prefixo.lower()):
+        normal = normal[len(prefixo):]
+    return normal.lower() in declarados
+
+
 def e_credencial(pedaco: str) -> str:
     for candidato in PEDACO_QUE_PODE_SER_CAMINHO.findall(pedaco):
         partes = [p for p in SEPARADOR_DE_PASTA.split(candidato) if p]
         if not partes:
             continue
         if esta_numa_gaveta_de_credencial(partes):
+            if e_declarado_rastreado(candidato):
+                continue
             return candidato
         if NOME_DE_CREDENCIAL.match(partes[-1].lower()):
             return candidato
@@ -339,8 +382,21 @@ def endpoint_de_metadata_chamado(texto: str) -> str:
     return SEM_ALVO
 
 
+def desembrulhador():
+    import importlib.util
+    if CACHE_DO_DESEMBRULHADOR:
+        return CACHE_DO_DESEMBRULHADOR[0]
+    caminho = Path(__file__).resolve().with_name(MODULO_QUE_DESEMBRULHA)
+    origem = importlib.util.spec_from_file_location(
+        "desembrulhar_comando", caminho)
+    modulo = importlib.util.module_from_spec(origem)
+    origem.loader.exec_module(modulo)
+    CACHE_DO_DESEMBRULHADOR.append(modulo)
+    return modulo
+
+
 def so_o_que_executa(comando: str) -> str:
-    texto = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(r"\3", comando)
+    texto = desembrulhador().sem_os_documentos_que_sao_dado(comando)
     texto = MENSAGEM_COLADA.sub(tirar_mensagem, texto)
     return MENSAGEM_SEPARADA.sub(tirar_mensagem, texto)
 
@@ -519,6 +575,7 @@ CASOS_QUE_ORIENTAM = [
     ("gaveta da azure", "cat ~/.azure/accessTokens.json"),
     ("no PowerShell, com barra invertida",
      "Get-Content $HOME\\.aws\\credentials"),
+    ("o documento entregue ao sh lê a credencial", "sh <<'FIM'\ncat .env\nFIM"),
 ]
 
 CASOS_QUE_VETAM = [
@@ -598,7 +655,7 @@ CASOS_QUE_CALAM = [
     ("exclude-dir no grep", "grep -r foo . --exclude-dir=.credenciais"),
     ("exclude no rsync", "rsync -a --exclude .credenciais/ . /backup"),
     ("exclude colado no tar", "tar --exclude=.credenciais -cf x.tar ."),
-    ("escrever só o NOME no .gitignore é PROTEGER",
+    ("escrever só o nome no .gitignore é proteger",
      'echo ".credenciais/" >> .gitignore'),
     ("pathspec de exclusão no git add",
      'git add . -- ":(exclude).credenciais"'),
@@ -648,6 +705,10 @@ CASOS_QUE_VETAM_POR_METADATA = [
     ("no PowerShell",
      "Invoke-WebRequest -Uri http://169.254.169.254/latest/meta-data/"),
     ("com https", "curl https://169.254.169.254/"),
+    ("o documento entregue ao bash é comando",
+     "bash <<'FIM'\ncurl http://169.254.169.254/\nFIM"),
+    ("a marca de documento dentro de aspas não apaga o resto do comando",
+     "echo \"<<'X'\"\ncurl http://169.254.169.254/"),
 ]
 
 
@@ -684,10 +745,54 @@ def testar_a_porta_da_leitura_direta(caso) -> None:
          decisao_de_arquivo("kube/config") == (RESPOSTA_CALA, SEM_ALVO))
 
 
+def testar_os_declarados_rastreados_na_gaveta(caso) -> None:
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="gaveta-") as pasta:
+        declarada = Path(pasta) / "declarada"
+        calada = Path(pasta) / "sem-declaracao"
+        declarada.mkdir()
+        calada.mkdir()
+        (declarada / ARQUIVO_DO_GITIGNORE).write_text(
+            "/.credenciais/*\n!/.credenciais/LEIAME.txt\n"
+            "!/.credenciais/publicar-mcp-env.py\n", encoding="utf-8")
+        (calada / ARQUIVO_DO_GITIGNORE).write_text("/.credenciais/*\n",
+                                                  encoding="utf-8")
+        vereditos = {}
+
+        def medir(nome, comando):
+            vereditos[nome] = decisao(comando)[0]
+
+        com_a_raiz_apontando_para(str(declarada), lambda: [
+            medir("leiame", "git add .credenciais/LEIAME.txt"),
+            medir("publicador", "git add .credenciais/publicar-mcp-env.py"),
+            medir("absoluto", f"git add {declarada.as_posix()}"
+                              "/.credenciais/LEIAME.txt"),
+            medir("segredo", "git add .credenciais/mcp.env"),
+            medir("junto", "git add .credenciais/LEIAME.txt "
+                           ".credenciais/mcp.env"),
+            medir("vizinho", "git add projetos/x/.credenciais/LEIAME.txt")])
+        com_a_raiz_apontando_para(str(calada), lambda: medir(
+            "sem-declaracao", "git add .credenciais/LEIAME.txt"))
+    caso("o arquivo que o .gitignore declara rastreado na gaveta entra no "
+         "git: é regra da gaveta, não valor",
+         vereditos["leiame"] == RESPOSTA_CALA
+         and vereditos["publicador"] == RESPOSTA_CALA
+         and vereditos["absoluto"] == RESPOSTA_CALA)
+    caso("o resto da gaveta continua vetado, sozinho ou junto do declarado",
+         vereditos["segredo"] == RESPOSTA_VETA
+         and vereditos["junto"] == RESPOSTA_VETA)
+    caso("a exceção vale só na gaveta da raiz: a de um vizinho continua "
+         "vetada",
+         vereditos["vizinho"] == RESPOSTA_VETA)
+    caso("sem a declaração no .gitignore, nem o LEIAME passa: a exceção "
+         "vem da declaração, não do nome",
+         vereditos["sem-declaracao"] == RESPOSTA_VETA)
+
+
 def testar_a_forma_da_saida(caso) -> None:
     orienta = resposta_json(RESPOSTA_ORIENTA, ".env")["hookSpecificOutput"]
     caso("orienta leva additionalContext", "additionalContext" in orienta)
-    caso("orienta NÃO decide permissão (allow auto-aprovaria)",
+    caso("orienta não decide permissão (allow auto-aprovaria)",
          "permissionDecision" not in orienta)
     licao = ORIENTACAO.format(alvo=".env")
     caso("a lição é curta — regra 8: ler é livre, aviso longo é ruído",
@@ -828,6 +933,7 @@ def testar_comportamento(falhas: list) -> None:
             falhas.append(FALHA_DE_COMPORTAMENTO.format(rotulo))
 
     testar_a_porta_da_leitura_direta(caso)
+    testar_os_declarados_rastreados_na_gaveta(caso)
     testar_a_forma_da_saida(caso)
     testar_a_evidencia_materializada(caso, falhas)
     testar_a_falha_aberta_sem_executor(caso)

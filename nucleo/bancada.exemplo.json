@@ -7,7 +7,7 @@
     "`raiz` é de onde a bancada clona a camada para cada árvore de teste; ela nunca escreve lá.",
     "`gh_de_verdade` é o binário que o dublê chama quando a sessão de teste LÊ o rastreador. Escrita nunca chega nele.",
     "Cada braço declara: o pedido que a sessão recebe, a prova que diz se ele foi resolvido, e — quando o trabalho é num repositório vizinho — o nome da pasta dele, o commit onde o defeito ainda existe, e a branch de integração dele.",
-    "A `prova` é um dicionário de rótulo para comando de shell. Cada comando roda na raiz do alvo e sai ZERO quando o problema está resolvido. Um comando que conta e devolve zero é o formato mais honesto: `! grep -rq <o defeito> src`.",
+    "A `prova` é um dicionário de rótulo para comando de shell. Cada comando roda no bash, na raiz do alvo, e sai ZERO quando o problema está resolvido. Um comando que conta e devolve zero é o formato mais honesto: `! grep -rq <o defeito> src`.",
     "`com_executor` diz se a árvore de teste nasce com a configuração local do executor. Deixe falso num braço para medir se a sessão RELATA o que falta em vez de chutar.",
     "`prova_no_transcript` são trechos que a sessão deveria ter digitado no terminal ao provar o próprio trabalho; a bancada procura cada um nos comandos que ela rodou."
   ],

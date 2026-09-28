@@ -1,11 +1,8 @@
 import argparse
-import importlib.util
 import json
 import os
 import re
 import sys
-import time
-import unicodedata
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -39,17 +36,6 @@ VEREDITO_PIOR_PRIMEIRO = ("para", "pergunta", "segue")
 TIPO_CONTADOR = 1
 TIPO_MEDIDOR = 3
 
-METRICA_DO_CREDITO = "atlas.motor.credito.usado"
-METRICA_DA_FONTE_DO_CREDITO = "atlas.motor.credito.medido"
-METRICA_DOS_TOKENS_DO_MOTOR = "atlas.motor.tokens"
-METRICA_DAS_CHAMADAS_DO_MOTOR = "atlas.motor.chamadas"
-INSTRUMENTO_DOS_MOTORES = Path(".agents") / "motores" / "motores.py"
-ARQUIVO_DO_CADASTRO = Path("nucleo") / "executor.json"
-MOTOR_COM_REGISTRO = "codex"
-MOLDE_DO_ROLLOUT = "**/rollout-*.jsonl"
-JANELA_QUE_A_API_ACEITA_S = 3600
-FOLGA_DA_JANELA_S = 120
-
 TEMPO_DA_REDE_S = 20
 PRAZO_DURO_DA_EMISSAO_S = 60
 PRAZO_ESTOURADO = ("a emissão passou de {}s e o processo foi encerrado sem "
@@ -61,11 +47,6 @@ SEM_BIBLIOTECA = "a biblioteca ddtrace não está instalada"
 SEM_RECIBO = "a pasta {} não tem recibo de etapa"
 EMITIDO = "emitido: {etapas} etapa(s) de {trabalho}, {pontos} ponto(s) de métrica"
 FALHA_DA_METRICA = "a métrica não subiu: {}"
-SEM_MOTORES = "o instrumento dos motores não está em {}"
-SEM_CADASTRO = "nenhum motor cadastrado em {}"
-EMITIDO_DOS_MOTORES = ("emitido: {pontos} ponto(s) de crédito e gasto dos "
-                       "motores; {fora} registro(s) do Codex mais velhos que "
-                       "a janela que a API aceita ficaram de fora")
 OK_DO_TESTE = "OK: {} casos — emissor de observabilidade"
 FALHA_DO_TESTE = "FALHOU: {} de {} casos"
 LINHA_DE_FALHA = "FALHOU: {}"
@@ -322,174 +303,6 @@ def emitir_metricas(desenho: dict) -> int:
     return mandar_pontos(desenho.get("metricas") or [])
 
 
-def ponto_medido(metrica: str, valor: float, quando: float,
-                 etiquetas: list) -> dict:
-    return {"metric": metrica, "type": TIPO_MEDIDOR,
-            "points": [{"timestamp": int(quando), "value": float(valor)}],
-            "tags": list(etiquetas)}
-
-
-def etiqueta_sem_acento(texto: str) -> str:
-    sem_acento = unicodedata.normalize("NFKD", texto or "?").encode(
-        "ascii", "ignore").decode("ascii")
-    return "-".join(sem_acento.lower().split()) or "?"
-
-
-def pontos_do_credito(creditos: dict, quando: float) -> list:
-    pontos = []
-    for nome, (cobranca, usado) in sorted(creditos.items()):
-        etiquetas = ["motor:" + nome,
-                     "cobranca:" + etiqueta_sem_acento(cobranca)]
-        medido = isinstance(usado, (int, float))
-        pontos.append(ponto_medido(METRICA_DA_FONTE_DO_CREDITO,
-                                   1.0 if medido else 0.0, quando, etiquetas))
-        if medido:
-            pontos.append(ponto_medido(METRICA_DO_CREDITO, usado, quando,
-                                       etiquetas))
-    return pontos
-
-
-def instante_do_registro(quando):
-    if isinstance(quando, str) and quando.endswith("Z"):
-        quando = quando[:-1] + "+00:00"
-    return instante_do_marco(quando)
-
-
-def gasto_do_rollout(arquivo: Path) -> dict:
-    try:
-        bruto = arquivo.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return {}
-    sessao, modelo, total, chamadas, ultimo = "", "", None, 0, None
-    for linha in bruto.splitlines():
-        try:
-            dado = json.loads(linha)
-        except ValueError:
-            continue
-        if not isinstance(dado, dict):
-            continue
-        corpo = dado.get("payload")
-        corpo = corpo if isinstance(corpo, dict) else {}
-        if dado.get("type") == "session_meta":
-            sessao = str(corpo.get("id") or corpo.get("session_id") or "")
-        elif (dado.get("type") == "turn_context"
-              and isinstance(corpo.get("model"), str)):
-            modelo = corpo["model"]
-        elif corpo.get("type") == "token_count":
-            informe = corpo.get("info")
-            uso = (informe.get("total_token_usage")
-                   if isinstance(informe, dict) else None)
-            instante = instante_do_registro(dado.get("timestamp"))
-            if isinstance(uso, dict) and instante is not None:
-                total, ultimo = uso, instante
-                chamadas += 1
-    if total is None:
-        return {}
-
-    def contado(campo):
-        valor = total.get(campo)
-        return valor if isinstance(valor, int) else 0
-
-    return {"sessao": sessao or arquivo.stem, "modelo": modelo,
-            "quando": ultimo, "chamadas": chamadas,
-            "tokens": {"entrada": max(0, contado("input_tokens")
-                                      - contado("cached_input_tokens")),
-                       "cache-lido": contado("cached_input_tokens"),
-                       "cache-criado": contado("cache_write_input_tokens"),
-                       "saida": contado("output_tokens")}}
-
-
-def pontos_do_codex(gastos: list, agora: float) -> tuple:
-    pontos, fora = [], 0
-    for gasto in gastos:
-        if not gasto:
-            continue
-        if agora - gasto["quando"] > JANELA_QUE_A_API_ACEITA_S - FOLGA_DA_JANELA_S:
-            fora += 1
-            continue
-        etiquetas = ["motor:codex",
-                     "modelo:" + (gasto["modelo"] or MOTOR_NAO_DECLARADO),
-                     "sessao:" + gasto["sessao"]]
-        for tipo, valor in sorted(gasto["tokens"].items()):
-            pontos.append(ponto_medido(METRICA_DOS_TOKENS_DO_MOTOR, valor,
-                                       gasto["quando"],
-                                       etiquetas + ["token:" + tipo]))
-        pontos.append(ponto_medido(METRICA_DAS_CHAMADAS_DO_MOTOR,
-                                   gasto["chamadas"], gasto["quando"],
-                                   etiquetas))
-    return pontos, fora
-
-
-def rollouts_recentes(pasta: Path, agora: float) -> list:
-    achados = []
-    for arquivo in sorted(pasta.glob(MOLDE_DO_ROLLOUT)):
-        try:
-            mexido = arquivo.stat().st_mtime
-        except OSError:
-            continue
-        if mexido >= agora - JANELA_QUE_A_API_ACEITA_S:
-            achados.append(arquivo)
-    return achados
-
-
-def carregar_os_motores(raiz: Path):
-    caminho = raiz / INSTRUMENTO_DOS_MOTORES
-    if not caminho.is_file():
-        return None
-    especificacao = importlib.util.spec_from_file_location(
-        "motores_lidos_pelo_emissor", caminho)
-    modulo = importlib.util.module_from_spec(especificacao)
-    try:
-        especificacao.loader.exec_module(modulo)
-    except (OSError, SyntaxError, ImportError):
-        return None
-    return modulo
-
-
-def desenho_dos_motores(raiz: Path, agora: float) -> dict:
-    modulo = carregar_os_motores(raiz)
-    if modulo is None:
-        return {"pontos": [], "fora": 0, "impedimento": SEM_MOTORES.format(
-            raiz / INSTRUMENTO_DOS_MOTORES)}
-    cadastro = modulo.ler_o_cadastro(raiz / ARQUIVO_DO_CADASTRO)
-    motores = cadastro.get("motores") if isinstance(cadastro, dict) else None
-    if not isinstance(motores, dict) or not motores:
-        return {"pontos": [], "fora": 0, "impedimento": SEM_CADASTRO.format(
-            raiz / ARQUIVO_DO_CADASTRO)}
-    creditos = {}
-    for nome in motores:
-        receita = modulo.receita_do_motor(nome) or {}
-        limite = modulo.credito_do_motor(receita) if receita else {}
-        creditos[nome] = (receita.get("cobranca", "?"),
-                          limite.get("usado_por_cento"))
-    pontos = pontos_do_credito(creditos, agora)
-    fora = 0
-    fonte = (modulo.receita_do_motor(MOTOR_COM_REGISTRO) or {}).get(
-        "fonte_do_limite")
-    if MOTOR_COM_REGISTRO in motores and fonte:
-        gastos = [gasto_do_rollout(arquivo) for arquivo in
-                  rollouts_recentes(Path(fonte).expanduser(), agora)]
-        do_codex, fora = pontos_do_codex(gastos, agora)
-        pontos += do_codex
-    return {"pontos": pontos, "fora": fora, "impedimento": ""}
-
-
-def emitir_os_motores(raiz: Path) -> int:
-    if not chave_de_api():
-        print(SEM_MEDICAO.format(SEM_CHAVE))
-        return SILENCIO
-    desenho = desenho_dos_motores(raiz, time.time())
-    if desenho["impedimento"]:
-        print(SEM_MEDICAO.format(desenho["impedimento"]))
-        return SILENCIO
-    try:
-        enviados = mandar_pontos(desenho["pontos"])
-    except (urllib.error.URLError, OSError, ValueError) as falha:
-        print(FALHA_DA_METRICA.format(falha))
-        enviados = 0
-    print(EMITIDO_DOS_MOTORES.format(pontos=enviados, fora=desenho["fora"]))
-    return SILENCIO
-
 
 def porque_nao_mede(pasta: Path) -> str:
     if not chave_de_api():
@@ -549,10 +362,6 @@ def montar_parser() -> argparse.ArgumentParser:
                     "opcional: sem chave no ambiente ou sem a biblioteca, "
                     "ela diz não medido e sai zero")
     parser.add_argument("--execucao", help="a pasta de evidências do trabalho")
-    parser.add_argument("--motores", action="store_true",
-                        help="emite o crédito de cada motor auxiliar "
-                             "cadastrado e o gasto do Codex lido do registro "
-                             "dele; lê o cadastro da raiz, que é a pasta atual")
     parser.add_argument("--sessao", default="", help="o identificador da "
                                                      "sessão que agrupa os spans")
     parser.add_argument("--ensaio", action="store_true",
@@ -577,33 +386,13 @@ def mostrar_o_ensaio(pasta: Path) -> int:
     return SILENCIO
 
 
-def mostrar_o_ensaio_dos_motores(raiz: Path) -> int:
-    desenho = desenho_dos_motores(raiz, time.time())
-    if desenho["impedimento"]:
-        print(SEM_MEDICAO.format(desenho["impedimento"]))
-        return SILENCIO
-    print("ensaio dos motores — nada será emitido:")
-    for ponto in desenho["pontos"]:
-        print("  %s = %s  %s" % (ponto["metric"],
-                                 ponto["points"][0]["value"],
-                                 " ".join(ponto["tags"])))
-    print("  %d registro(s) do Codex fora da janela" % desenho["fora"])
-    return SILENCIO
-
-
 def main(argv) -> int:
     parser = montar_parser()
     if BANDEIRA_DE_TESTE in argv:
         return testar()
     args = parser.parse_args(argv)
-    if args.motores:
-        if args.ensaio:
-            return mostrar_o_ensaio_dos_motores(Path.cwd())
-        armar_o_prazo_duro(PRAZO_DURO_DA_EMISSAO_S)
-        sair_sem_esperar_a_biblioteca(emitir_os_motores(Path.cwd()))
     if not args.execucao:
-        parser.error("informe --execucao com a pasta de evidências, "
-                     "ou --motores")
+        parser.error("informe --execucao com a pasta de evidências")
     pasta = Path(args.execucao)
     if args.ensaio:
         return mostrar_o_ensaio(pasta)
@@ -771,116 +560,6 @@ def testar() -> int:
         else:
             os.environ[VARIAVEL_DA_CHAVE] = guardado
 
-    agora = 1790000000.0
-    creditos = {"codex": ("assinatura", 46.0),
-                "devin": ("pré-pago por token", None)}
-    pontos = pontos_do_credito(creditos, agora)
-
-    def pontos_de(nome, motor):
-        return [p for p in pontos if p["metric"] == nome
-                and ("motor:" + motor) in p["tags"]]
-
-    caso("o crédito lido sem gastar vira métrica do motor que tem fonte",
-         [p["points"][0]["value"] for p in pontos_de(METRICA_DO_CREDITO,
-                                                     "codex")] == [46.0])
-    caso("motor sem fonte local de crédito fica AUSENTE da métrica, nunca "
-         "zero: zero diria janela vazia, e o que houve foi não saber",
-         pontos_de(METRICA_DO_CREDITO, "devin") == [])
-    caso("a ausência se vê pela cobertura: 1 no motor com fonte, 0 no sem",
-         [p["points"][0]["value"] for p in pontos_de(
-             METRICA_DA_FONTE_DO_CREDITO, "codex")] == [1.0]
-         and [p["points"][0]["value"] for p in pontos_de(
-             METRICA_DA_FONTE_DO_CREDITO, "devin")] == [0.0])
-    caso("a cobrança vai na etiqueta, sem acento nem espaço",
-         any("cobranca:pre-pago-por-token" in p["tags"]
-             for p in pontos_de(METRICA_DA_FONTE_DO_CREDITO, "devin")))
-
-    with tempfile.TemporaryDirectory(prefix="emissor-motores-") as tmp:
-        raiz = Path(tmp)
-        rollout = raiz / "sessoes" / "rollout-teste.jsonl"
-        rollout.parent.mkdir(parents=True)
-        linhas = [
-            {"type": "session_meta", "payload": {"id": "sessao-9"}},
-            {"type": "turn_context", "payload": {"model": "modelo-do-log"}},
-            {"timestamp": "2026-09-21T12:00:00.000Z", "type": "event_msg",
-             "payload": {"type": "token_count", "info": None}},
-            {"timestamp": "2026-09-21T12:00:05.000Z", "type": "event_msg",
-             "payload": {"type": "token_count", "info": {"total_token_usage": {
-                 "input_tokens": 100, "cached_input_tokens": 60,
-                 "cache_write_input_tokens": 0, "output_tokens": 7}}}},
-            {"timestamp": "2026-09-21T12:00:09.000Z", "type": "event_msg",
-             "payload": {"type": "token_count", "info": {"total_token_usage": {
-                 "input_tokens": 300, "cached_input_tokens": 200,
-                 "cache_write_input_tokens": 5, "output_tokens": 20}}}},
-        ]
-        rollout.write_text("\n".join(json.dumps(l) for l in linhas)
-                           + "\n{ partida", encoding="utf-8")
-        gasto = gasto_do_rollout(rollout)
-        quando = gasto.get("quando") or 0.0
-        caso("o gasto do Codex sai do registro dele: o ÚLTIMO total acumulado, "
-             "com a entrada sem o cache, como no recibo da casa",
-             gasto.get("tokens") == {"entrada": 100, "cache-lido": 200,
-                                     "cache-criado": 5, "saida": 20})
-        caso("chamada é contagem de token lido, e evento sem uso não conta",
-             gasto.get("chamadas") == 2)
-        caso("o modelo e a sessão saem do próprio registro, nunca escolhidos",
-             gasto.get("modelo") == "modelo-do-log"
-             and gasto.get("sessao") == "sessao-9")
-        caso("o instante é o do último uso lido, e é ele que faz a emissão "
-             "repetida cair no mesmo ponto em vez de somar",
-             quando == instante_do_marco(
-                 "2026-09-21T12:00:09.000+00:00"))
-        vazio = raiz / "sessoes" / "rollout-vazio.jsonl"
-        vazio.write_text(json.dumps(linhas[0]), encoding="utf-8")
-        caso("registro sem uso de token não vira gasto zero: vira nada",
-             gasto_do_rollout(vazio) == {})
-
-        recente, fora = pontos_do_codex([gasto], quando + 60)
-        caso("gasto recente sai em ponto por tipo de token, mais as chamadas",
-             len([p for p in recente
-                  if p["metric"] == METRICA_DOS_TOKENS_DO_MOTOR]) == 4
-             and [p["points"][0]["value"] for p in recente if p["metric"]
-                  == METRICA_DAS_CHAMADAS_DO_MOTOR] == [2.0] and fora == 0)
-        caso("todo ponto de gasto leva motor, modelo e sessão na etiqueta",
-             bool(recente)
-             and all({"motor:codex", "modelo:modelo-do-log", "sessao:sessao-9"}
-                     <= set(p["tags"]) for p in recente))
-        velho, fora = pontos_do_codex(
-            [gasto], quando + JANELA_QUE_A_API_ACEITA_S + 1)
-        caso("gasto mais velho que a janela que a API aceita não sai, e é "
-             "contado: ponto velho some calado na ingestão",
-             velho == [] and fora == 1)
-
-        os.utime(vazio, (agora - 2 * JANELA_QUE_A_API_ACEITA_S,) * 2)
-        os.utime(rollout, (agora - 10,) * 2)
-        caso("só o registro mexido dentro da janela é lido",
-             rollouts_recentes(raiz / "sessoes", agora) == [rollout])
-
-        caso("sem o instrumento dos motores, os motores são não medidos, "
-             "e isso não estoura",
-             desenho_dos_motores(raiz, agora)["impedimento"].startswith(
-                 SEM_MOTORES.split("{")[0]))
-        instrumento = raiz / INSTRUMENTO_DOS_MOTORES
-        instrumento.parent.mkdir(parents=True)
-        instrumento.write_text(MOTORES_DE_MENTIRA.format(
-            sessoes=str(raiz / "sessoes")), encoding="utf-8")
-        (raiz / "nucleo").mkdir()
-        (raiz / ARQUIVO_DO_CADASTRO).write_text(json.dumps(
-            {"motores": {"codex": {}, "devin": {}}}), encoding="utf-8")
-        desenho = desenho_dos_motores(raiz, quando + 60)
-        nomes = [p["metric"] for p in desenho["pontos"]]
-        caso("o desenho dos motores junta o crédito de cada motor cadastrado "
-             "e o gasto do Codex dos registros recentes",
-             nomes.count(METRICA_DA_FONTE_DO_CREDITO) == 2
-             and nomes.count(METRICA_DO_CREDITO) == 1
-             and nomes.count(METRICA_DOS_TOKENS_DO_MOTOR) == 4)
-
-        guardada = os.environ.pop(VARIAVEL_DA_CHAVE, None)
-        caso("sem chave, a emissão dos motores diz não medido e sai zero",
-             emitir_os_motores(raiz) == SILENCIO)
-        if guardada is not None:
-            os.environ[VARIAVEL_DA_CHAVE] = guardada
-
     morreu, saida, dito = processo_que_trava_com_o_prazo_armado(1)
     caso("emissor que TRAVA não vive além do prazo: o processo de verdade "
          "está morto depois dele, sai zero e diz não medido — tempo limite "
@@ -895,26 +574,6 @@ def testar() -> int:
     print(OK_DO_TESTE.format(len(casos)))
     return SILENCIO
 
-
-MOTORES_DE_MENTIRA = '''import json
-from pathlib import Path
-
-
-def receita_do_motor(nome, binario=""):
-    return {{"codex": {{"cobranca": "assinatura",
-                       "fonte_do_limite": {sessoes!r}}},
-            "devin": {{"cobranca": "pré-pago por token",
-                       "fonte_do_limite": ""}}}}.get(nome, {{}})
-
-
-def credito_do_motor(receita, raiz_das_sessoes=None):
-    return {{"usado_por_cento": 46.0 if receita.get("fonte_do_limite")
-            else None}}
-
-
-def ler_o_cadastro(caminho):
-    return json.loads(Path(caminho).read_text(encoding="utf-8"))
-'''
 
 ESPERA_PELA_MORTE_DO_PROCESSO_S = 15
 PROCESSO_QUE_TRAVA = (

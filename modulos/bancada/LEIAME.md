@@ -24,7 +24,10 @@ sobreviveu à medição.
 
 1. **`montar`** — clona a camada do commit que você declarou em `--ref` para
    uma árvore por braço, e o repositório vizinho de um espelho local, no
-   commit onde o defeito ainda existe. Nada toca repositório de verdade.
+   commit onde o defeito ainda existe. Nada toca repositório de verdade. A
+   árvore mora numa pasta curta na raiz do disco, `bnc/<hash>`, porque o
+   rascunho da sessão repete o caminho dela e passaria do teto de 260
+   caracteres.
 2. **`rodar`** — abre uma sessão sem cabeça em cada árvore, com o pedido
    declarado e mais nada. Os ganchos e as cercas do repositório valem lá
    dentro — provado: uma cerca recusou um comando numa sessão sem cabeça, com
@@ -109,6 +112,12 @@ sobrevive a quem tenta derrubá-los.
 propôs frase que contrariava a regra declarada do repositório, e as duas foram
 descartadas por isso. Quando o juiz e o contrato divergem, o contrato ganha.
 
+**Painel de propostas concorrentes ganha o juiz da intenção.** O único
+trabalho dele é achar a frase do pedido que tem mais de uma leitura honesta e
+dizer qual leitura cada proposta escolheu calada. O que ele acha vira pergunta
+ao dono antes de escolher a vencedora: nota alta para a leitura errada ainda é
+a proposta errada.
+
 ## O achado que paga a bancada inteira
 
 **Regra escrita não muda o jeito de falar; exemplo copiável muda.**
@@ -138,6 +147,13 @@ capítulo bem escrito no fim.**
   sessão tentou criar. A sessão de teste também roda com a configuração do
   cliente apontando para uma pasta vazia, então o binário de verdade não tem
   conta nenhuma — rede de segurança para o caso de o dublê falhar.
+- **Não herda a sessão que a abre.** A sessão de teste só tem as ferramentas
+  declaradas, lê só a configuração do projeto, nenhum servidor de contexto,
+  e perde as variáveis da sessão de fora; o estilo de saída vem da
+  configuração própria da rodada.
+- **Não conta recusa pelo texto.** Recusa é a decisão de negar que o gancho
+  devolveu, lida no fim do transcrito; nome de cerca na saída de um comando
+  não conta.
 - **Não empurra para remoto de verdade.** O `push` cai no espelho local.
 - **Não escreve na raiz da camada.** Ela só lê de lá para clonar.
 

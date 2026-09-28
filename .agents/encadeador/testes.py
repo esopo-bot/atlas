@@ -75,7 +75,9 @@ from encadeador import (
     avisos_do_alvo, branch_fora_do_lugar, branch_que_a_issue_pede,
     carregar_executor, foto_das_etapas, gravar_estado,
     ler_estado, processo_vivo, resumo_da_etapa, sem_caminho_de_maquina,
-    validar_roteiro)
+    validar_roteiro, texto_do_bloco_da_execucao,
+    MARCA_QUE_ABRE_O_BLOCO_DA_EXECUCAO, corpo_com_o_bloco_da_execucao,
+    gravar_no_corpo, AVISO_SEM_QUEM_SE_MARCA)
 
 
 MARCA_DO_RELATORIO_DO_AUDITOR = "AUDITORIA DO TRABALHO"
@@ -612,8 +614,9 @@ def _sobre_a_conta_que_age(b) -> None:
          str(sem_remoto), "--configuracao", str(configuracao)]))
     na_issue = [linha for linha
                 in b.texto_de(b.caixa / "chamadas.txt").splitlines()
-                if linha.startswith("issue comment 77")]
-    b.caso("o comentário na issue sai com o token de issues.conta_gh",
+                if linha.startswith(("issue view 77", "issue edit 77"))]
+    b.caso("o passo no corpo da issue é lido e gravado com o token de "
+           "issues.conta_gh",
            na_issue and all(linha.endswith("\ttoken-de-das-issues")
                             for linha in na_issue))
     b.caso("e o trabalho no --cwd roda com o token de remoto.conta_gh",
@@ -893,8 +896,69 @@ def _sobre_os_enderecos_no_bloco(b) -> None:
          montado.count(mapa) == 1)
 
 
+def _comentado_depois(b, antes: int) -> str:
+    onde = b.caixa / "postado.md"
+    texto = onde.read_text(encoding="utf-8") if onde.exists() else ""
+    return texto[antes:]
+
+
+def _tamanho_do_comentado(b) -> int:
+    onde = b.caixa / "postado.md"
+    return len(onde.read_text(encoding="utf-8")) if onde.exists() else 0
+
+
+def _bloco_da_execucao(b) -> str:
+    onde = b.caixa / "corpo.md"
+    corpo = onde.read_text(encoding="utf-8") if onde.exists() else ""
+    return texto_do_bloco_da_execucao(corpo) or ""
+
+
+def _sobre_o_corpo_que_a_execucao_escreve(b) -> None:
+    import encadeador
+
+    b.forjar_o_dublê()
+    corpo = "# topo\n\n## Estado\nfeito\n"
+    com_ele = corpo_com_o_bloco_da_execucao(corpo, "primeira versão")
+    b.caso("o bloco da execução nasce no fim do corpo e o resto fica como "
+           "estava",
+         com_ele.startswith(corpo.rstrip("\n"))
+         and texto_do_bloco_da_execucao(com_ele) == "primeira versão")
+    trocado = corpo_com_o_bloco_da_execucao(com_ele + "\ntexto de gente\n",
+                                            "segunda versão")
+    b.caso("reescrever troca o bloco INTEIRO e não toca o texto de gente",
+         texto_do_bloco_da_execucao(trocado) == "segunda versão"
+         and "primeira versão" not in trocado and "texto de gente" in trocado)
+
+    configuracao = {"issues": {"repositorio": "dono/repo", "conta_gh": "conta"}}
+    guardado = encadeador.GH
+    encadeador.GH = [sys.executable, str(Path(b.pasta) / "gh-dublê.py")]
+    try:
+        (b.caixa / "corpo.md").write_text(corpo, encoding="utf-8")
+        gravou, _ = gravar_no_corpo(configuracao, 42, "o passo de agora")
+        b.caso("gravar no corpo lê, grava e relê: o bloco fica na issue",
+             gravou and texto_do_bloco_da_execucao(
+                 (b.caixa / "corpo.md").read_text(encoding="utf-8"))
+             == "o passo de agora")
+        (b.caixa / "outro-escritor.txt").write_text("x", encoding="utf-8")
+        gravou, recado = gravar_no_corpo(configuracao, 42, "o passo seguinte")
+        b.caso("DOIS ESCRITORES: outra sessão grava por cima, e a releitura "
+               "acusa em vez de dar o passo por gravado",
+             not gravou and "NÃO está lá" in recado)
+        (b.caixa / "outro-escritor.txt").unlink()
+        gravou, recado = gravar_no_corpo({}, 42, "sem repositório")
+        b.caso("sem repositório na configuração não se grava nada, e o recado "
+               "diz por quê",
+             not gravou and recado)
+    finally:
+        encadeador.GH = guardado
+
+
 def _sobre_a_issue(b) -> None:
-    b.configurar(b.pasta)
+    b.configurar(b.pasta, issues={"repositorio": "dono/repo",
+                                  "conta_gh": "conta",
+                                  "quem_se_marca": "a-pessoa"})
+    (b.caixa / "corpo.md").unlink(missing_ok=True)
+    comentado_antes = _tamanho_do_comentado(b)
     aprovacao = Path(b.pasta) / "aprovacoes" / "h3.ok"
     roteiro = _roteiro(b.pasta, "m-issue.json", {"issue": 42, "etapas": [
         {"nome": "antes", "tipo": "codigo", "comando": FANTOCHE_OK},
@@ -914,6 +978,17 @@ def _sobre_a_issue(b) -> None:
     b.caso("a pergunta foi postada na issue, com a marca do motor",
          (b.caixa / "postado.md").exists()
          and MARCA_DO_MOTOR in (b.caixa / "postado.md").read_text(encoding="utf-8"))
+    comentado = _comentado_depois(b, comentado_antes)
+    b.caso("COM ALGO PARA O DONO: a pergunta abre marcando o login da "
+           "configuração local",
+         comentado.startswith("@a-pessoa ") and "Aprova a etapa" in comentado)
+    b.caso("SEM NADA PARA O DONO: a etapa que seguiu não abre comentário — o "
+           "único comentário da execução é a pergunta",
+         comentado.count(MARCA_DO_MOTOR) == 1)
+    b.caso("o passo mora no corpo: o bloco da execução traz a etapa que "
+           "seguiu e a que parou, com o veredito",
+         "`antes` — segue" in _bloco_da_execucao(b)
+         and "`espera` — pergunta" in _bloco_da_execucao(b))
     b.caso("o motor pediu o token da conta configurada, sem trocar a ativa",
          "auth token --user conta" in (b.caixa / "chamadas.txt").read_text(encoding="utf-8"))
     chamadas = (b.caixa / "chamadas.txt").read_text(encoding="utf-8")
@@ -993,11 +1068,13 @@ def _sobre_a_issue(b) -> None:
          "aguardando resposta na issue 42" in b.cli_dublê(
              ["andamento", "--trabalho", "t-issue", "--dir", b.evidencias]).stdout)
 
-    postado = (b.caixa / "postado.md").read_text(encoding="utf-8")
-    b.caso("cada etapa vira um comentário na issue, com o veredito",
-         "`antes` — segue (1 de 4" in postado)
-    b.caso("e o comentário diz o que foi testado, com o comando",
-         "O que foi testado" in postado and "$ " in postado)
+    bloco = _bloco_da_execucao(b)
+    b.caso("o bloco guarda o detalhe do último passo, com a contagem das "
+           "etapas",
+         "`espera` — pergunta (2 de 4" in bloco)
+    b.caso("e a execução reescreve o bloco inteiro: o bloco é um só no corpo",
+         b.texto_de(b.caixa / "corpo.md").count(
+             MARCA_QUE_ABRE_O_BLOCO_DA_EXECUCAO) == 1)
     resumo = resumo_da_etapa({"etapa": "x", "veredito": "para",
                               "provado": [{"afirmacao": "a", "comando": "b",
                                            "saida": "c"}],
@@ -1008,7 +1085,7 @@ def _sobre_a_issue(b) -> None:
     b.caso("etapa sem prova nenhuma é dita, não escondida",
          "Sem prova declarada" in resumo_da_etapa(
              {"etapa": "x", "veredito": "segue", "provado": []}, 1, 1))
-    b.caso("prova longa é cortada — comentário que ninguém lê não registra",
+    b.caso("prova longa é cortada — bloco que ninguém lê não registra",
          len(resumo_da_etapa({"etapa": "x", "veredito": "segue", "provado": [
              {"afirmacao": "a", "comando": "b", "saida": "z" * 5000}]}, 1, 1))
          < 1200)
@@ -1080,8 +1157,12 @@ def _sobre_a_issue(b) -> None:
          "já provada" in resposta.stdout
          and antes_c1.stat().st_mtime == marca_de_tempo
          and not (Path(b.evidencias) / "t-issue" / "01-antes-c2.json").exists())
-    b.caso("o desfecho também foi para a issue",
-         "Execução completa" in (b.caixa / "postado.md").read_text(encoding="utf-8"))
+    b.caso("o desfecho mora no corpo, e não abre comentário: completa não "
+           "é pergunta",
+         "Execução completa" in _bloco_da_execucao(b)
+         and "Execução completa" not in _comentado_depois(b, comentado_antes))
+    b.caso("a etapa provada antes aparece no bloco como já provada",
+         "`antes` — já provada" in _bloco_da_execucao(b))
     b.caso("nem o `proximo` de uma reprovação carrega caminho absoluto",
          "/home/" not in resumo_da_etapa(
              {"etapa": "x", "veredito": "para", "provado": [],
@@ -1099,10 +1180,12 @@ def _sobre_a_issue(b) -> None:
          == "leia ~/fora/z.log")
     b.caso("texto sem caminho nenhum atravessa intacto",
          sem_caminho_de_maquina("nada aqui", "/r/a") == "nada aqui")
-    b.caso("e NENHUM comentário carrega caminho absoluto de máquina",
+    b.caso("e NENHUM comentário nem o bloco do corpo carrega caminho "
+           "absoluto de máquina",
          "/home/" not in (b.caixa / "postado.md").read_text(encoding="utf-8")
          and str(Path(b.evidencias).resolve()) not in
-             (b.caixa / "postado.md").read_text(encoding="utf-8"))
+             (b.caixa / "postado.md").read_text(encoding="utf-8")
+         and str(Path(b.evidencias).resolve()) not in _bloco_da_execucao(b))
     b.caso("e o estado terminal ficou gravado",
          (ler_estado(b.evidencias, "t-issue") or {}).get("situacao") == "completa")
     fechado = json.loads((Path(b.evidencias) / "t-issue" / ARQUIVO_ESTADO)
@@ -1265,6 +1348,7 @@ def _sobre_o_grafo(b) -> None:
     marca_a, marca_b = Path(b.pasta) / "marca-a", Path(b.pasta) / "marca-b"
 
     def espera(minha, outra):
+        minha, outra = no_shell(minha), no_shell(outra)
         return (f"touch {minha} && for i in $(seq 1 50); do "
                 f"[ -f {outra} ] && break; sleep 0.1; done; "
                 f"[ -f {outra} ] && " + FANTOCHE_OK)
@@ -1282,6 +1366,9 @@ def _sobre_o_grafo(b) -> None:
     b.caso("fork real: as duas se veem rodando (encontro marcado) e o join vem",
          resposta.returncode == 0 and "fork de 2" in resposta.stdout
          and (Path(b.evidencias) / "t-fork" / "03-cc-c1.json").exists())
+    b.caso("as marcas do encontro nascem onde o roteiro mandou, e não num "
+           "nome solto feito do caminho do Windows que o shell comeu",
+           marca_a.exists() and marca_b.exists())
 
     roteiro = _roteiro(b.pasta, "m-solo.json", {"etapas": [
         {"nome": "verifica", "tipo": "verificacao"},
@@ -1863,14 +1950,33 @@ def _sobre_a_aprovacao_por_comentario(b) -> None:
         "issue": 99,
         "etapas": [{"nome": "aprova", "tipo": "aprovacao-manual",
                    "aprovacao": str(aprovacao)}]})
-    resposta = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
-                            "t-aprovacao-comentario", "--dir", b.evidencias,
-                            "--cwd", b.pasta, "--configuracao",
-                            str(configuracao)], issue="99")
-    b.caso("sem arquivo, mas com resposta de não-bot na issue: segue",
+    disparo_comentario = ["executar", "--roteiro", roteiro, "--trabalho",
+                          "t-aprovacao-comentario", "--dir", b.evidencias,
+                          "--cwd", b.pasta, "--configuracao",
+                          str(configuracao)]
+    comentado_antes = _tamanho_do_comentado(b)
+    velha = b.cli_dublê(disparo_comentario, issue="99")
+    b.caso("RESPOSTA QUE JÁ VALEU: a resposta na issue a uma pergunta que "
+           "esta etapa não fez não a aprova — ela pergunta, em vez de seguir "
+           "com a resposta dada a outra",
+         velha.returncode == 6 and "Aprova a etapa" in velha.stdout)
+    comentado = _comentado_depois(b, comentado_antes)
+    b.caso("SEM LOGIN CONFIGURADO: a pergunta sai sem marca, e o registro "
+           "da execução avisa o campo que falta",
+         "Aprova a etapa" in comentado and "@" not in comentado
+         and AVISO_SEM_QUEM_SE_MARCA in velha.stdout)
+    resposta = b.cli_dublê(disparo_comentario, issue="99")
+    b.caso("sem arquivo, mas com resposta de não-bot à pergunta que a etapa "
+           "fez: segue",
          resposta.returncode == 0)
-    b.caso("a evidência nomeia quem aprovou por comentário",
-         "dono" in resposta.stdout)
+    aprovou_por_comentario = json.loads(b.texto_de(
+        Path(b.evidencias) / "t-aprovacao-comentario" / "01-aprova-c2.json")
+        or "{}")
+    b.caso("a evidência nomeia quem aprovou por comentário — lida no recibo, "
+           "não na saída, onde o nome do repositório de mentira passava por "
+           "ela",
+         [prova.get("saida") for prova in
+          aprovou_por_comentario.get("provado") or []] == ["dono"])
 
     (b.caixa / "comentarios.json").write_text(
         json.dumps({"comments": []}), encoding="utf-8")
@@ -3350,7 +3456,7 @@ def _sobre_o_escopo_declarado_na_verificacao(b) -> None:
     etapas = [{"nome": "trabalha", "tipo": "codigo", "comando": FANTOCHE_OK},
               {"nome": "verifica", "tipo": "verificacao",
                "depende": ["trabalha"]}]
-    (b.caixa / "comentarios.json").write_text(
+    (b.caixa / "corpo.md").write_text(
         "## Bloco 3 — a fantoche\n"
         "- [ ] a fantoche rodou\n"
         "\n"
@@ -3390,7 +3496,7 @@ def _sobre_os_criterios_da_issue_na_verificacao(b) -> None:
         {"nome": "trabalha", "tipo": "codigo", "comando": FANTOCHE_OK},
         {"nome": "verifica", "tipo": "verificacao", "depende": ["trabalha"]}]})
 
-    (b.caixa / "comentarios.json").write_text(
+    (b.caixa / "corpo.md").write_text(
         "## Criterios\n- [ ] a paginacao do catalogo devolve a segunda pagina\n",
         encoding="utf-8")
     resposta = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
@@ -3408,7 +3514,7 @@ def _sobre_os_criterios_da_issue_na_verificacao(b) -> None:
     b.caso("e o critério sai NOMEADO, não somado",
            "paginacao do catalogo" in faltas)
 
-    (b.caixa / "comentarios.json").write_text(
+    (b.caixa / "corpo.md").write_text(
         "## Criterios\n- [ ] a fantoche rodou\n", encoding="utf-8")
     resposta = b.cli_dublê(["executar", "--roteiro", roteiro, "--trabalho",
                             "t-criterio-coberto", "--dir", b.evidencias,
@@ -3473,7 +3579,7 @@ def _sobre_a_verificacao_retomada(b) -> None:
         return json.loads((Path(b.evidencias) / trabalho / nome)
                           .read_text(encoding="utf-8"))
 
-    (b.caixa / "comentarios.json").write_text(aberto, encoding="utf-8")
+    (b.caixa / "corpo.md").write_text(aberto, encoding="utf-8")
     b.caso("o ciclo 1 para no critério que ninguém cobriu",
            _executar("t-recobra").returncode == EXIT_PAROU_NUM_PARA)
     retomada = _executar("t-recobra", "--retomar")
@@ -3485,10 +3591,10 @@ def _sobre_a_verificacao_retomada(b) -> None:
                _evidencia_de("t-recobra", "02-verifica-c2.json")
                .get("faltas") or []))
 
-    (b.caixa / "comentarios.json").write_text(aberto, encoding="utf-8")
+    (b.caixa / "corpo.md").write_text(aberto, encoding="utf-8")
     b.caso("o ciclo 1 do trabalho consertado também para",
            _executar("t-conserta").returncode == EXIT_PAROU_NUM_PARA)
-    (b.caixa / "comentarios.json").write_text(coberto, encoding="utf-8")
+    (b.caixa / "corpo.md").write_text(coberto, encoding="utf-8")
     b.caso("acusação resolvida antes da retomada não fica de pé para sempre",
            _executar("t-conserta", "--retomar").returncode == EXIT_COMPLETA)
     provado = (_evidencia_de("t-conserta", "02-verifica-c2.json")
@@ -3499,10 +3605,10 @@ def _sobre_a_verificacao_retomada(b) -> None:
                NADA_A_VERIFICAR_AFIRMACAO not in item.get("afirmacao", "")
                for item in provado))
 
-    (b.caixa / "comentarios.json").write_text(aberto, encoding="utf-8")
+    (b.caixa / "corpo.md").write_text(aberto, encoding="utf-8")
     b.caso("o ciclo 1 do trabalho de janela forjada também para",
            _executar("t-janela").returncode == EXIT_PAROU_NUM_PARA)
-    (b.caixa / "comentarios.json").write_text(coberto, encoding="utf-8")
+    (b.caixa / "corpo.md").write_text(coberto, encoding="utf-8")
     pulada = Path(b.evidencias) / "t-janela" / "01-trabalha-c1.json"
     forjada = verificacao_de(pulada)
     forjada.parent.mkdir(parents=True, exist_ok=True)
@@ -3835,6 +3941,44 @@ def _sobre_a_entrada_da_suite(b) -> None:
            "vez de morrer antes de a suíte imprimir placar",
            not como_o_git_escreve.exists())
 
+    com_arquivo_preso = Path(b.pasta) / "com-arquivo-preso"
+    com_arquivo_preso.mkdir()
+    aviso_do_preso = io.StringIO()
+    with open(com_arquivo_preso / "aberto.log", "w", encoding="utf-8"), \
+            contextlib.redirect_stderr(aviso_do_preso):
+        apagar_a_pasta_de_teste(com_arquivo_preso)
+    b.caso("arquivo preso por quem ainda o tem aberto não deixa sobra "
+           "calada: ou a pasta sai do disco, ou a sobra é acusada pelo nome",
+           not com_arquivo_preso.exists()
+           or str(com_arquivo_preso) in aviso_do_preso.getvalue())
+    apagar_a_pasta_de_teste(com_arquivo_preso)
+
+    b.caso("a pasta da rodada leva o pid do dono, para a rodada seguinte "
+           "saber se ele morreu sem limpar",
+           (Path(b.pasta) / ARQUIVO_DO_DONO_DA_RODADA).read_text(
+               encoding="utf-8") == str(os.getpid()))
+
+    temporaria = Path(b.pasta) / "temporaria-da-maquina"
+    de_rodada_morta = temporaria / f"{PREFIXO_DA_PASTA_DE_TESTE}morta"
+    de_rodada_viva = temporaria / f"{PREFIXO_DA_PASTA_DE_TESTE}viva"
+    sem_dono = temporaria / f"{PREFIXO_DA_PASTA_DE_TESTE}sem-dono"
+    for pasta in (de_rodada_morta, de_rodada_viva, sem_dono):
+        (pasta / "evidencias").mkdir(parents=True)
+    (de_rodada_morta / ARQUIVO_DO_DONO_DA_RODADA).write_text(
+        str(_pid_de_quem_ja_morreu()), encoding="utf-8")
+    (de_rodada_viva / ARQUIVO_DO_DONO_DA_RODADA).write_text(
+        str(os.getpid()), encoding="utf-8")
+    aviso_da_varredura = io.StringIO()
+    with contextlib.redirect_stderr(aviso_da_varredura):
+        varrer_as_sobras_de_rodadas_mortas(temporaria)
+    b.caso("a sobra de rodada que morreu antes de limpar sai no começo da "
+           "rodada seguinte, e a varredura diz o que apagou",
+           not de_rodada_morta.exists()
+           and str(de_rodada_morta) in aviso_da_varredura.getvalue())
+    b.caso("a varredura deixa a pasta de rodada viva e a pasta sem a marca "
+           "do dono",
+           de_rodada_viva.exists() and sem_dono.exists())
+
 
 def _sobre_a_issue_de_politica(b) -> None:
     raiz = Path(b.pasta) / "com-cerca"
@@ -4036,6 +4180,7 @@ TEMAS = (
     _sobre_a_configuracao,
     _sobre_o_bloco_de_estado,
     _sobre_os_enderecos_no_bloco,
+    _sobre_o_corpo_que_a_execucao_escreve,
     _sobre_a_issue,
     _sobre_a_branch_que_a_issue_pede,
     _sobre_o_recibo_que_a_bancada_le,
@@ -4190,6 +4335,38 @@ def apagar_a_pasta_de_teste(pasta) -> None:
         pasta=pasta, voltas=VOLTAS_DA_LIMPEZA, erro=preso), file=sys.stderr)
 
 
+PREFIXO_DA_PASTA_DE_TESTE = "encadeador-teste-"
+ARQUIVO_DO_DONO_DA_RODADA = "dono-da-rodada.pid"
+SOBRA_DE_RODADA_MORTA = ("AVISO: apaguei a pasta {pasta}, sobra de uma rodada "
+                         "da suíte que morreu antes de limpar (pid {pid})")
+
+
+def dono_da_rodada(pasta):
+    try:
+        return int((Path(pasta) / ARQUIVO_DO_DONO_DA_RODADA).read_text(
+            encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def varrer_as_sobras_de_rodadas_mortas(temporaria) -> None:
+    for pasta in Path(temporaria).glob(PREFIXO_DA_PASTA_DE_TESTE + "*"):
+        dono = dono_da_rodada(pasta)
+        if dono is None or encadeador.processo_vivo(dono):
+            continue
+        print(SOBRA_DE_RODADA_MORTA.format(pasta=pasta, pid=dono),
+              file=sys.stderr)
+        apagar_a_pasta_de_teste(pasta)
+
+
+def pasta_da_rodada() -> str:
+    varrer_as_sobras_de_rodadas_mortas(tempfile.gettempdir())
+    pasta = tempfile.mkdtemp(prefix=PREFIXO_DA_PASTA_DE_TESTE)
+    (Path(pasta) / ARQUIVO_DO_DONO_DA_RODADA).write_text(
+        str(os.getpid()), encoding="utf-8")
+    return pasta
+
+
 def testar_so_os_temas(pedidos) -> int:
     escolhidos, desconhecidos = temas_do_filtro(pedidos)
     if not pedidos:
@@ -4201,7 +4378,7 @@ def testar_so_os_temas(pedidos) -> int:
                                        nomes="\n".join(NOMES_DOS_TEMAS)),
               file=sys.stderr)
         return EXIT_ERRO_DE_USO_OU_AMBIENTE
-    pasta = tempfile.mkdtemp(prefix="encadeador-teste-")
+    pasta = pasta_da_rodada()
     try:
         comportamento, medidos, incompletos = _comportamento(pasta, escolhidos)
     finally:
@@ -4224,7 +4401,7 @@ def testar() -> int:
     if pediram_tema(sys.argv[1:]):
         return testar_so_os_temas(pedidos_de_tema(sys.argv[1:]))
     falhas = []
-    pasta = tempfile.mkdtemp(prefix="encadeador-teste-")
+    pasta = pasta_da_rodada()
     try:
         for rotulo, conteudo, trecho in RECUSA:
             roteiro = _roteiro(pasta, "m-recusa.json", conteudo)

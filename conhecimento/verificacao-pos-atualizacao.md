@@ -1,157 +1,73 @@
 # A camada foi atualizada — verifique e limpe antes de trabalhar
 
-Receita para o repositório que INSTALA a camada; o bootstart aponta para ela.
-Siga-a numa sessão aberta na raiz do repositório logo depois de uma atualização da camada (o
-instalador do clone já rodou daqui, com
-`python <pasta do clone do atlas>/montar.py --atualizar`). O objetivo: provar
-que a instalação está íntegra e que nada da versão anterior ficou para trás.
+Receita para o repositório que INSTALA a camada, numa sessão aberta na raiz
+logo depois de `python <pasta do clone do atlas>/montar.py --atualizar`.
+Atualização regrava as cópias, mas não remove o que a versão nova deixou de
+escrever: skill renomeada, gancho aposentado, página movida. O que a camada
+instalou está em `.agents/camada/registro-da-instalacao.json`. Marque cada
+linha só com a saída colada.
 
-## O que aconteceu
+## 1. O que mudou
 
-A camada instalada neste repositório foi atualizada pelo instalador que mora
-no clone dela. Atualização regrava as cópias — nunca se edita cópia à mão —
-mas ela não remove sozinha o que a versão nova deixou de escrever: skill
-renomeada, gancho aposentado, página movida. Isso é a sujeira que esta sessão
-caça. O que a camada instalou está listado em
-`.agents/camada/registro-da-instalacao.json`.
+- [ ] A versão que chegou: `commit_da_camada` do registro.
+- [ ] A que estava antes: `git log -1 --format=%H -- .agents/camada/registro-da-instalacao.json`
+      e `git show <SHA>^:.agents/camada/registro-da-instalacao.json`. Sem
+      registro rastreado, diga isso e pule.
+- [ ] O diff: `git diff --stat HEAD~1 -- .agents .claude conhecimento nucleo`
+      (ou `git status --short` se não commitou). Agrupe em entrou, mudou,
+      saiu: a coluna "saiu" gera a sujeira do passo 3.
+- [ ] Três a cinco linhas ao dono sobre o que muda no trabalho dele; nunca
+      a lista de arquivos.
 
-## O checklist
+## 2. A instalação está íntegra
 
-Marque cada linha só depois de colar a saída que a prova. Linha sem saída
-colada não está feita.
+- [ ] `python <pasta do clone do atlas>/montar.py --verificar` sai zero;
+      divergência é cópia editada à mão ou atualização pela metade: pare e
+      mostre ao dono.
+- [ ] Um `montar.py` antigo na raiz daqui não é mais a origem; apagar é do
+      dono.
+- [ ] O `--testar` de cada instrumento de `.agents/` passa. Cuidado: o
+      `gatilho` abre sessões pagas (só com o dono); o `encadeador` demora
+      minutos; o `buscar.py` sem banco se declara "não medido".
+- [ ] `python verificacoes.py ritual`, se existir aqui (só existe no
+      repositório da camada).
+- [ ] O que a versão nova precisa: um Python 3 que responda
+      (`python -c "import sys; print(sys.version_info[0])"`; no Windows
+      `python3` é o atalho da loja e engana o `which`), `git --version`,
+      `gh auth status` (escopo `project` se a camada move cartão), `claude
+      --version` se o executor roda aqui, e a receita do módulo que pede
+      serviço de fora (a do `indice` é `conhecimento/indice.md`). Ambiente
+      trancado não se contorna: registre a mensagem exata ao dono.
 
-### 1. O que mudou desta versão para a anterior
+## 3. A sujeira que a versão anterior deixou
 
-- [ ] **A versão que chegou:** o campo `commit_da_camada` de
-      `.agents/camada/registro-da-instalacao.json`, que é o commit do clone
-      de onde a camada veio.
-- [ ] **A versão que estava aqui antes:**
-      `git log -1 --format=%H -- .agents/camada/registro-da-instalacao.json`
-      e, com esse SHA,
-      `git show <SHA>^:.agents/camada/registro-da-instalacao.json`. Se o
-      registro ainda não era rastreado, diga isso e pule — não invente o
-      número.
-- [ ] **O diff da atualização:** `git diff --stat HEAD~1 -- .agents .claude
-      conhecimento nucleo`, ou, se a atualização ainda não foi
-      commitada, `git status --short`. Leia a lista inteira e agrupe em três
-      colunas: **entrou**, **mudou**, **saiu**. É a coluna "saiu" que gera a
-      sujeira dos passos seguintes.
-- [ ] **O que o dono precisa saber:** três a cinco linhas sobre o que a
-      versão nova muda no trabalho DELE — instrumento novo, bandeira nova,
-      passo que deixou de existir. Nunca a lista de arquivos.
+- [ ] `python .agents/limpeza/limpeza.py rodar --workspace .` lista sem
+      apagar; separe resto da camada antiga de arquivo seu que só parece
+      órfão.
+- [ ] Cruze com a coluna "saiu" do passo 1.
+- [ ] `--aplicar` só no que você separou; dúvida é pergunta ao dono, porque
+      destrutivo é dele. Nunca apague fora da lista do instrumento.
+- [ ] Referência quebrada: `grep` pelos nomes da coluna "saiu"; corrija só
+      apontador para a camada.
 
-### 2. A instalação está íntegra
+## 4. O relato
 
-- [ ] **A instalação bate com o clone:**
-      `python <pasta do clone do atlas>/montar.py --verificar`, rodado daqui
-      — tem de sair zero. Divergência aqui é cópia editada à mão ou
-      atualização pela metade: pare e mostre ao dono antes de qualquer outra
-      coisa.
-- [ ] **O instalador antigo na raiz:** se a receita de antes copiou um
-      `montar.py` para a raiz daqui, ele ficou intacto e não é mais a
-      origem. Diga isso ao dono; apagar é decisão dele.
-- [ ] **Os instrumentos respondem:** rode o `--testar` de cada instrumento
-      de `.agents/` (todo instrumento da camada tem o seu). Um vermelho aqui
-      é defeito de instalação, não do seu repositório. **Cuidado com três:**
-      o `gatilho` abre sessões de verdade e cobra por elas — só rode se o
-      dono pedir; o do `encadeador` demora minutos; e a bancada do
-      `buscar.py`, fora do temporário, mede contra o banco e o gerador de
-      vetores desta máquina — sem eles, ela se declara "não medido" e passa
-      com um caso a menos.
-- [ ] **O ritual, se este repositório o tiver:** `python verificacoes.py
-      ritual`. Ele só existe no repositório da camada; ausente aqui, não é
-      falha.
+O que mudou de versão para versão em linguagem de quem usa; o que foi
+verificado, com saída; o que saiu, o que ficou por decisão e por dúvida
+(sem lista de removidos não houve limpeza); o que travou e é do dono.
 
-### 3. O que a versão nova precisa e talvez não esteja instalado
+## O par de settings
 
-Confira **só o que este repositório usa**. Ferramenta que ninguém aqui
-chama não precisa existir — e instalar por precaução é sujeira futura.
+`.claude/settings.json` é da camada: rastreado, regravado na atualização,
+nunca editado. `.claude/settings.local.json` é seu: fora do git, sobrevive,
+e guarda o que é desta máquina (`permissions.allow`,
+`enabledMcpjsonServers`, ganchos pessoais, variáveis). Depois de atualizar,
+leve valor pessoal que esteja no da camada para o local, reponha no local o
+que sumiu, e prove:
+`python -m json.tool .claude/settings.local.json > /dev/null && echo legivel`.
+Segredo não entra em nenhum dos dois por valor. Gancho novo só carrega em
+sessão nova.
 
-- [ ] **Um Python 3 responde**, e `git --version` responde. São o piso; sem
-      eles nada da camada roda. O NOME do interpretador não é o piso: em
-      Windows `python3` é o atalho da loja de aplicativos, que está no PATH,
-      sai sem rodar e engana o `which`; em Linux enxuto `python` pode não
-      existir. Julgue executando, nunca pelo nome:
-      `python -c "import sys; print(sys.version_info[0])"` — e se esse nome
-      não responder `3`, tente `python3`. Os ganchos do Claude Code dependem
-      disso: a linha de cada um chama o Python pelo nome medido na
-      instalação; sem Python que responda, ela volta ao lançador
-      `.claude/hooks/interpretador.sh`, que escolhe o interpretador por
-      execução.
-- [ ] `gh auth status` — necessário se o repositório abre issue, comenta ou
-      mexe no quadro. Se a camada aqui move cartão de projeto, a linha de
-      escopos precisa trazer `project`; só `repo` comenta e etiqueta, mas
-      nunca move. A saída para o que falta é `gh auth refresh -s project`.
-- [ ] `claude --version` — necessário só se o executor de roteiros roda
-      aqui.
-- [ ] Módulo instalado que pede serviço de fora (o `indice` pede banco
-      vetorial e servidor de modelo) — abra a página que o módulo instalou (a
-      do `indice` é `conhecimento/indice.md`) e siga a receita DELA. Não escreva receita nova:
-      se a de lá não funciona neste ambiente, isso é achado para o dono,
-      não conserto seu.
-- [ ] **Ambiente corporativo trancado** (proxy que reassina TLS, registro de
-      pacote bloqueado, política que barra CLI): não contorne. Registre o
-      que travou, com a mensagem de erro exata, e devolva ao dono.
-
-### 4. A sujeira que a versão anterior deixou
-
-- [ ] **Liste antes de apagar:** `python .agents/limpeza/limpeza.py rodar
-      --workspace .` — sem `--aplicar` ele só LISTA. Leia a lista e separe
-      em duas: o que é resto da camada antiga (candidato a sair) e o que é
-      arquivo seu que só parece órfão (fica).
-- [ ] **Cruze com a coluna "saiu"** do passo 1: arquivo que a versão nova
-      deixou de escrever e continua no disco é resto, e é o caso mais comum
-      — skill renomeada, gancho aposentado, página movida.
-- [ ] **Aplique só o que você separou:** `--aplicar`. O que restar de
-      dúvida, **pergunte ao dono antes**: remover é destrutivo, e
-      destrutivo é do dono. Nunca apague fora da lista do instrumento.
-- [ ] **Referência quebrada:** procure no repositório citações aos caminhos
-      que sumiram (grep pelos nomes da coluna "saiu"). Corrija só apontador
-      para a camada, nunca conteúdo seu.
-
-### 5. O relato
-
-- [ ] O que mudou de versão para versão, em linguagem de quem usa.
-- [ ] O que foi verificado, com as saídas coladas.
-- [ ] O que saiu, o que ficou por decisão e o que ficou por dúvida. **Sem
-      lista de removidos não houve limpeza — houve fé.**
-- [ ] O que travou e é do dono resolver, com a mensagem de erro exata.
-
-## O par de settings: o que é da camada e o que é seu
-
-O Claude Code lê DOIS arquivos em `.claude/`, e a atualização trata cada
-um de um jeito:
-
-- **`settings.json`** é DA CAMADA: rastreado, viaja, e a atualização o
-  regrava. Nunca edite — edição aqui morre na próxima atualização, e
-  valor pessoal aqui vaza para o git.
-- **`settings.local.json`** é SEU: fora do git, sobrevive a toda
-  atualização. É o lugar certo de tudo que é desta máquina e desta
-  pessoa: permissões liberadas (`permissions.allow`), servidores MCP
-  habilitados (`enabledMcpjsonServers`), ganchos pessoais (`hooks`),
-  variáveis de ambiente. Os dois se somam na leitura; o local acrescenta
-  sem tocar no da camada.
-
-Depois de atualizar, faça a triagem dos valores:
-
-1. Abra os dois e compare. Valor PESSOAL que esteja no `settings.json`
-   (permissão da sua máquina, gancho seu, caminho local) está no lugar
-   errado: leve-o para o `settings.local.json` — a atualização não o
-   levaria, e a próxima o apagaria.
-2. Procure valor perdido: permissão que você tinha e sumiu, servidor MCP
-   que parou de aparecer, gancho pessoal que deixou de disparar — tudo
-   isso se recoloca no `settings.local.json`, nunca no da camada.
-3. Segredo não entra em NENHUM dos dois por valor: em arquivo rastreado
-   vai `${VARIAVEL}`; no local, prefira apontar para onde a credencial
-   mora a colar o valor.
-4. Prove que o resultado é legível:
-   `python -m json.tool .claude/settings.local.json > /dev/null && echo legivel`
-   — e lembre que gancho novo só carrega em sessão nova.
-
-## O que esta sessão NÃO faz
-
-Não edita cópia da camada (regra: fonte, nunca cópia — e a fonte mora no
-repositório da camada, não aqui). Não apaga nada fora da lista do
-instrumento sem perguntar. Não commita sem o repositório autorizar em
-`nucleo/configuracao.json`, campo `autorizacoes` — omissão não é
-permissão.
+Esta sessão não edita cópia da camada, não apaga fora da lista do
+instrumento sem perguntar, e não commita sem `autorizacoes` em
+`nucleo/configuracao.json`.

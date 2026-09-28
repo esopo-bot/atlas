@@ -22,7 +22,7 @@ SILENCIO = 0
 BANDEIRA_DE_TESTE = "--testar"
 
 AVISO = (
-    "A busca por significado no código está FORA DO AR — {}.\n"
+    "A busca por significado no código está fora do ar — {}.\n"
     "Enquanto isso a ferramenta do índice devolve erro, e a alternativa é "
     "`grep`, que custa umas cinco vezes mais contexto por pergunta e não "
     "acha por significado.\n"

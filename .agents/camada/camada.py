@@ -3,6 +3,8 @@ import ast
 import contextlib
 import fnmatch
 import functools
+import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -14,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -96,6 +99,9 @@ COMANDO_DO_UPSTREAM = "git rev-parse --abbrev-ref --symbolic-full-name @{u}"
 COMANDO_DO_ESPELHO = "git rev-parse --abbrev-ref origin/{}"
 COMANDO_DO_QUE_FALTA = "git log {}..HEAD --oneline"
 COMANDO_DO_QUE_SO_EXISTE_AQUI = "git log HEAD --not --remotes --oneline"
+COMANDO_DOS_REMOTOS_QUE_CONTEM_A_CABECA = "git branch -r --contains HEAD"
+MARCA_DO_PONTEIRO_DO_REMOTO = "->"
+CABECA_DESTACADA = "HEAD"
 SEM_UPSTREAM_E_SEM_COMMIT_PROPRIO = (
     "Nada ficou para trás: {} não tem upstream, mas todo commit dela já está "
     "em algum remoto — não há trabalho que só exista nesta máquina.")
@@ -173,8 +179,19 @@ ARQUIVO_DAS_INSTRUCOES = "AGENTS.md"
 ARQUIVO_DA_DECLARACAO_DE_MCP = ".mcp.json"
 CHAVE_DOS_SERVIDORES_DE_MCP = "mcpServers"
 ARQUIVO_DOS_ALVOS_DO_INDICE = ".agents/indice/alvos.json"
+INSTRUMENTO_DO_HISTORICO = ".agents/historico/historico.py"
+BANDEIRA_DAS_PENDENTES = "--pendentes"
+ROTULO_DO_HISTORICO = "histórico das issues encerradas"
+CHAVE_DOS_AVISOS_DA_ABERTURA = "avisos_da_abertura"
+CAMPOS_DO_MODULO_INSCRITO = ("instrumento", "bandeira", "rotulo")
+INSCRITOS_SEM_LISTA = "não é lista"
+INSCRITOS_TORTOS = "{} item(ns) sem instrumento, bandeira e rotulo em texto"
+TEMPO_DO_AVISO_DE_MODULO = 60
+SAIDA_DO_MODULO_COM_AVISO = 1
+AVISO_DE_MODULO_NAO_MEDIDO = "{rotulo}: não medido — {motivo}"
 INSTRUMENTO_DO_INDICE = ".agents/indice/indexar.py"
 BUSCADOR_DO_INDICE = ".agents/indice/buscar.py"
+MARCA_DA_COLECAO_SEM_ALVO = "coleção sem alvo em"
 BANDEIRA_DO_ESTADO_DO_INDICE = "--estado"
 TEMPO_DO_ESTADO_DO_INDICE = 60
 TETO_DE_LINHAS_DO_ERRO = 6
@@ -198,6 +215,44 @@ MCP_SO_NA_RAIZ_PRINCIPAL = (
     "  copie o {arquivo} da raiz principal para cá.")
 COMANDO_DA_RAIZ_COMUM = "git rev-parse --path-format=absolute --git-common-dir"
 MCP_SEM_SERVIDOR = "  {} existe e não declara servidor nenhum em {}."
+BANDEIRA_DA_CONEXAO = "--conexao"
+TEMPO_DO_APERTO_DE_MAO = 45
+CONEXAO_DE_PE = "de pé"
+CONEXAO_CAIU = "caiu"
+CONEXAO_NAO_MEDIDA = "não medida"
+ID_DO_APERTO_DE_MAO = 1
+PEDIDO_DO_APERTO_DE_MAO = {
+    "jsonrpc": "2.0", "id": ID_DO_APERTO_DE_MAO, "method": "initialize",
+    "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+               "clientInfo": {"name": "camada-abertura", "version": "1"}}}
+CODIGO_DE_PARAMETRO_INVALIDO = -32602
+MARCAS_DE_LOGIN_VENCIDO = ("invalidgrant", "invalid_grant")
+TIPOS_DE_SERVIDOR_REMOTO = ("http", "sse", "streamable-http")
+COMANDO_QUE_DERRUBA_A_ARVORE_DO_PROCESSO = ["taskkill", "/PID", "{}", "/T", "/F"]
+TEMPO_PARA_DERRUBAR = 10
+TEMPO_PARA_A_SAIDA_ASSENTAR = 2
+MCP_CONEXAO_NAO_PEDIDA = (
+    "  Provada a declaração, não a conexão: servidor que cai ao subir só\n"
+    "  aparece aqui com `--abertura {}`, que faz o aperto de mão com cada um.")
+MCP_TITULO_DA_CONEXAO = (
+    "  Aperto de mão com cada servidor, até {} s cada, em paralelo:")
+MCP_CONEXAO_DE_PE = "    {}: respondeu ao initialize."
+MCP_CONEXAO_CAIU = "    {}: CAIU — {}."
+MCP_CONEXAO_NAO_MEDIDA = (
+    "    {}: NÃO MEDIDA — não é stdio ({}), e o aperto de mão daqui só fala "
+    "stdio.")
+MCP_CONEXAO_SEM_RESPOSTA = (
+    "    {}: NÃO MEDIDA — não respondeu ao initialize em {} s e seguia vivo: "
+    "no prazo, lento e mudo são iguais.")
+MOTIVO_LOGIN_VENCIDO = (
+    "login do perfil vencido ({}), ato do dono: renove o login e reabra a "
+    "sessão")
+MOTIVO_SEM_RESPOSTA = "não respondeu ao initialize em {} s"
+MOTIVO_SAIU = "saiu sem responder ao initialize: {}"
+MOTIVO_NAO_SOBE = "não subiu: {}"
+MOTIVO_ERRO = "respondeu com erro {}: {}"
+MOTIVO_SEM_COMANDO = "a declaração não tem comando"
+MCP_CONEXAO_CAIDOS = "  {} servidor(es) caíram no aperto de mão: {}."
 ARQUIVO_DE_ESTADO_DO_CLIENTE = ".claude.json"
 ARQUIVO_DE_AUTENTICACAO_PENDENTE = ".claude/mcp-needs-auth-cache.json"
 CHAVE_DOS_PROJETOS_DO_CLIENTE = "projects"
@@ -236,6 +291,170 @@ ABERTURA_INCOMPLETA = (
     "Abertura INCOMPLETA: {} peça(s) faltando. A sessão que seguir daqui "
     "trabalha\ncom menos do que pensa ter — conserte o que está acima antes "
     "de trabalhar.")
+TEMPO_DO_GIT_DOS_GANCHOS = 15
+COMANDO_DA_REF_DA_INTEGRACAO = ("git", "rev-parse", "--verify", "--quiet",
+                                "{}")
+COMANDO_DOS_GANCHOS_CONTRA_A_REF = ("git", "diff", "--quiet", "{}", "--",
+                                    PASTA_DOS_GANCHOS)
+COMANDO_DOS_GANCHOS_QUE_FALTAM = ("git", "rev-list", "--count", "HEAD..{}",
+                                  "--", PASTA_DOS_GANCHOS)
+COMANDO_DO_COMMIT_DOS_GANCHOS = ("git", "log", "-1", "--format=%h", "{}", "--",
+                                 PASTA_DOS_GANCHOS)
+COMANDO_DOS_GANCHOS_FORA_DE_COMMIT = ("git", "diff", "--quiet", "HEAD", "--",
+                                      PASTA_DOS_GANCHOS)
+GANCHOS_IGUAIS = 0
+GANCHOS_DIFERENTES = 1
+SEM_AVISO_DOS_GANCHOS = ""
+NENHUM_COMMIT_DE_GANCHO = "nenhum commit"
+SUFIXO_DOS_GANCHOS_SUJOS = ", mais mudança sem commit"
+CHAVE_DA_RAIZ_QUE_ESPELHA = "camada.raizSoEspelhaAIntegracao"
+GANCHOS_SEM_INTEGRACAO = (
+    "  Ganchos desta árvore contra a integração: não medido — {arquivo} não\n"
+    "  declara {chave}, e sem ela não há contra o que comparar.")
+GANCHOS_SEM_REF = (
+    "  Ganchos desta árvore contra {ref}: não medido — a ref não existe aqui\n"
+    "  (sem git, sem remoto ou nunca buscada); a abertura só busca na raiz\n"
+    f"  que se declara espelho (git config {CHAVE_DA_RAIZ_QUE_ESPELHA} true).")
+GANCHOS_NAO_MEDIDOS_PELO_GIT = (
+    "  Ganchos desta árvore contra {ref}: não medido — `{comando}` saiu "
+    "{codigo}.")
+GANCHOS_DEFASADOS = (
+    "  Ganchos DEFASADOS: os de {pasta} desta árvore são do {daqui}{sujos},\n"
+    "  e faltam {faltam} commit(s) de gancho de {ref} ({dela}, ref local,\n"
+    "  sem busca): a sessão roda cercas sem esses consertos.\n"
+    "  Avance: {avanco}")
+GANCHOS_SO_DESTA_ARVORE = (
+    "  Ganchos desta árvore: diferem de {ref} ({dela}, ref local, sem busca)\n"
+    "  só pelo que ela mesma mudou ({daqui}{sujos}).\n"
+    "  Todo commit de gancho da integração já está aqui: não há o que avançar.")
+AVANCO_POR_MESCLA = ("git fetch origin {integracao} && git merge {ref},\n"
+                     "  e abra a sessão de novo.")
+AVANCO_NUMA_ARVORE_DA_INTEGRACAO = (
+    "{branch} não recebe mescla da sessão: depois de git fetch origin\n"
+    "  {integracao}, abra a sessão numa worktree nova de {ref}.")
+TEMPO_DA_BUSCA_DA_INTEGRACAO = 30
+TEMPO_DO_AVANCO_DA_RAIZ = 300
+COMANDO_DA_DECLARACAO_DA_RAIZ = ("git", "config", "--local", "--bool", "--get",
+                                 CHAVE_DA_RAIZ_QUE_ESPELHA)
+COMANDO_DA_PASTA_COMUM_DO_GIT = ("git", "rev-parse", "--path-format=absolute",
+                                 "--git-common-dir")
+COMANDO_DA_MUDANCA_RASTREADA = ("git", "status", "--porcelain",
+                                "--untracked-files=no")
+COMANDO_DA_BUSCA_DA_INTEGRACAO = ("git", "fetch", "--quiet", "origin", "{}")
+COMANDO_DOS_COMMITS_ENTRE = ("git", "rev-list", "--count", "{}..{}")
+COMANDO_DO_AVANCO_RAPIDO = ("git", "merge", "--ff-only",
+                            "--no-overwrite-ignore", "--quiet", "{}")
+COMANDO_DO_COMMIT_CURTO = ("git", "rev-parse", "--short", "{}")
+MARCA_DA_SESSAO_DE_PESQUISA = "ATLAS_SO_LEITURA"
+VARIAVEL_DA_SESSAO_DO_CLIENTE = "CLAUDE_CODE_SESSION_ID"
+GANCHO_DAS_SESSOES_VIVAS = ".claude/hooks/avisar-sessao-paralela.py"
+NIVEIS_DA_CAMADA_ATE_A_ARVORE = 2
+LETRAS_DO_APELIDO_DA_SESSAO = 8
+TETO_DA_LISTA_DE_SUJOS = 5
+SUJOS_ALEM_DO_TETO = " e mais {}"
+RAIZ_SEM_INTEGRACAO = (
+    "  A raiz contra a integração: não medido — {arquivo} não declara "
+    "{chave}.")
+RAIZ_NAO_MEDIDA = "  A raiz contra {ref}: não medido — {motivo}."
+RAIZ_FORA_DA_INTEGRACAO = (
+    "  A raiz está em {branch}, não na integração {integracao}: a abertura "
+    "não a avança.")
+RAIZ_EM_DIA = "  A raiz está em dia com {ref} ({curto})."
+RAIZ_AVANCOU = (
+    "  A raiz avançou {atras} commit(s) até {ref} ({curto}): a sessão aberta "
+    "nela passa a rodar os ganchos de hoje.")
+RAIZ_SUJA = (
+    "  A raiz NÃO avançou: {quantos} arquivo(s) rastreado(s) mudado(s) nela "
+    "— {lista}.\n"
+    "  Ela fica {atras} commit(s) atrás de {ref}, e toda sessão aberta nela "
+    "roda os ganchos de lá.\n"
+    "  Quem mudou esses arquivos leva a mudança a uma worktree ou a desfaz; "
+    "sem saber de quem é, pergunte ao dono antes de tocar.")
+RAIZ_DIVERGIU = (
+    "  A raiz NÃO avançou: tem {adiante} commit(s) que {ref} não tem, e o "
+    "avanço rápido não passa por cima deles. Esses commits são de alguém: "
+    "leve-os ao dono antes de qualquer coisa.")
+RAIZ_AVANCO_RECUSADO = (
+    "  A raiz NÃO avançou: `git merge --ff-only {ref}` recusou — {motivo}.")
+RAIZ_COM_SESSAO_VIVA = (
+    "  A raiz NÃO avançou: {quantas} outra(s) sessão(ões) viva(s) nela ({lista})."
+    "\n  Avançar trocaria os arquivos debaixo delas; ela fica {atras} commit(s) "
+    "atrás de {ref}, e a próxima abertura tenta de novo.")
+RAIZ_EM_PESQUISA = (
+    f"  A raiz: a sessão de pesquisa ({MARCA_DA_SESSAO_DE_PESQUISA}) não busca "
+    "nem avança a raiz.")
+TITULO_DA_CONFIANCA_DO_CODEX = (
+    "A CONFIANÇA DOS GANCHOS DO CODEX — a impressão de hoje contra a "
+    "confiada")
+ARQUIVO_DOS_GANCHOS_DO_CODEX = ".codex/hooks.json"
+PASTA_DO_CODEX_NA_CASA = ".codex"
+VARIAVEL_DA_PASTA_DO_CODEX = "CODEX_HOME"
+CONFIGURACAO_DO_CODEX = "config.toml"
+CHAVE_DO_ESTADO_DOS_GANCHOS = "state"
+CHAVE_DA_IMPRESSAO_CONFIADA = "trusted_hash"
+CHAVE_DO_GANCHO_LIGADO = "enabled"
+CHAVE_DO_FILTRO_DO_GANCHO = "matcher"
+CHAVE_DO_TIPO_DO_GANCHO = "type"
+CHAVE_DO_TEMPO_DO_GANCHO = "timeout"
+CHAVE_DO_GANCHO_ASSINCRONO = "async"
+CHAVE_DO_EVENTO_NA_IMPRESSAO = "event_name"
+TIPO_DO_GANCHO_DE_COMANDO = "command"
+CAMPOS_QUE_O_GANCHO_EXIGE = frozenset({CHAVE_DO_TIPO_DO_GANCHO,
+                                       CHAVE_DO_COMANDO})
+CAMPOS_DO_GANCHO_QUE_A_IMPRESSAO_REPRODUZ = (CAMPOS_QUE_O_GANCHO_EXIGE
+                                             | {CHAVE_DO_TEMPO_DO_GANCHO})
+CAMPOS_DO_GRUPO_QUE_A_IMPRESSAO_REPRODUZ = frozenset(
+    {CHAVE_DO_FILTRO_DO_GANCHO, CHAVE_DOS_GANCHOS})
+EVENTOS_QUE_IGNORAM_O_FILTRO = ("user_prompt_submit", "stop", "interrupt")
+EVENTOS_DE_TEMPO_CURTO = ("session_end", "interrupt")
+TEMPO_PADRAO_DO_GANCHO_S = 600
+TEMPO_MINIMO_DO_GANCHO_S = 1
+TEMPO_CURTO_PADRAO_S = 1
+TEMPO_CURTO_MAXIMO_S = 3
+PREFIXO_DA_IMPRESSAO = "sha256:"
+PREFIXO_DE_CAMINHO_LITERAL = "\\\\?\\"
+SEPARADOR_DA_CHAVE_DO_GANCHO = ":"
+PARTES_DA_CHAVE_DEPOIS_DO_CAMINHO = 3
+MAIUSCULA_QUE_ABRE_PALAVRA = re.compile(r"(?<!^)(?=[A-Z])")
+GANCHO_CONFIADO = "confiado"
+GANCHO_COM_CONFIANCA_VELHA = "confiança velha"
+GANCHO_NUNCA_CONFIADO = "nunca confiado"
+GANCHO_DESLIGADO = "desligado no /hooks"
+GANCHO_FORA_DA_CONTA = "não medido: campo que esta leitura não reproduz"
+LINHA_DO_GANCHO_DO_CODEX = "  {}:{}:{} — {}"
+CODEX_SEM_PONTE = (
+    "  {} não existe aqui ou não declara gancho: não há ponte do Codex, e\n"
+    "  nada a confiar.")
+CODEX_SEM_CONFIGURACAO = (
+    "  o Codex não guardou configuração nesta máquina ({} não existe na\n"
+    "  pasta dele): não há confiança a ler.")
+CODEX_SEM_LEITOR_DE_TOML = (
+    "  este Python não lê TOML (o leitor chegou no 3.11): a confiança não se\n"
+    "  mede aqui, e a prova é a sonda do item 7 da partida, numa sessão do\n"
+    "  Codex.")
+CODEX_CONFIGURACAO_ILEGIVEL = (
+    "  o {} do Codex não se deixou ler como TOML. O conteúdo não se repete\n"
+    "  aqui, porque o arquivo guarda segredo. Sem ele a leitura não mede, e a\n"
+    "  prova é a sonda do item 7 da partida, numa sessão do Codex.")
+CODEX_PONTE_ILEGIVEL = "  {} não se deixou ler: {}"
+CODEX_GANCHOS_CONFIADOS = (
+    "Os {} gancho(s) do Codex estão confiados: a impressão de hoje bate com "
+    "a\nque o dono confiou.")
+CODEX_GANCHOS_NUNCA_CONFIADOS = (
+    "Nenhum dos {} gancho(s) do Codex foi confiado nesta pasta: se o Codex\n"
+    "abrir aqui, as cercas não rodam. Pasta onde o Codex não trabalha, como\n"
+    "worktree nova, fica assim e passa.")
+CODEX_GANCHOS_PULADOS = (
+    "{} de {} gancho(s) do Codex não rodam aqui: o Codex os pula em "
+    "silêncio,\ne a escrita que a cerca barraria passa. Confiança velha é o "
+    "{}\nque mudou depois da última confiança. Confiar é do dono: /hooks no "
+    "Codex\nde terminal aberto nesta raiz. Acusou logo depois de confiar: a "
+    "conta do\nCodex mudou, e a prova é a sonda do item 7 da partida.")
+CODEX_GANCHOS_FORA_DA_CONTA = (
+    "{} de {} gancho(s) do Codex usam campo que esta leitura não reproduz: "
+    "ela\nrefaz a conta só de type, command, timeout e matcher. Sem a conta "
+    "não se\nsabe se o Codex os roda, e a prova é a sonda do item 7 da "
+    "partida.")
 MARCA_POR_PREENCHER = "${"
 SAIDA_LIMPA = 0
 SAIDA_COM_ACHADO = 1
@@ -317,11 +536,6 @@ INSTRUMENTOS_QUE_FICAM = {
         "mede o ciclo de edição de fonte deste repositório contra um commit "
         "dele; quem instala não tem montar.py nem a fonte das skills para o "
         "ciclo existir"),
-    ".agents/manual/manual.py": (
-        "escreve o manual desta árvore: as pastas que ele descreve — "
-        "modulos/, execucoes/, os instrumentos da raiz — não existem em "
-        "quem instala, e o manual gerado lá descreveria o que não está no "
-        "disco"),
 }
 INSTRUMENTO_DE_MODULO_DE_MENTIRA = ".agents/mod/mod.py"
 INSTALADOR_DE_MENTIRA = (
@@ -430,6 +644,20 @@ CHAVES_ABERTAS = (
     "próxima sessão não sabe se foi decisão ou esquecimento.")
 CHAVES_FECHADAS = ("Chaves fechadas: {} chave(s) de {} arquivo(s) de "
                    "configuração, todas com leitor em {} `.py` rastreado(s).")
+CHAVE_APOSENTADA = "publicar"
+CHAVE_DAS_AUTORIZACOES = "autorizacoes"
+CHAVE_DOS_CADASTROS = "projetos"
+CHAVE_APOSENTADA_NA_CONFIGURACAO = f"{CHAVE_DAS_AUTORIZACOES}.{CHAVE_APOSENTADA}"
+CHAVE_APOSENTADA_NO_CADASTRO = (
+    f"{CHAVE_DOS_CADASTROS}.<cadastro>.{CHAVE_APOSENTADA_NA_CONFIGURACAO}")
+CADASTROS_COM_A_CHAVE_APOSENTADA = "{}, em {} cadastro(s)"
+AVISO_DE_CHAVE_APOSENTADA = (
+    "AVISO, chave aposentada: `{}` em {}. Publicar é do dono, sempre, e "
+    "gancho nenhum lê esta chave — ligada ou desligada, ela não muda nada. "
+    "Apague-a à mão: a camada não reescreve o arquivo de quem instalou.")
+CHAVE_APOSENTADA_NAO_MEDIDA = (
+    "Chave aposentada NÃO MEDIDA em {}: o arquivo não se deixou ler — {}. "
+    "Sem lê-lo não se sabe se `{}` sobrou nele.")
 
 COMANDO_DOS_RASTREADOS = "git ls-files"
 SUFIXO_DA_PROSA = ".md"
@@ -514,6 +742,7 @@ GLOB_PAGINA = "*.md"
 BANDEIRA_DE_TESTE = "--testar"
 MARCAS_DE_RESUMO = ("OK:", "FALHOU:")
 MARCA_DE_BANCADA_AUSENTE = "bancada de testes ausente"
+NOME_DO_MODULO_DA_BANCADA = "testes"
 BANCADA_NAO_VIAJA = (
     MARCA_DE_BANCADA_AUSENTE + ": ela não viaja com a camada, e mora no "
     "repositório onde a camada é construída. Nada a rodar aqui.")
@@ -527,8 +756,13 @@ MARCA_DE_QUE_CAIU = "CAIU"
 
 ORCAMENTO_DAS_BANCADAS_TOCADAS = 120
 TEMPO_DE_UMA_BANCADA_TOCADA = 60
+BANCADAS_AO_MESMO_TEMPO = 8
 TETOS_PROPRIOS_DE_BANCADA = {
     ".agents/camada": 180,
+    ".claude/hooks/vetar-branch-protegida.py": 180,
+    ".claude/hooks/cobrar-destino-da-entrega.py": 180,
+    ".agents/encadeador": 360,
+    "modulos/encadeador/.agents/encadeador": 360,
 }
 MARCA_DE_QUE_NAO_COUBE = "TETO"
 ARQUIVO_DA_BANCADA_DA_PASTA = "testes.py"
@@ -606,6 +840,8 @@ LINHA_DO_CATALOGO = "- {}: {}\n"
 
 MODELO_DA_SIMULACAO = "claude-haiku-4-5-20251001"
 TIPO_DO_RESULTADO = "result"
+TIPO_DA_MENSAGEM_DO_ASSISTENTE = "assistant"
+TIPO_DO_BLOCO_DE_TEXTO = "text"
 FERRAMENTAS_DA_SIMULACAO = "Read,Glob,Grep,Write,Bash"
 TEMPO_DA_SIMULACAO = 900
 TEMPO_DE_UM_TESTE = 900
@@ -687,7 +923,7 @@ FORA_DO_ALCANCE = ("a listagem de skills que a ferramenta monta some {} bytes "
 LISTAGEM_NAO_MEDIDA = ("a listagem da máquina não foi medida — não há pasta de "
                        "skill da ferramenta neste alcance")
 
-TETO_DO_CORPO_DA_SKILL = 10000
+TETO_DO_CORPO_DA_SKILL = 35000
 SKILL_ACIMA_DO_TETO = "{} ({} bytes)"
 NENHUMA_SKILL_ACIMA = "nenhuma"
 
@@ -872,12 +1108,16 @@ def branch_de_incorporacao(raiz: Path) -> str:
     return nomes[0].strip() if nomes else ""
 
 
-def referencia_que_existe(raiz: Path, nome: str) -> str:
+def referencia_e_topo(raiz: Path, nome: str) -> tuple:
     for candidata in (f"{PREFIXO_DO_REMOTO}{nome}", nome):
-        codigo, _ = corre(COMANDO_DA_REFERENCIA.format(candidata), cwd=raiz)
+        codigo, topo = corre(COMANDO_DA_REFERENCIA.format(candidata), cwd=raiz)
         if codigo == 0:
-            return candidata
-    return ""
+            return candidata, topo
+    return "", ""
+
+
+def referencia_que_existe(raiz: Path, nome: str) -> str:
+    return referencia_e_topo(raiz, nome)[0]
 
 
 def nome_curto_da_branch(bruta: str) -> str:
@@ -912,13 +1152,18 @@ def acrescenta_a_referencia(raiz: Path, referencia: str, completa: str):
     return codigo == NAO_ACRESCENTA_NADA, True
 
 
+def topo_lido_no_git(raiz: Path, referencia: str) -> str:
+    codigo, topo = corre(COMANDO_DO_TOPO.format(referencia), cwd=raiz)
+    return topo.strip() if codigo == 0 else ""
+
+
 def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
-                          protegidas: set) -> tuple:
-    codigo, topo_da_referencia = corre(COMANDO_DO_TOPO.format(referencia),
-                                       cwd=raiz)
-    topo_da_referencia = topo_da_referencia.strip()
+                          protegidas: set, topo_da_referencia=None) -> tuple:
+    topo_da_referencia = (topo_lido_no_git(raiz, referencia)
+                          if topo_da_referencia is None
+                          else topo_da_referencia.strip())
     topos = linhas_do_git(raiz, COMANDO_DOS_TOPOS)
-    if codigo != 0 or not topo_da_referencia or topos is None:
+    if not topo_da_referencia or topos is None:
         return [], [], False
     a_julgar = []
     for linha in topos:
@@ -943,69 +1188,94 @@ def branches_ja_entregues(raiz: Path, referencia: str, atual: str,
     return locais, remotas, mediu
 
 
-def o_que_ainda_nao_saiu(raiz: Path, atual: str) -> int:
-    codigo, alvo = corre(COMANDO_DO_UPSTREAM, cwd=raiz)
-    if codigo != 0 or not alvo:
-        codigo, alvo = corre(COMANDO_DO_ESPELHO.format(atual), cwd=raiz)
+def remotos_que_contem_a_cabeca(raiz: Path) -> list:
+    codigo, saida = corre(COMANDO_DOS_REMOTOS_QUE_CONTEM_A_CABECA, cwd=raiz)
+    if codigo != 0:
+        return []
+    return [linha.strip() for linha in saida.split("\n")
+            if linha.strip() and MARCA_DO_PONTEIRO_DO_REMOTO not in linha]
+
+
+def destino_da_cabeca_destacada(raiz: Path) -> str:
+    integracao = integracao_declarada(raiz)
+    if integracao:
+        return referencia_que_existe(raiz, integracao)
+    remotos = remotos_que_contem_a_cabeca(raiz)
+    return remotos[0] if remotos else ""
+
+
+def o_que_ainda_nao_saiu(raiz: Path, atual: str, dizer=print) -> int:
+    if atual == CABECA_DESTACADA:
+        alvo = destino_da_cabeca_destacada(raiz)
+        codigo = 0 if alvo else 1
+    else:
+        codigo, alvo = corre(COMANDO_DO_UPSTREAM, cwd=raiz)
+        if codigo != 0 or not alvo:
+            codigo, alvo = corre(COMANDO_DO_ESPELHO.format(atual), cwd=raiz)
     if codigo != 0 or not alvo:
         codigo, so_aqui = corre(COMANDO_DO_QUE_SO_EXISTE_AQUI, cwd=raiz)
         if codigo == 0 and not so_aqui.strip():
-            print(SEM_UPSTREAM_E_SEM_COMMIT_PROPRIO.format(atual))
+            dizer(SEM_UPSTREAM_E_SEM_COMMIT_PROPRIO.format(atual))
             return SAIDA_LIMPA
-        print(SEM_ENTREGA.format(atual, atual))
+        dizer(SEM_ENTREGA.format(atual, atual))
         return SAIDA_COM_ACHADO
     _, sobra = corre(COMANDO_DO_QUE_FALTA.format(alvo), cwd=raiz)
     linhas = [l for l in sobra.split("\n") if l.strip()]
     if not linhas:
-        print(ENTREGA_LIMPA.format(atual, alvo))
+        dizer(ENTREGA_LIMPA.format(atual, alvo))
         return SAIDA_LIMPA
-    print(ENTREGA_COM_SOBRA.format(len(linhas), atual, alvo))
+    dizer(ENTREGA_COM_SOBRA.format(len(linhas), atual, alvo))
     for linha in linhas:
-        print(f"  {linha}")
+        dizer(f"  {linha}")
     return SAIDA_COM_ACHADO
 
 
-def branches_abertas_em_arvore(raiz: Path) -> set:
-    linhas = linhas_do_git(raiz, COMANDO_DAS_ARVORES_DE_TRABALHO) or []
-    return {linha[len(MARCA_DA_BRANCH_NA_ARVORE):] for linha in linhas
+def branches_das_arvores(linhas) -> set:
+    return {linha[len(MARCA_DA_BRANCH_NA_ARVORE):] for linha in linhas or []
             if linha.startswith(MARCA_DA_BRANCH_NA_ARVORE)}
 
 
-def o_que_saiu_e_ficou(raiz: Path, atual: str) -> int:
+def branches_abertas_em_arvore(raiz: Path) -> set:
+    return branches_das_arvores(
+        linhas_do_git(raiz, COMANDO_DAS_ARVORES_DE_TRABALHO))
+
+
+def o_que_saiu_e_ficou(raiz: Path, atual: str, dizer=print,
+                       abertas_em_arvore=branches_abertas_em_arvore) -> int:
     incorporacao = branch_de_incorporacao(raiz)
     if not incorporacao:
-        print(PODA_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
+        dizer(PODA_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
                                            CHAVE_POR_INCORPORACAO))
         return 0
-    referencia = referencia_que_existe(raiz, incorporacao)
+    referencia, topo = referencia_e_topo(raiz, incorporacao)
     if not referencia:
-        print(PODA_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
+        dizer(PODA_SEM_INCORPORACAO.format(ARQUIVO_DE_CONFIGURACAO,
                                            CHAVE_POR_INCORPORACAO))
         return 0
     locais, remotas, mediu = branches_ja_entregues(
-        raiz, referencia, atual, branches_de_longa_duracao(raiz))
+        raiz, referencia, atual, branches_de_longa_duracao(raiz), topo)
     if not mediu:
-        print(PODA_NAO_MEDIDA)
+        dizer(PODA_NAO_MEDIDA)
         return SAIDA_NAO_MEDIDO
-    abertas = branches_abertas_em_arvore(raiz)
+    abertas = abertas_em_arvore(raiz)
     em_uso = sorted(set(locais) & abertas)
     locais = [branch for branch in locais if branch not in em_uso]
     remotas = [remota for remota in remotas
                if nome_curto_da_branch(remota) not in abertas]
     if not locais and not remotas:
-        print(PODA_LIMPA)
+        dizer(PODA_LIMPA)
         if em_uso:
-            print(PODA_EM_USO.format(" ".join(em_uso)))
+            dizer(PODA_EM_USO.format(" ".join(em_uso)))
         return SAIDA_LIMPA
-    print(PODA_COM_SOBRA.format(len(locais) + len(remotas), referencia))
+    dizer(PODA_COM_SOBRA.format(len(locais) + len(remotas), referencia))
     if locais:
-        print(PODA_LOCAL.format(" ".join(locais)))
+        dizer(PODA_LOCAL.format(" ".join(locais)))
     if remotas:
-        print(PODA_REMOTA.format(
+        dizer(PODA_REMOTA.format(
             " ".join(nome_curto_da_branch(r) for r in remotas)))
     if em_uso:
-        print(PODA_EM_USO.format(" ".join(em_uso)))
-    print(PODA_ESCAPE.format(ARQUIVO_DAS_PROTEGIDAS))
+        dizer(PODA_EM_USO.format(" ".join(em_uso)))
+    dizer(PODA_ESCAPE.format(ARQUIVO_DAS_PROTEGIDAS))
     return SAIDA_COM_ACHADO
 
 
@@ -1117,21 +1387,30 @@ def veredito_da_entrega(*pontas: int) -> int:
     return SAIDA_LIMPA
 
 
-def arvores_de_trabalho(raiz: Path) -> str:
-    try:
-        codigo, saida = corre(COMANDO_DAS_ARVORES, cwd=raiz)
-    except (OSError, subprocess.SubprocessError):
+def resumo_das_arvores(linhas) -> str:
+    if linhas is None:
         return ARVORES_NAO_MEDIDAS
-    if codigo != 0:
-        return ARVORES_NAO_MEDIDAS
-    caminhos = [linha[len(MARCA_DA_ARVORE):].strip()
-                for linha in saida.split("\n")
+    caminhos = [linha[len(MARCA_DA_ARVORE):].strip() for linha in linhas
                 if linha.startswith(MARCA_DA_ARVORE)]
     if len(caminhos) < 2:
         return UMA_ARVORE_SO
     agora = time.strftime("%H:%M:%S")
     return ARVORES_AO_LADO.format(len(caminhos), agora,
                                   ", ".join(Path(c).name for c in caminhos))
+
+
+def arvores_de_trabalho(raiz: Path) -> str:
+    return resumo_das_arvores(linhas_do_git(raiz, COMANDO_DAS_ARVORES))
+
+
+MEDIDAS_DA_ENTREGA_AO_MESMO_TEMPO = 3
+
+
+def dito_na_ordem(medida, dito: list) -> int:
+    veredito = medida.result()
+    for linha in dito:
+        print(linha)
+    return veredito
 
 
 def entrega(raiz: Path,
@@ -1142,14 +1421,23 @@ def entrega(raiz: Path,
         print(FORA_DE_REPOSITORIO)
         return SAIDA_LIMPA
     print(TITULO_ENTREGA.format(Path(raiz).resolve().as_posix(), atual))
-    faltou = o_que_ainda_nao_saiu(raiz, atual)
-    sobrou = o_que_saiu_e_ficou(raiz, atual)
+    dito_do_que_falta, dito_do_que_sobrou = [], []
+    with ThreadPoolExecutor(
+            max_workers=MEDIDAS_DA_ENTREGA_AO_MESMO_TEMPO) as grupo:
+        arvores = grupo.submit(linhas_do_git, raiz, COMANDO_DAS_ARVORES)
+        falta = grupo.submit(o_que_ainda_nao_saiu, raiz, atual,
+                             dito_do_que_falta.append)
+        sobra = grupo.submit(
+            o_que_saiu_e_ficou, raiz, atual, dito_do_que_sobrou.append,
+            lambda _: branches_das_arvores(arvores.result()))
+        faltou = dito_na_ordem(falta, dito_do_que_falta)
+        sobrou = dito_na_ordem(sobra, dito_do_que_sobrou)
     if sem_pedido:
         print(PEDIDO_PULADO_A_PEDIDO.format(BANDEIRA_SEM_O_PEDIDO))
         espera = MEDIDA_PULADA
     else:
         espera = o_que_espera_incorporacao(raiz, atual, consultar_pedidos)
-    print(arvores_de_trabalho(raiz))
+    print(resumo_das_arvores(arvores.result()))
     print(linha_das_categorias(faltou, sobrou, espera))
     return veredito_da_entrega(faltou, sobrou,
                                *([] if sem_pedido else [espera]))
@@ -1311,7 +1599,133 @@ def servidores_da_raiz_principal(raiz: Path) -> str:
         quantos=len(declarados), nomes=", ".join(sorted(declarados)))
 
 
-def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
+def derrubar_o_servidor(processo: subprocess.Popen) -> None:
+    if processo.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run([parte.format(processo.pid) for parte in
+                            COMANDO_QUE_DERRUBA_A_ARVORE_DO_PROCESSO],
+                           capture_output=True, timeout=TEMPO_PARA_DERRUBAR)
+        else:
+            processo.kill()
+        processo.wait(timeout=TEMPO_PARA_DERRUBAR)
+    except (OSError, subprocess.SubprocessError) as falha:
+        print(f"  o servidor de pid {processo.pid} não caiu: {falha}",
+              file=sys.stderr)
+
+
+def resposta_ao_aperto_de_mao(processo: subprocess.Popen, tempo: float):
+    achada = {}
+
+    def ler():
+        for linha in processo.stdout:
+            with contextlib.suppress(ValueError):
+                dado = json.loads(linha)
+                if isinstance(dado, dict) \
+                        and dado.get("id") == ID_DO_APERTO_DE_MAO:
+                    achada.update(dado)
+                    return
+
+    leitor = threading.Thread(target=ler, daemon=True)
+    leitor.start()
+    leitor.join(tempo)
+    return achada
+
+
+def codigo_de_saida_assentado(processo: subprocess.Popen):
+    try:
+        return processo.wait(TEMPO_PARA_A_SAIDA_ASSENTAR)
+    except subprocess.TimeoutExpired:
+        return None
+
+
+def e_login_vencido(*textos) -> bool:
+    juntos = " ".join(str(texto) for texto in textos).lower()
+    return any(marca in juntos for marca in MARCAS_DE_LOGIN_VENCIDO)
+
+
+def motivo_da_queda(resposta: dict, berro: str, saiu, tempo) -> str:
+    erro = resposta.get("error")
+    if isinstance(erro, dict):
+        codigo, mensagem = erro.get("code"), str(erro.get("message", ""))
+        if e_login_vencido(mensagem, berro) \
+                or (codigo == CODIGO_DE_PARAMETRO_INVALIDO
+                    and e_login_vencido(berro)):
+            return MOTIVO_LOGIN_VENCIDO.format(codigo)
+        return MOTIVO_ERRO.format(codigo, mensagem[:120])
+    if e_login_vencido(berro):
+        return MOTIVO_LOGIN_VENCIDO.format("InvalidGrant")
+    if saiu is not None:
+        ultima = (berro.strip().splitlines() or [f"código {saiu}"])[-1]
+        return MOTIVO_SAIU.format(ultima[:120])
+    return MOTIVO_SEM_RESPOSTA.format(tempo)
+
+
+def aperto_de_mao(raiz: Path, nome: str, declaracao: dict,
+                  tempo: float = TEMPO_DO_APERTO_DE_MAO) -> tuple:
+    declaracao = declaracao if isinstance(declaracao, dict) else {}
+    tipo = str(declaracao.get("type", "")).lower()
+    if tipo in TIPOS_DE_SERVIDOR_REMOTO or declaracao.get("url"):
+        return CONEXAO_NAO_MEDIDA, MCP_CONEXAO_NAO_MEDIDA.format(
+            nome, tipo or "url")
+    comando = os.path.expandvars(str(declaracao.get("command") or ""))
+    if not comando:
+        return CONEXAO_CAIU, MCP_CONEXAO_CAIU.format(nome, MOTIVO_SEM_COMANDO)
+    argumentos = [shutil.which(comando) or comando] + [
+        os.path.expandvars(str(a)) for a in declaracao.get("args") or []]
+    ambiente = dict(os.environ)
+    ambiente.update({chave: os.path.expandvars(str(valor)) for chave, valor
+                     in (declaracao.get("env") or {}).items()})
+    with tempfile.TemporaryFile() as berros:
+        try:
+            processo = subprocess.Popen(
+                argumentos, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=berros, cwd=raiz, env=ambiente, text=True,
+                encoding="utf-8", errors="replace")
+        except OSError as falha:
+            return CONEXAO_CAIU, MCP_CONEXAO_CAIU.format(
+                nome, MOTIVO_NAO_SOBE.format(falha))
+        try:
+            with contextlib.suppress(OSError):
+                processo.stdin.write(json.dumps(PEDIDO_DO_APERTO_DE_MAO) + "\n")
+                processo.stdin.flush()
+            resposta = resposta_ao_aperto_de_mao(processo, tempo)
+            saiu = codigo_de_saida_assentado(processo)
+        finally:
+            derrubar_o_servidor(processo)
+        berros.seek(0)
+        berro = berros.read().decode("utf-8", "replace")
+    if "result" in resposta:
+        return CONEXAO_DE_PE, MCP_CONEXAO_DE_PE.format(nome)
+    if not resposta and saiu is None and not e_login_vencido(berro):
+        return CONEXAO_NAO_MEDIDA, MCP_CONEXAO_SEM_RESPOSTA.format(
+            nome, tempo)
+    return CONEXAO_CAIU, MCP_CONEXAO_CAIU.format(
+        nome, motivo_da_queda(resposta, berro, saiu, tempo))
+
+
+def conexao_dos_servidores(raiz: Path, declarados: dict,
+                           tempo: float) -> tuple:
+    nomes = sorted(declarados)
+    with ThreadPoolExecutor(max_workers=max(1, len(nomes))) as grupo:
+        apertos = list(grupo.map(
+            lambda nome: aperto_de_mao(raiz, nome, declarados[nome], tempo),
+            nomes))
+    caidos = [nome for nome, (estado, _) in zip(nomes, apertos)
+              if estado == CONEXAO_CAIU]
+    linhas = [MCP_TITULO_DA_CONEXAO.format(tempo)]
+    linhas += [linha for _, linha in apertos]
+    if caidos:
+        linhas.append(MCP_CONEXAO_CAIDOS.format(len(caidos),
+                                                ", ".join(caidos)))
+    return not caidos, "\n".join(linhas)
+
+
+def servidores_de_contexto(raiz: Path, casa: Path = None,
+                           conexao: bool = False,
+                           tempo_da_conexao: float = TEMPO_DO_APERTO_DE_MAO
+                           ) -> tuple:
     alvo = raiz / ARQUIVO_DA_DECLARACAO_DE_MCP
     if not alvo.is_file():
         return None, (servidores_da_raiz_principal(raiz)
@@ -1333,7 +1747,11 @@ def servidores_de_contexto(raiz: Path, casa: Path = None) -> tuple:
         raiz, declarados, Path.home() if casa is None else casa)
     if barrados:
         estado = MCP_BARRADO_PELA_LISTA.format(len(barrados), ", ".join(barrados)) + "\n" + estado
-    return True, f"{declaracao}\n{estado}"
+    if not conexao:
+        return True, (f"{declaracao}\n{estado}\n"
+                      f"{MCP_CONEXAO_NAO_PEDIDA.format(BANDEIRA_DA_CONEXAO)}")
+    de_pe, linhas = conexao_dos_servidores(raiz, declarados, tempo_da_conexao)
+    return de_pe, f"{declaracao}\n{estado}\n{linhas}"
 
 
 def indice_da_abertura(raiz: Path) -> tuple:
@@ -1356,22 +1774,299 @@ def indice_da_abertura(raiz: Path) -> tuple:
             INSTRUMENTO_DO_INDICE, BANDEIRA_DO_ESTADO_DO_INDICE, codigo,
             "\n".join(f"    {linha}" for linha in ultimas),
             BUSCADOR_DO_INDICE)
-    return True, INDICE_DE_PE.format(BUSCADOR_DO_INDICE)
+    sobras = [linha for linha in saida.splitlines()
+              if MARCA_DA_COLECAO_SEM_ALVO in linha]
+    return True, "\n".join([INDICE_DE_PE.format(BUSCADOR_DO_INDICE)] + sobras)
 
 
-def pecas_da_abertura(raiz: Path) -> list:
+def git_dos_ganchos(raiz: Path, comando: tuple, *valores) -> tuple:
+    argumentos = [parte.format(*valores) for parte in comando]
+    try:
+        codigo, saida = corre_a_lista(argumentos,
+                                      tempo=TEMPO_DO_GIT_DOS_GANCHOS, cwd=raiz)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return type(falha).__name__, "", " ".join(argumentos)
+    ultima_linha = saida.strip().splitlines()[-1].strip() if saida.strip() \
+        else ""
+    return codigo, ultima_linha, " ".join(argumentos)
+
+
+def commit_dos_ganchos(raiz: Path, ponta: str) -> str:
+    codigo, curto, _ = git_dos_ganchos(raiz, COMANDO_DO_COMMIT_DOS_GANCHOS,
+                                       ponta)
+    return MARCO_DO_COMMIT.format(curto) if codigo == 0 and curto \
+        else NENHUM_COMMIT_DE_GANCHO
+
+
+def avanco_dos_ganchos(raiz: Path, integracao: str, referencia: str) -> str:
+    codigo, branch, _ = git_dos_ganchos(raiz, tuple(COMANDO_DA_BRANCH.split()))
+    branch = branch if codigo == 0 else ""
+    if (branch.lower() in branches_de_longa_duracao(raiz)
+            and branch.lower() != integracao.lower()):
+        return AVANCO_NUMA_ARVORE_DA_INTEGRACAO.format(
+            branch=branch, integracao=integracao, ref=referencia)
+    return AVANCO_POR_MESCLA.format(integracao=integracao, ref=referencia)
+
+
+def ganchos_contra_a_integracao(raiz: Path) -> str:
+    integracao = integracao_declarada(raiz)
+    if not integracao:
+        return GANCHOS_SEM_INTEGRACAO.format(
+            arquivo=ARQUIVO_DO_EXECUTOR,
+            chave=f"{CHAVE_DAS_BRANCHES}.{CHAVE_DA_INTEGRACAO}")
+    referencia = f"{PREFIXO_DO_REMOTO}{integracao}"
+    codigo, _, _ = git_dos_ganchos(raiz, COMANDO_DA_REF_DA_INTEGRACAO,
+                                   referencia)
+    if codigo != 0:
+        return GANCHOS_SEM_REF.format(ref=referencia)
+    codigo, _, comando = git_dos_ganchos(
+        raiz, COMANDO_DOS_GANCHOS_CONTRA_A_REF, referencia)
+    if codigo == GANCHOS_IGUAIS:
+        return SEM_AVISO_DOS_GANCHOS
+    if codigo != GANCHOS_DIFERENTES:
+        return GANCHOS_NAO_MEDIDOS_PELO_GIT.format(
+            ref=referencia, comando=comando, codigo=codigo)
+    codigo, faltam, comando = git_dos_ganchos(
+        raiz, COMANDO_DOS_GANCHOS_QUE_FALTAM, referencia)
+    if codigo != 0 or not faltam.isdigit():
+        return GANCHOS_NAO_MEDIDOS_PELO_GIT.format(
+            ref=referencia, comando=comando, codigo=codigo)
+    sujos, _, _ = git_dos_ganchos(raiz, COMANDO_DOS_GANCHOS_FORA_DE_COMMIT)
+    campos = dict(
+        pasta=PASTA_DOS_GANCHOS, ref=referencia, faltam=faltam,
+        daqui=commit_dos_ganchos(raiz, "HEAD"),
+        dela=commit_dos_ganchos(raiz, referencia),
+        sujos=SUFIXO_DOS_GANCHOS_SUJOS if sujos == GANCHOS_DIFERENTES else "")
+    if int(faltam) == 0:
+        return GANCHOS_SO_DESTA_ARVORE.format(**campos)
+    return GANCHOS_DEFASADOS.format(
+        avanco=avanco_dos_ganchos(raiz, integracao, referencia), **campos)
+
+
+def declara_que_a_raiz_espelha(raiz: Path) -> bool:
+    codigo, saida = git_da_raiz(raiz, COMANDO_DA_DECLARACAO_DA_RAIZ)
+    return codigo == 0 and ultima_linha(saida) == "true"
+
+
+def git_da_raiz(pasta: Path, comando: tuple, *valores,
+                tempo=TEMPO_DO_GIT_DOS_GANCHOS) -> tuple:
+    argumentos = [parte.format(*valores) for parte in comando]
+    try:
+        return corre_a_lista(argumentos, tempo=tempo, cwd=pasta)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return None, type(falha).__name__
+
+
+def ultima_linha(texto: str) -> str:
+    linhas = [linha.strip() for linha in (texto or "").splitlines()
+              if linha.strip()]
+    return linhas[-1] if linhas else ""
+
+
+def arvore_principal(raiz: Path):
+    codigo, saida = git_da_raiz(raiz, COMANDO_DA_PASTA_COMUM_DO_GIT)
+    comum = ultima_linha(saida) if codigo == 0 else ""
+    return Path(comum).parent if comum else None
+
+
+def commit_curto(pasta: Path, ponta: str) -> str:
+    codigo, saida = git_da_raiz(pasta, COMANDO_DO_COMMIT_CURTO, ponta)
+    return ultima_linha(saida) if codigo == 0 else ponta
+
+
+def lista_dos_sujos(sujos: list) -> str:
+    lista = ", ".join(sujos[:TETO_DA_LISTA_DE_SUJOS])
+    alem = len(sujos) - TETO_DA_LISTA_DE_SUJOS
+    return lista + (SUJOS_ALEM_DO_TETO.format(alem) if alem > 0 else "")
+
+
+def buscar_a_integracao(principal: Path, integracao: str) -> str:
+    argumentos = [parte.format(integracao)
+                  for parte in COMANDO_DA_BUSCA_DA_INTEGRACAO]
+    try:
+        feito = subprocess.run(
+            argumentos, cwd=str(principal),
+            env=dict(os.environ, GIT_TERMINAL_PROMPT="0"),
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=TEMPO_DA_BUSCA_DA_INTEGRACAO)
+    except subprocess.TimeoutExpired:
+        return (f"a busca de {integracao} passou de "
+                f"{TEMPO_DA_BUSCA_DA_INTEGRACAO} s")
+    except (OSError, subprocess.SubprocessError) as falha:
+        return f"a busca de {integracao} não rodou ({type(falha).__name__})"
+    if feito.returncode != 0:
+        return f"a busca de {integracao} no remoto saiu {feito.returncode}"
+    return ""
+
+
+def sessoes_vivas_na_raiz(principal: Path, lar: Path, minha: str,
+                          agora: float):
+    gancho = (Path(__file__).resolve().parents[NIVEIS_DA_CAMADA_ATE_A_ARVORE]
+              / GANCHO_DAS_SESSOES_VIVAS)
+    try:
+        espec = importlib.util.spec_from_file_location(
+            "sessoes_vivas_da_raiz", gancho)
+        modulo = importlib.util.module_from_spec(espec)
+        espec.loader.exec_module(modulo)
+        pasta = modulo.pasta_dos_transcritos(principal, lar)
+        vivas = modulo.sessoes_vivas_ao_lado(pasta, minha, agora)
+    except Exception:
+        return None
+    return [apelido[:LETRAS_DO_APELIDO_DA_SESSAO] for _, apelido in vivas]
+
+
+def avancar_a_raiz(raiz: Path, lar=None, minha=None, agora=None) -> str:
+    if not declara_que_a_raiz_espelha(raiz):
+        return ""
+    if os.environ.get(MARCA_DA_SESSAO_DE_PESQUISA):
+        return RAIZ_EM_PESQUISA
+    principal = arvore_principal(raiz)
+    if principal is None:
+        return RAIZ_NAO_MEDIDA.format(
+            ref="a integração", motivo="o git não disse onde mora a árvore "
+            "principal")
+    integracao = integracao_declarada(principal)
+    if not integracao:
+        return RAIZ_SEM_INTEGRACAO.format(
+            arquivo=ARQUIVO_DO_EXECUTOR,
+            chave=f"{CHAVE_DAS_BRANCHES}.{CHAVE_DA_INTEGRACAO}")
+    referencia = f"{PREFIXO_DO_REMOTO}{integracao}"
+    codigo, branch = git_da_raiz(principal, tuple(COMANDO_DA_BRANCH.split()))
+    branch = ultima_linha(branch) if codigo == 0 else ""
+    if branch != integracao:
+        return RAIZ_FORA_DA_INTEGRACAO.format(branch=branch or "?",
+                                              integracao=integracao)
+    falha = buscar_a_integracao(principal, integracao)
+    if falha:
+        return RAIZ_NAO_MEDIDA.format(ref=referencia, motivo=falha)
+    codigo_atras, atras = git_da_raiz(principal, COMANDO_DOS_COMMITS_ENTRE,
+                                      "HEAD", referencia)
+    codigo_adiante, adiante = git_da_raiz(principal, COMANDO_DOS_COMMITS_ENTRE,
+                                          referencia, "HEAD")
+    atras, adiante = ultima_linha(atras), ultima_linha(adiante)
+    if codigo_atras != 0 or codigo_adiante != 0 or not atras.isdigit() \
+            or not adiante.isdigit():
+        return RAIZ_NAO_MEDIDA.format(
+            ref=referencia, motivo="o git não contou os commits entre a raiz "
+            "e a integração")
+    codigo, estado = git_da_raiz(principal, COMANDO_DA_MUDANCA_RASTREADA)
+    if codigo != 0:
+        return RAIZ_NAO_MEDIDA.format(
+            ref=referencia, motivo=f"`git status` saiu {codigo}")
+    sujos = [linha.strip().split(maxsplit=1)[-1]
+             for linha in estado.splitlines() if linha.strip()]
+    if sujos:
+        return RAIZ_SUJA.format(quantos=len(sujos), lista=lista_dos_sujos(sujos),
+                                atras=atras, ref=referencia)
+    if int(adiante):
+        return RAIZ_DIVERGIU.format(adiante=adiante, ref=referencia)
+    if not int(atras):
+        return RAIZ_EM_DIA.format(ref=referencia,
+                                  curto=commit_curto(principal, "HEAD"))
+    vivas = sessoes_vivas_na_raiz(
+        principal, Path.home() if lar is None else Path(lar),
+        os.environ.get(VARIAVEL_DA_SESSAO_DO_CLIENTE, "") if minha is None
+        else minha, time.time() if agora is None else agora)
+    if vivas is None:
+        return RAIZ_NAO_MEDIDA.format(
+            ref=referencia, motivo="não se leu se há outra sessão viva na "
+            "raiz, e sem isso ela não se troca")
+    if vivas:
+        return RAIZ_COM_SESSAO_VIVA.format(quantas=len(vivas),
+                                           lista=", ".join(vivas),
+                                           atras=atras, ref=referencia)
+    codigo, saida = git_da_raiz(principal, COMANDO_DO_AVANCO_RAPIDO, referencia,
+                                tempo=TEMPO_DO_AVANCO_DA_RAIZ)
+    if codigo != 0:
+        return RAIZ_AVANCO_RECUSADO.format(
+            ref=referencia, motivo=ultima_linha(saida) or codigo)
+    return RAIZ_AVANCOU.format(atras=atras, ref=referencia,
+                               curto=commit_curto(principal, "HEAD"))
+
+
+def aviso_do_modulo(raiz: Path, instrumento: str, bandeira: str,
+                    rotulo: str) -> str:
+    if not (raiz / instrumento).is_file():
+        return ""
+    try:
+        codigo, saida = corre_a_lista(
+            [INTERPRETADOR, instrumento, bandeira, "--cwd", str(raiz)],
+            tempo=TEMPO_DO_AVISO_DE_MODULO, cwd=raiz)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return AVISO_DE_MODULO_NAO_MEDIDO.format(rotulo=rotulo,
+                                                 motivo=type(falha).__name__)
+    if codigo == 0:
+        return ""
+    ultima = saida.splitlines()[-1].strip() if saida else str(codigo)
+    if codigo == SAIDA_DO_MODULO_COM_AVISO:
+        return ultima
+    return AVISO_DE_MODULO_NAO_MEDIDO.format(rotulo=rotulo, motivo=ultima)
+
+
+def aviso_do_historico(raiz: Path) -> str:
+    return aviso_do_modulo(raiz, INSTRUMENTO_DO_HISTORICO,
+                           BANDEIRA_DAS_PENDENTES, ROTULO_DO_HISTORICO)
+
+
+def modulo_inscrito_de_pe(item) -> bool:
+    return isinstance(item, dict) and all(
+        isinstance(item.get(campo), str) and item[campo].strip()
+        for campo in CAMPOS_DO_MODULO_INSCRITO)
+
+
+def modulos_inscritos(raiz: Path) -> tuple:
+    principal = arvore_principal(raiz) or raiz
+    executor, erro = json_que_se_deixa_ler(principal / ARQUIVO_DO_EXECUTOR)
+    if erro:
+        return [], erro
+    inscritos = (executor.get(CHAVE_DOS_AVISOS_DA_ABERTURA)
+                 if isinstance(executor, dict) else None)
+    if inscritos is None:
+        return [], ""
+    if not isinstance(inscritos, list):
+        return [], INSCRITOS_SEM_LISTA
+    de_pe = [item for item in inscritos if modulo_inscrito_de_pe(item)]
+    tortos = len(inscritos) - len(de_pe)
+    return de_pe, INSCRITOS_TORTOS.format(tortos) if tortos else ""
+
+
+def avisos_dos_modulos_inscritos(raiz: Path) -> list:
+    de_pe, motivo = modulos_inscritos(raiz)
+    avisos = [aviso_do_modulo(raiz, *(item[campo]
+                                      for campo in CAMPOS_DO_MODULO_INSCRITO))
+              for item in de_pe]
+    if motivo:
+        avisos.append(AVISO_DE_MODULO_NAO_MEDIDO.format(
+            rotulo=f"{CHAVE_DOS_AVISOS_DA_ABERTURA} de {ARQUIVO_DO_EXECUTOR}",
+            motivo=motivo))
+    return [aviso for aviso in avisos if aviso]
+
+
+def pecas_da_abertura(raiz: Path, conexao: bool = False) -> list:
     declarado, recado = quadro_declarado(raiz)
     return [instrucoes_da_raiz(raiz),
-            servidores_de_contexto(raiz),
+            servidores_de_contexto(raiz, conexao=conexao),
             (bool(declarado), recado),
             indice_da_abertura(raiz)]
 
 
-def abertura(raiz: Path) -> int:
+def abertura(raiz: Path, conexao: bool = False) -> int:
     print(f"\n{TITULO_DA_ABERTURA}")
-    pecas = pecas_da_abertura(raiz)
+    pecas = pecas_da_abertura(raiz, conexao=conexao)
     for _, recado in pecas:
         print(recado)
+    aviso_da_raiz = avancar_a_raiz(raiz)
+    if aviso_da_raiz:
+        print(aviso_da_raiz)
+    aviso_dos_ganchos = ganchos_contra_a_integracao(raiz)
+    if aviso_dos_ganchos:
+        print(aviso_dos_ganchos)
+    quadro_de_pe = pecas[2][0]
+    aviso_das_encerradas = aviso_do_historico(raiz) if quadro_de_pe else ""
+    if aviso_das_encerradas:
+        print(aviso_das_encerradas)
+    for aviso in avisos_dos_modulos_inscritos(raiz):
+        print(aviso)
     faltam = [ok for ok, _ in pecas if ok is False]
     if faltam:
         print(ABERTURA_INCOMPLETA.format(len(faltam)))
@@ -1385,6 +2080,153 @@ def onde_a_issue_nasce(raiz: Path) -> int:
     declarado, recado = quadro_declarado(raiz)
     print(recado)
     return 0 if declarado else 1
+
+
+def rotulo_do_evento(evento: str) -> str:
+    return MAIUSCULA_QUE_ABRE_PALAVRA.sub("_", evento).lower()
+
+
+def tempo_do_gancho(rotulo: str, tempo) -> int:
+    if rotulo in EVENTOS_DE_TEMPO_CURTO:
+        pedido = TEMPO_CURTO_PADRAO_S if tempo is None else tempo
+        return min(max(pedido, TEMPO_MINIMO_DO_GANCHO_S), TEMPO_CURTO_MAXIMO_S)
+    pedido = TEMPO_PADRAO_DO_GANCHO_S if tempo is None else tempo
+    return max(pedido, TEMPO_MINIMO_DO_GANCHO_S)
+
+
+def impressao_do_gancho(rotulo: str, filtro, gancho: dict) -> str:
+    identidade = {CHAVE_DO_EVENTO_NA_IMPRESSAO: rotulo, CHAVE_DOS_GANCHOS: [{
+        CHAVE_DO_TIPO_DO_GANCHO: TIPO_DO_GANCHO_DE_COMANDO,
+        CHAVE_DO_COMANDO: gancho[CHAVE_DO_COMANDO],
+        CHAVE_DO_TEMPO_DO_GANCHO: tempo_do_gancho(
+            rotulo, gancho.get(CHAVE_DO_TEMPO_DO_GANCHO)),
+        CHAVE_DO_GANCHO_ASSINCRONO: False}]}
+    if filtro is not None and rotulo not in EVENTOS_QUE_IGNORAM_O_FILTRO:
+        identidade[CHAVE_DO_FILTRO_DO_GANCHO] = filtro
+    texto = json.dumps(identidade, sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False)
+    return PREFIXO_DA_IMPRESSAO + hashlib.sha256(
+        texto.encode("utf-8")).hexdigest()
+
+
+def caminho_comparavel(caminho: str) -> str:
+    return os.path.normcase(os.path.normpath(
+        caminho.removeprefix(PREFIXO_DE_CAMINHO_LITERAL)))
+
+
+def pasta_do_codex(casa: Path = None) -> Path:
+    if casa is not None:
+        return casa / PASTA_DO_CODEX_NA_CASA
+    return Path(os.environ.get(VARIAVEL_DA_PASTA_DO_CODEX)
+                or Path.home() / PASTA_DO_CODEX_NA_CASA)
+
+
+def confiancas_guardadas(texto_da_configuracao: str) -> dict:
+    import tomllib
+    lida = tomllib.loads(texto_da_configuracao)
+    estados = lida.get(CHAVE_DOS_GANCHOS, {}).get(
+        CHAVE_DO_ESTADO_DOS_GANCHOS, {})
+    guardadas = {}
+    for chave, estado in estados.items():
+        partes = chave.rsplit(SEPARADOR_DA_CHAVE_DO_GANCHO,
+                              PARTES_DA_CHAVE_DEPOIS_DO_CAMINHO)
+        if (len(partes) == PARTES_DA_CHAVE_DEPOIS_DO_CAMINHO + 1
+                and isinstance(estado, dict)):
+            guardadas[(caminho_comparavel(partes[0]), *partes[1:])] = estado
+    return guardadas
+
+
+def situacao_do_gancho(rotulo: str, grupo: dict, gancho: dict,
+                       estado) -> str:
+    if (not CAMPOS_QUE_O_GANCHO_EXIGE <= set(gancho)
+            <= CAMPOS_DO_GANCHO_QUE_A_IMPRESSAO_REPRODUZ
+            or not set(grupo) <= CAMPOS_DO_GRUPO_QUE_A_IMPRESSAO_REPRODUZ
+            or gancho[CHAVE_DO_TIPO_DO_GANCHO] != TIPO_DO_GANCHO_DE_COMANDO):
+        return GANCHO_FORA_DA_CONTA
+    estado = estado or {}
+    if estado.get(CHAVE_DO_GANCHO_LIGADO) is False:
+        return GANCHO_DESLIGADO
+    confiada = estado.get(CHAVE_DA_IMPRESSAO_CONFIADA)
+    if not confiada:
+        return GANCHO_NUNCA_CONFIADO
+    atual = impressao_do_gancho(rotulo, grupo.get(CHAVE_DO_FILTRO_DO_GANCHO),
+                                gancho)
+    return GANCHO_CONFIADO if confiada == atual else GANCHO_COM_CONFIANCA_VELHA
+
+
+def ganchos_declarados_ao_codex(declarados: dict):
+    for evento, grupos in declarados.get(CHAVE_DOS_GANCHOS, {}).items():
+        for n_grupo, grupo in enumerate(grupos):
+            for n_gancho, gancho in enumerate(grupo.get(CHAVE_DOS_GANCHOS,
+                                                        [])):
+                yield rotulo_do_evento(evento), n_grupo, n_gancho, grupo, gancho
+
+
+def situacoes_da_ponte_do_codex(arquivo: Path, guardadas: dict) -> list:
+    caminhos = {caminho_comparavel(os.path.abspath(arquivo)),
+                caminho_comparavel(str(arquivo.resolve()))}
+    declarados = json.loads(arquivo.read_text(encoding="utf-8"))
+    situacoes = []
+    for rotulo, n_grupo, n_gancho, grupo, gancho in \
+            ganchos_declarados_ao_codex(declarados):
+        posicao = (rotulo, str(n_grupo), str(n_gancho))
+        estado = next((guardadas[(caminho, *posicao)] for caminho in caminhos
+                       if (caminho, *posicao) in guardadas), None)
+        situacoes.append((*posicao, situacao_do_gancho(rotulo, grupo, gancho,
+                                                       estado)))
+    return situacoes
+
+
+def veredito_da_confianca_do_codex(situacoes: list) -> int:
+    for rotulo, n_grupo, n_gancho, situacao in situacoes:
+        print(LINHA_DO_GANCHO_DO_CODEX.format(rotulo, n_grupo, n_gancho,
+                                              situacao))
+    total = len(situacoes)
+    so_situacoes = [situacao for *_, situacao in situacoes]
+    if so_situacoes.count(GANCHO_CONFIADO) == total:
+        print(CODEX_GANCHOS_CONFIADOS.format(total))
+        return SAIDA_LIMPA
+    if so_situacoes.count(GANCHO_NUNCA_CONFIADO) == total:
+        print(CODEX_GANCHOS_NUNCA_CONFIADOS.format(total))
+        return SAIDA_LIMPA
+    fora_da_conta = so_situacoes.count(GANCHO_FORA_DA_CONTA)
+    pulados = total - so_situacoes.count(GANCHO_CONFIADO) - fora_da_conta
+    if pulados:
+        print(CODEX_GANCHOS_PULADOS.format(pulados, total,
+                                           ARQUIVO_DOS_GANCHOS_DO_CODEX))
+        return SAIDA_COM_ACHADO
+    print(CODEX_GANCHOS_FORA_DA_CONTA.format(fora_da_conta, total))
+    return SAIDA_NAO_MEDIDO
+
+
+def confianca_dos_ganchos_do_codex(raiz: Path, casa: Path = None) -> int:
+    print(f"\n{TITULO_DA_CONFIANCA_DO_CODEX}")
+    arquivo = raiz / ARQUIVO_DOS_GANCHOS_DO_CODEX
+    configuracao = pasta_do_codex(casa) / CONFIGURACAO_DO_CODEX
+    if not arquivo.is_file():
+        print(CODEX_SEM_PONTE.format(ARQUIVO_DOS_GANCHOS_DO_CODEX))
+        return SAIDA_LIMPA
+    if not configuracao.is_file():
+        print(CODEX_SEM_CONFIGURACAO.format(CONFIGURACAO_DO_CODEX))
+        return SAIDA_LIMPA
+    try:
+        guardadas = confiancas_guardadas(
+            configuracao.read_text(encoding="utf-8"))
+    except ImportError:
+        print(CODEX_SEM_LEITOR_DE_TOML)
+        return SAIDA_NAO_MEDIDO
+    except (OSError, ValueError, AttributeError):
+        print(CODEX_CONFIGURACAO_ILEGIVEL.format(CONFIGURACAO_DO_CODEX))
+        return SAIDA_NAO_MEDIDO
+    try:
+        situacoes = situacoes_da_ponte_do_codex(arquivo, guardadas)
+    except (OSError, ValueError, AttributeError, TypeError) as falha:
+        print(CODEX_PONTE_ILEGIVEL.format(ARQUIVO_DOS_GANCHOS_DO_CODEX, falha))
+        return SAIDA_NAO_MEDIDO
+    if not situacoes:
+        print(CODEX_SEM_PONTE.format(ARQUIVO_DOS_GANCHOS_DO_CODEX))
+        return SAIDA_LIMPA
+    return veredito_da_confianca_do_codex(situacoes)
 
 
 def dias_parado(arquivo: Path, agora: float) -> int:
@@ -2015,8 +2857,53 @@ def json_fora_do_universo(raiz: Path) -> str:
     return FORA_DO_UNIVERSO.format(", ".join(fora))
 
 
+def json_que_se_deixa_ler(caminho: Path) -> tuple:
+    if not caminho.is_file():
+        return None, ""
+    try:
+        return json.loads(caminho.read_text(encoding="utf-8")), ""
+    except (OSError, ValueError) as erro:
+        return None, f"{type(erro).__name__}: {erro}"
+
+
+def autorizacoes_declaradas_em(dado) -> dict:
+    declarado = (dado.get(CHAVE_DAS_AUTORIZACOES) if isinstance(dado, dict)
+                 else None)
+    return declarado if isinstance(declarado, dict) else {}
+
+
+def chaves_aposentadas(raiz: Path) -> list:
+    avisos = []
+    configuracao, erro = json_que_se_deixa_ler(raiz / ARQUIVO_DE_CONFIGURACAO)
+    if erro:
+        avisos.append(CHAVE_APOSENTADA_NAO_MEDIDA.format(
+            ARQUIVO_DE_CONFIGURACAO, erro, CHAVE_APOSENTADA))
+    elif CHAVE_APOSENTADA in autorizacoes_declaradas_em(configuracao):
+        avisos.append(AVISO_DE_CHAVE_APOSENTADA.format(
+            CHAVE_APOSENTADA_NA_CONFIGURACAO, ARQUIVO_DE_CONFIGURACAO))
+    executor, erro = json_que_se_deixa_ler(raiz / ARQUIVO_DO_EXECUTOR)
+    if erro:
+        avisos.append(CHAVE_APOSENTADA_NAO_MEDIDA.format(
+            ARQUIVO_DO_EXECUTOR, erro, CHAVE_APOSENTADA))
+        return avisos
+    cadastros = (executor.get(CHAVE_DOS_CADASTROS)
+                 if isinstance(executor, dict) else None)
+    com_a_chave = sum(
+        1 for cadastro in (cadastros.values()
+                           if isinstance(cadastros, dict) else ())
+        if CHAVE_APOSENTADA in autorizacoes_declaradas_em(cadastro))
+    if com_a_chave:
+        avisos.append(AVISO_DE_CHAVE_APOSENTADA.format(
+            CHAVE_APOSENTADA_NO_CADASTRO,
+            CADASTROS_COM_A_CHAVE_APOSENTADA.format(
+                ARQUIVO_DO_EXECUTOR, com_a_chave)))
+    return avisos
+
+
 def chaves(raiz: Path) -> int:
     print(f"\n{TITULO_DAS_CHAVES}")
+    for aviso in chaves_aposentadas(raiz):
+        print(aviso)
     declaradas, ilegiveis = chaves_declaradas(raiz)
     if declaradas is None:
         print(CHAVES_NAO_MEDIDAS.format(COMANDO_DOS_JSON_RASTREADOS))
@@ -2529,19 +3416,26 @@ def bancada_dos_tocados(raiz: Path,
     nasceu_antes = linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU)
     orcamento = orcamento_das_bancadas(com_bancada, orcamento, teto, tetos)
     with tempfile.TemporaryDirectory(prefix="bancada-fora-da-raiz-") as fora:
-        for lugar, caminho in enumerate(com_bancada):
+        def rodar_se_couber(caminho):
             if time.monotonic() - partida >= orcamento:
-                fora_do_orcamento = com_bancada[lugar:]
-                break
-            marca, texto = rodar_uma_bancada(
+                return None
+            return rodar_uma_bancada(
                 raiz, caminho, teto_desta_bancada(caminho, teto, tetos),
                 Path(fora))
-            print(LINHA_DE_CASO.format(marca, texto))
-            rodadas += 1
-            if marca == MARCA_DE_QUE_CAIU:
-                caidos.append(caminho)
-            if marca == MARCA_DE_QUE_NAO_COUBE:
-                nao_couberam.append(caminho)
+
+        with ThreadPoolExecutor(max_workers=BANCADAS_AO_MESMO_TEMPO) as grupo:
+            resultados = grupo.map(rodar_se_couber, com_bancada)
+            for caminho, resultado in zip(com_bancada, resultados):
+                if resultado is None:
+                    fora_do_orcamento.append(caminho)
+                    continue
+                marca, texto = resultado
+                print(LINHA_DE_CASO.format(marca, texto))
+                rodadas += 1
+                if marca == MARCA_DE_QUE_CAIU:
+                    caidos.append(caminho)
+                if marca == MARCA_DE_QUE_NAO_COUBE:
+                    nao_couberam.append(caminho)
     sujou = o_que_a_bancada_sujou(
         nasceu_antes, linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU))
     anunciar_o_que_ficou_de_fora(fora_do_orcamento, orcamento)
@@ -2621,6 +3515,30 @@ def colher_json(texto: str) -> dict:
                 return dado
             if isinstance(dado, list):
                 return o_evento_do_resultado(dado)
+    return {}
+
+
+def textos_do_assistente(bruto: str) -> list:
+    try:
+        eventos = json.loads(bruto[bruto.find("["):bruto.rfind("]") + 1])
+    except ValueError:
+        return []
+    if not isinstance(eventos, list):
+        return []
+    return [bloco.get("text", "") for evento in eventos
+            if isinstance(evento, dict)
+            and evento.get("type") == TIPO_DA_MENSAGEM_DO_ASSISTENTE
+            for bloco in (evento.get("message") or {}).get("content") or []
+            if isinstance(bloco, dict)
+            and bloco.get("type") == TIPO_DO_BLOCO_DE_TEXTO]
+
+
+def resposta_da_sessao(bruto: str, chaves: list) -> dict:
+    final = str(colher_json(bruto).get("result", ""))
+    for texto in [final] + textos_do_assistente(bruto)[::-1]:
+        dado = colher_json(texto)
+        if any(chave in dado for chave in chaves):
+            return dado
     return {}
 
 
@@ -2710,16 +3628,18 @@ def simular_na_copia(raiz: Path) -> tuple:
     partida = time.monotonic()
     _, bruto = corre_a_lista(
         ["claude", "-p", PEDIDO.format(arquivo=ARQUIVO_PEDIDO),
-         "--output-format", "json", "--model", MODELO_DA_SIMULACAO,
+         "--output-format", "json", "--verbose",
+         "--model", MODELO_DA_SIMULACAO,
          "--allowedTools", FERRAMENTAS_DA_SIMULACAO],
         tempo=TEMPO_DA_SIMULACAO, cwd=raiz)
     parede = time.monotonic() - partida
 
     sessao = colher_json(bruto)
-    resposta = colher_json(str(sessao.get("result", "")))
+    gabarito = perguntas(quantas)
+    resposta = resposta_da_sessao(bruto, [chave for _, chave, _ in gabarito])
     do_nucleo = [(rotulo, bool(prova(resposta)),
                   "" if prova(resposta) else str(resposta.get(chave, ""))[:44])
-                 for rotulo, chave, prova in perguntas(quantas)]
+                 for rotulo, chave, prova in gabarito]
     do_artefato = []
 
     if alvo.is_file():
@@ -2889,6 +3809,9 @@ def main() -> int:
     ap.add_argument("--abertura", action="store_true",
                     help="prova que a sessão tem instruções, servidores de "
                          "contexto, endereço do quadro e índice de pé")
+    ap.add_argument(BANDEIRA_DA_CONEXAO, action="store_true",
+                    help="com --abertura, faz o aperto de mão MCP com cada "
+                         "servidor stdio declarado e nomeia o que caiu")
     ap.add_argument("--entrega", action="store_true",
                     help="prova que nada ficou fora da branch de entrega")
     ap.add_argument(BANDEIRA_SEM_O_PEDIDO, action="store_true",
@@ -2911,6 +3834,11 @@ def main() -> int:
                     help="acusa arquivo não rastreado envelhecido em tmp/")
     ap.add_argument("--quadro", action="store_true",
                     help="imprime onde as issues deste workspace nascem")
+    ap.add_argument("--confianca-do-codex", action="store_true",
+                    dest="confianca_do_codex",
+                    help="compara a impressão de cada gancho do "
+                         ".codex/hooks.json com a que o dono confiou no "
+                         "Codex, sem chamar o Codex")
     ap.add_argument("--conta", action="store_true",
                     help="mostra o que cada execução gravada custou")
     ap.add_argument("--versao", action="store_true",
@@ -2928,7 +3856,9 @@ def main() -> int:
     if a.testar:
         try:
             from testes import testar
-        except ImportError:
+        except ModuleNotFoundError as falta:
+            if falta.name != NOME_DO_MODULO_DA_BANCADA:
+                raise
             print(BANCADA_NAO_VIAJA)
             return 0
         return testar()
@@ -2941,7 +3871,7 @@ def main() -> int:
         return largada(raiz)
 
     if a.abertura:
-        return abertura(raiz)
+        return abertura(raiz, conexao=a.conexao)
 
     if a.entrega:
         return entrega(raiz, sem_pedido=a.sem_pedido)
@@ -2966,6 +3896,9 @@ def main() -> int:
 
     if a.quadro:
         return onde_a_issue_nasce(raiz)
+
+    if a.confianca_do_codex:
+        return confianca_dos_ganchos_do_codex(raiz)
 
     if a.conta:
         return conta(raiz)

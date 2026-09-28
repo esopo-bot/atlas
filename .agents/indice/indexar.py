@@ -1,6 +1,7 @@
 import argparse
 import contextlib
 import fnmatch
+import importlib.util
 import io
 import json
 import os
@@ -47,6 +48,20 @@ ESTADO_DA_ULTIMA_RONDA = ("última ronda em {quando}: {feitos} indexado(s), "
                           "{pulados} já estava(m), {sem_elegivel} sem arquivo "
                           "elegível, {falharam} falhou(ram), em {duracao}")
 SEM_RONDA_AINDA = "nenhuma ronda registrada ainda"
+BUSCADOR_IRMAO = "buscar.py"
+NOME_DO_BUSCADOR_IRMAO = "buscar_do_indice"
+MARCA_DA_COLECAO_SEM_ALVO = "coleção sem alvo em"
+COLECAO_SEM_ALVO = ("  " + MARCA_DA_COLECAO_SEM_ALVO + " {arquivo}: {caminho} "
+                    "({colecao}) — o alvo saiu da lista ou nunca entrou, e a "
+                    "coleção continua no banco respondendo à busca por "
+                    "caminho. Declare o alvo ou apague a coleção")
+COLECOES_SEM_ALVO_NAO_MEDIDAS = ("  " + MARCA_DA_COLECAO_SEM_ALVO +
+                                 " {arquivo}: não medido — {razao}")
+PORTAS_MUDAS = "as portas do índice não respondem"
+ALVO_AUSENTE_NAO_MEDIDO = ("  não medido: {} não existe no disco — alvo "
+                           "declarado em outra árvore; a ronda segue sem ele")
+NENHUM_ALVO_NO_DISCO = ("nenhum alvo declarado existe nesta árvore: a ronda "
+                        "não mediu nada")
 CAMPO_DOS_QUE_FALHARAM = "quais_falharam"
 QUAIS_FALHARAM = "  falhou(ram): {quais}"
 SEM_OS_NOMES_DOS_QUE_FALHARAM = ("  registro sem os nomes de quem falhou — "
@@ -272,7 +287,7 @@ def gravar_ultima_ronda(cwd: str, resumo: dict) -> None:
                     encoding="utf-8")
 
 
-def estado(dado: dict, cwd: str) -> int:
+def estado(dado: dict, cwd: str, banco=None) -> int:
     print(estado_em_uma_linha(dado))
     registro = ultima_ronda(cwd)
     print(ESTADO_DA_ULTIMA_RONDA.format(**registro) if registro
@@ -290,7 +305,76 @@ def estado(dado: dict, cwd: str) -> int:
     respostas = [responde for _, responde, _ in sondagem]
     if respostas and not any(respostas):
         print(NEM_UMA_PORTA_RESPONDE)
+    for linha in linhas_das_colecoes_sem_alvo(dado, cwd, all(respostas),
+                                              banco):
+        print(linha)
     return 0 if all(respostas) else 1
+
+
+def buscador_irmao():
+    caminho = Path(__file__).resolve().with_name(BUSCADOR_IRMAO)
+    origem = importlib.util.spec_from_file_location(NOME_DO_BUSCADOR_IRMAO,
+                                                    caminho)
+    modulo = importlib.util.module_from_spec(origem)
+    origem.loader.exec_module(modulo)
+    return modulo
+
+
+def colecoes_sem_alvo(indexados: list, alvos: list, cwd: str,
+                      raizes: list) -> list:
+    busca = buscador_irmao()
+    bases = [Path(cwd or ".")] + [Path(raiz) for raiz in raizes]
+    declarados = [str((base / Path(alvo).expanduser()).resolve())
+                  for alvo in alvos for base in bases]
+    nomes = {busca.colecao_do_alvo(caminho) for caminho in declarados}
+    caminhos = {busca.com_barra(caminho) for caminho in declarados}
+    return [(caminho, colecao) for caminho, colecao, _ in indexados
+            if colecao not in nomes
+            and busca.com_barra(caminho) not in caminhos]
+
+
+def linhas_das_colecoes_sem_alvo(dado: dict, cwd: str, portas_de_pe: bool,
+                                 banco=None) -> list:
+    if not portas_de_pe:
+        return [COLECOES_SEM_ALVO_NAO_MEDIDAS.format(
+            arquivo=ARQUIVO_DOS_ALVOS, razao=PORTAS_MUDAS)]
+    busca = buscador_irmao()
+    banco = banco or busca.Banco(dado.get(CAMPO_DO_AMBIENTE))
+    try:
+        indexados = banco.alvos_indexados()
+    except (OSError, ValueError) as falha:
+        return [COLECOES_SEM_ALVO_NAO_MEDIDAS.format(
+            arquivo=ARQUIVO_DOS_ALVOS, razao=falha)]
+    sobras = colecoes_sem_alvo(indexados, dado.get(CAMPO_DOS_ALVOS) or [],
+                               cwd, busca.raizes_do_git(cwd))
+    return [COLECAO_SEM_ALVO.format(arquivo=ARQUIVO_DOS_ALVOS,
+                                    caminho=caminho, colecao=colecao)
+            for caminho, colecao in sobras]
+
+
+def alvo_na_raiz(alvo: str, cwd: str, raizes: list) -> str:
+    caminho = Path(alvo).expanduser()
+    if caminho.is_absolute():
+        return alvo
+    base = Path(raizes[0]) if raizes else Path(cwd or ".")
+    return str((base / caminho).resolve())
+
+
+def com_alvos_na_raiz(dado: dict, cwd: str, raizes=None) -> dict:
+    if raizes is None:
+        raizes = buscador_irmao().raizes_do_git(cwd)
+    return {**dado, CAMPO_DOS_ALVOS: [alvo_na_raiz(alvo, cwd, raizes)
+                                      for alvo in dado.get(CAMPO_DOS_ALVOS)
+                                      or []]}
+
+
+def sem_os_ausentes(dado: dict) -> dict:
+    alvos = dado.get(CAMPO_DOS_ALVOS) or []
+    presentes = [c for c in alvos if Path(c).expanduser().is_dir()]
+    for caminho in alvos:
+        if caminho not in presentes:
+            print(ALVO_AUSENTE_NAO_MEDIDO.format(caminho))
+    return {**dado, CAMPO_DOS_ALVOS: presentes}
 
 
 def recusa_da_configuracao(dado: dict, cwd: str = "") -> str:
@@ -1368,6 +1452,124 @@ def testar() -> int:
              codigo == 1 and ("desfaz", alvo_real) in fingido.chamadas
              and "fetch failed" in dito)
 
+        fantasma = str(raiz / "so-existe-na-raiz")
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            sobrou = sem_os_ausentes({CAMPO_DOS_ALVOS: [alvo_real, fantasma],
+                                      CAMPO_DO_SERVIDOR: str(servidor)})
+        caso("na ronda, alvo ausente no disco sai da lista como NÃO MEDIDO, "
+             "com o nome dele — em worktree o alvos.json copiado aponta "
+             "pasta que só existe na raiz, e a recusa derrubava o ritual",
+             sobrou[CAMPO_DOS_ALVOS] == [alvo_real]
+             and ALVO_AUSENTE_NAO_MEDIDO.format(fantasma) in saida.getvalue()
+             and recusa_da_configuracao(sobrou) == "")
+
+        arvore = raiz / "arvore-sem-os-alvos"
+        (arvore / ".agents" / "indice").mkdir(parents=True)
+        gravar_configuracao({CAMPO_DO_LIGADO: True,
+                             CAMPO_DOS_ALVOS: [fantasma],
+                             CAMPO_DO_SERVIDOR: str(servidor)}, str(arvore))
+        feito = subprocess.run(
+            [sys.executable, "-X", "utf8", str(Path(__file__).resolve()),
+             "--ronda", "--cwd", str(arvore)],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=TEMPO_DE_HANDSHAKE)
+        caso("a ronda de ponta a ponta com todo alvo fora do disco sai 0 e "
+             "diz o nome de cada um, sem subir o servidor",
+             feito.returncode == 0
+             and ALVO_AUSENTE_NAO_MEDIDO.format(fantasma) in feito.stdout
+             and NENHUM_ALVO_NO_DISCO in feito.stdout)
+
+        principal = raiz / "principal"
+        (principal / "so-na-raiz").mkdir(parents=True)
+        (principal / "so-na-raiz" / "nota.md").write_text("z", encoding="utf-8")
+        (principal / "rastreado.md").write_text("r", encoding="utf-8")
+        worktree = raiz / "worktree-da-sessao"
+        for comando in (["init", "-q"], ["add", "rastreado.md"],
+                        ["-c", "user.name=bancada", "-c",
+                         "user.email=bancada@exemplo", "commit", "-q", "-m",
+                         "base"],
+                        ["worktree", "add", "-q", str(worktree)]):
+            subprocess.run(["git", "-C", str(principal)] + comando,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=TEMPO_DE_HANDSHAKE)
+        (worktree / ".agents" / "indice").mkdir(parents=True)
+        gravar_configuracao({CAMPO_DOS_ALVOS: ["so-na-raiz"],
+                             CAMPO_DO_SERVIDOR: str(servidor)}, str(worktree))
+        na_raiz = str((principal / "so-na-raiz").resolve())
+        fingido = ServidorFingido(espera=(FEITO, concluiu_o(na_raiz)))
+        with contextlib.redirect_stdout(io.StringIO()):
+            indexar(com_alvos_na_raiz(configuracao(str(worktree)),
+                                      str(worktree)),
+                    teto=1, extensoes={".md"}, cwd=str(worktree),
+                    fabrica=lambda c, a, refaz: fingido,
+                    trava=raiz / "sem-trava")
+        caso("de dentro de worktree, o alvo relativo vai ao servidor com o "
+             "caminho da raiz principal do git — nunca o da worktree, que "
+             "criaria coleção nova no banco",
+             ("indexa", na_raiz) in fingido.chamadas
+             and not any(str(worktree) in str(c[1])
+                         for c in fingido.chamadas))
+        feito = subprocess.run(
+            [sys.executable, "-X", "utf8", str(Path(__file__).resolve()),
+             "--ensaio", "--cwd", str(worktree)],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=TEMPO_DE_HANDSHAKE)
+        caso("o instrumento de ponta a ponta, rodado com --cwd na worktree, "
+             "mede a pasta da raiz principal em vez de recusá-la por ausente",
+             feito.returncode == 0 and f"  {na_raiz} — " in feito.stdout)
+        caso("alvo absoluto não muda: o caminho declarado é o que vai",
+             com_alvos_na_raiz({CAMPO_DOS_ALVOS: [alvo_real]}, str(worktree),
+                               [principal])[CAMPO_DOS_ALVOS] == [alvo_real])
+
+        busca = buscador_irmao()
+        saiu = str(raiz / "saiu-da-lista")
+        indexados = [(alvo_real, busca.colecao_do_alvo(alvo_real), 2),
+                     (saiu, "hybrid_code_chunks_sobra", 5)]
+        caso("coleção cujo alvo saiu do alvos.json é acusada, e a do alvo "
+             "declarado não — declarado em relativo, contra o --cwd",
+             colecoes_sem_alvo(indexados, ["acervo"], str(raiz), [])
+             == [(saiu, "hybrid_code_chunks_sobra")])
+        caso("de dentro de worktree o alvo relativo casa a coleção da raiz "
+             "principal do git, em vez de dar tudo por sobra",
+             colecoes_sem_alvo(indexados, ["acervo", "saiu-da-lista"],
+                               str(arvore), [raiz]) == [])
+
+        class BancoFingido:
+            def __init__(self, indexados=None):
+                self.indexados = indexados
+
+            def alvos_indexados(self):
+                if self.indexados is None:
+                    raise OSError("recusou a conexão")
+                return self.indexados
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ouvinte:
+            ouvinte.bind(("127.0.0.1", 0))
+            ouvinte.listen(16)
+            porta = ouvinte.getsockname()[1]
+            de_pe = {CAMPO_DO_LIGADO: True, CAMPO_DOS_ALVOS: [alvo_real],
+                     CAMPO_DO_AMBIENTE: {
+                         "MILVUS_ADDRESS": f"127.0.0.1:{porta}",
+                         "OLLAMA_HOST": f"http://127.0.0.1:{porta}"}}
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                codigo = estado(de_pe, cwd, banco=BancoFingido(indexados))
+            caso("o --estado lista a coleção do banco que não está no "
+                 "alvos.json, com o caminho — e sai 0: é aviso, não queda",
+                 codigo == 0 and MARCA_DA_COLECAO_SEM_ALVO in saida.getvalue()
+                 and saiu in saida.getvalue()
+                 and alvo_real not in saida.getvalue().split(
+                     MARCA_DA_COLECAO_SEM_ALVO, 1)[1])
+            saida = io.StringIO()
+            with contextlib.redirect_stdout(saida):
+                estado(de_pe, cwd, banco=BancoFingido())
+            caso("banco que não lista as coleções vira NÃO MEDIDO com a "
+                 "razão, nunca 'nenhuma sobra'",
+                 COLECOES_SEM_ALVO_NAO_MEDIDAS.format(
+                     arquivo=ARQUIVO_DOS_ALVOS, razao="recusou a conexão")
+                 in saida.getvalue())
+
     print(f"{'OK' if not falhou else 'FALHOU'}: {passou + falhou} casos")
     return 1 if falhou else 0
 
@@ -1407,6 +1609,12 @@ def main() -> int:
     if a.ronda and not esta_ligado(dado):
         print(RONDA_DESLIGADA.format(ARQUIVO_DOS_ALVOS))
         return 0
+    dado = com_alvos_na_raiz(dado, a.cwd)
+    if a.ronda and dado.get(CAMPO_DOS_ALVOS):
+        dado = sem_os_ausentes(dado)
+        if not dado[CAMPO_DOS_ALVOS]:
+            print(NENHUM_ALVO_NO_DISCO)
+            return 0
     if (recusa := recusa_da_configuracao(dado, a.cwd)):
         print(recusa, file=sys.stderr)
         return 2

@@ -37,8 +37,9 @@ MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
 ACOES = {
     "push": (r"\bpush(?:es|ar|ei)?\b", r"\bempurr\w+"),
     "commit": (r"\bcommit\w*\b", r"\bcomit\w+"),
-    "publicar": (r"\bpublic\w+", r"\bpublicar\b"),
+    "publicar": (r"\bpubli(?:c|qu)\w+",),
 }
+ACOES_QUE_A_CHAVE_AUTORIZA = ("commit", "push")
 
 PEDE_PERMISSAO = re.compile(
     r"\b(?:posso|pode|podemos|deixa|autoriz\w+|permit\w+|libero|libera|"
@@ -90,7 +91,7 @@ def autorizacoes(raiz: Path) -> dict:
     if not isinstance(declarado, dict):
         return {}
     return {acao: valor for acao, valor in declarado.items()
-            if isinstance(valor, bool)}
+            if acao in ACOES_QUE_A_CHAVE_AUTORIZA and isinstance(valor, bool)}
 
 
 def texto_das_perguntas(entrada: dict) -> str:
@@ -179,7 +180,6 @@ BARRA = [
     ("posso empurrar a branch?", TUDO_LIGADO),
     ("Faço o push da branch de trabalho?", TUDO_LIGADO),
     ("quer que eu commite o que fiz?", TUDO_LIGADO),
-    ("me autoriza a publicar?", TUDO_LIGADO),
     ("posso commitar isto?", SO_COMMIT),
     ("empurro a branch `issue/32-x` para o github?", TUDO_LIGADO),
     ("commito o que fiz na branch de trabalho?", TUDO_LIGADO),
@@ -207,6 +207,8 @@ AMBIENTE_DA_ETAPA_SEM_NINGUEM = {MARCA_DE_ETAPA_NO_AMBIENTE: "1"}
 PERGUNTA_JA_RESPONDIDA = {"questions": [
     {"question": "Posso commitar o que fiz?", "header": "Commit"}]}
 RAZAO_DA_PERGUNTA_JA_RESPONDIDA = "`autorizacoes.commit`"
+PERGUNTA_DE_PUBLICAR = {"questions": [
+    {"question": "Posso publicar a release?", "header": "Publicar"}]}
 
 
 def testar() -> int:
@@ -243,7 +245,7 @@ def testar() -> int:
             and AVISO_QUE_NAO_SEGURA_A_PERGUNTA
             in com_gente.get("systemMessage", "")):
         falhas.append(TESTE_COMPORTAMENTO.format(
-            "sem a marca da etapa há gente: a cerca AVISA e deixa a "
+            "sem a marca da etapa há gente: a cerca avisa e deixa a "
             "pergunta passar — ela lê prosa, erra em exemplo citado, e "
             "pergunta a mais custa menos ao dono que pergunta legítima "
             "recusada"))
@@ -268,20 +270,20 @@ def testar() -> int:
             pedido_da_pergunta(SESSAO_INTERATIVA), AMBIENTE_SEM_A_MARCA)):
         falhas.append(TESTE_COMPORTAMENTO.format(
             "pelo gancho inteiro, em modo `default` sem a marca da etapa: o "
-            "dono está, a cerca AVISA e a pergunta segue"))
+            "dono está, a cerca avisa e a pergunta segue"))
     if not so_avisa(resposta_do_gancho(
             pedido_da_pergunta(SESSAO_QUE_NAO_MOSTRA_A_PERGUNTA),
             AMBIENTE_SEM_A_MARCA)):
         falhas.append(TESTE_COMPORTAMENTO.format(
             "pelo gancho inteiro, em `bypassPermissions` sem a marca: há "
             "gente, e a pergunta é ela mesma o caminho até o dono — a cerca "
-            "AVISA; negar ali barraria pergunta que só citasse commit"))
+            "avisa; negar ali barraria pergunta que só citasse commit"))
     if not so_avisa(resposta_do_gancho(
             pedido_da_pergunta(PEDIDO_SEM_MODO_DECLARADO),
             AMBIENTE_SEM_A_MARCA)):
         falhas.append(TESTE_COMPORTAMENTO.format(
             "pelo gancho inteiro, pedido sem o modo declarado e sem a marca: "
-            "a cerca AVISA"))
+            "a cerca avisa"))
     na_etapa = resposta_do_gancho(pedido_da_pergunta(SESSAO_INTERATIVA),
                                   AMBIENTE_DA_ETAPA_SEM_NINGUEM).get(
                                       "hookSpecificOutput", {})
@@ -290,10 +292,20 @@ def testar() -> int:
             in na_etapa.get("permissionDecisionReason", "")):
         falhas.append(TESTE_COMPORTAMENTO.format(
             "pelo gancho inteiro, na etapa do executor, com a marca no "
-            "ambiente, ninguém responde nem em modo `default`: a cerca NEGA, "
+            "ambiente, ninguém responde nem em modo `default`: a cerca nega, "
             "com a razão"))
+    for onde, ambiente in (("na sessão comum", AMBIENTE_SEM_A_MARCA),
+                           ("na etapa do executor",
+                            AMBIENTE_DA_ETAPA_SEM_NINGUEM)):
+        if resposta_do_gancho(pedido_da_pergunta(SESSAO_INTERATIVA,
+                                                 PERGUNTA_DE_PUBLICAR),
+                              ambiente):
+            falhas.append(TESTE_COMPORTAMENTO.format(
+                f"pelo gancho inteiro, {onde}, com o arquivo ligando "
+                "publicar: publicar é do dono, sempre, a chave não autoriza "
+                "nada, e a pergunta segue sem aviso nem veto"))
 
-    total = len(BARRA) + len(DEIXA_PASSAR) + 11
+    total = len(BARRA) + len(DEIXA_PASSAR) + 13
     if falhas:
         print(RESUMO_FALHOU.format(len(falhas), total))
         print("\n".join(falhas))
@@ -314,9 +326,9 @@ def resposta_do_aviso_ou_da_negativa(razao: str, ambiente) -> dict:
         return {}
 
 
-def pedido_da_pergunta(sessao: dict) -> dict:
-    return dict(sessao, tool_name="AskUserQuestion",
-                tool_input=PERGUNTA_JA_RESPONDIDA)
+def pedido_da_pergunta(sessao: dict,
+                       pergunta: dict = PERGUNTA_JA_RESPONDIDA) -> dict:
+    return dict(sessao, tool_name="AskUserQuestion", tool_input=pergunta)
 
 
 def resposta_do_gancho(pedido: dict, ambiente: dict) -> dict:

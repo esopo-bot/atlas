@@ -18,9 +18,8 @@ python .agents/indice/buscar.py "<pergunta ou termo exato>"
 **Comece com `--alvo`. Sem ele a busca sai cara.** A saída traz os melhores
 trechos **de cada alvo**, então o custo cresce com o número de alvos indexados,
 não com a qualidade da resposta: os alvos que nada têm a ver devolvem os
-respectivos menos ruins do mesmo jeito. Medido num acervo de doze alvos, a
-mesma pergunta custou **quase dez vezes mais contexto** sem alvo do que com — e
-mais que um `grep -r` na pasta certa. Meça no seu com `| wc -c` nas duas formas.
+respectivos menos ruins do mesmo jeito, e sem alvo a busca pode custar mais
+que um `grep -r` na pasta certa. Meça no seu com `| wc -c` nas duas formas.
 
 Busca sem alvo serve para uma coisa: **descobrir onde o assunto mora**, quando
 você não sabe. Achou o alvo, repita a pergunta nele.
@@ -37,16 +36,16 @@ você não sabe. Achou o alvo, repita a pergunta nele.
   caminho absoluto. Sem ele, busca em tudo que o banco tem.
 - A busca é híbrida: significado mais termo exato, fundidos. `--denso` roda só
   por significado, para comparar; `--medir` compara os dois no seu acervo.
-- **A resposta tem teto.** O total sai cortado no `--teto-total` (30 trechos
-  por padrão), e a última linha avisa quando cortou: `cortado no teto de N:
-  havia M`. Viu essa linha? Você não viu tudo — o certo é estreitar com
-  `--alvo`, não subir o teto.
+- **A resposta tem teto.** O total sai cortado no `--teto-total` (o padrão
+  está no `--help`), e a última linha avisa quando cortou:
+  `cortado no teto de N: havia M`. Viu essa linha? Você não viu tudo — o
+  certo é estreitar com `--alvo`, não subir o teto.
 
 ## Quando não usar
 
 Pergunta cuja resposta é um arquivo que você já sabe onde está: abra o arquivo.
-Acervo pequeno, abaixo de uns dois mil arquivos: `grep` ganha. A régua medida
-está na página do módulo `indice`.
+Acervo pequeno: `grep` ganha. A régua medida está na página do módulo
+`indice`.
 
 ## Pedidos de exemplo
 

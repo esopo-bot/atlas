@@ -5,6 +5,7 @@ import io
 import json
 import re
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -62,7 +63,8 @@ CAIXA_EM_BRANCO = "- [ ]"
 CAIXA_MARCADA = ("- [x]", "- [X]")
 MARCA_DA_ISSUE_NA_BRANCH = re.compile(r"(?:^|/)issue/(\d+)(?:-|$)")
 MARCA_DA_ISSUE_NO_COMMIT = re.compile(r"\(issue (\d+)\)")
-COMANDO_DAS_MENSAGENS = ["git", "log", "--format=%s", "{0}..HEAD"]
+COMANDO_DAS_MENSAGENS = [
+    "git", "log", "--format=%s", "{0}..HEAD", "--not", "{1}"]
 TETO_DE_CRITERIOS_MOSTRADOS = 3
 CHAVE_DO_PUSH = "push"
 COMANDO_DA_INTEGRACAO_NO_REMOTO = ["git", "ls-remote", "--heads", "origin", "{}"]
@@ -84,7 +86,7 @@ EXTENSOES_QUE_A_CAMADA_NAO_JULGA = (
     ".sqlite", ".db", ".dump", ".bin", ".so", ".dll", ".exe", ".woff",
     ".woff2", ".ttf", ".otf")
 COBRA_SUJEIRA_QUE_A_CAMADA_NAO_JULGA = (
-    "Na árvore há {} arquivo(s) que a camada não sabe julgar, e eles NÃO "
+    "Na árvore há {} arquivo(s) que a camada não sabe julgar, e eles não "
     "impedem a entrega — ficam nomeados aqui porque nada sem destino passa "
     "calado:\n{}\n"
     "Commitá-los seria adotar o que talvez não seja seu; apagá-los é "
@@ -93,8 +95,23 @@ COMANDO_DA_BRANCH_DA_ARVORE = ["git", "branch", "--show-current"]
 COMANDO_DO_COMMIT_DA_ARVORE = ["git", "rev-parse", "HEAD"]
 COMANDO_DA_BRANCH_NO_DURAVEL = [
     "git", "ls-remote", "--heads", "origin", "{}"]
-COMANDO_DE_BUSCA_NO_REMOTO = ["git", "fetch", "--quiet", "origin", "{0}", "{1}"]
+COMANDO_DE_BUSCA_NO_REMOTO = [
+    "git", "-c", "credential.interactive=never", "fetch", "--quiet", "origin",
+    "{0}", "{1}"]
+AMBIENTE_DA_BUSCA_QUE_NAO_PEDE_SENHA = {"GIT_TERMINAL_PROMPT": "0",
+                                        "GCM_INTERACTIVE": "never"}
+COMANDO_DO_REGISTRO_DA_ULTIMA_BUSCA = [
+    "git", "rev-parse", "--git-path", "FETCH_HEAD"]
+PRAZO_DA_BUSCA_RECENTE_EM_SEGUNDOS = 300
+PRAZO_DA_BUSCA_EM_CURSO_EM_SEGUNDOS = 60
 MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO = "ATLAS_BUSCA_FEITA"
+MODO_DO_PROCESSO_DESTACADO = (
+    {"creationflags": subprocess.DETACHED_PROCESS
+     | subprocess.CREATE_NEW_PROCESS_GROUP}
+    if os.name == "nt" else {"start_new_session": True})
+AVISO_DA_BUSCA_QUE_NAO_SUBIU = (
+    "A busca no remoto em segundo plano não subiu ({}): a parada mediu pela "
+    "vista local, que segue sendo a da última busca que deu certo.")
 COMANDO_DA_RAIZ_DO_REPOSITORIO = ["git", "rev-parse", "--show-toplevel"]
 MARCA_DO_REPOSITORIO = ".git"
 COMANDO_DO_QUE_NAO_ESTA_EM_REMOTO_NENHUM = [
@@ -113,6 +130,7 @@ VERBOS_QUE_MEXEM_EM_ARQUIVO = (
     "git mv", "git rm", "git checkout", "git restore", "sed -i", "mv ", "cp ",
     "rm ", "tee ", "touch ", "mkdir ", "rmdir ", ">>", ">")
 CAMINHO_NO_COMANDO = re.compile(r"[\w./-]*[\w-]+\.[A-Za-z0-9]{1,6}")
+PEDACO_QUE_NAO_E_CAMINHO_LOCAL = ("-", "//")
 CHAVE_DO_INSTANTE = "timestamp"
 LINHAS_LIDAS_DO_TRANSCRITO = 200
 MARCA_DE_UTC = "Z"
@@ -130,18 +148,21 @@ DITO_DA_SESSAO_DE_PESQUISA = (
     "Sessão de pesquisa: a regra 16 não cobra destino aqui, porque esta "
     "sessão não entrega em disco — o modo somente leitura está posto "
     "({}), e a cerca recusou qualquer escrita no repositório.\n"
-    "O destino dela é a ISSUE: antes de fechar, o que a sessão apurou vira "
-    "corpo ou comentário lá. O que não estiver na issue não existe.")
+    "O destino dela é a issue: antes de fechar, o que a sessão apurou vai ao "
+    "corpo, na seção a que pertence; comentário, só para falar com o dono. "
+    "O que não estiver na issue não existe.")
 
 EVENTO_DE_PARADA = "Stop"
 DECISAO_DE_BLOQUEAR = "block"
 AVISO_QUE_NAO_SEGURA_A_PARADA = (
-    "SÓ NO REGISTRO DE DEPURAÇÃO, sem bloqueio: com gente no terminal esta "
+    "Só no registro de depuração, sem bloqueio: com gente no terminal esta "
     "cobrança da regra 16 não chega à conversa nem à tela, e a parada segue. "
     "A sessão prova o destino antes de encerrar — `--entrega`, `git status` "
     "em cada repositório tocado e os critérios da issue —, e quem segura "
     "entrega sem destino é o portão do servidor.\n\n")
 BANDEIRA_DE_TESTE = "--testar"
+ARQUIVO_DAS_REGRAS = "nucleo/regras.json"
+NUMERO_DA_REGRA_DO_DESTINO = 16
 NAO_MEDIDO = None
 SILENCIO = 0
 FALHA_ABERTA = 0
@@ -149,8 +170,8 @@ COBRANCA_ENTREGUE = 0
 TETO_DE_LINHAS = 5
 
 COBRA_SUJEIRA_HERDADA = (
-    "Na árvore há {} arquivo(s) sujo(s) desde ANTES desta sessão abrir — "
-    "sujeira herdada, de outra sessão ou do dono, e ela NÃO trava esta "
+    "Na árvore há {} arquivo(s) sujo(s) desde antes desta sessão abrir — "
+    "sujeira herdada, de outra sessão ou do dono, e ela não trava esta "
     "parada:\n{}\n"
     "Não commite nem apague o que não é seu: diga ao dono, e siga.")
 COBRA_ARVORE_SUJA = (
@@ -178,10 +199,10 @@ MOTIVO_O_ERRO_DO_INSTRUMENTO = "o instrumento saiu {} e o erro dele diz: {}"
 MOTIVO_O_INSTRUMENTO_CALOU = "o instrumento saiu {} sem dizer nada"
 MOTIVO_NAO_DITO = "nada ficou registrado sobre a causa"
 COBRA_INTEGRACAO_SEM_PEDIDO = (
-    "A integração {!r} está {} commit(s) à frente de {!r} e NÃO há pedido de "
+    "A integração {!r} está {} commit(s) à frente de {!r} e não há pedido de "
     "incorporação aberto entre elas:\n{}\n"
     "Destino inclui o passo seguinte, não só a branch: se a promoção é por "
-    "pedido de incorporação, ele fica ABERTO, não planejado para depois. "
+    "pedido de incorporação, ele fica aberto, não planejado para depois. "
     "Trabalho parado antes disso não chegou a lugar nenhum, só parece pronto."
 )
 COBRA_FORA_DO_REPOSITORIO_DURAVEL = (
@@ -196,12 +217,12 @@ COBRA_DURAVEL_NAO_MEDIDO = (
     "medido', nunca 'chegou': confira à mão antes de fechar a etapa."
 )
 COBRA_CRITERIO_EM_BRANCO = (
-    "A issue {} tem {} critério(s) de pronto EM BRANCO, e o trabalho já está "
+    "A issue {} tem {} critério(s) de pronto em branco, e o trabalho já está "
     "na {}:\n{}\n"
     "Critério que ninguém conferiu não vira pronto por mescla: caixa marcada "
     "não fecha issue, critério conferido fecha. Rode o comando de cada um, "
     "cole a saída na issue e marque; ou diga em uma linha por que ele sai do "
-    "escopo. Se o pedido de incorporação carrega o verbo que FECHA a issue, "
+    "escopo. Se o pedido de incorporação carrega o verbo que fecha a issue, "
     "tire-o: o fechamento é ato de quem conferiu."
 )
 COBRA_CRITERIO_NAO_MEDIDO = (
@@ -270,25 +291,30 @@ LINHA_DO_VIZINHO_NAO_MEDIDO = (
 LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO = (
     "  {0} commit(s) da branch {1!r} que não estão em {2} "
     "(`git log {2}..HEAD`):\n{3}\n"
-    "  aqui a sessão pode empurrar, e onde ela pode empurrar a entrega é a "
-    "MESCLA na integração declarada no cadastro: branch de trabalho "
-    "empurrada é sincronização, não entrega. Da branch de trabalho para a "
-    "integração não se abre pedido de incorporação — o pedido é o caminho "
-    "da integração para a branch por incorporação, e o do vizinho somente "
-    "leitura. `git -C {4} switch {5} && git -C {4} merge --no-ff {1} && "
-    "git -C {4} push origin {5}`")
+    "  aqui a sessão pode empurrar, e a integração {5!r} não está em "
+    "`branches_por_incorporacao` do vizinho: a entrega é a mescla na "
+    "integração declarada no cadastro. Branch de trabalho empurrada é "
+    "sincronização, não entrega. `git -C {4} switch {5} && git -C {4} "
+    "merge --no-ff {1} && git -C {4} push origin {5}`")
+LINHA_DO_VIZINHO_INTEGRACAO_POR_PEDIDO = (
+    "  {0} commit(s) da branch {1!r} que não estão em {2}, e nenhum pedido "
+    "de incorporação aberto de {1!r} para {3!r}:\n{4}\n"
+    "  a integração {3!r} está em `branches_por_incorporacao` do vizinho: "
+    "ela recebe por pedido de incorporação, não por mescla. Abrir o pedido "
+    "é da sessão, aprová-lo é do dono: `gh pr create -R <dono>/<repo> "
+    "--base {3} --head {1}`")
 LINHA_DO_VIZINHO_SEM_PUSH = (
     "  {0} commit(s) da branch {1!r} que não estão em {2} "
     "(`git log {2}..HEAD`):\n{3}\n"
-    "  o cadastro do projeto NÃO autoriza push aqui (`autorizacoes.push`), "
+    "  o cadastro do projeto não autoriza push aqui (`autorizacoes.push`), "
     "e omissão nega: a entrega é do dono, não desta sessão. Diga a ele o "
     "que está commitado e onde, e pare — empurrar mesmo assim é passar por "
     "cima da autorização que o cadastro declara")
 LINHA_DO_VIZINHO_SEM_PEDIDO = (
-    "  {0} commit(s) da branch {1!r} que não estão em {2}, e NENHUM pedido "
+    "  {0} commit(s) da branch {1!r} que não estão em {2}, e nenhum pedido "
     "de incorporação aberto de {1!r} para {3!r}:\n{4}\n"
     "  vizinho somente leitura é território de terceiro: a entrega é por "
-    "pedido de incorporação, e ele só se abre com autorização EXPRESSA do "
+    "pedido de incorporação, e ele só se abre com autorização expressa do "
     "dono, uma por vez. Pergunte a ele primeiro; com o sim, `gh pr create "
     "-R <dono>/<repo> --base {3} --head {1}`. Sem o sim, diga a ele o que "
     "está pendente e pare")
@@ -298,11 +324,11 @@ LINHA_DO_VIZINHO_PEDIDO_NAO_MEDIDO = (
     "medido nunca é 'aberto': confira com `gh pr list -R <dono>/<repo> "
     "--base {3} --head {1} --state open` antes de encerrar")
 LINHA_DO_VIZINHO_SEM_A_INTEGRACAO = (
-    "  a integração {0!r} que o cadastro declara para este vizinho NÃO "
+    "  a integração {0!r} que o cadastro declara para este vizinho não "
     "existe no remoto dele (`git ls-remote --heads origin {0}` veio vazio). "
     "Sem ela não há para onde entregar, e o nome não se adivinha: declare a "
     "certa em `nucleo/executor.json`, no `branches.integracao` do projeto "
-    "deste vizinho — a do topo é a DESTE repositório, e só serve de reserva "
+    "deste vizinho — a do topo é a deste repositório, e só serve de reserva "
     "quando por acaso coincide")
 LINHA_DO_VIZINHO_INTEGRACAO_NAO_MEDIDA = (
     "  não deu para medir a integração {0!r} do cadastro — o git não "
@@ -376,21 +402,6 @@ def responde_sem_aparar(comando: list, raiz: Path, tempo: int):
     return pronto.returncode, pronto.stdout or ""
 
 
-def responde_com_o_erro(comando: list, raiz: Path, tempo: int):
-    try:
-        pronto = subprocess.run(comando, cwd=raiz, capture_output=True,
-                                text=True, encoding="utf-8", errors="replace",
-                                timeout=tempo)
-    except subprocess.TimeoutExpired:
-        RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(tempo))
-        return NAO_MEDIDO
-    except (OSError, subprocess.SubprocessError) as falha:
-        RAZAO_DE_NAO_MEDIR.append(
-            MOTIVO_NAO_SUBIU.format(type(falha).__name__))
-        return NAO_MEDIDO
-    return pronto.returncode, pronto.stdout or "", pronto.stderr or ""
-
-
 def responde(comando: list, raiz: Path, tempo: int):
     resposta = responde_sem_aparar(comando, raiz, tempo)
     if resposta is NAO_MEDIDO:
@@ -409,10 +420,6 @@ def a_camada_julga(linha: str) -> bool:
 
 def linhas_da_arvore_suja(raiz: Path) -> list:
     return [l for l in _toda_a_sujeira(raiz) if a_camada_julga(l)]
-
-
-def linhas_que_a_camada_nao_julga(raiz: Path) -> list:
-    return [l for l in _toda_a_sujeira(raiz) if not a_camada_julga(l)]
 
 
 def _toda_a_sujeira(raiz: Path) -> list:
@@ -514,7 +521,7 @@ def caminhos_que_o_shell_mexeu(comando, raiz: Path) -> set:
     achados = set()
     for pedaco in CAMINHO_NO_COMANDO.findall(comando):
         limpo = pedaco.strip("'\"")
-        if not limpo or limpo.startswith("-"):
+        if not limpo or limpo.startswith(PEDACO_QUE_NAO_E_CAMINHO_LOCAL):
             continue
         achados.add(str((raiz / limpo).resolve()))
         achados.add(str(raiz / limpo))
@@ -533,8 +540,9 @@ def pasta_dos_transcritos(raiz: Path, lar: Path) -> Path:
 
 
 def sujeira_desta_sessao_e_herdada(raiz: Path, abertura, entrada=None,
-                                   agora=None, lar=None) -> tuple:
-    suja = linhas_da_arvore_suja(raiz)
+                                   agora=None, lar=None, suja=None,
+                                   escritos=None) -> tuple:
+    suja = linhas_da_arvore_suja(raiz) if suja is None else suja
     herdada = [l for l in suja
                if modificado_antes_da_abertura(raiz, l, abertura)]
     minha = [l for l in suja if l not in herdada]
@@ -547,8 +555,9 @@ def sujeira_desta_sessao_e_herdada(raiz: Path, abertura, entrada=None,
         pasta, str(entrada.get(CHAVE_DA_SESSAO) or ""), agora)
     if not vizinha:
         return minha, herdada
-    escritos = arquivos_que_esta_sessao_escreveu(
-        entrada.get(CHAVE_DO_TRANSCRITO), raiz)
+    if escritos is None:
+        escritos = arquivos_que_esta_sessao_escreveu(
+            entrada.get(CHAVE_DO_TRANSCRITO), raiz)
     if not escritos:
         return minha, herdada
     alheia = [l for l in minha if _o_caminho_da_linha(raiz, l) not in escritos]
@@ -630,17 +639,41 @@ def so_o_bloco_do_commit(dito: str) -> str:
     return "\n".join(bloco) if bloco else dito
 
 
-def achados_da_entrega(raiz: Path) -> dict:
+def instrumento_da_entrega_ao_lado(raiz: Path):
     if not (raiz / INSTRUMENTO_DA_ENTREGA).is_file():
+        return None
+    try:
+        return subprocess.Popen(
+            [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA,
+             BANDEIRA_SEM_O_PEDIDO],
+            cwd=raiz, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as falha:
+        return falha
+
+
+def achados_do_instrumento_ao_lado(em_curso) -> dict:
+    if em_curso is None:
         return {"sobra": "", "poda": ""}
-    resposta = responde_com_o_erro(
-        [sys.executable, INSTRUMENTO_DA_ENTREGA, BANDEIRA_DA_ENTREGA,
-         BANDEIRA_SEM_O_PEDIDO],
-        raiz, TEMPO_DO_GIT)
-    if resposta is NAO_MEDIDO:
+    try:
+        if isinstance(em_curso, Exception):
+            raise em_curso
+        dito, erro = em_curso.communicate(timeout=TEMPO_DO_GIT)
+    except subprocess.TimeoutExpired:
+        em_curso.kill()
+        em_curso.communicate()
+        RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(TEMPO_DO_GIT))
         return {"sobra": NAO_MEDIDO, "poda": ""}
-    codigo, dito, erro = resposta
-    return o_que_o_instrumento_achou(codigo, dito.strip(), erro)
+    except (OSError, subprocess.SubprocessError) as falha:
+        RAZAO_DE_NAO_MEDIR.append(
+            MOTIVO_NAO_SUBIU.format(type(falha).__name__))
+        return {"sobra": NAO_MEDIDO, "poda": ""}
+    return o_que_o_instrumento_achou(em_curso.returncode, (dito or "").strip(),
+                                     erro or "")
+
+
+def achados_da_entrega(raiz: Path) -> dict:
+    return achados_do_instrumento_ao_lado(instrumento_da_entrega_ao_lado(raiz))
 
 
 def sobra_fora_da_branch_de_entrega(raiz: Path):
@@ -652,15 +685,43 @@ def marca_da_busca_feita(principal: str, integracao: str, agora: float) -> tuple
             f"{agora}|{principal},{integracao}")
 
 
+def ha_busca_recente_ou_em_curso(raiz: Path, agora: float) -> bool:
+    registro = responde(COMANDO_DO_REGISTRO_DA_ULTIMA_BUSCA, raiz, TEMPO_DO_GIT)
+    if registro is NAO_MEDIDO or registro[0] != 0 or not registro[1]:
+        return False
+    try:
+        situacao = (raiz / registro[1]).stat()
+    except OSError:
+        return False
+    idade = agora - situacao.st_mtime
+    prazo = (PRAZO_DA_BUSCA_RECENTE_EM_SEGUNDOS if situacao.st_size > 0
+             else PRAZO_DA_BUSCA_EM_CURSO_EM_SEGUNDOS)
+    return 0 <= idade < prazo
+
+
+def disparar_a_busca_no_remoto(raiz: Path, principal: str, integracao: str):
+    try:
+        return subprocess.Popen(
+            [parte.format(principal, integracao)
+             for parte in COMANDO_DE_BUSCA_NO_REMOTO],
+            cwd=raiz, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env={**os.environ, **AMBIENTE_DA_BUSCA_QUE_NAO_PEDE_SENHA},
+            **MODO_DO_PROCESSO_DESTACADO)
+    except (OSError, subprocess.SubprocessError) as falha:
+        print(AVISO_DA_BUSCA_QUE_NAO_SUBIU.format(type(falha).__name__),
+              file=sys.stderr)
+        return None
+
+
 def commits_da_integracao_fora_da_principal(raiz: Path, principal: str,
                                             integracao: str):
     if not principal or not integracao:
         return NAO_MEDIDO
-    buscou = responde([parte.format(principal, integracao)
-                       for parte in COMANDO_DE_BUSCA_NO_REMOTO], raiz, TEMPO_DA_REDE)
-    if buscou is not NAO_MEDIDO and buscou[0] == 0:
-        chave, valor = marca_da_busca_feita(principal, integracao, time.time())
-        os.environ[chave] = valor
+    if not ha_busca_recente_ou_em_curso(raiz, time.time()):
+        disparar_a_busca_no_remoto(raiz, principal, integracao)
+    chave, valor = marca_da_busca_feita(principal, integracao, time.time())
+    os.environ[chave] = valor
     comando = [parte.format(ESPELHO_NO_REMOTO.format(principal),
                             ESPELHO_NO_REMOTO.format(integracao))
                for parte in COMANDO_DO_QUE_A_PRINCIPAL_NAO_TEM]
@@ -696,13 +757,15 @@ def repositorio_das_issues(raiz: Path) -> str:
     return onde.strip() if isinstance(onde, str) else ""
 
 
-def numero_da_issue_do_trabalho(raiz: Path, branch: str, principal: str):
+def numero_da_issue_do_trabalho(raiz: Path, branch: str, principal: str,
+                                integracao: str = ""):
     achou = MARCA_DA_ISSUE_NA_BRANCH.search(branch or "")
     if achou:
         return achou.group(1)
-    if not principal:
+    if not principal or not integracao:
         return ""
-    comando = [parte.format(principal) for parte in COMANDO_DAS_MENSAGENS]
+    comando = [parte.format(principal, ESPELHO_NO_REMOTO.format(integracao))
+               for parte in COMANDO_DAS_MENSAGENS]
     resposta = responde(comando, raiz, TEMPO_DO_GIT)
     if resposta is NAO_MEDIDO or resposta[0] != 0:
         return ""
@@ -729,31 +792,64 @@ def criterios_do_que_o_gh_respondeu(resposta):
     }
 
 
-def criterios_da_issue(raiz: Path, numero: str, onde: str):
+def pergunta_ao_lado(comando: list, raiz: Path):
+    try:
+        return subprocess.Popen(
+            comando, cwd=raiz, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace"), time.monotonic()
+    except (OSError, subprocess.SubprocessError) as falha:
+        return falha
+
+
+def resposta_da_pergunta_ao_lado(em_curso, tempo: int):
+    if isinstance(em_curso, Exception):
+        RAZAO_DE_NAO_MEDIR.append(
+            MOTIVO_NAO_SUBIU.format(type(em_curso).__name__))
+        return NAO_MEDIDO
+    processo, subiu = em_curso
+    try:
+        saida, _ = processo.communicate(
+            timeout=max(0.0, subiu + tempo - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        processo.kill()
+        processo.communicate()
+        RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(tempo))
+        return NAO_MEDIDO
+    except (OSError, subprocess.SubprocessError) as falha:
+        RAZAO_DE_NAO_MEDIR.append(
+            MOTIVO_NAO_SUBIU.format(type(falha).__name__))
+        return NAO_MEDIDO
+    return processo.returncode, (saida or "").strip()
+
+
+def pergunta_do_criterio(raiz: Path, branch: str, principal: str,
+                         integracao: str, entregue: bool):
+    if not entregue:
+        return None
+    onde = repositorio_das_issues(raiz)
+    numero = numero_da_issue_do_trabalho(raiz, branch, principal, integracao)
+    if not onde or not numero:
+        return None
     comando = [parte.format(numero, onde)
                for parte in COMANDO_DO_CORPO_DA_ISSUE]
-    return criterios_do_que_o_gh_respondeu(
-        responde(comando, raiz, TEMPO_DA_REDE))
+    return numero, onde, pergunta_ao_lado(comando, raiz)
 
 
-def criterio_do_trabalho(raiz: Path, branch: str, principal: str,
-                         entregue: bool):
-    if not entregue:
+def criterio_respondido(pergunta) -> dict:
+    if pergunta is None:
         return {}
-    onde = repositorio_das_issues(raiz)
-    numero = numero_da_issue_do_trabalho(raiz, branch, principal)
-    if not onde or not numero:
-        return {}
-    lido = criterios_da_issue(raiz, numero, onde)
-    if lido is NAO_MEDIDO:
-        return {"issue": numero, "onde": onde, "criterios": NAO_MEDIDO}
-    return {"issue": numero, "onde": onde, "criterios": lido}
+    numero, onde, em_curso = pergunta
+    return {"issue": numero, "onde": onde,
+            "criterios": criterios_do_que_o_gh_respondeu(
+                resposta_da_pergunta_ao_lado(em_curso, TEMPO_DA_REDE))}
 
 
-def pedidos_abertos(raiz: Path, principal: str, integracao: str):
-    comando = [parte.format(principal, integracao)
-               for parte in COMANDO_DO_PEDIDO_ABERTO]
-    resposta = responde(comando, raiz, TEMPO_DA_REDE)
+def comando_dos_pedidos_abertos(principal: str, integracao: str) -> list:
+    return [parte.format(principal, integracao)
+            for parte in COMANDO_DO_PEDIDO_ABERTO]
+
+
+def pedidos_da_resposta(resposta):
     if resposta is NAO_MEDIDO or resposta[0] != 0:
         return NAO_MEDIDO
     try:
@@ -761,6 +857,12 @@ def pedidos_abertos(raiz: Path, principal: str, integracao: str):
     except ValueError:
         return NAO_MEDIDO
     return pedidos if isinstance(pedidos, list) else NAO_MEDIDO
+
+
+def pedidos_abertos(raiz: Path, principal: str, integracao: str):
+    return pedidos_da_resposta(responde(
+        comando_dos_pedidos_abertos(principal, integracao), raiz,
+        TEMPO_DA_REDE))
 
 
 def ha_pedido_de_incorporacao_aberto(pedidos):
@@ -896,7 +998,7 @@ def push_autorizado(projeto: dict, vizinho: Path) -> bool:
 
 def cadastro_do_vizinho(raiz: Path, vizinho: Path) -> dict:
     sem_cadastro = {"integracao": "", "somente_leitura": False,
-                    "pode_empurrar": False}
+                    "pode_empurrar": False, "integracao_por_pedido": False}
     try:
         dado = json.loads((raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -915,9 +1017,12 @@ def cadastro_do_vizinho(raiz: Path, vizinho: Path) -> dict:
                    if isinstance(do_projeto, dict) else None)
                   or (do_topo.get(CHAVE_DA_INTEGRACAO)
                       if isinstance(do_topo, dict) else None))
-    return {"integracao": str(integracao).strip() if integracao else "",
+    integracao = str(integracao).strip() if integracao else ""
+    return {"integracao": integracao,
             "somente_leitura": bool(projeto.get(CHAVE_DO_SOMENTE_LEITURA)),
-            "pode_empurrar": push_autorizado(projeto, vizinho)}
+            "pode_empurrar": push_autorizado(projeto, vizinho),
+            "integracao_por_pedido": bool(integracao) and integracao.lower()
+            in branches_por_incorporacao(vizinho)}
 
 
 SEM_A_INTEGRACAO = "sem-a-integracao"
@@ -965,18 +1070,25 @@ def medir_vizinho(vizinho: Path, abertura, raiz: Path) -> dict:
     fora = ([] if not integracao or branch == integracao
             else commits_fora_da_integracao(vizinho, integracao))
     pedido = NAO_MEDIDO
-    if cadastro["somente_leitura"] and isinstance(fora, list) and fora:
+    if recebe_por_pedido(cadastro) and isinstance(fora, list) and fora:
         pedido = ha_pedido_de_incorporacao_aberto(
             pedidos_abertos(vizinho, integracao, branch))
     return {"raiz": str(vizinho), "suja": suja, "sem_remoto": sem_remoto,
             "branch": branch, "integracao": integracao,
             "somente_leitura": cadastro["somente_leitura"],
             "pode_empurrar": cadastro["pode_empurrar"],
+            "integracao_por_pedido": cadastro.get("integracao_por_pedido",
+                                                  False),
             "fora_da_integracao": fora, "pedido": pedido}
 
 
 def nada_a_entregar(medido: dict) -> bool:
     return not medido["suja"] and medido["sem_remoto"] == []
+
+
+def recebe_por_pedido(vizinho: dict) -> bool:
+    return bool(vizinho.get("somente_leitura")
+                or vizinho.get("integracao_por_pedido"))
 
 
 def vizinho_sem_destino(medido: dict) -> bool:
@@ -990,32 +1102,40 @@ def vizinho_sem_destino(medido: dict) -> bool:
         return True
     if not fora:
         return False
-    return not (medido.get("somente_leitura") and medido.get("pedido") is True)
+    return not (recebe_por_pedido(medido) and medido.get("pedido") is True)
 
 
-def vizinhos_sem_destino(raiz: Path, abertura, entrada) -> list:
-    if not isinstance(entrada, dict):
-        return []
-    escritos = arquivos_que_esta_sessao_escreveu(
-        entrada.get(CHAVE_DO_TRANSCRITO), raiz)
+def vizinhos_sem_destino(raiz: Path, abertura, escritos: set) -> list:
     medidos = [medir_vizinho(vizinho, abertura, raiz)
                for vizinho in repositorios_tocados(escritos, raiz)]
     return [m for m in medidos if vizinho_sem_destino(m)]
 
 
+def sujeira_e_vizinhos_da_sessao(raiz: Path, abertura, entrada) -> dict:
+    toda_a_sujeira = _toda_a_sujeira(raiz)
+    escritos = (arquivos_que_esta_sessao_escreveu(
+        entrada.get(CHAVE_DO_TRANSCRITO), raiz)
+        if isinstance(entrada, dict) else set())
+    suja, herdada = sujeira_desta_sessao_e_herdada(
+        raiz, abertura, entrada,
+        suja=[l for l in toda_a_sujeira if a_camada_julga(l)],
+        escritos=escritos)
+    return {
+        "suja": suja,
+        "herdada": herdada,
+        "nao_julgada": [l for l in toda_a_sujeira if not a_camada_julga(l)],
+        "vizinhos": vizinhos_sem_destino(raiz, abertura, escritos),
+    }
+
+
 def medir(raiz: Path, abertura=None, entrada=None) -> dict:
-    suja, herdada = sujeira_desta_sessao_e_herdada(raiz, abertura, entrada)
-    nao_julgada = linhas_que_a_camada_nao_julga(raiz)
-    vizinhos = vizinhos_sem_destino(raiz, abertura, entrada)
     etapa = etapa_em_curso()
     if etapa:
+        da_sessao = sujeira_e_vizinhos_da_sessao(raiz, abertura, entrada)
         branch = resposta_limpa(COMANDO_DA_BRANCH_DA_ARVORE, raiz, TEMPO_DO_GIT)
         return {
             "etapa": etapa,
-            "suja": suja,
-            "herdada": herdada,
-            "nao_julgada": nao_julgada,
-            "vizinhos": vizinhos,
+            **da_sessao,
             "branch": branch,
             "duravel": chegou_ao_repositorio_duravel(raiz, branch),
         }
@@ -1024,30 +1144,33 @@ def medir(raiz: Path, abertura=None, entrada=None) -> dict:
     integracao = branch_de_integracao(raiz)
     tudo = commits_da_integracao_fora_da_principal(
         raiz, principal, integracao)
+    entrega = instrumento_da_entrega_ao_lado(raiz)
     if tudo is NAO_MEDIDO:
+        da_sessao = sujeira_e_vizinhos_da_sessao(raiz, abertura, entrada)
         return {
-            "etapa": "", "suja": suja, "herdada": herdada,
-            "nao_julgada": nao_julgada, "vizinhos": vizinhos,
-            **achados_da_entrega(raiz),
+            "etapa": "", **da_sessao,
+            **achados_do_instrumento_ao_lado(entrega),
             "principal": principal, "integracao": integracao,
             "adiante": NAO_MEDIDO, "herdados": [], "pedido": NAO_MEDIDO,
         }
+    pedidos_em_curso = (pergunta_ao_lado(
+        comando_dos_pedidos_abertos(principal, integracao), raiz)
+        if tudo else None)
     desta = (commits_desta_sessao(raiz, principal, integracao, abertura, tudo)
              if tudo else [])
-    do_criterio = criterio_do_trabalho(
+    criterio_em_curso = pergunta_do_criterio(
         raiz, resposta_limpa(COMANDO_DA_BRANCH_DA_ARVORE, raiz, TEMPO_DO_GIT),
-        principal, bool(desta))
-    pedidos = (pedidos_abertos(raiz, principal, integracao)
-               if tudo else NAO_MEDIDO)
+        principal, integracao, bool(desta))
+    da_sessao = sujeira_e_vizinhos_da_sessao(raiz, abertura, entrada)
+    do_criterio = criterio_respondido(criterio_em_curso)
+    pedidos = (pedidos_da_resposta(resposta_da_pergunta_ao_lado(
+        pedidos_em_curso, TEMPO_DA_REDE)) if tudo else NAO_MEDIDO)
     revisor = revisor_deste_repositorio(raiz)
     pedido_aberto = ha_pedido_de_incorporacao_aberto(pedidos) is True
     return {
         "etapa": "",
-        "suja": suja,
-        "herdada": herdada,
-        "nao_julgada": nao_julgada,
-        "vizinhos": vizinhos,
-        **achados_da_entrega(raiz),
+        **da_sessao,
+        **achados_do_instrumento_ao_lado(entrega),
         "principal": principal,
         "integracao": integracao,
         "adiante": desta,
@@ -1089,17 +1212,21 @@ def linhas_do_vizinho(vizinho: dict) -> list:
         linhas.append(LINHA_DO_VIZINHO_SEM_A_INTEGRACAO.format(integracao))
     elif not fora:
         pass
-    elif not vizinho.get("somente_leitura"):
-        molde = (LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO
-                 if vizinho.get("pode_empurrar") else LINHA_DO_VIZINHO_SEM_PUSH)
-        linhas.append(molde.format(
+    elif not vizinho.get("somente_leitura") and not vizinho.get("pode_empurrar"):
+        linhas.append(LINHA_DO_VIZINHO_SEM_PUSH.format(
+            len(fora), branch, espelho, primeiras_linhas(fora),
+            vizinho.get("raiz"), integracao))
+    elif not recebe_por_pedido(vizinho):
+        linhas.append(LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO.format(
             len(fora), branch, espelho, primeiras_linhas(fora),
             vizinho.get("raiz"), integracao))
     elif vizinho.get("pedido") is NAO_MEDIDO:
         linhas.append(LINHA_DO_VIZINHO_PEDIDO_NAO_MEDIDO.format(
             len(fora), branch, espelho, integracao))
     elif vizinho.get("pedido") is False:
-        linhas.append(LINHA_DO_VIZINHO_SEM_PEDIDO.format(
+        molde = (LINHA_DO_VIZINHO_SEM_PEDIDO if vizinho.get("somente_leitura")
+                 else LINHA_DO_VIZINHO_INTEGRACAO_POR_PEDIDO)
+        linhas.append(molde.format(
             len(fora), branch, espelho, integracao, primeiras_linhas(fora)))
     return linhas
 
@@ -1326,11 +1453,11 @@ FORA_DA_ETAPA_PALAVRA_POR_PALAVRA = [
     "Commit em branch que ninguém vai incorporar não existe para o resto do "
     "mundo, e some no dia em que a branch for podada.",
 
-    "A integração 'homolog' está 1 commit(s) à frente de 'main' e NÃO há "
+    "A integração 'homolog' está 1 commit(s) à frente de 'main' e não há "
     "pedido de incorporação aberto entre elas:\n"
     "  abc1234 trabalho\n"
     "Destino inclui o passo seguinte, não só a branch: se a promoção é por "
-    "pedido de incorporação, ele fica ABERTO, não planejado para depois. "
+    "pedido de incorporação, ele fica aberto, não planejado para depois. "
     "Trabalho parado antes disso não chegou a lugar nenhum, só parece pronto.",
 
     "A integração 'homolog' está 1 commit(s) à frente de 'main', e não deu "
@@ -1436,11 +1563,62 @@ INSTRUMENTO_DE_MENTIRA_QUE_QUEBROU = f"""import sys
 sys.stderr.write("Traceback (most recent call last):\\n{ERRO_DO_INSTRUMENTO_QUE_QUEBROU}\\n")
 sys.exit(1)
 """
+MARCA_DO_INSTRUMENTO_QUE_SUBIU = "subiu.txt"
+INSTRUMENTO_DE_MENTIRA_QUE_AVISA_QUE_SUBIU = f"""from pathlib import Path
+Path("{MARCA_DO_INSTRUMENTO_QUE_SUBIU}").write_text("subiu", encoding="utf-8")
+"""
+ESPERA_PELO_INSTRUMENTO_DE_MENTIRA = 10
+GH_DE_MENTIRA_QUE_ESPERA_A_SUJEIRA = f"""import json, sys, time
+from pathlib import Path
+Path(sys.argv[1]).write_text("subiu", encoding="utf-8")
+lida = Path(sys.argv[3])
+limite = time.monotonic() + {ESPERA_PELO_INSTRUMENTO_DE_MENTIRA}
+while not lida.exists() and time.monotonic() < limite:
+    time.sleep(0.05)
+viu = lida.exists()
+print(json.dumps({{"body": "- [x] feito" if viu else "- [ ] feito",
+                  "state": "OPEN"}})
+      if sys.argv[2] == "issue" else json.dumps([{{"number": 1}}] if viu else []))
+"""
+IDADE_DA_BUSCA_AINDA_RECENTE_EM_SEGUNDOS = 240
+IDADE_DA_BUSCA_VELHA_EM_SEGUNDOS = 360
+FOLGA_DA_MARCA_DE_AGORA_EM_SEGUNDOS = 5
+TETO_CURTO_PARA_O_INSTRUMENTO_DE_MENTIRA = 1
+INSTRUMENTO_DE_MENTIRA_QUE_DEMORA = """import time
+time.sleep(30)
+"""
+IDADE_DA_BUSCA_VAZIA_QUE_FALHOU_EM_SEGUNDOS = 120
+VARIAVEIS_QUE_CALAM_A_PERGUNTA_DE_SENHA = {"GIT_TERMINAL_PROMPT": "0",
+                                           "GCM_INTERACTIVE": "never"}
+OPCAO_QUE_CALA_A_PERGUNTA_DE_SENHA = "credential.interactive=never"
+SONO_DA_BUSCA_DE_MENTIRA_EM_SEGUNDOS = 5
+FOLGA_DO_DISPARO_NA_PARADA_EM_SEGUNDOS = 1
+ESPERA_PELA_BUSCA_DISPARADA_EM_SEGUNDOS = 30
+BUSCA_DE_MENTIRA_QUE_DORME = f"""import subprocess, sys, time
+from pathlib import Path
+time.sleep({SONO_DA_BUSCA_DE_MENTIRA_EM_SEGUNDOS})
+Path(sys.argv[1]).write_text("acordou", encoding="utf-8")
+sys.exit(subprocess.run(["git", "upload-pack", *sys.argv[2:]]).returncode)
+"""
+PROGRAMA_DE_BUSCA_QUE_NAO_EXISTE = "busca-que-nao-existe-de-mentira"
+ARQUIVO_DO_SETTINGS = "settings.json"
+PASTAS_DO_GANCHO_FORA_DO_GIT_DE_MENTIRA = ("nucleo", ".claude")
 
 
 def git_de_mentira(arvore: Path, *argumentos) -> None:
     subprocess.run(["git", *argumentos], cwd=arvore, check=True,
                    capture_output=True)
+
+
+def marca_de_agora_para_o_instrumento(principal: str, integracao: str) -> bool:
+    instante, _, buscadas = os.environ.get(
+        MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO, "").partition("|")
+    try:
+        idade = time.time() - float(instante)
+    except ValueError:
+        return False
+    return (0 <= idade < FOLGA_DA_MARCA_DE_AGORA_EM_SEGUNDOS
+            and buscadas == f"{principal},{integracao}")
 
 
 def trabalho_de_mentira_com_repositorio_duravel(pasta: Path) -> Path:
@@ -1467,10 +1645,51 @@ def o_que_o_gancho_responde(arvore: Path, etapa: str,
         arvore, etapa, entrada, temporaria, variaveis).stdout.strip()
 
 
+def comando_do_gancho_no_settings() -> list:
+    try:
+        dado = json.loads((Path(__file__).resolve().parents[1]
+                           / ARQUIVO_DO_SETTINGS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    for grupo in (dado.get("hooks") or {}).get(EVENTO_DE_PARADA) or []:
+        for gancho in grupo.get("hooks") or []:
+            comando = str(gancho.get("command") or "")
+            if comando.endswith(Path(__file__).name):
+                return shlex.split(comando)
+    return []
+
+
+def a_busca_gravou(arvore: Path, commit: str) -> bool:
+    ultima_busca = arvore / ".git" / "FETCH_HEAD"
+    limite = time.monotonic() + ESPERA_PELA_BUSCA_DISPARADA_EM_SEGUNDOS
+    while time.monotonic() < limite:
+        espelho = resposta_limpa(["git", "rev-parse", ESPELHO_NO_REMOTO.format(
+            PRINCIPAL_DE_MENTIRA)], arvore, TEMPO_DO_GIT)
+        with contextlib.suppress(OSError):
+            if espelho == commit and commit in ultima_busca.read_text(
+                    encoding="utf-8"):
+                return True
+        time.sleep(0.1)
+    return False
+
+
+def esperar_a_busca_soltar_a_pasta(pasta: Path) -> None:
+    limite = time.monotonic() + ESPERA_PELA_BUSCA_DISPARADA_EM_SEGUNDOS
+    while True:
+        try:
+            pasta.rename(pasta.with_name(pasta.name + "-solta"))
+            return
+        except PermissionError:
+            if time.monotonic() >= limite:
+                raise
+            time.sleep(0.1)
+
+
 def rodar_o_gancho_de_verdade(arvore: Path, etapa: str,
                               entrada: str = ENTRADA_DE_PARADA,
                               temporaria: Path = None,
-                              variaveis: dict = None):
+                              variaveis: dict = None,
+                              comando: list = None):
     ambiente = {**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(arvore)}
     for variavel, valor in (variaveis or {}).items():
         if valor is None:
@@ -1485,7 +1704,7 @@ def rodar_o_gancho_de_verdade(arvore: Path, etapa: str,
         for variavel in VARIAVEIS_DA_PASTA_TEMPORARIA:
             ambiente[variavel] = str(temporaria)
     return subprocess.run(
-        [sys.executable, str(Path(__file__).resolve())],
+        comando or [sys.executable, str(Path(__file__).resolve())],
         input=entrada, capture_output=True, text=True,
         encoding="utf-8", errors="replace", env=ambiente)
 
@@ -1587,7 +1806,7 @@ def testar() -> int:
         comportamento.append((rotulo, bool(condicao)))
 
     raiz_de_prova = Path("/tmp/atlas-prova")
-    caso("renomear por `git mv` conta como escrita DESTA sessao — antes o "
+    caso("renomear por `git mv` conta como escrita desta sessao — antes o "
          "gancho so via Write e Edit, chamava o proprio trabalho de herdado "
          "e mandava a sessao abandona-lo",
          str(raiz_de_prova / "b.md") in caminhos_que_o_shell_mexeu(
@@ -1598,15 +1817,24 @@ def testar() -> int:
     caso("redirecionar para arquivo tambem conta",
          str(raiz_de_prova / "saida.json") in caminhos_que_o_shell_mexeu(
              "echo oi > saida.json", raiz_de_prova))
-    caso("comando que so LE nao vira escrita — senao toda varredura marcaria "
+    caso("comando que so le nao vira escrita — senao toda varredura marcaria "
          "o repositorio inteiro como escrito por esta sessao",
          caminhos_que_o_shell_mexeu("grep -rn coisa arquivo.py",
                                     raiz_de_prova) == set())
     caso("comando vazio ou que nao e texto nao estoura",
          caminhos_que_o_shell_mexeu(None, raiz_de_prova) == set()
          and caminhos_que_o_shell_mexeu("", raiz_de_prova) == set())
+    com_endereco_de_rede = caminhos_que_o_shell_mexeu(
+        "curl -s https://exemplo.invalid/org/repo/x.py https://exemplo.invalid "
+        "res://jogo/x.gd > saida.json", raiz_de_prova)
+    caso("endereço de rede no comando não vira caminho: no Windows //host é "
+         "pasta de rede, e sondá-la faz cada parada esperar o servidor — o "
+         "arquivo local do mesmo comando continua achado",
+         str(raiz_de_prova / "saida.json") in com_endereco_de_rede
+         and not any("exemplo.invalid" in achado or "jogo" in achado
+                     for achado in com_endereco_de_rede))
 
-    caso("commit que a sessão NAO fez nao vira cobranca dela: sessao de "
+    caso("commit que a sessão nao fez nao vira cobranca dela: sessao de "
          "estudo encontra a integracao a frente e nao e dona disso",
          not cobrancas(com(adiante=[], herdados=["abc1234 de ontem"],
                            pedido=False)))
@@ -1674,7 +1902,7 @@ def testar() -> int:
              len(minha) == 2 and herdada == [])
 
         minha, herdada = _com(vizinha_viva=True)
-        caso("com outra sessao viva, so e cobrado o arquivo que ESTA sessao "
+        caso("com outra sessao viva, so e cobrado o arquivo que esta sessao "
              "escreveu — o que ela nunca tocou vira herdado",
              minha == [" M meu.py"] and herdada == [" M alheio.py"])
 
@@ -1740,6 +1968,126 @@ def testar() -> int:
              "de estourar",
              sobra_fora_da_branch_de_entrega(duble) == "")
 
+    def medido_fora_da_etapa(raiz: Path, sujeira_espiada, teto=None):
+        global _toda_a_sujeira, TEMPO_DO_GIT
+        guardadas = _toda_a_sujeira, TEMPO_DO_GIT
+        etapa = os.environ.pop(MARCA_DE_ETAPA_NO_AMBIENTE, None)
+        _toda_a_sujeira = sujeira_espiada
+        TEMPO_DO_GIT = TEMPO_DO_GIT if teto is None else teto
+        try:
+            return medir(raiz, None, None)
+        finally:
+            _toda_a_sujeira, TEMPO_DO_GIT = guardadas
+            if etapa is not None:
+                os.environ[MARCA_DE_ETAPA_NO_AMBIENTE] = etapa
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-ao-lado-") as tmp:
+        ao_lado = Path(tmp).resolve()
+        instrumento = ao_lado / INSTRUMENTO_DA_ENTREGA
+        instrumento.parent.mkdir(parents=True, exist_ok=True)
+        instrumento.write_text(INSTRUMENTO_DE_MENTIRA_QUE_AVISA_QUE_SUBIU,
+                               encoding="utf-8")
+        vistos = []
+
+        def sujeira_que_espera_o_instrumento(raiz):
+            marca = raiz / MARCA_DO_INSTRUMENTO_QUE_SUBIU
+            limite = time.monotonic() + ESPERA_PELO_INSTRUMENTO_DE_MENTIRA
+            while not marca.exists() and time.monotonic() < limite:
+                time.sleep(0.05)
+            vistos.append(marca.exists())
+            return []
+
+        medido = medido_fora_da_etapa(ao_lado, sujeira_que_espera_o_instrumento)
+        caso("o instrumento da entrega corre ao lado do resto da medida: ele "
+             "já subiu quando o gancho lê a sujeira — medido, em série os dois "
+             "somavam segundos a cada parada — e o que ele disse continua "
+             "chegando",
+             vistos == [True] and medido.get("sobra") == "")
+        instrumento.write_text(INSTRUMENTO_DE_MENTIRA_QUE_DEMORA,
+                               encoding="utf-8")
+        RAZAO_DE_NAO_MEDIR.clear()
+        inicio = time.monotonic()
+        estourado = medido_fora_da_etapa(
+            ao_lado, lambda _: [], TETO_CURTO_PARA_O_INSTRUMENTO_DE_MENTIRA)
+        caso("instrumento que passa do teto vira NÃO MEDIDO com o motivo do "
+             "teto, e o gancho não espera por ele além disso",
+             estourado.get("sobra") is NAO_MEDIDO
+             and porque_nao_mediu() == MOTIVO_TEMPO_ESGOTADO.format(
+                 TETO_CURTO_PARA_O_INSTRUMENTO_DE_MENTIRA)
+             and time.monotonic() - inicio < ESPERA_PELO_INSTRUMENTO_DE_MENTIRA)
+        RAZAO_DE_NAO_MEDIR.clear()
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-gh-ao-lado-") as tmp:
+        base = Path(tmp).resolve()
+        origem, arvore = base / "origem", base / "arvore"
+        origem.mkdir()
+        git_de_mentira(origem, "init", "-q", "--bare", "-b", "main")
+        git_de_mentira(base, "clone", "-q", str(origem), str(arvore))
+        git_de_mentira(arvore, "config", "user.email", "prova@exemplo")
+        git_de_mentira(arvore, "config", "user.name", "Prova")
+        git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m", "raiz")
+        git_de_mentira(arvore, "push", "-q", "origin", "main")
+        git_de_mentira(arvore, "checkout", "-q", "-b", "homolog")
+        git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m",
+                       "trabalho (issue 7)")
+        git_de_mentira(arvore, "push", "-q", "origin", "homolog")
+        git_de_mentira(arvore, "checkout", "-q", "-b", "issue/7-ao-lado")
+        git_de_mentira(arvore, "fetch", "-q", "origin")
+        (arvore / ARQUIVO_CONFIGURACAO).parent.mkdir(parents=True)
+        (arvore / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+            {CHAVE_POR_INCORPORACAO: ["main"]}), encoding="utf-8")
+        (arvore / ARQUIVO_EXECUTOR).write_text(json.dumps(
+            {CHAVE_DAS_BRANCHES: {CHAVE_DA_INTEGRACAO: "homolog"},
+             CHAVE_DAS_ISSUES: {CHAVE_DO_REPOSITORIO: "quem-instala/o-quadro"}}),
+            encoding="utf-8")
+        gh = base / "gh_de_mentira.py"
+        gh.write_text(GH_DE_MENTIRA_QUE_ESPERA_A_SUJEIRA, encoding="utf-8")
+        marca_dos_pedidos, marca_da_issue = base / "pedidos.txt", base / "issue.txt"
+        sujeira_lida = base / "sujeira-lida.txt"
+        vistos_com_o_gh = []
+
+        def sujeira_que_espera_o_gh(raiz):
+            limite = time.monotonic() + ESPERA_PELO_INSTRUMENTO_DE_MENTIRA
+            while (not (marca_dos_pedidos.exists() and marca_da_issue.exists())
+                   and time.monotonic() < limite):
+                time.sleep(0.05)
+            vistos_com_o_gh.append((marca_dos_pedidos.exists(),
+                                    marca_da_issue.exists()))
+            sujeira_lida.write_text("lida", encoding="utf-8")
+            return []
+
+        def medido_com_o_gh_de_mentira() -> dict:
+            global COMANDO_DO_PEDIDO_ABERTO, COMANDO_DO_CORPO_DA_ISSUE
+            guardados = COMANDO_DO_PEDIDO_ABERTO, COMANDO_DO_CORPO_DA_ISSUE
+            marca_de_antes = os.environ.get(
+                MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO)
+            COMANDO_DO_PEDIDO_ABERTO = [sys.executable, str(gh),
+                                        str(marca_dos_pedidos), "pedidos",
+                                        str(sujeira_lida)]
+            COMANDO_DO_CORPO_DA_ISSUE = [sys.executable, str(gh),
+                                         str(marca_da_issue), "issue",
+                                         str(sujeira_lida)]
+            try:
+                return medido_fora_da_etapa(arvore, sujeira_que_espera_o_gh)
+            finally:
+                COMANDO_DO_PEDIDO_ABERTO, COMANDO_DO_CORPO_DA_ISSUE = guardados
+                os.environ.pop(MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO, None)
+                if marca_de_antes is not None:
+                    os.environ[MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO] = (
+                        marca_de_antes)
+
+        medido = medido_com_o_gh_de_mentira()
+        lido = (medido.get("criterio") or {}).get("criterios") or {}
+        caso("as duas perguntas ao gh — o pedido aberto e o corpo da issue — "
+             "correm ao lado da leitura da sujeira: já subiram quando ela "
+             "começa e ainda esperam quando ela termina — medido, em série "
+             "elas somavam mais de um segundo a cada parada — e o que o gh "
+             "disse continua chegando",
+             vistos_com_o_gh == [(True, True)]
+             and medido.get("pedido_aberto") is True
+             and medido.get("criterio", {}).get("issue") == "7"
+             and lido.get("aberta") is True and lido.get("marcados") == 1)
+
     def dito_com(**categorias) -> str:
         valores = {"commit-sem-destino": 0, "branch-por-podar": 0,
                    "integracao-sem-pedido": 0, **{
@@ -1750,12 +2098,12 @@ def testar() -> int:
                            for nome, valor in valores.items()))
 
     so_poda = o_que_o_instrumento_achou(1, dito_com(branch_por_podar=1))
-    caso("branch entregue por podar NÃO é commit fora da branch de entrega: "
+    caso("branch entregue por podar não é commit fora da branch de entrega: "
          "o instrumento disse que ela não acrescenta nada, e o gancho abria "
          "a cobrança dizendo o contrário",
          so_poda["sobra"] == "" and "prosa do instrumento" in so_poda["poda"]
          and cobrancas(com(**so_poda)) == [])
-    caso("e a poda pendente sai como RELATO, que não bloqueia a parada",
+    caso("e a poda pendente sai como relato, que não bloqueia a parada",
          any("podar" in linha for linha in relato(com(**so_poda))))
     da_poda = [linha for linha in relato(com(**so_poda)) if "podar" in linha]
     caso("o relato da poda cabe numa linha e aponta o instrumento, sem colar "
@@ -1779,7 +2127,7 @@ def testar() -> int:
         1, dito_com(integracao_sem_pedido=1))
     caso("integração inteira à espera de pedido, vista pelo instrumento, "
          "não bloqueia a sessão que não tem commit seu nela — quem cobra a "
-         "integração é a medida da PRÓPRIA sessão, logo adiante",
+         "integração é a medida da própria sessão, logo adiante",
          cobrancas(com(**so_espera)) == [])
     caso("CONTROLE: commit que ainda não saiu da máquina segue cobrado",
          len(cobrancas(com(**o_que_o_instrumento_achou(
@@ -1862,7 +2210,7 @@ def testar() -> int:
     if instrumento_de_verdade.is_file():
         fonte_do_instrumento = instrumento_de_verdade.read_text(
             encoding="utf-8")
-        caso("o instrumento de entrega e este gancho falam a MESMA linha de "
+        caso("o instrumento de entrega e este gancho falam a mesma linha de "
              "categorias: o contrato mora nos dois arquivos, e divergência "
              "calada devolveria o gancho ao modo antigo sem ninguém ver",
              MARCA_DAS_CATEGORIAS in fonte_do_instrumento
@@ -1880,7 +2228,7 @@ def testar() -> int:
          MOTIVO_NAO_DITO in "".join(cobrancas(com(sobra=NAO_MEDIDO))))
     RAZAO_DE_NAO_MEDIR.append(MOTIVO_TEMPO_ESGOTADO.format(15))
     caso("teto de tempo esgotado aparece na cobrança com o número do teto — "
-         "medido: rede lenta e instrumento quebrado davam a MESMA cobrança "
+         "medido: rede lenta e instrumento quebrado davam a mesma cobrança "
          "muda, e a causa levou um dia para aparecer",
          "15 s" in "".join(cobrancas(com(sobra=NAO_MEDIDO))))
     RAZAO_DE_NAO_MEDIR.clear()
@@ -1929,7 +2277,7 @@ def testar() -> int:
          o_revisor_e_o_autor(ninguem, "conta-x") is False)
     caso("basta um pedido de outra conta para a isenção cair",
          o_revisor_e_o_autor(do_proprio_autor + de_outro, "conta-x") is False)
-    caso("a cobrança de revisor CALA quando o autor é o revisor, e o motivo "
+    caso("a cobrança de revisor cala quando o autor é o revisor, e o motivo "
          "fica dito no relato em vez de sumir calado",
          not any("revisor configurado" in linha and "não foi solicitado"
                  in linha
@@ -1978,8 +2326,8 @@ def testar() -> int:
              "o motivo cita a árvore suja",
              "A árvore está suja" in motivo_do_gancho(arvore, "trabalhar"))
         na_sessao = o_que_o_gancho_responde(arvore, "")
-        caso("SEM a marca de etapa, com gente no terminal, a mesma árvore "
-             "suja vira AVISO e não segura a parada: a cobrança que bloqueia "
+        caso("Sem a marca de etapa, com gente no terminal, a mesma árvore "
+             "suja vira aviso e não segura a parada: a cobrança que bloqueia "
              "parou sessão que já tinha destino, e o portão é do servidor",
              "decision" not in na_sessao
              and "A árvore está suja" in na_sessao
@@ -2019,22 +2367,22 @@ def testar() -> int:
              is NAO_MEDIDO)
 
     com_gente = o_que_main_imprime(MOTIVO_DE_MENTIRA, "", "")
-    caso("SEM a marca, com gente, a cobrança sai como texto comum, fora da "
+    caso("Sem a marca, com gente, a cobrança sai como texto comum, fora da "
          "conversa: a saída não é JSON, não tem systemMessage, e leva o aviso "
          "e o motivo inteiros, em UTF-8",
          com_gente.strip() and not parece_json(com_gente)
          and "systemMessage" not in com_gente
          and com_gente.startswith(AVISO_QUE_NAO_SEGURA_A_PARADA)
          and MOTIVO_DE_MENTIRA in com_gente)
-    caso("SEM a marca, o relato que só avisa também sai como texto comum",
+    caso("Sem a marca, o relato que só avisa também sai como texto comum",
          o_que_main_imprime("", RELATO_DE_MENTIRA, "").strip()
          == RELATO_DE_MENTIRA)
-    caso("COM a marca, o bloqueio segue igual: decision block com o motivo "
+    caso("Com a marca, o bloqueio segue igual: decision block com o motivo "
          "inteiro, o evento de parada, e nada de systemMessage",
          lido_como_json(o_que_main_imprime(MOTIVO_DE_MENTIRA, "", "trabalhar"))
          == {"decision": DECISAO_DE_BLOQUEAR, "reason": MOTIVO_DE_MENTIRA,
              "hookSpecificOutput": {"hookEventName": EVENTO_DE_PARADA}})
-    caso("COM a marca, o relato segue como hoje, no systemMessage",
+    caso("Com a marca, o relato segue como hoje, no systemMessage",
          lido_como_json(o_que_main_imprime("", RELATO_DE_MENTIRA, "trabalhar"))
          == {"systemMessage": RELATO_DE_MENTIRA})
 
@@ -2111,13 +2459,218 @@ def testar() -> int:
         git_de_mentira(outra, "checkout", "-q", "main")
         git_de_mentira(outra, "merge", "-q", "homolog")
         git_de_mentira(outra, "push", "-q", "origin", "main")
-        caso("a régua busca o remoto antes de medir: integração já mesclada na "
-             "principal lá fora não vira acusação por ref local velha",
-             commits_da_integracao_fora_da_principal(quieta, "main", "homolog")
-             == [])
+        ultima_busca = quieta / ".git" / "FETCH_HEAD"
+        marca_de_antes = os.environ.pop(
+            MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO, None)
+        disparar_de_verdade = globals().get("disparar_a_busca_no_remoto")
+        disparadas, todas_as_disparadas = [], []
+
+        def disparar_e_guardar(raiz, principal, integracao):
+            disparada = disparar_de_verdade(raiz, principal, integracao)
+            disparadas.append(disparada)
+            todas_as_disparadas.append(disparada)
+            return disparada
+
+        def medido_na_quieta() -> list:
+            global disparar_a_busca_no_remoto
+            os.environ.pop(MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO, None)
+            disparadas.clear()
+            disparar_a_busca_no_remoto = disparar_e_guardar
+            try:
+                return commits_da_integracao_fora_da_principal(
+                    quieta, "main", "homolog")
+            finally:
+                disparar_a_busca_no_remoto = disparar_de_verdade
+
+        def a_busca_disparada_terminou() -> bool:
+            if len(disparadas) != 1 or disparadas[0] is None:
+                return False
+            try:
+                return disparadas[0].wait(
+                    timeout=ESPERA_PELA_BUSCA_DISPARADA_EM_SEGUNDOS) == 0
+            except subprocess.TimeoutExpired:
+                return False
+
+        def medido_com_a_busca_que_nao_sobe():
+            global COMANDO_DE_BUSCA_NO_REMOTO
+            guardado = COMANDO_DE_BUSCA_NO_REMOTO
+            COMANDO_DE_BUSCA_NO_REMOTO = [PROGRAMA_DE_BUSCA_QUE_NAO_EXISTE,
+                                          *guardado[1:]]
+            avisado = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(avisado):
+                    return medido_na_quieta(), avisado.getvalue()
+            except Exception as falha:
+                return falha, avisado.getvalue()
+            finally:
+                COMANDO_DE_BUSCA_NO_REMOTO = guardado
+
+        def envelhecer_a_ultima_busca(segundos: int) -> None:
+            instante = time.time() - segundos
+            os.utime(ultima_busca, (instante, instante))
+
+        try:
+            medido = medido_na_quieta()
+            caso("busca feita há pouco por qualquer sessão dispensa a da "
+                 "parada: com o FETCH_HEAD de agora, a mescla nova lá fora "
+                 "não aparece, e a parada não dispara busca nenhuma",
+                 len(medido) == 1 and medido[0].endswith("trabalho")
+                 and disparadas == [])
+            caso("a marca para o instrumento sai também quando a parada pula "
+                 "a busca, porque a busca é recente",
+                 marca_de_agora_para_o_instrumento("main", "homolog"))
+            envelhecer_a_ultima_busca(IDADE_DA_BUSCA_AINDA_RECENTE_EM_SEGUNDOS)
+            medido = medido_na_quieta()
+            caso("FETCH_HEAD de 4 minutos ainda dispensa a busca, não dispara "
+                 "nada, e a marca leva a hora de agora, que o instrumento aceita",
+                 len(medido) == 1 and disparadas == []
+                 and marca_de_agora_para_o_instrumento("main", "homolog"))
+            envelhecer_a_ultima_busca(IDADE_DA_BUSCA_VELHA_EM_SEGUNDOS)
+            medido = medido_na_quieta()
+            caso("com o FETCH_HEAD de 6 minutos a parada não espera a rede: "
+                 "mede pela vista local, que ainda mostra a integração à "
+                 "frente, e dispara uma busca só",
+                 len(medido) == 1 and medido[0].endswith("trabalho")
+                 and len(disparadas) == 1 and disparadas[0] is not None)
+            caso("a marca para o instrumento sai também quando a parada "
+                 "dispara a busca, porque o instrumento também não pode "
+                 "esperar a rede na parada",
+                 marca_de_agora_para_o_instrumento("main", "homolog"))
+            terminou = a_busca_disparada_terminou()
+            caso("a régua segue buscando o remoto, para a parada seguinte: "
+                 "terminada a busca disparada, integração já mesclada na "
+                 "principal lá fora não vira acusação por ref local velha, e "
+                 "a busca fresca não dispara outra",
+                 terminou and medido_na_quieta() == [] and disparadas == [])
+            git_de_mentira(outra, "checkout", "-q", "homolog")
+            git_de_mentira(outra, "commit", "-q", "--allow-empty", "-m",
+                           "depois")
+            git_de_mentira(outra, "push", "-q", "origin", "homolog")
+            ultima_busca.unlink()
+            medido = medido_na_quieta()
+            terminou = a_busca_disparada_terminou()
+            seguinte = medido_na_quieta()
+            caso("sem FETCH_HEAD a parada dispara a busca, e o commit novo lá "
+                 "fora aparece na parada seguinte",
+                 medido == [] and terminou
+                 and len(seguinte) == 1 and seguinte[0].endswith("depois"))
+            git_de_mentira(outra, "commit", "-q", "--allow-empty", "-m",
+                           "mais um")
+            git_de_mentira(outra, "push", "-q", "origin", "homolog")
+            ultima_busca.write_text("", encoding="utf-8")
+            medido = medido_na_quieta()
+            caso("FETCH_HEAD vazio de agora é busca em curso, porque o git o "
+                 "esvazia ao começar: a parada mede pela vista local e não "
+                 "dispara outra",
+                 len(medido) == 1 and disparadas == [])
+            envelhecer_a_ultima_busca(IDADE_DA_BUSCA_VAZIA_QUE_FALHOU_EM_SEGUNDOS)
+            medido = medido_na_quieta()
+            terminou = a_busca_disparada_terminou()
+            caso("FETCH_HEAD vazio de 2 minutos é busca que falhou, e a parada "
+                 "dispara a busca de novo em vez de confiar na vista velha: a "
+                 "seguinte vê os dois commits",
+                 len(medido) == 1 and terminou
+                 and len(medido_na_quieta()) == 2)
+            envelhecer_a_ultima_busca(IDADE_DA_BUSCA_VELHA_EM_SEGUNDOS)
+            medido, avisado = medido_com_a_busca_que_nao_sobe()
+            caso("disparo que falha não derruba a parada: ela mede pela vista "
+                 "local, deixa a marca para o instrumento e avisa numa linha "
+                 "fora da conversa que a busca não subiu",
+                 isinstance(medido, list) and len(medido) == 2
+                 and marca_de_agora_para_o_instrumento("main", "homolog")
+                 and "busca" in avisado and len(avisado.splitlines()) == 1)
+        finally:
+            for disparada in todas_as_disparadas:
+                if disparada is not None:
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        disparada.wait(
+                            timeout=ESPERA_PELA_BUSCA_DISPARADA_EM_SEGUNDOS)
+            os.environ.pop(MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO, None)
+            if marca_de_antes is not None:
+                os.environ[MARCA_DA_BUSCA_FEITA_PARA_O_INSTRUMENTO] = (
+                    marca_de_antes)
+
+    with tempfile.TemporaryDirectory(prefix="cobrar-destino-destacada-") as tmp:
+        base = Path(tmp).resolve()
+        origem, arvore, outra = base / "origem", base / "arvore", base / "outra"
+        origem.mkdir()
+        git_de_mentira(origem, "init", "-q", "--bare", "-b",
+                       PRINCIPAL_DE_MENTIRA)
+        git_de_mentira(base, "clone", "-q", str(origem), str(outra))
+        git_de_mentira(outra, "config", "user.email", "prova@exemplo")
+        git_de_mentira(outra, "config", "user.name", "Prova")
+        git_de_mentira(outra, "commit", "-q", "--allow-empty", "-m", "raiz")
+        git_de_mentira(outra, "push", "-q", "origin", PRINCIPAL_DE_MENTIRA,
+                       f"{PRINCIPAL_DE_MENTIRA}:homolog")
+        git_de_mentira(base, "clone", "-q", str(origem), str(arvore))
+        git_de_mentira(arvore, "fetch", "-q", "origin")
+        for arquivo, conteudo in (
+                (ARQUIVO_CONFIGURACAO,
+                 {CHAVE_POR_INCORPORACAO: [PRINCIPAL_DE_MENTIRA]}),
+                (ARQUIVO_EXECUTOR,
+                 {CHAVE_DAS_BRANCHES: {CHAVE_DA_INTEGRACAO: "homolog"}})):
+            (arvore / arquivo).parent.mkdir(parents=True, exist_ok=True)
+            (arvore / arquivo).write_text(json.dumps(conteudo),
+                                          encoding="utf-8")
+        copia_do_gancho = arvore / ".claude" / "hooks" / Path(__file__).name
+        copia_do_gancho.parent.mkdir(parents=True)
+        copia_do_gancho.write_bytes(Path(__file__).read_bytes())
+        (arvore / ".git" / "info" / "exclude").write_text(
+            "".join(f"{pasta_fora}/\n"
+                    for pasta_fora in PASTAS_DO_GANCHO_FORA_DO_GIT_DE_MENTIRA),
+            encoding="utf-8")
+        como_o_settings_chama = comando_do_gancho_no_settings()
+
+        def parada_cronometrada():
+            inicio = time.monotonic()
+            parada = rodar_o_gancho_de_verdade(
+                arvore, "", ENTRADA_DE_PARADA, base,
+                comando=como_o_settings_chama)
+            return parada, time.monotonic() - inicio
+
+        caso("o settings.json chama este gancho na parada, e o caso do "
+             "processo real o chama do mesmo jeito",
+             bool(como_o_settings_chama))
+        controle, sem_busca = (parada_cronometrada() if como_o_settings_chama
+                               else (None, 0.0))
+        git_de_mentira(outra, "commit", "-q", "--allow-empty", "-m",
+                       "mescla la fora")
+        git_de_mentira(outra, "push", "-q", "origin", PRINCIPAL_DE_MENTIRA)
+        commit_la_fora = resposta_limpa(COMANDO_DO_COMMIT_DA_ARVORE, outra,
+                                        TEMPO_DO_GIT)
+        instante_velho = time.time() - IDADE_DA_BUSCA_VELHA_EM_SEGUNDOS
+        os.utime(arvore / ".git" / "FETCH_HEAD",
+                 (instante_velho, instante_velho))
+        acordou = base / "acordou.txt"
+        busca_que_dorme = base / "busca_que_dorme.py"
+        busca_que_dorme.write_text(BUSCA_DE_MENTIRA_QUE_DORME, encoding="utf-8")
+        git_de_mentira(arvore, "config", "remote.origin.uploadpack",
+                       f'"{Path(sys.executable).as_posix()}" '
+                       f'"{busca_que_dorme.as_posix()}" "{acordou.as_posix()}"')
+        parada, durou = (parada_cronometrada() if como_o_settings_chama
+                         else (None, 0.0))
+        acordou_antes_do_fim_da_parada = acordou.exists()
+        gravou = a_busca_gravou(arvore, commit_la_fora)
+        caso("PROCESSO REAL, chamado como o settings.json chama: sem busca "
+             "recente, a parada termina enquanto a busca de mentira dorme "
+             f"{SONO_DA_BUSCA_DE_MENTIRA_EM_SEGUNDOS} s, e custa menos de "
+             f"{FOLGA_DO_DISPARO_NA_PARADA_EM_SEGUNDOS} s a mais que "
+             "a parada com busca recente, medida agora na mesma árvore — o "
+             "filho não herda as saídas do gancho, e quem chamou não espera "
+             f"por ele (com busca recente {sem_busca:.2f} s, disparando "
+             f"{durou:.2f} s)",
+             controle is not None and controle.returncode == 0
+             and parada is not None and parada.returncode == 0
+             and durou < sem_busca
+             + FOLGA_DO_DISPARO_NA_PARADA_EM_SEGUNDOS
+             and not acordou_antes_do_fim_da_parada)
+        caso("PROCESSO REAL: a busca disparada termina depois da parada e "
+             "grava o que buscou — o FETCH_HEAD e o espelho da principal "
+             "trazem o commit novo lá fora",
+             acordou.exists() and gravou)
+        esperar_a_busca_soltar_a_pasta(arvore)
 
     with tempfile.TemporaryDirectory(prefix="cobrar-destino-herdada-") as tmp:
-        import time
         from datetime import timezone
         arvore = Path(tmp).resolve()
         git_de_mentira(arvore, "init", "-q")
@@ -2141,16 +2694,31 @@ def testar() -> int:
              == datetime(2026, 9, 1, 20, 28, 57, 754000,
                          tzinfo=timezone.utc).timestamp())
         so_herdada = {**ARVORE_LIMPA, "herdada": ["?? velho.txt"]}
-        caso("sujeira herdada NÃO trava a parada de verdade: o texto dela "
+        caso("sujeira herdada não trava a parada de verdade: o texto dela "
              "dizia isso e ela morava na lista que trava, então a sessão era "
              "bloqueada pelo que não é dela",
              cobrancas(so_herdada) == [])
         caso("e sai como relato, nomeando o arquivo e dizendo que não trava",
-             any("velho.txt" in linha and "NÃO trava" in linha
+             any("velho.txt" in linha and "não trava" in linha
                  for linha in relato(so_herdada)))
-        caso("CONTROLE: sujeira DESTA sessão segue travando, com a herdada "
+        caso("CONTROLE: sujeira desta sessão segue travando, com a herdada "
              "ao lado",
              len(cobrancas({**so_herdada, "suja": ["?? novo.py"]})) == 1)
+
+    try:
+        regras = json.loads((raiz_do_projeto_nunca_o_cwd() / ARQUIVO_DAS_REGRAS)
+                            .read_text(encoding="utf-8"))
+        da_regra_16 = " ".join(
+            " ".join(regra.get("faca") or []) for regra in regras["regras"]
+            if regra.get("id") == NUMERO_DA_REGRA_DO_DESTINO)
+    except (OSError, ValueError, KeyError, TypeError):
+        da_regra_16 = ""
+    caso("a regra 16 e o gancho dizem o mesmo da sujeira herdada: não se "
+         "commita nem se apaga, relata-se ao dono",
+         "não se commita nem se apaga" in da_regra_16
+         and "relata-se ao dono" in da_regra_16
+         and "Não commite nem apague" in COBRA_SUJEIRA_HERDADA
+         and "diga ao dono" in COBRA_SUJEIRA_HERDADA)
 
     limpo_e_somente_leitura = {
         "raiz": "projetos/vizinho", "suja": [], "sem_remoto": [],
@@ -2158,19 +2726,19 @@ def testar() -> int:
         "pode_empurrar": False, "fora_da_integracao": SEM_A_INTEGRACAO,
         "pedido": NAO_MEDIDO,
     }
-    caso("vizinho SOMENTE LEITURA, com árvore limpa e nada por empurrar, não "
+    caso("vizinho somente leitura, com árvore limpa e nada por empurrar, não "
          "é cobrado por não ter a integração declarada: não há o que "
          "entregar, e o nome de uma branch onde nunca se escreve não é "
          "pendência — cobrança impossível de resolver ensina a ignorar a "
          "cobrança inteira",
          vizinho_sem_destino(limpo_e_somente_leitura) is False)
-    caso("mas o mesmo vizinho COM árvore suja continua cobrado",
+    caso("mas o mesmo vizinho com árvore suja continua cobrado",
          vizinho_sem_destino(dict(limpo_e_somente_leitura,
                                   suja=[" M x.py"])) is True)
     caso("e com commit que não está em remoto nenhum, também",
          vizinho_sem_destino(dict(limpo_e_somente_leitura,
                                   sem_remoto=["abc1234 solto"])) is True)
-    caso("vizinho onde SE ESCREVE segue cobrado pela integração que falta — "
+    caso("vizinho onde se escreve segue cobrado pela integração que falta — "
          "ali o nome importa, porque é para lá que a entrega vai",
          vizinho_sem_destino(dict(limpo_e_somente_leitura,
                                   somente_leitura=False)) is True)
@@ -2187,8 +2755,8 @@ def testar() -> int:
         git_de_mentira(principal, "commit", "-qm", "raiz")
         git_de_mentira(principal, "worktree", "add", "-q", str(ao_lado),
                        "-b", "issue/914-medido-de-dentro")
-        caso("a bancada monta uma ÁRVORE DE TRABALHO de verdade, onde o .git "
-             "é ARQUIVO e não pasta — a casa roda com várias, e nenhuma "
+        caso("a bancada monta uma árvore de trabalho de verdade, onde o .git "
+             "é arquivo e não pasta — a casa roda com várias, e nenhuma "
              "fixture exercitava esse terreno",
              (ao_lado / ".git").is_file()
              and not (ao_lado / ".git").is_dir())
@@ -2197,7 +2765,7 @@ def testar() -> int:
         git_de_mentira(ao_lado, "commit", "-qm", "de dentro da árvore")
         (ao_lado / "sujo.txt").write_text("nao commitado", encoding="utf-8")
         minha, herdada = sujeira_desta_sessao_e_herdada(ao_lado, None)
-        caso("medida de dentro da árvore de trabalho, a sujeira é a DELA — o "
+        caso("medida de dentro da árvore de trabalho, a sujeira é a dela — o "
              "git responde pela árvore em que o comando roda",
              any("sujo.txt" in linha for linha in minha) and herdada == [])
         caso("o número da issue sai do nome da branch da árvore de trabalho, "
@@ -2215,18 +2783,30 @@ def testar() -> int:
         git_de_mentira(arvore, "config", "user.name", "Prova")
         git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m", "raiz")
         git_de_mentira(arvore, "checkout", "-q", "-b", "issue/142-o-assunto")
-        caso("o número da issue sai do NOME da branch de trabalho",
+        caso("o número da issue sai do nome da branch de trabalho",
              numero_da_issue_do_trabalho(arvore, "issue/142-o-assunto", "main")
              == "142")
         git_de_mentira(arvore, "checkout", "-q", "-b", "sem-numero-no-nome")
         git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m",
                        "O conserto que faltava (issue 77)")
-        caso("sem número no nome da branch, ele sai da mensagem do commit — "
-             "o número da issue entre parênteses",
+        caso("sem integração declarada, a sessão não tem como separar o que é "
+             "dela do que herdou, e cala em vez de atribuir issue",
              numero_da_issue_do_trabalho(arvore, "sem-numero-no-nome", "main")
-             == "77")
+             == "")
+        git_de_mentira(arvore, "update-ref", "refs/remotes/origin/homolog",
+                       "HEAD")
+        caso("commit que já está na integração remota é herdado de outra "
+             "frente: o número dele não vira a issue desta sessão",
+             numero_da_issue_do_trabalho(arvore, "sem-numero-no-nome", "main",
+                                         "homolog") == "")
+        git_de_mentira(arvore, "commit", "-q", "--allow-empty", "-m",
+                       "O conserto desta sessão (issue 78)")
+        caso("sem número no nome da branch, ele sai da mensagem do commit "
+             "desta sessão — o que a integração remota ainda não tem",
+             numero_da_issue_do_trabalho(arvore, "sem-numero-no-nome", "main",
+                                         "homolog") == "78")
         caso("sem número em lugar nenhum, a cobrança não tem o que perguntar "
-             "e CALA, em vez de chutar um número",
+             "e cala, em vez de chutar um número",
              numero_da_issue_do_trabalho(arvore, "outra-coisa", "") == "")
 
         (arvore / "nucleo").mkdir()
@@ -2271,30 +2851,32 @@ def testar() -> int:
                              "criterios": criterios}}
 
     cobradas = cobranca_do_criterio(com_criterio(lido_com_branco))
-    caso("critério em branco com o trabalho entregue COBRA, diz quantos são e "
+    caso("critério em branco com o trabalho entregue cobra, diz quantos são e "
          "manda marcar com evidência ou dizer por que sai do escopo",
          len(cobradas) == 1 and "142" in cobradas[0]
          and "2 critério" in cobradas[0]
          and "a bancada cobre o caso novo" in cobradas[0])
-    caso("a cobrança manda tirar o verbo que FECHA a issue do pedido de "
+    caso("a cobrança manda tirar o verbo que fecha a issue do pedido de "
          "incorporação — é ali que o critério não conferido desaparece",
-         "FECHA" in cobradas[0])
+         "fecha a issue" in cobradas[0])
     caso("critério todo marcado não cobra nada",
          cobranca_do_criterio(com_criterio(lido_marcado)) == [])
-    caso("critério todo marcado entra no RELATO, com a contagem",
+    caso("critério todo marcado entra no relato, com a contagem",
          any("142" in linha and "2 critério" in linha
              for linha in relato(com_criterio(lido_marcado))))
     nao_medido = cobranca_do_criterio(com_criterio(NAO_MEDIDO))
-    caso("issue ilegível COBRA dizendo que não conferiu, e não conferido não "
+    caso("issue ilegível cobra dizendo que não conferiu, e não conferido não "
          "é cumprido — nem cala, nem inventa que está pronta",
          len(nao_medido) == 1 and "não se deixou ler" in nao_medido[0]
          and "gh issue view 142" in nao_medido[0])
     caso("sem issue no trabalho, a cobrança do critério cala",
          cobranca_do_criterio({"integracao": "homolog", "criterio": {}}) == []
          and cobranca_do_criterio({"integracao": "homolog"}) == [])
-    caso("trabalho NÃO entregue não vai à rede nem cobra critério: a issue só "
+    caso("trabalho não entregue não vai à rede nem cobra critério: a issue só "
          "se lê quando há commit da sessão na integração",
-         criterio_do_trabalho(Path("."), "issue/1-x", "main", False) == {})
+         pergunta_do_criterio(Path("."), "issue/1-x", "main", "homolog",
+                              False) is None
+         and criterio_respondido(None) == {})
 
     with tempfile.TemporaryDirectory(prefix="cobrar-destino-porcelain-") as tmp:
         arvore = Path(tmp).resolve()
@@ -2307,22 +2889,22 @@ def testar() -> int:
         git_de_mentira(arvore, "commit", "-qm", "base")
         rastreado.write_text("mexido antes da sessão", encoding="utf-8")
         os.utime(rastreado, (1000, 1000))
-        caso("a PRIMEIRA linha do porcelain guarda o espaço inicial — o strip "
+        caso("a primeira linha do porcelain guarda o espaço inicial — o strip "
              "da saída inteira o comia, ` M a.txt` virava `M a.txt`, o corte "
              "em [3:] perdia três letras do caminho e o stat não achava o "
              "arquivo",
              linhas_da_arvore_suja(arvore) == [" M a.txt"])
         caso("e o primeiro arquivo sujo, mais velho que a abertura, é herdado "
-             "— antes era SEMPRE sujeira desta sessão, e o gancho mandava "
+             "— antes era sempre sujeira desta sessão, e o gancho mandava "
              "commitar ou apagar trabalho alheio",
              sujeira_desta_sessao_e_herdada(arvore, time.time() - 60)
              == ([], [" M a.txt"]))
 
-    caso("arquivo que a camada JULGA continua barrando: código solto trava",
+    caso("arquivo que a camada julga continua barrando: código solto trava",
          any("árvore está suja" in c
              for c in cobrancas({**ARVORE_LIMPA, "suja": ["?? sujo.py"],
                                  "nao_julgada": []})))
-    caso("arquivo que a camada NÃO julga avisa e NÃO trava: imagem solta "
+    caso("arquivo que a camada não julga avisa e não trava: imagem solta "
          "não impede a entrega",
          (lambda c: not any("árvore está suja" in x for x in c)
           and any("não sabe julgar" in x for x in c))(
@@ -2338,11 +2920,11 @@ def testar() -> int:
          and "`conhecimento/`" in FECHAMENTO_DA_COBRANCA
          and "nada fica sem destino" in FECHAMENTO_DA_COBRANCA)
 
-    caso("sessão de pesquisa: com a marca no ambiente a cobrança CALA, "
+    caso("sessão de pesquisa: com a marca no ambiente a cobrança cala, "
          "porque não há destino em disco a cobrar",
          decisao({}, Path("."), {MARCA_NO_AMBIENTE: "1"})[0] == "")
     caso("e o silêncio vem explicado: a sessão é mandada para a issue",
-         "ISSUE" in decisao({}, Path("."), {MARCA_NO_AMBIENTE: "1"})[1])
+         "é a issue" in decisao({}, Path("."), {MARCA_NO_AMBIENTE: "1"})[1])
     caso("marca vazia não conta como posta, e a cobrança segue normal",
          not o_modo_esta_posto({MARCA_NO_AMBIENTE: ""}))
     caso("sem a marca, a árvore suja continua sendo cobrada",
@@ -2457,16 +3039,63 @@ def testar() -> int:
              "omissão não é permissão",
              cadastro_do_vizinho(principal, vizinho)["pode_empurrar"] is False)
         cadastrar(False, push=False)
-        caso("push negado no cadastro cobra avisando o dono, e NÃO manda "
+        caso("push negado no cadastro cobra avisando o dono, e não manda "
              "mesclar onde a sessão não pode empurrar",
-             any("NÃO autoriza push" in c and "MESCLA na integração" not in c
+             any("não autoriza push" in c and "mescla na integração" not in c
                  for c in o_que_cobra_do_vizinho()))
         cadastrar(False)
         caso("vizinho próprio com a branch de trabalho empurrada mas fora da "
              "integração do cadastro é cobrado: empurrar é sincronizar, "
              "entregar é mesclar",
-             any("MESCLA na integração" in c and BRANCH_DE_MENTIRA in c
+             any("mescla na integração" in c and BRANCH_DE_MENTIRA in c
                  for c in o_que_cobra_do_vizinho()))
+        caso("a mensagem da mescla não afirma que para a integração nunca "
+             "cabe pedido: o caminho de cada branch sai da configuração de "
+             "quem instala, e a regra 16 manda ler a lista",
+             "não se abre pedido" not in LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO
+             and "branches_por_incorporacao" in
+             LINHA_DO_VIZINHO_FORA_DA_INTEGRACAO)
+
+        def o_que_cobra_com_pedidos(pedidos):
+            global pedidos_abertos
+            guardada = pedidos_abertos
+            pedidos_abertos = lambda *_: pedidos
+            try:
+                return o_que_cobra_do_vizinho()
+            finally:
+                pedidos_abertos = guardada
+
+        (vizinho / ARQUIVO_CONFIGURACAO).parent.mkdir(parents=True,
+                                                      exist_ok=True)
+        (vizinho / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+            {CHAVE_POR_INCORPORACAO: ["Homolog"]}), encoding="utf-8")
+        git_de_mentira(vizinho, "add", ARQUIVO_CONFIGURACAO)
+        git_de_mentira(vizinho, "commit", "-qm", "a integração recebe por pedido")
+        git_de_mentira(vizinho, "push", "-q", "origin", BRANCH_DE_MENTIRA)
+        caso("a integração que o vizinho lista no branches_por_incorporacao "
+             "dele sai do cadastro marcada como a que recebe por pedido, sem "
+             "olhar maiúscula",
+             cadastro_do_vizinho(principal, vizinho).get(
+                 "integracao_por_pedido") is True)
+        caso("vizinho próprio cuja integração está em branches_por_"
+             "incorporacao dele é cobrado pelo pedido, não pela mescla — "
+             "antes a mensagem mandava mesclar e dizia que para a integração "
+             "nunca cabe pedido",
+             any("pedido de incorporação" in c and "mescla na integração" not in c
+                 and "gh pr create" in c and "é da sessão" in c
+                 for c in o_que_cobra_com_pedidos([])))
+        caso("e com o pedido aberto da branch para a integração ele cala: o "
+             "pedido é o destino dela",
+             o_que_cobra_com_pedidos([{"number": 1}]) == [])
+        caso("gh mudo nesse vizinho é não medido, nunca pedido aberto",
+             any("não deu para medir" in c
+                 for c in o_que_cobra_com_pedidos(NAO_MEDIDO)))
+        cadastrar(False, push=False)
+        caso("CONTROLE: com push negado no cadastro a entrega segue do dono, "
+             "mesmo com a integração listada",
+             any("não autoriza push" in c and "gh pr create" not in c
+                 for c in o_que_cobra_com_pedidos([])))
+        cadastrar(False)
         git_de_mentira(vizinho, "checkout", "-q", "homolog")
         git_de_mentira(vizinho, "merge", "-q", BRANCH_DE_MENTIRA)
         git_de_mentira(vizinho, "push", "-q", "origin", "homolog")
@@ -2479,23 +3108,13 @@ def testar() -> int:
         caso("integração declarada que não existe no remoto do vizinho manda "
              "declarar a certa no cadastro, e não vira 'entregue' nem "
              "'não medido'",
-             any("NÃO" in c and "existe no remoto" in c
+             any("não existe no remoto" in c
                  and "branches.integracao" in c
                  for c in o_que_cobra_do_vizinho()))
         cadastrar(True)
-
-        def o_que_cobra_com_pedidos(pedidos):
-            global pedidos_abertos
-            guardada = pedidos_abertos
-            pedidos_abertos = lambda *_: pedidos
-            try:
-                return o_que_cobra_do_vizinho()
-            finally:
-                pedidos_abertos = guardada
-
         caso("vizinho somente leitura fora da integração e sem pedido aberto é "
              "cobrado pelo pedido, não pela mescla",
-             any("pedido de incorporação" in c and "MESCLA na integração" not in c
+             any("pedido de incorporação" in c and "mescla na integração" not in c
                  for c in o_que_cobra_com_pedidos([])))
         caso("vizinho somente leitura com pedido de incorporação aberto cala",
              o_que_cobra_com_pedidos([{"number": 1}]) == [])
@@ -2509,6 +3128,33 @@ def testar() -> int:
          "formatar cada pedaço com {} punha a principal nas duas posições, e a "
          "integração nunca era buscada",
          montada[-2:] == ["main", "homolog"])
+    pedidos_ao_popen = []
+
+    class PopenEspiao:
+        def __init__(self, comando, **opcoes):
+            pedidos_ao_popen.append((comando, opcoes))
+
+    popen_de_verdade = subprocess.Popen
+    subprocess.Popen = PopenEspiao
+    try:
+        disparar = globals().get("disparar_a_busca_no_remoto")
+        if callable(disparar):
+            disparar(Path("."), "main", "homolog")
+    finally:
+        subprocess.Popen = popen_de_verdade
+    comando_disparado, opcoes_do_disparo = (
+        pedidos_ao_popen[0] if len(pedidos_ao_popen) == 1 else ([], {}))
+    ambiente_do_disparo = opcoes_do_disparo.get("env") or {}
+    caso("a busca de fundo nunca pede senha: o disparo sobe com "
+         "GIT_TERMINAL_PROMPT=0 e GCM_INTERACTIVE=never, sem perder o resto "
+         "do ambiente, e com credential.interactive=never no comando — "
+         "credencial vencida vira falha rápida, não janela escondida",
+         all(ambiente_do_disparo.get(variavel) == valor for variavel, valor
+             in VARIAVEIS_QUE_CALAM_A_PERGUNTA_DE_SENHA.items())
+         and ambiente_do_disparo.get("PATH") == os.environ.get("PATH")
+         and OPCAO_QUE_CALA_A_PERGUNTA_DE_SENHA in comando_disparado
+         and comando_disparado.index(OPCAO_QUE_CALA_A_PERGUNTA_DE_SENHA)
+         < comando_disparado.index("fetch"))
     avisar = globals().get("marca_da_busca_feita")
     caso("depois de buscar, o gancho deixa a marca que dispensa o instrumento "
          "de entrega de buscar de novo na mesma parada",

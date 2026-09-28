@@ -25,6 +25,7 @@ CHAVE_DO_MOTIVO_LONGO = "permissionDecisionReason"
 CHAVE_DA_DECISAO_CURTA = "decision"
 CHAVE_DO_MOTIVO_CURTO = "reason"
 CHAVE_DO_ENSINO = "additionalContext"
+CHAVE_DO_AVISO = "systemMessage"
 PALAVRA_QUE_BARRA_ONDE_NINGUEM_RESPONDE = ("deny", "block", "ask")
 PALAVRA_QUE_RECUSA_NA_OUTRA = "block"
 SAIDA_QUE_BARRA = 2
@@ -35,7 +36,9 @@ RAIZ_QUE_A_OUTRA_FERRAMENTA_DA = "DEVIN_PROJECT_DIR"
 RAIZ_QUE_AS_CERCAS_LEEM = "CLAUDE_PROJECT_DIR"
 EVENTO_PADRAO = "PreToolUse"
 CAMPO_DO_MODO_DE_PERMISSAO = "permission_mode"
-MODO_SEM_QUEM_RESPONDA = "bypassPermissions"
+MARCA_DE_ETAPA_NO_AMBIENTE = "ENCADEADOR_ETAPA"
+VALOR_QUE_O_EXECUTOR_POE_NA_MARCA = "1"
+EVENTOS_EM_QUE_O_CODEX_POE_O_TEXTO_NO_CONTEXTO = ("PreToolUse", "SessionStart")
 
 BANDEIRA_DO_CODEX = "--codex"
 FERRAMENTA_DE_PATCH_DO_CODEX = "apply_patch"
@@ -133,7 +136,7 @@ def cercas_que_a_ferramenta_de_origem_rodaria(raiz, evento, ferramenta):
 def a_recusa_e_o_ensino_de_uma_cerca(saida, codigo):
     if codigo == SAIDA_QUE_BARRA:
         return saida.strip() or RECUSADO_SEM_MOTIVO_DITO, None
-    ensino = None
+    ditos = []
     for linha in saida.splitlines():
         linha = linha.strip()
         if not linha.startswith("{"):
@@ -147,8 +150,9 @@ def a_recusa_e_o_ensino_de_uma_cerca(saida, codigo):
             return longa.get(CHAVE_DO_MOTIVO_LONGO, ""), None
         if dito.get(CHAVE_DA_DECISAO_CURTA) in PALAVRA_QUE_BARRA_ONDE_NINGUEM_RESPONDE:
             return dito.get(CHAVE_DO_MOTIVO_CURTO, ""), None
-        ensino = ensino or longa.get(CHAVE_DO_ENSINO)
-    return None, ensino
+        ditos += [texto for texto in (longa.get(CHAVE_DO_ENSINO),
+                                      dito.get(CHAVE_DO_AVISO)) if texto]
+    return None, "\n".join(dict.fromkeys(ditos)) or None
 
 
 def comando_com_a_raiz_expandida(comando: str, raiz) -> str:
@@ -158,9 +162,15 @@ def comando_com_a_raiz_expandida(comando: str, raiz) -> str:
 
 
 def pergunta_para_as_cercas(pedido_da_outra_ferramenta, ferramenta):
-    pergunta = dict(pedido_da_outra_ferramenta, tool_name=ferramenta)
-    pergunta.setdefault(CAMPO_DO_MODO_DE_PERMISSAO, MODO_SEM_QUEM_RESPONDA)
-    return pergunta
+    return dict(pedido_da_outra_ferramenta, tool_name=ferramenta)
+
+
+def ambiente_das_cercas(raiz, base=None):
+    ambiente = dict(os.environ if base is None else base)
+    ambiente[RAIZ_QUE_AS_CERCAS_LEEM] = str(raiz)
+    if not ambiente.get(MARCA_DE_ETAPA_NO_AMBIENTE):
+        ambiente[MARCA_DE_ETAPA_NO_AMBIENTE] = VALOR_QUE_O_EXECUTOR_POE_NA_MARCA
+    return ambiente
 
 
 def a_recusa_e_o_ensino_da_camada(pedido_da_outra_ferramenta, codex=False):
@@ -183,7 +193,7 @@ def a_recusa_e_o_ensino_de_um_pedido(pedido_da_outra_ferramenta):
     ferramenta = COMO_A_OUTRA_FERRAMENTA_CHAMA_A_MESMA_COISA.get(chegou, chegou)
 
     pergunta = pergunta_para_as_cercas(pedido_da_outra_ferramenta, ferramenta)
-    ambiente = dict(os.environ, **{RAIZ_QUE_AS_CERCAS_LEEM: str(raiz)})
+    ambiente = ambiente_das_cercas(raiz)
 
     ensinos = []
     for comando in cercas_que_a_ferramenta_de_origem_rodaria(raiz, evento,
@@ -210,6 +220,7 @@ RECUSA_LONGA = ('{"hookSpecificOutput": {"permissionDecision": "deny", '
                 '"permissionDecisionReason": "porque sim"}}')
 RECUSA_CURTA = '{"decision": "block", "reason": "porque nao"}'
 ENSINO = ('{"hookSpecificOutput": {"additionalContext": "cuidado com isso"}}')
+AVISO = '{"systemMessage": "olha isso"}'
 LIBERADO = '{"hookSpecificOutput": {"permissionDecision": "allow"}}'
 PERGUNTA = ('{"hookSpecificOutput": {"permissionDecision": "ask", '
             '"permissionDecisionReason": "quem decide e o dono"}}')
@@ -231,7 +242,11 @@ CASOS_DA_RESPOSTA = (
      "porque nao", None),
     ("json quebrado nao derruba", "{nao e json}", 0, None, None),
     ("pergunta barra onde ninguem responde", PERGUNTA, 0,
-     "quem decide e o dono", None))
+     "quem decide e o dono", None),
+    ("aviso da cerca chega ao motor como o que ela diz sem barrar", AVISO, 0,
+     None, "olha isso"),
+    ("ensino e aviso da mesma cerca chegam os dois", ENSINO + "\n" + AVISO,
+     0, None, "cuidado com isso\nolha isso"))
 
 CASOS_DO_NOME = (("write", "Write"), ("edit", "Edit"), ("exec", "Bash"),
                  ("shell_command", "Bash"), ("read", "Read"),
@@ -259,14 +274,15 @@ PEDIDO_DE_PATCH = {"hook_event_name": "PreToolUse",
                    "tool_name": "apply_patch",
                    "tool_input": {"command": PATCH_DE_EXEMPLO}}
 CERCA_QUE_BARRA_A_PARADA = 'print(\'{"decision": "block", "reason": "falta x"}\')\n'
+CERCA_QUE_AVISA_NA_PARADA = 'print(\'{"systemMessage": "relato sem barrar"}\')\n'
 TEMPO_DA_PONTE_VISTA_DE_FORA_S = 60
 
 
-def a_parada_do_codex_vista_de_fora():
+def a_parada_do_codex_vista_de_fora(programa=CERCA_QUE_BARRA_A_PARADA):
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         cerca = Path(tmp) / "cerca.py"
-        cerca.write_text(CERCA_QUE_BARRA_A_PARADA, encoding="utf-8")
+        cerca.write_text(programa, encoding="utf-8")
         declarado = Path(tmp) / ONDE_AS_CERCAS_SAO_DECLARADAS
         declarado.parent.mkdir(parents=True)
         declarado.write_text(json.dumps({CHAVE_DOS_GANCHOS: {EVENTO_DE_PARADA: [
@@ -285,6 +301,11 @@ def a_parada_do_codex_vista_de_fora():
 CERCA_NOVA_QUE_BARRA = ('import json\nprint(json.dumps({"hookSpecificOutput": '
                         '{"permissionDecision": "deny", '
                         '"permissionDecisionReason": "falta y"}}))\n')
+CERCA_QUE_SO_NEGA_SEM_NINGUEM = (
+    'import json,os\n'
+    f'if os.environ.get("{MARCA_DE_ETAPA_NO_AMBIENTE}"):\n'
+    '    print(json.dumps({"hookSpecificOutput": {"permissionDecision": '
+    '"deny", "permissionDecisionReason": "sem ninguem no terminal"}}))\n')
 PROGRAMA_QUE_RODA_A_CERCA = (
     "import os,sys,runpy;"
     "r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();"
@@ -293,12 +314,12 @@ PROGRAMA_QUE_RODA_A_CERCA = (
     "runpy.run_path(a,run_name='__main__')")
 
 
-def a_cerca_sem_variavel_no_texto_vista_de_fora():
+def a_cerca_sem_variavel_no_texto_vista_de_fora(programa=CERCA_NOVA_QUE_BARRA):
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         cerca = Path(tmp) / ".claude" / "hooks" / "cerca-nova.py"
         cerca.parent.mkdir(parents=True)
-        cerca.write_text(CERCA_NOVA_QUE_BARRA, encoding="utf-8")
+        cerca.write_text(programa, encoding="utf-8")
         (Path(tmp) / ONDE_AS_CERCAS_SAO_DECLARADAS).write_text(json.dumps(
             {CHAVE_DOS_GANCHOS: {EVENTO_PADRAO: [
                 {CHAVE_DO_CASADOR: "Bash", CHAVE_DOS_GANCHOS: [
@@ -307,7 +328,8 @@ def a_cerca_sem_variavel_no_texto_vista_de_fora():
                                        '.claude/hooks/cerca-nova.py'}]}]}}),
             encoding="utf-8")
         ambiente = {k: v for k, v in os.environ.items()
-                    if k != RAIZ_QUE_AS_CERCAS_LEEM}
+                    if k not in (RAIZ_QUE_AS_CERCAS_LEEM,
+                                 MARCA_DE_ETAPA_NO_AMBIENTE)}
         ambiente[RAIZ_QUE_A_OUTRA_FERRAMENTA_DA] = tmp
         corrida = subprocess.run(
             [sys.executable, str(Path(__file__).resolve())],
@@ -370,7 +392,41 @@ def casos_do_codex():
          "pelo ambiente, barra o Devin pela ponte com a saída que barra",
          a_cerca_sem_variavel_no_texto_vista_de_fora(),
          (2, {"decision": "block", "reason": "falta y"})),
+        ("na parada, o que a cerca diz sem barrar vai ao codex como aviso, o "
+         "único texto que a parada dele aceita",
+         ensino_para_quem_perguntou({"hook_event_name": "Stop"}, "oi",
+                                    codex=True),
+         {"systemMessage": "oi"}),
+        ("na parada, o aviso da cerca chega ao codex pela ponte, que sai sem "
+         "erro",
+         a_parada_do_codex_vista_de_fora(CERCA_QUE_AVISA_NA_PARADA),
+         (0, {"systemMessage": "relato sem barrar"})),
     )
+
+
+def casos_de_quem_nao_tem_ninguem():
+    return (
+        ("a ponte põe a marca da etapa no ambiente das cercas, porque o motor "
+         "não tem ninguém no terminal dele",
+         ambiente_das_cercas(Path("r"), {}).get(MARCA_DE_ETAPA_NO_AMBIENTE),
+         VALOR_QUE_O_EXECUTOR_POE_NA_MARCA),
+        ("a marca que o executor de roteiros já pôs fica como veio",
+         ambiente_das_cercas(Path("r"), {MARCA_DE_ETAPA_NO_AMBIENTE: "7"})
+         .get(MARCA_DE_ETAPA_NO_AMBIENTE),
+         "7"),
+        ("pedido sem modo de permissão segue sem modo: a ponte não finge "
+         "modo nenhum",
+         CAMPO_DO_MODO_DE_PERMISSAO in pergunta_para_as_cercas(
+             {"tool_name": "exec"}, "Bash"),
+         False),
+        ("cerca que só nega quando não há ninguém no terminal barra o Devin "
+         "pela ponte",
+         a_cerca_sem_variavel_no_texto_vista_de_fora(
+             CERCA_QUE_SO_NEGA_SEM_NINGUEM),
+         (2, {"decision": "block", "reason": "sem ninguem no terminal"})),
+    )
+
+
 FALHA = "  FALHA {}: esperado {!r}, veio {!r}"
 PLACAR = "ponte: {} de {} casos"
 
@@ -403,11 +459,6 @@ def testar():
         if vazio != []:
             quebrou += 1
             print(FALHA.format("sem settings", [], vazio))
-    sem_modo =pergunta_para_as_cercas({"tool_name": "exec"}, "Bash")
-    if sem_modo.get(CAMPO_DO_MODO_DE_PERMISSAO) != MODO_SEM_QUEM_RESPONDA:
-        quebrou += 1
-        print(FALHA.format("pedido sem modo declara que ninguem responde",
-                           MODO_SEM_QUEM_RESPONDA, sem_modo))
     com_modo = pergunta_para_as_cercas(
         {"tool_name": "exec", CAMPO_DO_MODO_DE_PERMISSAO: "default"}, "Bash")
     if com_modo.get(CAMPO_DO_MODO_DE_PERMISSAO) != "default":
@@ -418,14 +469,14 @@ def testar():
     if saida_da_outra != {"decision": "block", "reason": "x"}:
         quebrou += 1
         print(FALHA.format("resposta a outra ferramenta", "block", saida_da_outra))
-    casos_do_codex_medidos = casos_do_codex()
-    for nome, veio, esperado in casos_do_codex_medidos:
+    casos_medidos = casos_do_codex() + casos_de_quem_nao_tem_ninguem()
+    for nome, veio, esperado in casos_medidos:
         if veio != esperado:
             quebrou += 1
             print(FALHA.format(nome, esperado, veio))
     total = (len(CASOS_DA_RESPOSTA) + len(CASOS_DO_NOME)
-             + len(CASOS_DO_CASADOR) + 1 + 3
-             + len(casos_do_codex_medidos))
+             + len(CASOS_DO_CASADOR) + 1 + 2
+             + len(casos_medidos))
     print(PLACAR.format(total - quebrou, total))
     return 1 if quebrou else 0
 
@@ -442,10 +493,12 @@ def resposta_para_quem_perguntou(pedido, recusa, codex=False):
 
 
 def ensino_para_quem_perguntou(pedido, ensino, codex=False):
+    evento = pedido.get("hook_event_name", EVENTO_PADRAO)
+    if codex and evento not in EVENTOS_EM_QUE_O_CODEX_POE_O_TEXTO_NO_CONTEXTO:
+        return {CHAVE_DO_AVISO: ensino}
     resposta = {CHAVE_DO_ENSINO: ensino}
     if codex:
-        resposta[CHAVE_DO_NOME_DO_EVENTO] = pedido.get("hook_event_name",
-                                                       EVENTO_PADRAO)
+        resposta[CHAVE_DO_NOME_DO_EVENTO] = evento
     return {CHAVE_DA_RESPOSTA_LONGA: resposta}
 
 

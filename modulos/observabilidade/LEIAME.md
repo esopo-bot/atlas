@@ -30,22 +30,20 @@ python <pasta do clone do atlas>/montar.py --modulo observabilidade
 ## Os instrumentos avulsos
 
 Nenhum dos dois roda sozinho: não há gancho nem executor que os chame. Sem
-`DD_API_KEY` no ambiente, os dois dizem não medido e saem zero.
+`DD_API_KEY` no ambiente, os dois dizem não medido e saem zero. `DD_SITE`
+escolhe o site da conta; sem ele, vale `datadoghq.com`. Painel e alerta pela
+API pedem também `DD_APP_KEY`, que nenhum dos dois instrumentos lê. Os três
+moram no arquivo de variáveis da máquina, pelo nome, nunca no git.
 
 ```bash
 python .agents/observabilidade/emissor.py --execucao <pasta de evidências>
-python .agents/observabilidade/emissor.py --motores
 python .agents/observabilidade/batimento.py
 ```
 
 - `--execucao` lê os recibos de UMA execução e manda span e métrica. Rode
   logo depois de ela fechar: a API de métrica descarta ponto com mais de uma
   hora, e emitir de novo uma execução já emitida dobra o span no painel.
-- `--motores` manda o crédito de cada motor auxiliar cadastrado e o gasto do
-  Codex, lido do registro de sessão dele. Motor sem fonte local de crédito
-  fica ausente da métrica, nunca zero; a cobertura diz 0 para ele. Registro do
-  Codex mais velho que a janela da API fica de fora e é contado.
-- `--ensaio`, nos dois modos, mostra o que sairia sem emitir.
+- `--ensaio` mostra o que sairia sem emitir.
 - O emissor tem prazo duro: o processo não vive além dele.
 
 ## Por que ele não viaja com a camada

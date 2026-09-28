@@ -61,6 +61,11 @@ __pycache__/
 # referencias_que_ficam_fora_do_git, não esta linha.
 /conhecimento/projetos/
 
+# O histórico das issues encerradas, que o módulo historico escreve: cita
+# conta, ambiente e caminho de quem trabalha, e fica na máquina. Quem instala
+# a camada recebe o .gitignore dentro da própria pasta; aqui a linha é da raiz.
+/conhecimento/issues_encerradas/
+
 # Fora do git de propósito: cada pasta explica o porquê no seu LEIAME.
 /projetos/*
 !/projetos/LEIAME.md

@@ -36,9 +36,9 @@ RECUSA = (
     "Sessão de pesquisa: esta sessão abriu em modo somente leitura "
     "({marca} está no ambiente), e o modo proíbe escrever dentro do "
     "repositório — o alvo `{alvo}` cai lá.\n"
-    "O que ela entrega é a ISSUE, não arquivo. Rascunho e medição vão para a "
+    "O que ela entrega é a issue, não arquivo. Rascunho e medição vão para a "
     "pasta temporária da máquina, que o sistema limpa sozinho; o que valeria "
-    "memória vira comentário na issue do trabalho.\n"
+    "memória vai ao corpo da issue do trabalho.\n"
     "Se você precisa mesmo escrever no repositório, este é o modo errado: "
     "abra a sessão sem a marca.")
 RECUSA_SEM_ENTENDER = ("não entendi a entrada do gancho ({}: {}); na dúvida, "

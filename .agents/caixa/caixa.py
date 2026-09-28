@@ -13,18 +13,22 @@ DESCRICAO_DA_CLI = (
     "põe, atualiza e poda linha no quadro — a caixa permanente onde defeito "
     "e melhoria moram juntos, cada linha com a etiqueta do seu tipo. Mesma "
     "identidade, mesma linha: o quadro não vira log. O relatório da rodada "
-    "não é linha: entra como comentário novo, um por rodada")
+    "não é linha: reescreve o bloco dele no corpo da caixa, o último por cima "
+    "do anterior. O que espera pelo dono (`--seu`) abre um comentário que o "
+    "marca — comentário é conversa com ele, e mais nada")
 
 BANDEIRA_DE_TESTE = "--testar"
 
 MARCA_ABRE = "<!-- escrito pelo executor de roteiros -->"
 MARCA_FECHA = "<!-- /escrito pelo executor de roteiros -->"
-MARCA_ABRE_FECHAMENTOS = "<!-- fechamentos do executor de roteiros -->"
-MARCA_FECHA_FECHAMENTOS = "<!-- /fechamentos do executor de roteiros -->"
-TETO_DE_FECHAMENTOS = 20
-TITULO_DOS_FECHAMENTOS = ("## Fechamentos — os últimos {}, o executor "
-                          "apaga o mais velho").format(TETO_DE_FECHAMENTOS)
-MARCA_DO_RELATORIO = "<!-- relatorio de rodada do executor de roteiros -->"
+NOME_DO_BLOCO_DO_RELATORIO = "relatorio de rodada do executor de roteiros"
+TITULO_DO_RELATORIO = "## Relatório da rodada — o último, reescrito a cada rodada"
+SEPARADOR_DO_ITEM = "|"
+ENDERECO = re.compile(r"https?://\S+")
+LINHA_DO_QUE_ESPERA = "- {texto}"
+LINHA_DO_QUE_ESPERA_COM_LINK = "- {texto} — {link}"
+CHAMADA_DO_DONO = ("a rodada deixou isto para você:\n\n{itens}\n\nO relatório "
+                   "inteiro está no corpo desta issue.")
 
 DEFEITO = "defeito"
 MELHORIA = "melhoria"
@@ -72,8 +76,11 @@ RECUSA_LINHA_QUE_NAO_EXISTE = (
     "erro de uso: não achei a linha {id} no quadro da(s) caixa(s) {issues}. "
     "Poda-se o que está lá — veja a identidade e rode de novo")
 RECUSA_SEM_CORPO = (
-    "erro de uso: --corpo vazio. O relatório é o comentário inteiro: sem "
-    "texto eu não abro comentário nenhum na caixa")
+    "erro de uso: --corpo vazio. O relatório é o bloco inteiro no corpo da "
+    "caixa: sem texto eu não escrevo nada nela")
+RECUSA_SEU_SEM_LINK = (
+    "erro de uso: `--seu` sem link: `{item}`. O que espera pelo dono carrega "
+    "o endereço que o abre — número solto obriga a garimpar")
 
 ARQUIVO_DO_EXECUTOR = "nucleo/executor.json"
 CAMPO_DAS_CAIXAS = "caixas"
@@ -121,31 +128,42 @@ RECADO_ATUALIZADO = "atualizado na caixa {issue}: {id}"
 RECADO_JA_ESTAVA = "já estava igual na caixa {issue}: {id} — não regravei"
 RECADO_DO_ENSAIO = "ensaio — o bloco da caixa {issue} ficaria assim:{miolo}"
 RECADO_PODADO = (
-    "podado do quadro da caixa {issue}: {id} — o fechamento ficou na seção "
-    "de fechamentos do próprio corpo")
+    "podado do quadro da caixa {issue}: {id} — o corpo não guarda "
+    "fechamento; o motivo mora no commit e no histórico em disco:\n"
+    "{registro}")
 RECADO_DO_ENSAIO_DA_PODA = (
-    "ensaio — a linha {id} sairia do quadro da caixa {issue}, e a linha de "
-    "fechamento no corpo seria:\n{registro}")
-RECADO_RELATADO = "relatório reescrito no comentário fixo da caixa {issue}"
-RECADO_RELATADO_NOVO = ("relatório abriu o comentário fixo da caixa {issue} "
-                        "— as rodadas seguintes reescrevem esse mesmo")
+    "ensaio — a linha {id} sairia do quadro da caixa {issue}; o registro, "
+    "que vai ao commit e não ao corpo, seria:\n{registro}")
+RECADO_RELATADO = "relatório reescrito no bloco dele, no corpo da caixa {issue}"
+RECADO_CHAMOU_O_DONO = ("comentário na caixa {issue} chamando o dono: {quantos} "
+                        "item(ns) espera(m) por ele")
+FALHA_AO_CHAMAR_O_DONO = (
+    "erro de ambiente: o relatório está no corpo da caixa {issue}, mas o "
+    "comentário ao dono não subiu — {motivo}. Rode de novo: o bloco igual não "
+    "se regrava, e só o comentário sai")
 RECADO_DO_ENSAIO_DO_RELATO = (
-    "ensaio — o relatório reescreveria o comentário fixo da caixa {issue}, "
-    "e seria:\n{corpo}")
+    "ensaio — o relatório reescreveria o bloco dele no corpo da caixa "
+    "{issue}, e seria:\n{corpo}")
+RECADO_DO_ENSAIO_DA_CHAMADA = (
+    "\n\ne o comentário ao dono, com a marca da configuração local, seria:\n"
+    "{chamada}")
 
 REGISTRO_DA_PODA = "- {quando} · podado: **{id}** `{tipo}`"
 MOTIVO_DA_PODA = " · motivo: {motivo}"
 
 AJUDA_ACAO = ("em que caixa a linha entra, `" + PODA + "` para tirar a "
-              "linha do quadro, ou `" + RELATO + "` para escrever o "
-              "relatório da rodada como comentário novo")
+              "linha do quadro, ou `" + RELATO + "` para reescrever o bloco "
+              "do relatório da rodada no corpo")
 AJUDA_ID = "a identidade estável do achado, em kebab minúsculo"
 AJUDA_ASSUNTO = "o que a linha diz — o assunto, nunca a ocorrência"
-AJUDA_MOTIVO = "por que a linha saiu — entra no comentário do fechamento"
+AJUDA_MOTIVO = ("por que a linha saiu — sai no recado da poda, para o commit; "
+                "o corpo não o guarda")
 AJUDA_QUANDO = "a data do avistamento (padrão: hoje)"
-AJUDA_CORPO = ("em `" + RELATO + "`, o relatório inteiro, que vira o "
-               "comentário novo; em defeito e melhoria, o detalhe que entra "
-               "na linha atrás do assunto — nunca é descartado")
+AJUDA_CORPO = ("em `" + RELATO + "`, o relatório inteiro, que reescreve o "
+               "bloco dele no corpo; em defeito e melhoria, o detalhe que "
+               "entra na linha atrás do assunto — nunca é descartado")
+AJUDA_SEU = ("em `" + RELATO + "`, `o que|link` por item que espera pelo "
+             "dono: abre um comentário que o marca; repita a bandeira")
 AJUDA_CWD = "a raiz onde mora " + ARQUIVO_DO_EXECUTOR + " (padrão: aqui)"
 AJUDA_ENSAIO = "mostra o que subiria, sem escrever na caixa"
 AJUDA_QUADRO = ("número da issue do quadro, quando não for o declarado na "
@@ -175,13 +193,7 @@ def assunto_com_o_corpo(assunto: str, corpo: str) -> str:
 
 
 def partes_do_corpo(corpo: str) -> tuple:
-    abre = corpo.find(MARCA_ABRE)
-    fecha = corpo.find(MARCA_FECHA)
-    if abre < 0 or fecha < 0 or fecha < abre:
-        return ()
-    return (corpo[:abre + len(MARCA_ABRE)],
-            corpo[abre + len(MARCA_ABRE):fecha],
-            corpo[fecha:])
+    return gh.partes_do_bloco(corpo, MARCA_ABRE, MARCA_FECHA)
 
 
 def e_achado(item) -> bool:
@@ -290,7 +302,8 @@ def endereco_da_caixa(tipo: str, cwd: str = "", quadro: str = "") -> tuple:
                                                  qual=CAMPO_DO_REPOSITORIO)
     return {"issue": int(quadro) if quadro else caixas[qual],
             "repositorio": issues[CAMPO_DO_REPOSITORIO],
-            "conta": issues.get(CAMPO_DA_CONTA) or ""}, ""
+            "conta": issues.get(CAMPO_DA_CONTA) or "",
+            "quem_se_marca": gh.quem_se_marca(dado)}, ""
 
 
 def enderecos_das_caixas(cwd: str = "", quadro: str = "") -> tuple:
@@ -326,44 +339,6 @@ def gravar_corpo(endereco: dict, corpo: str) -> str:
     if feito is None or feito.returncode != 0:
         return FALHA_AO_GRAVAR.format(issue=endereco["issue"],
                                       motivo=gh.berro(feito))
-    return ""
-
-
-def comentario_fixo_do_relatorio(endereco: dict) -> tuple:
-    feito = gh.na_conta(endereco["conta"],
-                        ["api", "repos/{}/issues/{}/comments".format(
-                            endereco["repositorio"], endereco["issue"])])
-    if feito is None or feito.returncode != 0:
-        return None, gh.berro(feito)
-    try:
-        comentarios = json.loads(feito.stdout)
-    except ValueError as erro:
-        return None, str(erro)
-    for comentario in comentarios:
-        if MARCA_DO_RELATORIO in (comentario.get("body") or ""):
-            return comentario.get("id"), ""
-    return None, ""
-
-
-def reescrever_comentario(endereco: dict, identidade, texto: str) -> str:
-    feito = gh.na_conta(endereco["conta"],
-                        ["api", "-X", "PATCH",
-                         "repos/{}/issues/comments/{}".format(
-                             endereco["repositorio"], identidade),
-                         "--input", "-"],
-                        entrada=json.dumps({"body": texto}))
-    if feito is None or feito.returncode != 0:
-        return gh.berro(feito)
-    return ""
-
-
-def comentar(endereco: dict, texto: str) -> str:
-    feito = gh.na_conta(endereco["conta"],
-                         ["issue", "comment", str(endereco["issue"]),
-                          "--repo", endereco["repositorio"],
-                          "--body-file", "-"], entrada=texto)
-    if feito is None or feito.returncode != 0:
-        return gh.berro(feito)
     return ""
 
 
@@ -483,36 +458,6 @@ def registro_da_poda(alvo: dict, quando: str, motivo: str) -> str:
     return escrito + (MOTIVO_DA_PODA.format(motivo=limpo) if limpo else "")
 
 
-def partes_dos_fechamentos(corpo: str) -> tuple:
-    abre = corpo.find(MARCA_ABRE_FECHAMENTOS)
-    fecha = corpo.find(MARCA_FECHA_FECHAMENTOS)
-    if abre < 0 or fecha < 0 or fecha < abre:
-        return ()
-    return (corpo[:abre + len(MARCA_ABRE_FECHAMENTOS)],
-            corpo[abre + len(MARCA_ABRE_FECHAMENTOS):fecha],
-            corpo[fecha:])
-
-
-def fechamentos_do_miolo(miolo: str) -> list:
-    return [linha.strip() for linha in miolo.splitlines() if linha.strip()]
-
-
-def secao_de_fechamentos_nova(corpo: str) -> tuple:
-    antes = (corpo.rstrip("\n") + "\n\n" + TITULO_DOS_FECHAMENTOS + "\n\n"
-             + MARCA_ABRE_FECHAMENTOS)
-    return antes, "", MARCA_FECHA_FECHAMENTOS + "\n"
-
-
-def corpo_com_fechamento(corpo: str, registro: str) -> str:
-    antes, miolo, depois = (partes_dos_fechamentos(corpo)
-                            or secao_de_fechamentos_nova(corpo))
-    linhas = fechamentos_do_miolo(miolo)
-    if registro in linhas:
-        return corpo
-    linhas = (linhas + [registro])[-TETO_DE_FECHAMENTOS:]
-    return antes + "\n" + "\n".join(linhas) + "\n" + depois
-
-
 def podar_da_caixa(endereco: dict, corpo: str, identidade: str,
                    registro: str, ensaio: bool = False) -> tuple:
     if ensaio:
@@ -520,10 +465,7 @@ def podar_da_caixa(endereco: dict, corpo: str, identidade: str,
                                                   id=identidade,
                                                   registro=registro)
 
-    def podar_e_registrar(atual: str, quem: str) -> str:
-        return corpo_com_fechamento(corpo_sem(atual, quem), registro)
-
-    _, divergentes, erro = gravar_relendo(endereco, corpo, podar_e_registrar,
+    _, divergentes, erro = gravar_relendo(endereco, corpo, corpo_sem,
                                           identidade)
     if erro:
         return 2, erro
@@ -532,7 +474,8 @@ def podar_da_caixa(endereco: dict, corpo: str, identidade: str,
     if divergentes:
         return 2, NAO_ESTA_LA.format(issue=endereco["issue"],
                                      id=", ".join(sorted(divergentes)))
-    return 0, RECADO_PODADO.format(issue=endereco["issue"], id=identidade)
+    return 0, RECADO_PODADO.format(issue=endereco["issue"], id=identidade,
+                                   registro=registro)
 
 
 def podar(identidade: str, quando: str, cwd: str = "", motivo: str = "",
@@ -561,28 +504,53 @@ def aviso_de_digito_colado(corpo: str) -> str:
                                          exemplos=", ".join(coladas[:5]))
 
 
+def linha_do_que_espera(item: str) -> str:
+    texto, _, link = item.partition(SEPARADOR_DO_ITEM)
+    return (LINHA_DO_QUE_ESPERA_COM_LINK.format(texto=texto.strip(),
+                                                link=link.strip())
+            if link.strip() else LINHA_DO_QUE_ESPERA.format(texto=item.strip()))
+
+
 def relatar(corpo: str, cwd: str = "", ensaio: bool = False,
-            quadro: str = "") -> tuple:
+            quadro: str = "", seu=()) -> tuple:
     if not (corpo or "").strip():
         return 2, RECUSA_SEM_CORPO
+    itens = [item.strip() for item in seu or [] if item.strip()]
+    for item in itens:
+        if not ENDERECO.search(item):
+            return 2, RECUSA_SEU_SEM_LINK.format(item=item)
     enderecos, erro = enderecos_das_caixas(cwd, quadro)
     if erro:
         return 2, erro
     endereco = enderecos[0]
     aviso = aviso_de_digito_colado(corpo)
+    texto = TITULO_DO_RELATORIO + "\n\n" + corpo.strip()
+    chamada = CHAMADA_DO_DONO.format(
+        itens="\n".join(linha_do_que_espera(item) for item in itens))
     if ensaio:
         return 0, aviso + RECADO_DO_ENSAIO_DO_RELATO.format(
-            issue=endereco["issue"], corpo=corpo)
-    texto = MARCA_DO_RELATORIO + "\n" + corpo
-    fixo, berro = comentario_fixo_do_relatorio(endereco)
-    if not berro:
-        berro = (reescrever_comentario(endereco, fixo, texto) if fixo
-                 else comentar(endereco, texto))
-    if berro:
+            issue=endereco["issue"], corpo=texto) + (
+                RECADO_DO_ENSAIO_DA_CHAMADA.format(chamada=chamada)
+                if itens else "")
+    ficou, dito = gh.gravar_o_bloco(endereco["conta"],
+                                    endereco["repositorio"],
+                                    endereco["issue"],
+                                    NOME_DO_BLOCO_DO_RELATORIO, texto)
+    if not ficou:
         return 2, FALHA_AO_RELATAR.format(issue=endereco["issue"],
-                                          motivo=berro)
-    recado = RECADO_RELATADO if fixo else RECADO_RELATADO_NOVO
-    return 0, aviso + recado.format(issue=endereco["issue"])
+                                          motivo=dito)
+    recados = [aviso + RECADO_RELATADO.format(issue=endereco["issue"]), dito]
+    if itens:
+        comentou, falha, sem_marca = gh.comentar_para_o_dono(
+            endereco["conta"], endereco["repositorio"], endereco["issue"],
+            chamada, endereco["quem_se_marca"])
+        if not comentou:
+            return 2, FALHA_AO_CHAMAR_O_DONO.format(issue=endereco["issue"],
+                                                    motivo=falha)
+        recados += [RECADO_CHAMOU_O_DONO.format(issue=endereco["issue"],
+                                                quantos=len(itens)),
+                    sem_marca]
+    return 0, " · ".join(recado for recado in recados if recado)
 
 
 FALSO_GH = """import json
@@ -769,29 +737,8 @@ def testar() -> int:
          "entregue na rodada de hoje" in escrito)
     caso("sem motivo, o registro não inventa um",
          "motivo" not in registro_da_poda(um, amanha, ""))
-    caso("o registro da poda cabe numa linha — ele vai para o corpo, e "
-         "corpo cresce por linha",
+    caso("o registro da poda cabe numa linha — ele vai ao commit",
          "\n" not in registro_da_poda(um, amanha, "motivo com\nquebra"))
-    com_um = corpo_com_fechamento(molde, "- 2026-09-12 · podado: um")
-    caso("o primeiro fechamento abre a seção marcada no fim do corpo, "
-         "depois da prosa de gente",
-         com_um.startswith(molde.rstrip("\n"))
-         and fechamentos_do_miolo(partes_dos_fechamentos(com_um)[1])
-         == ["- 2026-09-12 · podado: um"])
-    caso("o mesmo registro duas vezes não duplica — a releitura da "
-         "gravação reaplica a poda",
-         corpo_com_fechamento(com_um, "- 2026-09-12 · podado: um") == com_um)
-    cheio = molde
-    for n in range(TETO_DE_FECHAMENTOS + 5):
-        cheio = corpo_com_fechamento(cheio, f"- 2026-09-12 · podado: {n:02d}")
-    guardados = fechamentos_do_miolo(partes_dos_fechamentos(cheio)[1])
-    caso("a seção de fechamentos tem teto: fica o mais novo e sai o mais "
-         "velho, porque o quadro fixo tem corpo e comentários contados",
-         len(guardados) == TETO_DE_FECHAMENTOS
-         and guardados[0].endswith("05")
-         and guardados[-1].endswith(f"{TETO_DE_FECHAMENTOS + 4:02d}"))
-    caso("a seção de fechamentos não vira linha do quadro",
-         not _achados_do_corpo(cheio))
 
     with tempfile.TemporaryDirectory(prefix="caixa-teste-") as pasta:
         base = Path(pasta)
@@ -949,14 +896,14 @@ def testar() -> int:
             caso("e a poda não leva junto a linha da vizinha",
                  no_quadro("prova-nao-reproduz"))
             no_corpo = corpo.read_text(encoding="utf-8")
-            caso("o fechamento fica no PRÓPRIO corpo, na seção de "
-                 "fechamentos, com identidade e motivo — e sem "
-                 "comentário novo, porque o quadro fixo tem teto",
+            caso("o corpo não guarda fechamento: a linha sai, nada de "
+                 "seção nova nem comentário, e o registro com o motivo "
+                 "vai no recado, para o commit",
                  chamadas("issue comment") == 0 and escrito == ""
-                 and partes_dos_fechamentos(no_corpo)
-                 and "caixa-aprende-a-podar" in no_corpo
-                 and "a poda entra" not in no_corpo
-                 and "entregue na #7" in no_corpo)
+                 and "fechamentos" not in no_corpo.lower()
+                 and "caixa-aprende-a-podar" not in no_corpo
+                 and "caixa-aprende-a-podar" in recado
+                 and "entregue na #7" in recado)
 
             codigo, recado = podar("nunca-esteve-no-quadro", amanha,
                                    cwd=str(base))
@@ -979,44 +926,88 @@ def testar() -> int:
             codigo, recado = relatar(relatorio, cwd=str(base), ensaio=True)
             caso("o ensaio do relatório mostra o corpo e não escreve na "
                  "caixa",
-                 codigo == 0 and relatorio in recado
+                 codigo == 0 and relatorio.strip() in recado
                  and chamadas("issue comment") == 0
                  and chamadas("api") == 0 and chamadas("edit") == 0)
 
+            def bloco_do_relatorio():
+                return gh.texto_do_bloco(corpo.read_text(encoding="utf-8"),
+                                         NOME_DO_BLOCO_DO_RELATORIO) or ""
+
             codigo, recado = relatar(relatorio, cwd=str(base))
-            caso("o primeiro relatório abre o comentário fixo, marcado, "
-                 "nunca como linha no quadro",
-                 codigo == 0 and chamadas("issue comment") == 1
-                 and chamadas("edit") == 0
-                 and relatorio in comentarios.read_text(encoding="utf-8")
-                 and MARCA_DO_RELATORIO
-                 in comentarios.read_text(encoding="utf-8")
-                 and not _achados_do_corpo(
-                     corpo.read_text(encoding="utf-8")))
+            caso("SEM NADA PARA O DONO: o relatório reescreve o bloco dele no "
+                 "corpo da caixa e não abre comentário nenhum",
+                 codigo == 0 and chamadas("issue comment") == 0
+                 and "O que ela mediu." in bloco_do_relatorio()
+                 and not comentarios.read_text(encoding="utf-8").strip())
+            caso("o relatório no corpo não vira linha do quadro",
+                 not _achados_do_corpo(corpo.read_text(encoding="utf-8")))
 
             outro = "# Outra rodada\n\nO que mudou.\n"
             codigo, recado = relatar(outro, cwd=str(base))
-            escrito = comentarios.read_text(encoding="utf-8")
-            caso("relatar de novo REESCREVE o comentário fixo, em vez de "
-                 "abrir outro — o relatório ocupa um comentário só",
+            escrito = corpo.read_text(encoding="utf-8")
+            caso("relatar de novo reescreve o MESMO bloco: o relatório velho "
+                 "sai do corpo, e continua no histórico de edição",
+                 codigo == 0 and chamadas("issue comment") == 0
+                 and "O que mudou." in bloco_do_relatorio()
+                 and "O que ela mediu." not in escrito
+                 and escrito.count(gh.marcas_do_bloco(
+                     NOME_DO_BLOCO_DO_RELATORIO)[0]) == 1)
+
+            com_configuracao({**quadro, "issues": {
+                "repositorio": "exemplo/exemplo",
+                "quem_se_marca": "a-pessoa"}})
+            do_zero()
+            codigo, recado = relatar(relatorio, cwd=str(base),
+                                     seu=["decidir o rumo|https://x/issues/7"])
+            dito = comentarios.read_text(encoding="utf-8")
+            caso("COM ALGO PARA O DONO: o relatório vai ao corpo e UM "
+                 "comentário abre marcando o login da configuração local",
                  codigo == 0 and chamadas("issue comment") == 1
-                 and chamadas("PATCH") == 1
-                 and escrito.count(MARCA_DO_RELATORIO) == 1
-                 and outro in escrito and relatorio not in escrito)
+                 and dito.startswith("@a-pessoa ")
+                 and "https://x/issues/7" in dito
+                 and "O que ela mediu." in bloco_do_relatorio())
+
+            com_configuracao(quadro)
+            do_zero()
+            codigo, recado = relatar(relatorio, cwd=str(base),
+                                     seu=["decidir o rumo|https://x/issues/7"])
+            dito = comentarios.read_text(encoding="utf-8")
+            caso("SEM LOGIN CONFIGURADO: o comentário sai sem marca, e o "
+                 "recado avisa o campo que falta",
+                 codigo == 0 and chamadas("issue comment") == 1
+                 and "@" not in dito and "quem_se_marca" in recado)
+
+            do_zero()
+            codigo, recado = relatar(relatorio, cwd=str(base),
+                                     seu=["decidir o rumo sem endereço"])
+            caso("o que espera pelo dono sem link é recusado antes de "
+                 "escrever: número solto obriga a garimpar",
+                 codigo == 2 and "--seu" in recado and chamadas("issue") == 0)
 
             for vazio in ("", "   \n\t "):
                 codigo, recado = relatar(vazio, cwd=str(base))
                 caso(f"corpo vazio ({vazio!r}) é recusado com recado, sem "
                      "chamar o GitHub",
                      codigo == 2 and recado == RECUSA_SEM_CORPO
-                     and chamadas("issue comment") == 1
-                     and chamadas("PATCH") == 1)
+                     and chamadas("issue") == 0)
 
+            do_zero()
             os.environ["CAIXA_TESTE_RECUSA_COMENTARIO"] = "1"
-            codigo, recado = relatar(relatorio, cwd=str(base))
+            codigo, recado = relatar(relatorio, cwd=str(base),
+                                     seu=["decidir o rumo|https://x/issues/7"])
             del os.environ["CAIXA_TESTE_RECUSA_COMENTARIO"]
-            caso("comentário que não subiu vira erro confessado, nunca "
-                 "relatório dado por escrito",
+            caso("comentário ao dono que não subiu vira erro confessado, e o "
+                 "recado diz que o relatório já está no corpo",
+                 codigo == 2 and "não subiu" in recado
+                 and "O que ela mediu." in bloco_do_relatorio())
+
+            do_zero()
+            os.environ["CAIXA_TESTE_ENGOLE"] = "1"
+            codigo, recado = relatar(relatorio, cwd=str(base))
+            del os.environ["CAIXA_TESTE_ENGOLE"]
+            caso("relatório que não ficou no corpo vira erro confessado, "
+                 "nunca relatório dado por escrito",
                  codigo == 2 and recado.startswith(
                      FALHA_AO_RELATAR.split("{motivo}")[0].format(issue=7)))
 
@@ -1075,8 +1066,7 @@ def testar() -> int:
             os.environ.update(guardado)
 
     este_modulo = sys.modules[__name__]
-    de_verdade = (este_modulo.ler_corpo, este_modulo.gravar_corpo,
-                  este_modulo.comentar)
+    de_verdade = (este_modulo.ler_corpo, este_modulo.gravar_corpo)
     gravado = {"corpo": ""}
     endereco = {"issue": 40, "repositorio": "exemplo/exemplo", "conta": ""}
     de_a = achado(MELHORIA, "linha-da-sessao-a", "posta pela sessão A", hoje)
@@ -1095,11 +1085,7 @@ def testar() -> int:
                                 else escrito)
             return ""
 
-        def nao_comenta(*_):
-            return ""
-
-        (este_modulo.ler_corpo, este_modulo.gravar_corpo,
-         este_modulo.comentar) = ler, gravar, nao_comenta
+        este_modulo.ler_corpo, este_modulo.gravar_corpo = ler, gravar
 
     def identidades_gravadas():
         return sorted(um["id"] for um in _achados_do_corpo(gravado["corpo"]))
@@ -1131,8 +1117,7 @@ def testar() -> int:
              codigo == 0 and identidades_gravadas()
              == ["linha-da-sessao-b"])
     finally:
-        (este_modulo.ler_corpo, este_modulo.gravar_corpo,
-         este_modulo.comentar) = de_verdade
+        este_modulo.ler_corpo, este_modulo.gravar_corpo = de_verdade
 
     total = len(rodados)
     if falhas:
@@ -1157,9 +1142,10 @@ def main() -> int:
     ap.add_argument("--cwd", default="", help=AJUDA_CWD)
     ap.add_argument("--ensaio", action="store_true", help=AJUDA_ENSAIO)
     ap.add_argument("--quadro", default="", help=AJUDA_QUADRO)
+    ap.add_argument("--seu", action="append", default=[], help=AJUDA_SEU)
     a = ap.parse_args()
     if a.acao == RELATO:
-        codigo, recado = relatar(a.corpo, a.cwd, a.ensaio, a.quadro)
+        codigo, recado = relatar(a.corpo, a.cwd, a.ensaio, a.quadro, a.seu)
     elif a.acao == PODA:
         codigo, recado = podar(a.identidade, a.quando, a.cwd, a.motivo,
                                a.ensaio, a.quadro)

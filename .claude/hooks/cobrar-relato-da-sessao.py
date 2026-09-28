@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +18,12 @@ TIPO_DE_TURNO_DE_USUARIO = "user"
 CHAVE_DO_NOME = "name"
 SEPARADORES_DE_CAMINHO = ("/", "\\")
 
+ARQUIVO_EXECUTOR = "nucleo/executor.json"
+CHAVE_DOS_QUADROS_FIXOS = "caixas"
+COMANDO_DA_BRANCH = ["git", "branch", "--show-current"]
+TEMPO_DO_GIT = 10
+MARCA_DA_ISSUE_NA_BRANCH = re.compile(r"(?:^|/)issue/(\d+)(?:-|$)")
+
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 
@@ -31,16 +39,17 @@ COBRANCA = (
     "A sessão escreveu arquivo e não deixou relato de entrega em issue "
     "nenhuma. Sem ele o dono não tem como ver o que foi feito nem o que "
     "ficou para ele — e número de issue solto, sem link, obriga a "
-    "garimpar. Poste antes de fechar:\n\n"
+    "garimpar. Grave antes de fechar:\n\n"
     "  python {instrumento} --issue <n> \\\n"
     "    --pedido \"<o pedido do dono, colado>\" \\\n"
     "    --executado \"<um passo>\" \\\n"
     "    --entregue \"<o que|link>\" \\\n"
     "    --seu \"<o que espera por ele|link>\"\n\n"
-    "Item entregue e item que fica para o dono levam LINK — o instrumento "
-    "recusa sem. Havendo `--seu`, ele etiqueta a issue e move o cartão. "
-    "Use `--ensaio` para ver antes de postar. Esta cobrança sai uma vez por "
-    "sessão."
+    "Item entregue e item que fica para o dono levam link — o instrumento "
+    "recusa sem. O relato vai a um bloco do corpo da issue, reescrito "
+    "inteiro; havendo `--seu`, ele também abre um comentário que marca o "
+    "dono, etiqueta a issue e move o cartão. Use `--ensaio` para ver antes "
+    "de gravar. Esta cobrança sai uma vez por sessão."
 )
 
 FALHA_DE_CASO = "  {}"
@@ -77,6 +86,36 @@ def nao_cobra_pelo_estado_da_sessao(entrada: dict, raiz: Path) -> bool:
     return (raiz / PASTA_MARCAS / sessao).exists()
 
 
+def quadros_fixos(raiz: Path) -> set:
+    try:
+        dado = json.loads((raiz / ARQUIVO_EXECUTOR).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    caixas = dado.get(CHAVE_DOS_QUADROS_FIXOS) if isinstance(dado, dict) else None
+    if not isinstance(caixas, dict):
+        return set()
+    return {str(numero) for numero in caixas.values()
+            if isinstance(numero, int) and not isinstance(numero, bool)}
+
+
+def issue_da_branch(raiz: Path) -> str:
+    try:
+        resposta = subprocess.run(
+            COMANDO_DA_BRANCH, cwd=raiz, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=TEMPO_DO_GIT)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if resposta.returncode != 0:
+        return ""
+    achou = MARCA_DA_ISSUE_NA_BRANCH.search(resposta.stdout.strip())
+    return achou.group(1) if achou else ""
+
+
+def a_issue_da_sessao_e_quadro_fixo(raiz: Path) -> bool:
+    fixos = quadros_fixos(raiz)
+    return bool(fixos) and issue_da_branch(raiz) in fixos
+
+
 def nao_cobra_pelo_que_a_sessao_fez(entrada: dict) -> bool:
     try:
         transcript = Path(entrada.get("transcript_path", ""))
@@ -106,6 +145,8 @@ def decisao(entrada: dict, raiz: Path) -> str:
         return NAO_COBRA
     if nao_cobra_pelo_que_a_sessao_fez(entrada):
         return NAO_COBRA
+    if a_issue_da_sessao_e_quadro_fixo(raiz):
+        return NAO_COBRA
     return MOTIVO_DE_COBRAR
 
 
@@ -133,6 +174,7 @@ def main() -> int:
 
 def testar() -> int:
     import io
+    import subprocess
     import tempfile
 
     passou = falhou = 0
@@ -196,6 +238,30 @@ def testar() -> int:
         for nome, entrada in calam:
             caso(FALHA_DEVIA_CALAR.format(nome),
                  decisao(entrada, raiz) == NAO_COBRA)
+
+        def repositorio_na_branch(nome: str, branch: str) -> Path:
+            alvo = raiz / nome
+            alvo.mkdir()
+            for argumentos in (["init", "-q", "-b", branch],
+                               ["config", "user.email", "prova@exemplo"],
+                               ["config", "user.name", "Prova"],
+                               ["commit", "-q", "--allow-empty", "-m", "raiz"]):
+                subprocess.run(["git", "-C", str(alvo), *argumentos],
+                               check=True, capture_output=True)
+            (alvo / "nucleo").mkdir()
+            (alvo / "nucleo" / "executor.json").write_text(
+                json.dumps({"caixas": {"defeitos": 40, "melhorias": 40}}),
+                encoding="utf-8")
+            return alvo
+
+        no_quadro = repositorio_na_branch("no-quadro", "issue/40-o-assunto")
+        caso("DEVIA CALAR: a única issue da sessão é quadro fixo, onde relato "
+             "de entrega não se posta",
+             decisao(base, no_quadro) == NAO_COBRA)
+        fora_do_quadro = repositorio_na_branch("fora", "issue/41-o-assunto")
+        caso("CONTROLE: issue de trabalho comum segue cobrada, com o mesmo "
+             "quadro declarado",
+             decisao(base, fora_do_quadro) == MOTIVO_DE_COBRAR)
 
         guardado = sys.stdin
         try:

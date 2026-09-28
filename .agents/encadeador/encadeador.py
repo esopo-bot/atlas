@@ -177,6 +177,7 @@ COR_DA_ETIQUETA = "b0741e"
 DESCRICAO_DA_ETIQUETA = ("a execução parou e espera uma decisão sua — "
                          "posta e tirada pelo executor de roteiros")
 SITUACOES_QUE_PARAM_EM_VOCE = ("parada", "aguardando-resposta")
+SITUACOES_QUE_PERGUNTAM_AO_DONO = ("aguardando-resposta",)
 ETIQUETA_PARADO_EM_TERCEIROS = "parado-em-terceiros"
 COR_DA_ETIQUETA_DE_TERCEIROS = "6f42c1"
 DESCRICAO_DA_ETIQUETA_DE_TERCEIROS = (
@@ -234,9 +235,19 @@ if argv[:2] == ["auth", "token"]:
     print("token-de-" + argv[-1])
 elif argv[:2] == ["issue", "comment"]:
     (caixa / "postado.md").open("ab").write(sys.stdin.buffer.read())
+elif argv[:2] == ["issue", "view"] and "body" in argv:
+    corpo = caixa / "corpo.md"
+    texto = corpo.read_text(encoding="utf-8") if corpo.exists() else ""
+    print(texto if "-q" in argv else json.dumps({{"body": texto}}))
 elif argv[:2] == ["issue", "view"]:
     print((caixa / "comentarios.json").read_text(encoding="utf-8")
           if (caixa / "comentarios.json").exists() else '{{"comments": []}}')
+elif argv[:2] == ["issue", "edit"] and "--body-file" in argv:
+    if (caixa / "outro-escritor.txt").exists():
+        (caixa / "corpo.md").write_text("corpo reescrito por outra sessão\\n",
+                                        encoding="utf-8")
+    else:
+        (caixa / "corpo.md").write_bytes(sys.stdin.buffer.read())
 elif argv[:1] == ["api"] and len(argv) > 1:
     negados = caixa / "sem-acesso.txt"
     if negados.exists() and argv[1] in negados.read_text(encoding="utf-8").split():
@@ -604,7 +615,8 @@ LOG_SEM_ASSINATURA = ("  {}: evidência sem assinatura, anterior ao campo — "
 LOG_SESSAO_REABERTA = "  {}: reaberta — uma etapa que depende dela acusou"
 LOG_ESTAGIO = "estagio {n} {marca}: {nomes}"
 LOG_VEREDITO_DA_ETAPA = "  {arquivo}: {veredito}"
-LOG_NAO_POSTEI_O_PASSO = "  não postei o passo: {}"
+LOG_GRAVOU_NO_CORPO = "  {}"
+LOG_NAO_GRAVEI_NO_CORPO = "  não gravei no corpo da issue: {}"
 LOG_POSTOU = "  {}"
 LOG_NAO_POSTEI = "  não postei: {}"
 LOG_ETIQUETA = "  quadro: {}"
@@ -873,7 +885,38 @@ RECADO_NAO_LI_A_ISSUE = "não li a issue {issue}: {erro}"
 RECADO_MOTOR_NAO_PERGUNTOU = "o motor ainda não perguntou na issue {}"
 RECADO_NINGUEM_RESPONDEU = "ninguém respondeu ainda na issue {}"
 RECADO_RESPOSTA_DE = "resposta de {}"
-CORPO_DO_COMENTARIO = "{texto}\n\n{marca}\n"
+CORPO_DO_COMENTARIO = "{quem}{texto}\n\n{marca}\n"
+CAMPO_DE_QUEM_SE_MARCA = "issues.quem_se_marca"
+LOGIN_QUE_SERVE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+AVISO_SEM_QUEM_SE_MARCA = (
+    "o comentário saiu sem marcar ninguém: `issues.quem_se_marca` não está "
+    "preenchido em nucleo/executor.json, e sem a marca o dono só o vê se "
+    "abrir a issue")
+RECADO_COM_AVISO = "{recado} · aviso: {aviso}"
+
+NOME_DO_BLOCO_DA_EXECUCAO = "execucao do executor de roteiros"
+MARCA_QUE_ABRE_O_BLOCO_DA_EXECUCAO = f"<!-- {NOME_DO_BLOCO_DA_EXECUCAO} -->"
+MARCA_QUE_FECHA_O_BLOCO_DA_EXECUCAO = f"<!-- /{NOME_DO_BLOCO_DA_EXECUCAO} -->"
+TETO_DO_BLOCO_DA_EXECUCAO = 12_000
+AVISO_DO_TETO_DO_BLOCO = "\n\n_(cortado no teto de {} caracteres do bloco)_"
+TENTATIVAS_DO_BLOCO = 3
+LIMITE_DO_CORPO_EM_BYTES = 262_144
+TITULO_DO_BLOCO_DA_EXECUCAO = ("## Execução `{trabalho}` — o estado de agora, "
+                               "reescrito a cada etapa")
+TITULO_DAS_ETAPAS = "**Etapas:**"
+TITULO_DO_ULTIMO_PASSO = "**O último passo:**"
+LINHA_DO_PASSO = "- {selo} `{etapa}` — {veredito}"
+VEREDITO_DE_QUEM_JA_PROVOU = "já provada"
+RECADO_BLOCO_GRAVADO = "passo gravado no bloco do corpo da issue {issue}"
+RECADO_BLOCO_NAO_FICOU = (
+    "gravei o bloco da execução no corpo da issue {issue} e reli {vezes} "
+    "vez(es), e ele NÃO está lá como escrevi. Outra escrita no mesmo corpo é "
+    "a explicação mais provável: quem grava por último vence")
+RECADO_CORPO_CHEIO = (
+    "não gravei: com o bloco da execução, o corpo da issue {issue} passaria "
+    "de {limite} bytes, o teto do rastreador")
+RECADO_NAO_LI_O_CORPO = "não li o corpo da issue {issue}: {motivo}"
+RECADO_NAO_GRAVEI_O_CORPO = "não gravei o corpo da issue {issue}: {motivo}"
 
 SELO_DO_VEREDITO = {"segue": "✅", "para": "❌", "pergunta": "⏸"}
 SELO_DESCONHECIDO = "•"
@@ -2451,6 +2494,14 @@ def _quando_o_dono_comecou_a_esperar(pasta, ordem, nome_da_etapa, agora):
         ciclo -= 1
 
 
+def a_etapa_ja_perguntou(dir_base, trabalho, ordem, nome_da_etapa) -> bool:
+    if not dir_base:
+        return False
+    recibos = _recibos_da_etapa_por_ciclo(Path(dir_base) / trabalho, ordem,
+                                          nome_da_etapa)
+    return bool(recibos) and recibos[max(recibos)].get("veredito") == "pergunta"
+
+
 def _espera_do_dono(dir_base, trabalho, ordem, nome_da_etapa) -> list:
     if not dir_base:
         return []
@@ -2477,7 +2528,8 @@ def _rodar_aprovacao_manual(etapa, base, cwd, trabalho, configuracao=None,
         return _materializar_envelope(base, envelope, esperou)
 
     corpo, autor, _ = resposta_na_issue(configuracao, issue)
-    if corpo:
+    if corpo and a_etapa_ja_perguntou(dir_base, trabalho, ordem,
+                                      etapa["nome"]):
         repositorio = _campo(configuracao or {}, "issues.repositorio")
         envelope = {"veredito": "segue",
                     "provado": [{
@@ -3106,6 +3158,16 @@ def avisar_o_quadro(configuracao, issue, situacao):
     return " · ".join(r for r in recados if r)
 
 
+def quem_se_marca(configuracao) -> str:
+    valor = _campo(configuracao or {}, CAMPO_DE_QUEM_SE_MARCA)
+    if not isinstance(valor, str):
+        return ""
+    valor = valor.strip().lstrip("@")
+    if _PENDENTE.search(valor) or not LOGIN_QUE_SERVE.match(valor):
+        return ""
+    return valor
+
+
 def postar_na_issue(configuracao, issue, texto, *raizes):
     if not issue:
         return False, RECADO_SEM_ISSUE
@@ -3113,12 +3175,14 @@ def postar_na_issue(configuracao, issue, texto, *raizes):
     repositorio = _campo(configuracao or {}, "issues.repositorio")
     if not repositorio:
         return False, RECADO_SEM_REPOSITORIO
+    login = quem_se_marca(configuracao)
     try:
         feito = subprocess.run(
             GH + ["issue", "comment", str(issue), "--repo", repositorio,
                   "--body-file", "-"],
-            input=CORPO_DO_COMENTARIO.format(texto=texto,
-                                             marca=MARCA_DO_MOTOR),
+            input=CORPO_DO_COMENTARIO.format(
+                quem=f"@{login} " if login else "", texto=texto,
+                marca=MARCA_DO_MOTOR),
             capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
             env=_ambiente_da_conta(_conta_das_issues(configuracao)))
@@ -3128,7 +3192,110 @@ def postar_na_issue(configuracao, issue, texto, *raizes):
         berro = (feito.stderr or feito.stdout).strip()
         return False, RECADO_FALHA_AO_POSTAR.format(
             issue=issue, motivo=berro[:LIMITE_DO_ERRO_DO_GH])
-    return True, RECADO_POSTADO.format(issue=issue, repositorio=repositorio)
+    recado = RECADO_POSTADO.format(issue=issue, repositorio=repositorio)
+    if not login:
+        return True, RECADO_COM_AVISO.format(recado=recado,
+                                             aviso=AVISO_SEM_QUEM_SE_MARCA)
+    return True, recado
+
+
+def _partes_do_bloco_da_execucao(corpo):
+    inicio = corpo.find(MARCA_QUE_ABRE_O_BLOCO_DA_EXECUCAO)
+    fim = corpo.find(MARCA_QUE_FECHA_O_BLOCO_DA_EXECUCAO)
+    if inicio < 0 or fim < 0 or fim < inicio:
+        return ()
+    meio = inicio + len(MARCA_QUE_ABRE_O_BLOCO_DA_EXECUCAO)
+    return corpo[:meio], corpo[meio:fim], corpo[fim:]
+
+
+def texto_do_bloco_da_execucao(corpo):
+    partes = _partes_do_bloco_da_execucao(corpo or "")
+    return partes[1].strip() if partes else None
+
+
+def _no_teto_do_bloco(texto):
+    limpo = (texto or "").strip()
+    if len(limpo) <= TETO_DO_BLOCO_DA_EXECUCAO:
+        return limpo
+    aviso = AVISO_DO_TETO_DO_BLOCO.format(TETO_DO_BLOCO_DA_EXECUCAO)
+    return limpo[:TETO_DO_BLOCO_DA_EXECUCAO - len(aviso)].rstrip() + aviso
+
+
+def corpo_com_o_bloco_da_execucao(corpo, texto):
+    miolo = "\n" + _no_teto_do_bloco(texto) + "\n"
+    partes = _partes_do_bloco_da_execucao(corpo or "")
+    if partes:
+        return partes[0] + miolo + partes[2]
+    return ((corpo or "").rstrip("\n") + "\n\n"
+            + MARCA_QUE_ABRE_O_BLOCO_DA_EXECUCAO + miolo
+            + MARCA_QUE_FECHA_O_BLOCO_DA_EXECUCAO + "\n")
+
+
+def bloco_da_execucao(trabalho, passos, ultimo_passo, desfecho=""):
+    partes = [TITULO_DO_BLOCO_DA_EXECUCAO.format(trabalho=trabalho)]
+    if desfecho:
+        partes.append(desfecho.strip())
+    if passos:
+        partes.append(TITULO_DAS_ETAPAS + "\n" + "\n".join(passos))
+    if ultimo_passo:
+        partes.append(TITULO_DO_ULTIMO_PASSO + "\n\n" + ultimo_passo.strip())
+    return "\n\n".join(partes)
+
+
+def _corpo_para_escrever(configuracao, issue, repositorio):
+    feito = _gh_na_conta_das_issues(configuracao, [
+        "issue", "view", str(issue), "--repo", repositorio, "--json", "body"])
+    if feito is None or feito.returncode != 0:
+        berro = ((feito.stderr or feito.stdout).strip() if feito
+                 else RECADO_GH_MUDO)
+        return None, RECADO_NAO_LI_O_CORPO.format(
+            issue=issue, motivo=berro[:LIMITE_DO_ERRO_DO_GH])
+    try:
+        corpo = json.loads(feito.stdout or "{}").get("body")
+    except (ValueError, AttributeError) as falha:
+        return None, RECADO_NAO_LI_O_CORPO.format(issue=issue, motivo=falha)
+    if not isinstance(corpo, str):
+        return None, RECADO_NAO_LI_O_CORPO.format(
+            issue=issue, motivo="o rastreador não devolveu o corpo")
+    return corpo.replace("\r", ""), ""
+
+
+def gravar_no_corpo(configuracao, issue, texto, *raizes):
+    if not issue:
+        return False, RECADO_SEM_ISSUE
+    repositorio = _campo(configuracao or {}, "issues.repositorio")
+    if not repositorio:
+        return False, RECADO_SEM_REPOSITORIO
+    esperado = _no_teto_do_bloco(sem_caminho_de_maquina(texto, *raizes))
+    gravacoes = 0
+    while True:
+        atual, erro = _corpo_para_escrever(configuracao, issue, repositorio)
+        if erro:
+            return False, erro
+        if texto_do_bloco_da_execucao(atual) == esperado:
+            return True, RECADO_BLOCO_GRAVADO.format(issue=issue)
+        if gravacoes >= TENTATIVAS_DO_BLOCO:
+            return False, RECADO_BLOCO_NAO_FICOU.format(issue=issue,
+                                                        vezes=gravacoes)
+        proposto = corpo_com_o_bloco_da_execucao(atual, esperado)
+        if len(proposto.encode("utf-8")) > LIMITE_DO_CORPO_EM_BYTES:
+            return False, RECADO_CORPO_CHEIO.format(
+                issue=issue, limite=LIMITE_DO_CORPO_EM_BYTES)
+        try:
+            feito = subprocess.run(
+                GH + ["issue", "edit", str(issue), "--repo", repositorio,
+                      "--body-file", "-"],
+                input=proposto, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
+                env=_ambiente_da_conta(_conta_das_issues(configuracao)))
+        except (OSError, subprocess.SubprocessError) as falha:
+            return False, RECADO_NAO_GRAVEI_O_CORPO.format(issue=issue,
+                                                           motivo=falha)
+        if feito.returncode != 0:
+            berro = (feito.stderr or feito.stdout).strip()
+            return False, RECADO_NAO_GRAVEI_O_CORPO.format(
+                issue=issue, motivo=berro[:LIMITE_DO_ERRO_DO_GH])
+        gravacoes += 1
 
 
 def _campo(dado, caminho):
@@ -3541,13 +3708,26 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
     gravar_estado(dir_base, trabalho, "rodando", issue=issue,
                   roteiro=str(caminho_roteiro) if caminho_roteiro else None)
 
+    passos, ultimo_passo = [], [""]
+
+    def escrever_no_corpo(desfecho=""):
+        gravou, recado = gravar_no_corpo(
+            configuracao, issue,
+            bloco_da_execucao(trabalho, passos, ultimo_passo[0], desfecho),
+            cwd, dir_base)
+        print((LOG_GRAVOU_NO_CORPO if gravou
+               else LOG_NAO_GRAVEI_NO_CORPO).format(recado))
+
     def _fechar(situacao, etapa=None, texto=None, **extra):
         gravar_estado(dir_base, trabalho, situacao, etapa=etapa, issue=issue,
                       cwd=str(cwd), **extra)
         if texto:
-            postou, recado = postar_na_issue(configuracao, issue, texto,
-                                             cwd, dir_base)
-            print((LOG_POSTOU if postou else LOG_NAO_POSTEI).format(recado))
+            if situacao in SITUACOES_QUE_PERGUNTAM_AO_DONO:
+                postou, recado = postar_na_issue(configuracao, issue, texto,
+                                                 cwd, dir_base)
+                print((LOG_POSTOU if postou else LOG_NAO_POSTEI).format(
+                    recado))
+            escrever_no_corpo(desfecho=texto)
         if issue:
             print(LOG_ETIQUETA.format(
                 avisar_o_quadro(configuracao, issue, situacao)))
@@ -3571,6 +3751,9 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
         estagio = [e for e in estagio if e["nome"] not in provadas]
         for etapa_pulada in pulando:
             print(LOG_JA_PROVADA.format(etapa_pulada["nome"]))
+            passos.append(LINHA_DO_PASSO.format(
+                selo=SELO_DO_VEREDITO["segue"], etapa=etapa_pulada["nome"],
+                veredito=VEREDITO_DE_QUEM_JA_PROVOU))
         if not estagio:
             continue
         print(LOG_ESTAGIO.format(
@@ -3604,13 +3787,13 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
                 faltas_declaradas += [
                     (evidencia_dado.get("etapa"), str(falta))
                     for falta in evidencia_dado.get("faltas") or []]
-            if issue:
-                postou, recado = postar_na_issue(
-                    configuracao, issue,
-                    resumo_da_etapa(evidencia_dado, feitas, len(etapas)),
-                    cwd, dir_base)
-                if not postou:
-                    print(LOG_NAO_POSTEI_O_PASSO.format(recado))
+            passos.append(LINHA_DO_PASSO.format(
+                selo=SELO_DO_VEREDITO.get(veredito, SELO_DESCONHECIDO),
+                etapa=evidencia_dado.get("etapa", "?"), veredito=veredito))
+            ultimo_passo[0] = resumo_da_etapa(evidencia_dado, feitas,
+                                              len(etapas))
+            if issue and veredito == "segue":
+                escrever_no_corpo()
             if veredito == "para":
                 proximo = evidencia_dado.get("proximo", "")
                 print(LOG_PAROU_NUM_PARA.format(proximo))

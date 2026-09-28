@@ -5,8 +5,8 @@ description: Busca de código já existente antes de escrever código novo. Use 
 
 # Antes de criar
 
-O padrão natural do agente é duplicar o que já existe num repositório
-vizinho. Esta skill o troca por procurar → citar → só então criar.
+Código novo nasce depois de procurar o que já existe nos repositórios
+vizinhos e citar o que achou: procurar → citar → só então criar.
 
 ## O fluxo
 

@@ -29,7 +29,7 @@ BANDEIRA_DE_TESTE = "--testar"
 AVISO = (
     "Outra sessão está viva neste mesmo repositório agora — {}.\n"
     "{}\n"
-    "Isto NÃO impede a sua escrita: é aviso, e sai uma vez por sessão. "
+    "Isto não impede a sua escrita: é aviso, e sai uma vez por sessão. "
     "Duas sessões na mesma pasta já receberam a mesma tarefa e só não "
     "colidiram porque uma verificou antes de escrever.\n"
     "Antes de commitar: `git status` para ver de quem é cada arquivo, e "
@@ -190,7 +190,7 @@ def testar() -> int:
         caso("e diz há quanto tempo ela se mexeu", "2 min" in dito)
         caso("e ensina o git add por caminho", "`git add` por caminho" in dito)
         caso("e não manda parar: o aviso não bloqueia",
-             "impede" in dito and "NÃO impede" in dito)
+             "impede" in dito and "não impede" in dito)
 
         caso("o aviso sai uma vez por sessão, não a cada escrita",
              decisao(pedido, raiz, lar, agora, marcas) == "")

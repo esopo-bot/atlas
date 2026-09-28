@@ -4,87 +4,42 @@ Busca por significado no código dos repositórios: a sessão pergunta "onde a
 autenticação decide quem entra" e recebe o trecho, sem depender de acertar a
 palavra que o autor usou. Chega pelo módulo `indice`
 (`python <pasta do clone do atlas>/montar.py --modulo indice`, rodado de
-dentro do repositório que o recebe); o cartão do módulo diz como subir.
+dentro do repositório que o recebe).
 
 ## Quando ele vale a pena — a régua medida
 
-Índice cobra manutenção e disco; `grep` é de graça. A régua, medida sobre um
-workspace real de vários repositórios:
+Abaixo de ~2 mil arquivos rastreados o `grep` ganha; acima de ~10 mil o
+índice ganha claro; no meio, decide a dor de varrer o mesmo repositório
+várias vezes por pergunta. Conte antes: `git ls-files | wc -l`.
 
-- Abaixo de ~2 mil arquivos rastreados, o `grep` ganha — o acervo cabe em
-  poucas varreduras.
-- Acima de ~10 mil, o índice ganha claro — foi o caso de um único repositório
-  de referência do workspace medido.
-- No meio, decida pela dor: se as sessões varrem o mesmo repositório várias
-  vezes por pergunta, o índice se paga.
-
-Conte os arquivos antes de instalar:
-
-```bash
-git ls-files | wc -l
-```
-
-## As peças, e a regra que governa
+## As peças
 
 | Peça | O quê | Onde |
 | --- | --- | --- |
 | Milvus | banco vetorial | container `vetores`, porta `${INDICE_PORTA_MILVUS}` (19530) |
 | Ollama | gera embeddings (modelo pequeno, sem LLM) | container `embeddings`, porta `${INDICE_PORTA_OLLAMA}` (11434) |
-| `@zilliz/claude-context-mcp` | o servidor que INDEXA — o `indexar.py` fala com ele por JSON-RPC; como cliente MCP da sessão, só onde a política deixar | instalado fora do repositório (seção "Quando o ambiente é trancado") |
+| `@zilliz/claude-context-mcp` | o servidor que indexa; o `indexar.py` fala com ele por JSON-RPC | instalado fora do repositório |
 | `buscar.py` | a porta de busca da sessão: HTTP puro, busca híbrida, biblioteca padrão | `.agents/indice/buscar.py` |
 | `subir.py` | sobe as duas peças e liga a placa de vídeo quando o docker a entrega | `.agents/indice/subir.py` |
 
-**A porta normal para o acervo é o `buscar.py`, não o cliente MCP.** A
-política de uma organização pode barrar todo servidor MCP fora de uma lista
-fechada, e os servidores somem da sessão sem aviso — o índice continua de
-pé, mas inalcançável. O buscador fala HTTP com o banco e
-com o gerador de vetores, usa só a biblioteca padrão do Python e faz a mesma
-busca híbrida que o MCP fazia. Onde a política deixar, o MCP segue funcionando
-ao lado; não há nada a desfazer.
+A porta normal para o acervo é o `buscar.py`, não o cliente MCP: política
+de organização pode barrar servidor MCP sem aviso, e o buscador segue de pé.
+O banco é derivado: sumiu o volume, reindexa. Nada do índice entra em git.
 
-**O banco é sempre derivado. Nada nasce dentro dele.** Se os volumes sumirem,
-reindexar reconstrói tudo do código-fonte. Por isso os volumes são nomeados e
-locais — nenhum dado do índice entra em git nenhum.
-
-## Subir, e registrar o MCP onde a política deixar
+## Subir e registrar
 
 ```bash
-python .agents/indice/subir.py
+python .agents/indice/subir.py            # sobe, baixa o modelo, liga a placa se houver
+python .agents/indice/subir.py --ensaio   # mostra a decisão sem subir
+python .agents/indice/subir.py --saude    # sonda as duas peças e o modelo; sai 1 nomeando o que falta
 ```
 
-Um comando: ele sobe as duas peças, baixa o modelo se faltar, e **liga a placa
-de vídeo sozinho quando houver uma que o docker entregue**. `--ensaio` mostra a
-decisão e o comando sem subir nada.
-
-**Quem já tinha o módulo instalado roda
-`python <pasta do clone do atlas>/montar.py --modulo indice` de novo para
-receber o `subir.py`.** O `--sincronizar` regrava cópia que já está
-em uso e não instala peça que o módulo ganhou depois — instalar é do
-`--modulo`. Sem esse passo, o módulo fica meio atualizado e calado.
-
-**Por que a placa não é opcional na prática — medido** na mesma máquina, com
-o mesmo modelo e o mesmo acervo:
-
-| | pedaços por minuto | um alvo de 408 pedaços |
-| --- | --- | --- |
-| CPU | 32 | 13 min |
-| placa de entrada (4 GB, sem tensor cores) | 232 | 1,8 min |
-
-São **7,2 vezes**, e é o que separa "indexar um repositório grande de
-madrugada" de "não indexar". O tamanho do lote não muda nada nem numa nem
-noutra — medido 31,3/min com lote 10 e 33,9/min com lote 30 em CPU; 226 e 232
-na placa. O gargalo é a conta, não a ida e volta, então `EMBEDDING_BATCH_SIZE`
-pequeno continua certo: ele existe para o `fetch` do Node não desistir, não
-para render mais.
-
-**A decisão é medida, nunca perguntada.** Ter placa na máquina não é ter placa
-no contêiner: o runtime pode estar registrado e o driver não responder. O
-instrumento roda um contêiner de verdade com `--gpus all` e só liga a placa se
-ela aparecer lá dentro; se não aparecer, sobe em CPU e diz por quê. Máquina sem
-placa não fica sem índice.
-
-**Se preferir os comandos crus**, são estes — e repare que o arquivo da placa
-entra como um `-f` a mais, depois do compose:
+Quem já tinha o módulo roda `montar.py --modulo indice` de novo para receber
+peça nova: o `--sincronizar` só regrava cópia que já está em uso. A placa
+medida na mesma máquina rende 7,2 vezes a CPU (232 contra 32 pedaços por
+minuto); o instrumento a liga só se ela aparecer dentro de um contêiner de
+verdade. Comandos crus, com o arquivo da placa como `-f` a mais (o `-f`
+explícito não carrega o `docker-compose.override.yml` sozinho):
 
 ```bash
 docker compose -f .agents/indice/docker-compose.yml \
@@ -92,84 +47,42 @@ docker compose -f .agents/indice/docker-compose.yml \
 docker exec indice-embeddings-1 ollama pull nomic-embed-text
 ```
 
-**Cuidado com o ajuste local.** Quando você passa `-f` explícito, o compose
-**não** carrega o `docker-compose.override.yml` sozinho — ele só faz isso
-quando ninguém nomeia arquivo. Quem escreveu um ajuste local seguindo a seção
-"Quando o ambiente é trancado" e continuou subindo com `-f` ficou sem o ajuste,
-calado. O `subir.py` nomeia o ajuste quando ele existe; à mão, nomeie você.
-
-O registro dá à sessão a ferramenta `search_code` do MCP. Sem ele, ou onde
-a política o barrar, a busca é pelo `buscar.py` e nada mais muda.
-
-**Quem registra é o instalador.**
-`python <pasta do clone do atlas>/montar.py --atualizar` escreve o
-servidor `indice` no `.mcp.json` da raiz se ele ainda não estiver lá — no
-Windows, por `cmd /c npx`, senão o servidor não sobe — e nunca sobrescreve
-uma entrada `indice` que você já tenha. Na mesma passada ele faz duas coisas
-por TODOS os servidores do `.mcp.json`, não só por este:
-
-- entra uma linha por servidor em `allowedMcpServers` do
-  `.claude/settings.local.json` — stdio vira `serverCommand` com o comando
-  exato, HTTP vira `serverUrl`. É o que devolve o servidor à sessão onde a
-  organização aplica uma **lista branda** de MCP (ver o relato 5, abaixo);
-- o mesmo `mcpServers` é espelhado em `.devin/mcp_config.local.json`, o
-  arquivo de servidores por projeto do Devin CLI. Os dois são pessoais e
-  ficam fora do git.
-
-Registrar à mão continua possível, e é o mesmo servidor:
+Quem registra o servidor MCP é `montar.py --atualizar`: escreve `indice` no
+`.mcp.json` da raiz (no Windows por `cmd /c npx`), entra uma linha por
+servidor em `allowedMcpServers` do `.claude/settings.local.json` (a lista
+branda de organização some com servidor local sem isso) e espelha o
+`mcpServers` em `.devin/mcp_config.local.json`. À mão:
 
 ```bash
 claude mcp add indice \
-  -e EMBEDDING_PROVIDER=Ollama \
-  -e EMBEDDING_MODEL=nomic-embed-text \
-  -e OLLAMA_HOST=http://127.0.0.1:11434 \
-  -e MILVUS_ADDRESS=127.0.0.1:19530 \
+  -e EMBEDDING_PROVIDER=Ollama -e EMBEDDING_MODEL=nomic-embed-text \
+  -e OLLAMA_HOST=http://127.0.0.1:11434 -e MILVUS_ADDRESS=127.0.0.1:19530 \
   -- npx @zilliz/claude-context-mcp@0.1.15
 ```
 
-A versão do servidor MCP vai presa, nunca `@latest`: o `npx` baixa a versão
-que estiver publicada a cada abertura de sessão, e uma versão nova que mude o
-formato do índice derruba a busca calada. Para subir de versão, troque o
-número aqui, remova e registre de novo (`claude mcp remove indice` antes do
-`add`), e reindexe se a nota de versão pedir.
-
-As portas saem de `${INDICE_PORTA_MILVUS}`, `${INDICE_PORTA_SAUDE}` e
-`${INDICE_PORTA_OLLAMA}` se as padrão estiverem ocupadas. As ferramentas que o
-MCP expõe: `index_codebase`, `search_code`, `get_indexing_status`,
-`clear_index`.
+Versão presa, nunca `@latest`: versão nova que mude o formato do índice
+derruba a busca calada. Para subir, `claude mcp remove indice`, `add` com o
+número novo, e reindexe se a nota pedir. Ferramentas do MCP:
+`index_codebase`, `search_code`, `get_indexing_status`, `clear_index`.
 
 ## Quando o ambiente é trancado
 
-Ambiente corporativo com proxy que reassina TLS e política de pacote costuma
-recusar quatro coisas desta receita. **A premissa "tudo local" continua de
-pé** — Milvus e Ollama sobem, o modelo gera vetores, nada sai da máquina. O
-que não se sustenta é a INSTALAÇÃO pela via padrão.
-
-Cada trava abaixo traz o contorno e diz se ele foi **provado** ou se é
-**relato de campo ainda não reexecutado**. Não invente um quinto caminho: o
-que travar fora desta lista é achado para o dono, com a mensagem de erro
+A premissa "tudo local" continua; o que trava é a instalação pela via
+padrão. O que travar fora desta lista é achado para o dono, com a mensagem
 exata, não conserto seu.
 
-### 1. O `npm` não instala a dependência nativa — PROVADO
+| Trava | Contorno | Estado |
+| --- | --- | --- |
+| `npm` não instala a dependência nativa (`faiss-node` baixa binário atrás do proxy) | `npm install --ignore-scripts @zilliz/claude-context-mcp@0.1.15` numa pasta FORA do repositório (~400 MB); `faiss` é peso morto e o `tree-sitter` traz binário pronto; se a sonda abaixo disser `Cannot find module`, `npm install --ignore-scripts "@langchain/core@0.3"` | provado |
+| registro de modelo bloqueado (`ollama pull`) | traga o `.gguf` por via liberada, `docker cp` para o contêiner e `ollama create nomic-embed-text -f Modelfile`; mesmo modelo (768 dimensões), senão o índice inteiro invalida | relato de campo |
+| contêiner não confia na autoridade do proxy (`x509: unknown authority`) | `docker-compose.override.yml` local, fora do git, montando `${CAMINHO_DA_CA_INTERNA}` em `/etc/ssl/certs/ca-interna.pem` e `SSL_CERT_FILE` apontando para ele | relato de campo |
+| `claude mcp add` barrado por política | registre direto no `.mcp.json`, com `command: node` apontando para o `dist/index.js` instalado e o `env` das quatro variáveis | relato de campo |
+| servidor declarado some da sessão | lista branda `allowedMcpServers` gerenciada: o `--atualizar` gera a entrada exata; com `allowManagedMcpServersOnly` ligado só o administrador inclui, e o `buscar.py` segue | provado |
 
-`faiss-node` baixa binário de fora na instalação e falha atrás de proxy
-autenticado. A saída é não rodar os scripts de instalação:
-
-**Instale FORA do repositório.** São ~400 MB e três arquivos, e dois deles
-o git não ignora — rodar na raiz do projeto suja o repositório de quem
-instalou:
-
-```bash
-mkdir -p ~/atlas-indice && cd ~/atlas-indice
-npm install --ignore-scripts @zilliz/claude-context-mcp@0.1.15
-```
-
-**Prove antes de registrar o servidor.** Instalar não é funcionar, e sem as
-variáveis o servidor tenta OpenAI e morre por motivo ERRADO — quem vir esse
-erro vai culpar a instalação:
+Prove antes de registrar (sem as variáveis o servidor tenta OpenAI e morre
+por motivo errado):
 
 ```bash
-cd ~/atlas-indice
 export EMBEDDING_PROVIDER=Ollama EMBEDDING_MODEL=nomic-embed-text
 export OLLAMA_HOST=http://127.0.0.1:11434 MILVUS_ADDRESS=127.0.0.1:19530
 printf '%s\n' \
@@ -180,155 +93,13 @@ printf '%s\n' \
 | grep -oE 'index_codebase|search_code|clear_index|get_indexing_status|Cannot find module' | sort -u
 ```
 
-Tem de sair exatamente isto, e nada mais:
+Tem de sair as quatro ferramentas, e nada mais.
 
-```
-clear_index
-get_indexing_status
-index_codebase
-search_code
-```
+## Indexar em segundo plano
 
-**Se sair `Cannot find module`, é dependência de par que não veio.** O
-`--ignore-scripts` não impede peer, mas a instalação automática de peer
-depende da versão do `npm` — e a receita não pode depender de comportamento
-que ela não declara. Medido: com npm 11 o `@langchain/core` veio junto; num
-ambiente com npm mais antigo, não veio, e o servidor não subiu. A saída é
-instalar o que faltar, pela mesma via:
-
-```bash
-npm install --ignore-scripts "@langchain/core@0.3"
-```
-
-E sondar de novo. Só registre o servidor depois que a sonda listar as
-quatro.
-
-**Por que pular os scripts não perde nada, medido:** o `dist` do pacote não
-referencia `faiss` em lugar nenhum e `dist/vectordb/` só traz Milvus — ou
-seja, `faiss` é peso morto declarado nas dependências. E o `tree-sitter`, que
-também é nativo mas este É usado pelo cortador por AST, traz binário pronto
-DENTRO do pacote (`tree-sitter/prebuilds/<plataforma>/`), então não depende
-de download.
-
-Provado ponta a ponta: a instalação sem scripts completa, o binário nasce em
-`node_modules/.bin/claude-context-mcp`, o servidor sobe e lê as variáveis, a
-indexação roda, o corte por AST engata (os pedaços são trechos dentro do
-arquivo, não o arquivo inteiro) e a busca por significado responde.
-
-**Ressalva medida:** a qualidade da busca varia com o ACERVO, não com o modo
-de instalação. Num corpo de arquivos parecidos entre si, pergunta com
-vocabulário distintivo acha o alvo nas primeiras posições e pergunta genérica
-erra. Isso vale para qualquer instalação.
-
-### 2. O registro de modelo é bloqueado — RELATO DE CAMPO
-
-`ollama pull` busca num registro que a política de URL pode barrar por
-categoria. O contorno é trazer o arquivo do modelo por outra via já liberada
-e importá-lo:
-
-```bash
-docker cp <modelo>.gguf indice-embeddings-1:/tmp/modelo.gguf
-docker exec indice-embeddings-1 sh -c \
-  'printf "FROM /tmp/modelo.gguf\n" > /tmp/Modelfile \
-   && ollama create nomic-embed-text -f /tmp/Modelfile'
-```
-
-O modelo tem de ser o mesmo (`nomic-embed-text`, ~274 MB, 768 dimensões):
-trocar de modelo muda a dimensão do vetor e invalida o índice inteiro.
-
-### 3. Os contêineres não confiam na autoridade do proxy — RELATO DE CAMPO
-
-O proxy reassina o TLS com autoridade interna, e o contêiner não a conhece:
-o erro é `x509: certificate signed by unknown authority`. O contorno é montar
-a autoridade em PEM e apontá-la, num arquivo à parte que não se versiona:
-
-```yaml
-# .agents/indice/docker-compose.override.yml — local, fora do git
-services:
-  embeddings:
-    volumes:
-      - ${CAMINHO_DA_CA_INTERNA}:/etc/ssl/certs/ca-interna.pem:ro
-    environment:
-      SSL_CERT_FILE: /etc/ssl/certs/ca-interna.pem
-```
-
-O caminho da autoridade vai por variável, nunca escrito no arquivo: caminho
-de máquina não entra em texto rastreado.
-
-### 4. O `claude mcp add` é barrado por política — RELATO DE CAMPO
-
-A política de empresa pode barrar o comando do CLI **sem barrar o servidor**.
-Registrar direto no `.mcp.json` do repositório funciona, e por isso ele é o
-método primário onde o CLI não passa:
-
-```json
-{
-  "mcpServers": {
-    "indice": {
-      "command": "node",
-      "args": ["node_modules/@zilliz/claude-context-mcp/dist/index.js"],
-      "env": {
-        "EMBEDDING_PROVIDER": "Ollama",
-        "EMBEDDING_MODEL": "nomic-embed-text",
-        "OLLAMA_HOST": "http://127.0.0.1:11434",
-        "MILVUS_ADDRESS": "127.0.0.1:19530"
-      }
-    }
-  }
-}
-```
-
-Com a instalação do item 1, o `command` é `node` apontando para o arquivo
-instalado — não `npx`, que voltaria a buscar o pacote na rede a cada abertura
-de sessão.
-
-### 5. O servidor está declarado e some da sessão sem aviso — a lista branda
-
-Uma organização pode empurrar, por configuração gerenciada do
-Claude Code, uma lista `allowedMcpServers` só com nomes e URLs dos
-conectores dela. Efeito: **todo servidor local declarado no `.mcp.json` some
-da sessão em silêncio**, e servidor HTTP fora das URLs também — mesmo com o
-nome na lista, porque quando há entrada de URL o nome deixa de contar para
-servidor remoto. Nada avisa; `claude mcp list` simplesmente não os mostra.
-
-A causa se lê na própria documentação do Claude Code: sem a chave
-`allowManagedMcpServersOnly`, a lista é **branda** — a lista de cada escopo
-de configuração se soma, inclusive a do usuário e a do projeto. Entrada
-`serverCommand` exige o comando **exato**, argumento por argumento, depois da
-expansão de `${VAR}`; `serverUrl` aceita `*`. O `--atualizar` gera as
-entradas a partir do `.mcp.json`, então elas batem por construção. Se a
-organização ligar a chave rígida, esse caminho fecha e o que resta é pedir
-a inclusão ao administrador — e o `buscar.py` continua de pé, porque é
-comando, não servidor.
-
-Para o Devin CLI a lista não existe: ela é do Claude Code. O Devin lê o
-`.devin/mcp_config.json` (compartilhado) e o `.devin/mcp_config.local.json`
-(pessoal), e é neste que o `--atualizar` espelha o `mcpServers`. Entrada
-HTTP com `headers` foi espelhada como está e **não foi medida** no Devin.
-
-## O que este módulo não é
-
-- Não é LLM local: o Ollama aqui só transforma texto em vetor
-  (`nomic-embed-text`, ~274 MB). Inferência local foi medida e descartada no
-  workspace de origem.
-- Não é LLM nem memória de sessão: a memória mora em arquivos `.md`. O que
-  o índice faz por ela é a busca por sentido — o mesmo `index_codebase`
-  aceita a pasta da memória e as pastas de conhecimento do workspace, porque
-  `.md` está entre as extensões padrão. Um índice de texto à parte foi medido
-  e descartado: peça caseira que ninguém manteve.
-- Não indexa por padrão: cada máquina decide o que indexar, e o índice nunca
-  viaja — só a receita.
-
-## Indexar em segundo plano, sem depender da sessão
-
-Indexar o acervo inteiro leva horas — 18 arquivos levaram cerca de um minuto e
-meio, e um workspace de milhares de arquivos escala daí. Por isso existe o
-`indexar.py`, que fala JSON-RPC **direto com o servidor**, sem passar pelo
-cliente MCP da sessão: assim a indexação sobrevive à sessão que a disparou, e
-pode rodar de madrugada.
-
-Ele lê `.agents/indice/alvos.json`, que é **local** — caminho de máquina não
-entra em git:
+O `indexar.py` fala JSON-RPC direto com o servidor: a indexação sobrevive à
+sessão e pode rodar de madrugada. Ele lê `.agents/indice/alvos.json`, que
+é local:
 
 ```json
 {
@@ -345,255 +116,52 @@ entra em git:
 }
 ```
 
-**`EMBEDDING_BATCH_SIZE` é obrigatório onde o Ollama roda em CPU.** O
-servidor manda os pedaços ao Ollama em lotes de 100 por padrão, numa
-chamada só, e o `fetch` do Node desiste de esperar cabeçalho em 5 minutos.
-Em CPU, lote de 100 chega a esse limite e estoura — o servidor registra
-`Embedding API error (batch size: 100): fetch failed`, dá a indexação por
-falha, e a coleção fica com o que os lotes anteriores gravaram. Com lote de
-10, cada chamada leva segundos. O
-valor entra no `ambiente` do `alvos.json`, e o `indexar.py` o passa ao
-servidor que ele sobe; o servidor registrado como MCP no `.mcp.json` lê o
-mesmo nome no bloco `env` dele.
-
-**Rode o ensaio ANTES da rodada real, e olhe as colunas.** Ele conta os
-arquivos sob cada alvo, quantos deles o git rastreia e quantos têm extensão
-que o servidor instalado indexa — essa última lista ele lê do código do
-próprio servidor, não de uma cópia:
-
-```
-ENSAIO — 2 alvo(s), nada será indexado:
-  conhecimento — 4972 arquivo(s) sob ele, 277 rastreado(s) no git, 260 com extensão que o servidor indexa
-      ATENÇÃO: 4695 arquivo(s) que o git não rastreia — quase sempre
-      artefato de build ou cache. Indexá-los é lento e enche o índice de
-      lixo. Declare `ignorar` em .agents/indice/alvos.json
-```
-
-Foi assim que um acervo real se revelou: 4.972 arquivos no disco contra 277
-versionados — o resto era saída de build de um site de documentação.
-
-**Mas leia o aviso com cuidado antes de agir:** o servidor filtra por
-extensão, então imagem e binário **não entram no índice** — medido aqui, 17
-arquivos no disco viraram 14 indexados. O que o excesso custa de fato é a
-varredura da árvore; o índice só se enche de lixo se o excesso for texto ou
-código. Confira de onde vem antes de decidir. O `ignorar` vira
-`ignorePatterns` na chamada.
+`EMBEDDING_BATCH_SIZE` é obrigatório em CPU: lote de 100 estoura os 5 min do
+`fetch` do Node e a coleção fica pela metade.
 
 ```bash
-python .agents/indice/indexar.py --ensaio      # mostra os alvos e o tamanho
-python .agents/indice/indexar.py               # indexa, esperando cada um terminar
+python .agents/indice/indexar.py --ensaio      # conta arquivos, rastreados e elegíveis por alvo
+python .agents/indice/indexar.py               # indexa, um alvo por vez, esperando cada um
 python .agents/indice/indexar.py --refazer     # reindexa o que já está indexado
+python .agents/indice/indexar.py --ligar       # a rotina indice do ritual passa a rodar --ronda
+python .agents/indice/indexar.py --estado      # como está, a última ronda e coleções sem alvo
 ```
 
-**Ligar a ronda no ritual.** O indexador tem estado: `--ligar` grava
-`"ligado": true` no `alvos.json`, `--desligar` tira, `--estado` diz como está
-e como foi a última ronda. Ligado, a rotina `indice` do ritual roda
-`--ronda`: indexa só o que mudou em cada alvo — o servidor compara por árvore
-de Merkle, e alvo sem mudança leva um segundo — com teto curto por alvo.
-Desligado, a rotina diz isso e passa. A indexação inteira de um acervo grande
-não cabe no ritual: ela roda de fundo pelo mesmo instrumento, e a ronda só
-acompanha depois.
+Leia o ensaio antes da rodada real: alvo com milhares de arquivos fora do
+git é saída de build, e vai para `ignorar`. O que o servidor pula, lido no
+código dele e reproduzido: `.json`, `.yaml`, `.txt`, `.html` e `.sql` estão
+fora da lista de extensões; alvo sem arquivo elegível nunca diz `completed`
+(o indexador o pula); pasta que começa com ponto é pulada em qualquer
+profundidade (declare `.agents/skills` como alvo próprio); `!pasta/` no
+`.gitignore` não reabre a pasta, `!pasta` sem barra reabre.
 
-```bash
-python .agents/indice/indexar.py --ligar
-python .agents/indice/indexar.py --estado
-nohup python .agents/indice/indexar.py > tmp/indexacao.log 2>&1 &   # a primeira, de fundo
-```
+Por que ele espera e indexa um alvo por vez: `index_codebase` devolve na
+hora e indexa de fundo, e a consulta de estado grava como `completed`
+qualquer alvo com linhas no banco, inclusive o que está em curso. O
+indexador espera pela marca no stderr do servidor que nomeia o alvo, empurra
+a sincronização periódica para 24 h, e dá `clear_index` no alvo que estourou
+o teto ou falhou. Servidor MCP órfão (o `npx` do `.mcp.json` que a sessão
+deixou vivo) sincroniza a cada 5 min por fora e deixa a trava
+`~/.context/mcp-sync.lock`: a ronda remove a trava de processo morto.
 
-**Por que ele ESPERA, e por que isso não é detalhe:** o `index_codebase`
-devolve na hora e indexa em segundo plano. Quem dispara e encerra o processo
-**aborta o trabalho do servidor** — a rodada parece ter terminado em zero
-segundo e o índice fica pela metade. O instrumento consulta o estado até o
-servidor dizer `Status: completed`.
-
-**E a consulta de estado é o que mente.** Lido no registro do servidor:
-cada `get_indexing_status` (e cada `index_codebase`)
-roda antes uma "recuperação" que compara o banco com o snapshot local, e
-qualquer alvo que já tenha linhas no banco e não conste como concluído —
-inclusive o que está sendo indexado naquele instante — é gravado como
-`completed`, com a contagem de linhas repetida em "N files, N chunks". Quem
-consulta o estado durante a indexação recebe "completed" depois do primeiro
-lote, encerra o servidor, e a coleção fica pela metade — o sinal é o alvo
-parado num múltiplo de 100 pedaços. A sincronização periódica do servidor
-(a cada 5 min) faz o mesmo, e ainda reindexa por mudança em cima do alvo em
-curso. Por isso o indexador:
-
-- **espera pelo registro (stderr) do servidor**, nunca pela consulta de
-  estado: as marcas são `Background indexing completed for '<alvo>'` e
-  `Indexing failed for <alvo>`, e só vale a linha que nomeia o alvo
-  esperado — a linha `Indexing completed successfully` não diz de quem é, e
-  a de um alvo que estourou o teto e concluiu depois encerraria a espera do
-  seguinte; a consulta só entra depois, para a linha de contagem;
-- **indexa um alvo por vez** — alvo em paralelo é o que a recuperação grava
-  como completo antes da hora;
-- **empurra a sincronização periódica para 24 h** (`CLAUDE_CONTEXT_SYNC_INTERVAL_MS`,
-  só se o `ambiente` não declarar outro valor) e **espera a inicial fechar**
-  antes do primeiro disparo — é ela que traz as mudanças dos alvos já
-  indexados;
-- **desfaz o que não terminou**: alvo que estoura o teto ou que o servidor
-  dá por falho recebe `clear_index` na hora, e entra inteiro na próxima
-  ronda em vez de virar metade gravada como completa. `Ctrl-C` faz o mesmo
-  com o alvo em curso. O que não der para desfazer é nomeado, com a saída
-  `--refazer`.
-
-**Servidor MCP órfão faz a mesma coisa por fora.** O `.mcp.json` registra o
-servidor por `npx`, e no Windows a sessão estoura o tempo de conexão e deixa
-o processo vivo, sem pai, sincronizando a cada 5 min com lote de 100 — e
-vários órfãos juntos disputam o Ollama e reescrevem o snapshot. Ao
-investigar lentidão, liste os processos `claude-context-mcp` cujo pai já
-morreu antes de culpar a ronda; onde a busca é pelo `buscar.py`, o registro
-no `.mcp.json` é dispensável. Servidor morto de fora ainda deixa a trava
-global `~/.context/mcp-sync.lock`, e o próximo só a reclama depois de 10
-min — nesse meio tempo ele pula a sincronização inicial ("Another MCP
-process is already syncing"). A ronda lê o `owner.json` da trava antes de
-subir o servidor e remove a trava cujo processo já morreu; trava de
-processo vivo fica, e a ronda relata a sincronização como pulada.
-
-E ele separa três vereditos, porque significam coisas diferentes:
-**indexado** (terminou agora), **já estava indexado** (não é falha; use
-`--refazer` se quiser) e **FALHOU**, com o texto do servidor colado. A marca
-de "já indexado" chega com `isError` DENTRO do resultado, então olhar só o
-erro de topo transforma recusa em sucesso.
-
-## O que o servidor pula — lido no código dele, e reproduzido
-
-O servidor indexa menos do que parece, e não avisa. As quatro causas abaixo
-foram lidas no código da versão instalada e reproduzidas em pastas de
-controle; o ensaio acusa cada uma **antes** de você disparar, com a saída.
-
-1. **`.json` não está na lista de extensões.** A lista padrão tem 25
-   extensões, e `.json`, `.yaml`, `.txt`, `.html` e `.sql` estão **comentadas**
-   no código. Reproduzido: pasta só com um JSON de 19 KB não indexa nada;
-   a mesma pasta com um `.md` ao lado indexa 1 arquivo em 14 s. Não é
-   densidade — é filtro. Onde o mesmo conteúdo existe em prosa (uma página
-   gerada a partir do JSON), aponte o alvo para a prosa.
-2. **Alvo sem arquivo elegível nunca termina.** O servidor acha 0 arquivos,
-   marca 100% e se recusa a gravar o estado "completed" com zero — então
-   `get_indexing_status` diz "indexando" para sempre, e quem espera o fim
-   espera o teto inteiro. Foi isso que pareceu "30 minutos e zero gravado".
-   O indexador agora **pula** esse alvo em vez de esperar.
-3. **Pasta que começa com ponto é pulada em qualquer profundidade.**
-   `.claude/`, `.agents/`, `.github/` nunca entram quando o alvo é a raiz —
-   para indexá-las, declare cada uma como alvo próprio (é por isso que
-   `.agents/skills` é um alvo, não parte de outro).
-4. **`!pasta/` no `.gitignore` não reabre a pasta.** O servidor lê os
-   `.*ignore` da raiz do alvo e respeita as exceções, mas testa o nome da
-   pasta **sem** a barra antes de testar com ela: a exclusão anterior (`*`)
-   vence, e a pasta reaberta fica de fora. Medido num alvo real: 4 páginas
-   sob uma pasta reaberta por `!prompts/` não entraram; com `!prompts`, sem a
-   barra — que o git aceita igual —, entraram. O ensaio acusa a linha exata.
-
-```
-  nucleo — 6 arquivo(s) sob ele, 5 rastreado(s) no git, 0 com extensão que o servidor indexa
-      ATENÇÃO: nenhum arquivo com extensão que o servidor aceite. Ele acha 0, marca 100% e NUNCA diz completed (...)
-      ATENÇÃO: 6 arquivo(s) .json — a extensão .json NÃO está na lista do servidor instalado (...)
-```
-
-A contagem de elegíveis é a que se compara com o que o servidor diz ter
-indexado no fim de cada alvo: divergência ali tem uma dessas quatro causas, e
-o ensaio diz qual.
-
-## Buscar — a porta normal
-
-A skill `buscar-no-acervo` ensina este comando a qualquer agente que leia
-`.agents/skills/` — é assim que os agentes sem MCP chegam ao acervo.
+## Buscar
 
 ```bash
 python .agents/indice/buscar.py "o que fazer quando a cópia diverge da fonte"
 python .agents/indice/buscar.py "vetar-andamento-em-arquivo" --alvo skills --quantos 3
-python .agents/indice/buscar.py "..." --teto-total 60  # teto da resposta inteira
-python .agents/indice/buscar.py "..." --denso      # só significado, para comparar
-python .agents/indice/buscar.py --medir            # denso contra híbrido, no seu acervo
+python .agents/indice/buscar.py "..." --teto-total 60   # teto da resposta inteira, em trechos
+python .agents/indice/buscar.py "..." --denso           # só significado, para comparar
+python .agents/indice/buscar.py --medir                 # denso contra híbrido, no seu acervo
 ```
 
-**Ele descobre sozinho o que está indexado.** O servidor grava o caminho de
-cada acervo na descrição da coleção, e o buscador lê isso do banco: nenhuma
-lista local de alvos a manter. `--alvo` restringe a um caminho, pelo fim dele
-ou pelo caminho absoluto; alvo que não está no banco é recusado com a lista do
-que existe, nunca devolvido como vazio. O `alvos.json` só entra pelos
-endereços dos serviços, e sem ele valem os padrões locais.
+O buscador lê do banco o que está indexado; `--alvo` restringe pelo fim do
+caminho ou pelo caminho absoluto, e alvo fora do banco é recusado com a
+lista. A resposta diz quando cortou no teto. A busca é híbrida (vetor denso
+mais BM25, fundidos por RRF) porque denso puro perde nome de gancho, de
+função e palavra rara; o `--medir` prova isso no seu acervo e o `--testar`
+falha se o híbrido não vencer. A pontuação é semelhança, não certeza: leia o
+trecho. Cada caminho indexado é uma coleção `hybrid_code_chunks_` mais os
+oito primeiros dígitos do md5 do caminho absoluto.
 
-**A resposta tem teto, e o teto se declara.** `--quantos` limita por alvo e,
-sozinho, não limita a resposta: com muitos acervos indexados uma pergunta
-despeja o contexto da sessão sem ninguém pedir. O `--teto-total` é o teto da
-resposta inteira, contado em trechos — a mesma unidade do `--quantos`, que é
-o que a saída imprime. O que passa do teto não é impresso, e a resposta **diz
-que cortou** (`cortado no teto de N: havia M`): silêncio aqui seria pior que o
-despejo, porque a sessão acharia que viu tudo. Teto zero ou negativo é
-recusado com razão, em vez de desligar a conta calado.
-
-Para ver o efeito no seu acervo, conte as linhas de achado de uma pergunta:
-
-```bash
-python .agents/indice/buscar.py "onde se decide o teto de contexto" \
-  | grep -c '^    \['
-```
-
-Sem teto, a conta cresce com cada acervo indexado; com o padrão, ela para no
-teto e a resposta traz a linha do corte.
-
-**A busca é híbrida, e isso é medido, não gosto.** Cada pergunta corre em duas
-pernas na mesma coleção — o vetor denso, que acha por significado, e o BM25 no
-campo esparso, que acha por termo exato — e o banco funde as duas por RRF.
-Denso puro perde justamente onde a sessão mais precisa: nome de gancho, nome
-de função, palavra rara. A medição é reprodutível e mora no instrumento:
-`--medir` tira do próprio acervo perguntas por termo único com resposta
-conhecida (arquivo:linha), roda cada uma nos dois modos, repete para medir o
-ruído e exige que o híbrido vença ou empate no topo e nos três primeiros — o
-`--testar` falha se não vencer. O placar do seu acervo sai do `--medir`. Em
-pergunta de linguagem natural, escrita à mão, o híbrido também vence no
-total, mas perde uma ou outra: a fusão não é ganho em toda pergunta, é ganho
-no total.
-
-**O que ele devolve, e o que a pontuação significa:**
-
-```
-BUSCA híbrida (significado + termo exato) — "regenere a cópia e prove antes de entregar" em 1 alvo(s)
-  <raiz>/conhecimento
-    [0.020] regras-da-camada.md:218
-           15. **Editou a fonte, regenere a cópia e prove — antes de entregar.** ...
-```
-
-A pontuação é a semelhança medida, **não a certeza**: o banco sempre devolve
-os mais próximos que tiver, mesmo quando nenhum serve. Leia o trecho antes de
-confiar nele. Na busca híbrida a pontuação é a do RRF (pequena, por
-construção); na densa é a semelhança de cosseno.
-
-**Como alvo vira coleção, medido:** o nome é `hybrid_code_chunks_` mais os
-oito primeiros dígitos do md5 do caminho **absoluto**. Cada caminho indexado é
-uma coleção própria — buscar em coleção alheia devolve o melhor resultado
-*dela*, que costuma não ter nada a ver com a pergunta.
-
-## Indexar conhecimento, não só código
-
-O mesmo índice cobre o que a sessão lê antes de agir — a memória e as
-páginas de conhecimento —, e é aí que ele mais poupa contexto: a sessão
-pergunta "o que já se decidiu sobre X" em vez de abrir arquivo por arquivo.
-Aponte `index_codebase` para cada pasta, uma por vez; pasta de credencial ou
-de rascunho confidencial fica fora, mesmo o índice sendo local.
-
-```
-index_codebase  ${HOME}/.claude/projects/<raiz-com-hifens>/memory
-index_codebase  <raiz>/conhecimento
-index_codebase  <workspace-privado>/conhecimento
-```
-
-Reindexar é barato: só o que mudou volta ao banco (árvore de Merkle).
-
-## Prova de saúde
-
-```bash
-python .agents/indice/subir.py --saude
-```
-
-Ele sonda as duas peças e sai 0 só quando as duas respondem **e** o modelo
-está no contêiner; senão sai 1 nomeando qual faltou e por quê. A sonda fala
-HTTP pela biblioteca padrão do Python, de propósito: `curl` pode estar negado
-na máquina, e prova que depende de ferramenta externa não viaja. As portas saem das mesmas `${INDICE_PORTA_SAUDE}` e
-`${INDICE_PORTA_OLLAMA}` do compose, com as padrão como reserva.
-
-Os serviços declaram `restart: unless-stopped`: quando o daemon do Docker
-sobe junto com a máquina, os containers voltam sozinhos depois da
-reinicialização. Quem os quer parados usa `docker compose down` — parado por
-ordem fica parado. `down` sem `-v` preserva os volumes: o índice sobrevive.
-`down -v` apaga — e reindexar reconstrói, porque o banco é derivado.
+O mesmo índice cobre a memória e as páginas de conhecimento: aponte um
+alvo por pasta; credencial e rascunho confidencial ficam fora.

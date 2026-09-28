@@ -38,8 +38,6 @@ coisas que o instalador não traz — isso está em
 
 - [o mapa do repositório](mapa-do-repositorio.md) — onde escrever cada
   coisa, e o que viaja para quem instala.
-- [os motores auxiliares](motores-auxiliares.md) — que papel vai para que
-  motor, e como se despacha.
 - [o estado que não viaja](estado-que-nao-viaja.md) — o que a máquina precisa
   ter e o instalador não traz.
 - [um navegador por projeto](navegador-por-projeto.md) — como a sessão ganha

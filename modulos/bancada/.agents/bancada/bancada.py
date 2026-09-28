@@ -1,10 +1,12 @@
 import argparse
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -29,7 +31,6 @@ TURNOS_DA_SESSAO = 80
 TEMPO_DA_PROVA = 900
 CAMPOS_DE_UM_CASO = ("pedido", "prova")
 CERCAS = re.compile(r"\b((?:vetar|orientar|avisar|cobrar)-[a-z-]+)\b")
-REGRA_DA_CAMADA = re.compile(r"Regra \d+ da camada")
 COMENTARIO_NOVO = re.compile(r"^\+(?!\+\+)\s*(#(?!!)|//(?!/))")
 EXTENSOES_DE_CODIGO = (".py", ".ts", ".js", ".vue", ".cs", ".sh")
 MARCAS_DE_ANDAMENTO = ("## Critério de aceitação", "## Onde mexer",
@@ -46,6 +47,19 @@ LEITORES_INTEIROS = ("cat", "type", "get-content", "gc")
 OPCOES_QUE_CORTAM = ("-totalcount", "-head", "-tail", "-first", "-last")
 SEPARADORES_SEM_PIPE = re.compile(r"&&|\|\||;|\n")
 ENDERECO_DE_MENTIRA = "sessao{}invalido.local"
+TETO_DO_CAMINHO = 260
+FOLGA_DO_NOME_NO_RASCUNHO = 60
+IDENTIFICADOR_DE_SESSAO = "0" * 36
+FORA_DO_ALFANUMERICO = re.compile(r"[^A-Za-z0-9]")
+PASTA_CURTA_DAS_ARVORES = "bnc"
+TAMANHO_DO_NOME_DA_ARVORE = 8
+BASH_AO_LADO_DO_GIT = (("bin", "bash.exe"), ("usr", "bin", "bash.exe"))
+SEM_BASH = "nao achei o bash do git para rodar a prova"
+MARCAS_DA_SESSAO_QUE_ABRE = ("CLAUDECODE", "CLAUDE_CODE_", "CLAUDE_EFFORT",
+                             "CLAUDE_PID", "MCP_")
+NECESSARIAS_A_SESSAO_DE_TESTE = ("CLAUDE_CODE_GIT_BASH_PATH", "CLAUDE_CODE_OAUTH_TOKEN",
+                                 "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX")
+CONFIGURACAO_DA_SESSAO = {"outputStyle": "default"}
 
 GITCONFIG = """[user]
 \tname = sessao-de-bancada
@@ -87,11 +101,11 @@ def ler_os_casos(raiz: Path, arquivo: str) -> dict:
             "bracos": casos}
 
 
-def corre(comando, cwd=None, env=None, tempo=600, entrada=None, shell=False):
+def corre(comando, cwd=None, env=None, tempo=600, entrada=None):
     try:
         feito = subprocess.run(comando, cwd=str(cwd) if cwd else None, env=env,
                                capture_output=True, text=True, timeout=tempo,
-                               input=entrada, shell=shell, encoding="utf-8",
+                               input=entrada, encoding="utf-8",
                                errors="replace")
     except subprocess.TimeoutExpired:
         return 124, "tempo esgotado"
@@ -111,6 +125,18 @@ def saida_do_git(*args, cwd):
 
 def pasta_da_rodada(versao: str, braco: str) -> Path:
     return RODADAS / versao / braco
+
+
+def arvore_da_rodada(versao: str, braco: str) -> Path:
+    nome = hashlib.sha1(f"{CASA}|{versao}|{braco}".encode("utf-8")).hexdigest()
+    return Path(CASA.anchor) / PASTA_CURTA_DAS_ARVORES / nome[:TAMANHO_DO_NOME_DA_ARVORE]
+
+
+def comprimento_do_rascunho_da_sessao(arvore: Path) -> int:
+    pasta_do_projeto = FORA_DO_ALFANUMERICO.sub("-", str(arvore))
+    rascunho = (Path(tempfile.gettempdir()) / "claude" / pasta_do_projeto
+                / IDENTIFICADOR_DE_SESSAO / "scratchpad")
+    return len(str(rascunho)) + FOLGA_DO_NOME_NO_RASCUNHO
 
 
 def pasta_dos_espelhos(versao: str) -> Path:
@@ -169,7 +195,10 @@ def montar_arvore(versao: str, braco: str, ref: str) -> dict:
     if pasta.exists():
         shutil.rmtree(pasta, ignore_errors=True)
     pasta.mkdir(parents=True)
-    arvore = pasta / "arvore"
+    arvore = arvore_da_rodada(versao, braco)
+    if arvore.exists():
+        shutil.rmtree(arvore, ignore_errors=True)
+    arvore.parent.mkdir(parents=True, exist_ok=True)
 
     espelho_da_camada = espelhar(f"camada-{braco}", CASOS["raiz"], versao)
     sha_da_camada = resolver(ref, espelho_da_camada)
@@ -182,6 +211,7 @@ def montar_arvore(versao: str, braco: str, ref: str) -> dict:
         raise SystemExit(f"nao clonou a camada: {saida[-300:]}")
 
     base = {"versao": versao, "braco": braco, "ref": ref, "camada": sha_da_camada,
+            "arvore": str(arvore),
             "integracao_da_camada": CASOS["integracao"],
             "espelho_da_camada": str(espelho_da_camada),
             "branches_do_espelho_da_camada": branches_de(espelho_da_camada)}
@@ -224,8 +254,14 @@ def branches_de(espelho: Path) -> list:
     return sorted(saida.splitlines())
 
 
+def ambiente_sem_a_sessao_que_abre(herdado: dict) -> dict:
+    return {nome: valor for nome, valor in herdado.items()
+            if nome in NECESSARIAS_A_SESSAO_DE_TESTE
+            or not nome.startswith(MARCAS_DA_SESSAO_QUE_ABRE)}
+
+
 def ambiente_da_sessao(pasta: Path) -> dict:
-    ambiente = dict(os.environ)
+    ambiente = ambiente_sem_a_sessao_que_abre(os.environ)
     ambiente["PATH"] = str(DUBLES / "bin") + os.pathsep + ambiente.get("PATH", "")
     ambiente[VARIAVEL_DO_GH_DA_CAMADA] = f'"{INTERPRETADOR}" "{CASA / "gh_duble.py"}"'
     ambiente["BANCADA_GH_REGISTRO"] = str(pasta / "gh-chamadas.jsonl")
@@ -243,18 +279,26 @@ def ambiente_da_sessao(pasta: Path) -> dict:
     return ambiente
 
 
+def comando_da_sessao(pedido: str, modelo: str, turnos: int, configuracao: Path) -> list:
+    return ["claude", "-p", pedido, "--output-format", "stream-json", "--verbose",
+            "--model", modelo, "--max-turns", str(turnos),
+            "--allowedTools", FERRAMENTAS, "--tools", FERRAMENTAS,
+            "--setting-sources", "project", "--strict-mcp-config",
+            "--settings", str(configuracao)]
+
+
 def rodar_sessao(versao: str, braco: str, modelo: str, turnos: int, tempo: int) -> dict:
     pasta = pasta_da_rodada(versao, braco)
-    arvore = pasta / "arvore"
+    arvore = arvore_da_rodada(versao, braco)
     pedido = CASOS["bracos"][braco]["pedido"]
+    (pasta / "configuracao-da-sessao.json").write_text(
+        json.dumps(CONFIGURACAO_DA_SESSAO), encoding="utf-8")
     inicio = time.time()
     with (pasta / "sessao.jsonl").open("w", encoding="utf-8") as saida, \
             (pasta / "sessao.err").open("w", encoding="utf-8") as erro:
         try:
             feito = subprocess.run(
-                ["claude", "-p", pedido, "--output-format", "stream-json", "--verbose",
-                 "--model", modelo, "--max-turns", str(turnos),
-                 "--allowedTools", FERRAMENTAS],
+                comando_da_sessao(pedido, modelo, turnos, pasta / "configuracao-da-sessao.json"),
                 cwd=str(arvore), env=ambiente_da_sessao(pasta), stdout=saida,
                 stderr=erro, text=True, timeout=tempo, encoding="utf-8",
                 errors="replace")
@@ -300,12 +344,15 @@ def ler_transcript(pasta: Path) -> dict:
                     if isinstance(conteudo, list):
                         conteudo = " ".join(p.get("text", "") for p in conteudo
                                             if isinstance(p, dict))
-                    resultados.append({"erro": bool(parte.get("is_error")),
+                    resultados.append({"id": parte.get("tool_use_id"),
+                                       "erro": bool(parte.get("is_error")),
                                        "texto": str(conteudo or "")})
         elif tipo == "result":
             resultado_final = evento
+    negadas = resultado_final.get("permission_denials") or []
     return {"ferramentas": ferramentas, "resultados": resultados, "textos": textos,
-            "final": resultado_final, "limite_recusado": limite_recusado}
+            "final": resultado_final, "limite_recusado": limite_recusado,
+            "negadas": negadas}
 
 
 def comandos_de_shell(transcript: dict) -> list:
@@ -314,12 +361,12 @@ def comandos_de_shell(transcript: dict) -> list:
 
 
 def recusas_de_cerca(transcript: dict) -> list:
+    texto_por_ferramenta = {r["id"]: r["texto"] for r in transcript["resultados"]}
     achadas = []
-    for resultado in transcript["resultados"]:
-        texto = resultado["texto"]
-        if resultado["erro"] and (CERCAS.search(texto) or REGRA_DA_CAMADA.search(texto)):
-            nomes = sorted(set(CERCAS.findall(texto))) or ["regra-da-camada"]
-            achadas.append({"cercas": nomes, "trecho": texto[:200]})
+    for negada in transcript["negadas"]:
+        texto = texto_por_ferramenta.get(negada.get("tool_use_id"), "")
+        nomes = sorted(set(CERCAS.findall(texto))) or [negada.get("tool_name") or "sem nome"]
+        achadas.append({"cercas": nomes, "trecho": texto[:200]})
     return achadas
 
 
@@ -425,18 +472,25 @@ def dado_pessoal_em(texto: str) -> str:
         return f"varredura indisponivel: {erro}"
 
 
-def contar_em_arquivos(arvore: Path, padrao: re.Pattern, caminhos: list) -> int:
-    total = 0
-    for relativo in caminhos:
-        for arquivo in arvore.glob(relativo):
-            if "projetos" in arquivo.parts and "conhecimento" in arquivo.parts:
-                continue
-            try:
-                total += len(padrao.findall(arquivo.read_text(encoding="utf-8",
-                                                               errors="replace")))
-            except OSError:
-                continue
-    return total
+
+def bash_do_git():
+    bash_nu_resolveria_para_o_subsistema_linux = shutil.which("bash")
+    if os.name != "nt":
+        return bash_nu_resolveria_para_o_subsistema_linux
+    git_no_caminho = shutil.which("git")
+    for pasta in (Path(git_no_caminho).resolve().parents if git_no_caminho else []):
+        for relativo in BASH_AO_LADO_DO_GIT:
+            achado = pasta.joinpath(*relativo)
+            if achado.is_file():
+                return str(achado)
+    return None
+
+
+def rodar_prova(comando: str, alvo: Path) -> tuple:
+    bash = bash_do_git()
+    if not bash:
+        return 127, SEM_BASH
+    return corre([bash, "-c", comando], cwd=alvo, tempo=TEMPO_DA_PROVA)
 
 
 def checar_problema(braco: str, arvore: Path) -> dict:
@@ -447,7 +501,7 @@ def checar_problema(braco: str, arvore: Path) -> dict:
     medidas = {}
     resolvido = True
     for rotulo, comando in caso["prova"].items():
-        codigo, saida = corre(comando, cwd=alvo, shell=True, tempo=TEMPO_DA_PROVA)
+        codigo, saida = rodar_prova(comando, alvo)
         medidas[rotulo] = {"exit": codigo, "cauda": saida.strip()[-300:]}
         resolvido = resolvido and codigo == 0
     medidas["resolvido"] = resolvido
@@ -456,7 +510,7 @@ def checar_problema(braco: str, arvore: Path) -> dict:
 
 def medir(versao: str, braco: str) -> dict:
     pasta = pasta_da_rodada(versao, braco)
-    arvore = pasta / "arvore"
+    arvore = arvore_da_rodada(versao, braco)
     base = json.loads((pasta / "base.json").read_text(encoding="utf-8"))
     problema = CASOS["bracos"][braco]
     transcript = ler_transcript(pasta)
@@ -777,11 +831,120 @@ TOQUES_QUE_NAO_VALEM = (
 )
 
 
+def evento_de_ferramenta(identificador: str, comando: str) -> dict:
+    return {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": identificador, "name": "Bash",
+         "input": {"command": comando}}]}}
+
+
+def evento_de_resultado(identificador: str, texto: str) -> dict:
+    return {"type": "user", "message": {"content": [
+        {"type": "tool_result", "tool_use_id": identificador, "is_error": True,
+         "content": texto}]}}
+
+
+SAIDA_DO_RITUAL = ("rotina vetar-branch-protegida: 244 casos\n"
+                   "rotina cobrar-destino-da-entrega falhou: Regra 16 da camada")
+RAZAO_DA_CERCA = "vetar-branch-protegida: push direto na integracao"
+PUSH_NA_INTEGRACAO = "git push origin homolog"
+
+
+def transcript_de_mentira(eventos: list) -> dict:
+    with tempfile.TemporaryDirectory() as pasta:
+        (Path(pasta) / "sessao.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in eventos), encoding="utf-8")
+        return ler_transcript(Path(pasta))
+
+
+def casos_das_recusas(caso) -> None:
+    ritual = [evento_de_ferramenta("t1", "python verificacoes.py ritual"),
+              evento_de_resultado("t1", SAIDA_DO_RITUAL),
+              {"type": "result", "permission_denials": []}]
+    caso("saída do ritual com nome de cerca não conta como recusa",
+         recusas_de_cerca(transcript_de_mentira(ritual)) == [])
+    negada = ritual[:2] + [
+        evento_de_ferramenta("t2", PUSH_NA_INTEGRACAO),
+        evento_de_resultado("t2", RAZAO_DA_CERCA),
+        {"type": "result", "permission_denials": [
+            {"tool_name": "Bash", "tool_use_id": "t2",
+             "tool_input": {"command": PUSH_NA_INTEGRACAO}}]}]
+    recusas = recusas_de_cerca(transcript_de_mentira(negada))
+    caso("a decisão de negar do gancho conta uma recusa, com o nome da cerca",
+         len(recusas) == 1 and recusas[0]["cercas"] == ["vetar-branch-protegida"])
+
+
+def casos_da_prova_pelo_bash(caso) -> None:
+    with tempfile.TemporaryDirectory() as pasta:
+        negou_o_que_falha, _ = rodar_prova("! false", Path(pasta))
+        negou_o_que_passa, _ = rodar_prova("! true", Path(pasta))
+        contou_zero, _ = rodar_prova("! printf 'a\\n' | grep -q b", Path(pasta))
+    caso("prova com exclamação sai zero quando o que ela nega falha",
+         negou_o_que_falha == 0)
+    caso("prova com exclamação sai diferente de zero quando o que ela nega passa",
+         negou_o_que_passa not in (0, 127))
+    caso("prova com exclamação e cano roda inteira no bash", contou_zero == 0)
+
+
+def casos_do_caminho_curto(caso) -> None:
+    global CASA, RODADAS
+    antes = CASA, RODADAS
+    CASA = (Path(Path.cwd().anchor) / "raiz-da-camada" / ".claude" / "worktrees"
+            / ("agent-" + "0" * 17) / "tmp" / "bancada")
+    RODADAS = CASA / "rodadas"
+    try:
+        arvore = arvore_da_rodada("v12-variante-do-bootstart", "vizinho-com-nome-comprido")
+        outra = arvore_da_rodada("v12-variante-do-bootstart", "camada")
+    finally:
+        CASA, RODADAS = antes
+    caso(f"o rascunho da sessão de teste cabe em {TETO_DO_CAMINHO} caracteres",
+         comprimento_do_rascunho_da_sessao(arvore) < TETO_DO_CAMINHO)
+    caso("cada braço tem a própria árvore", arvore != outra)
+
+
+def valor_da_bandeira(comando: list, bandeira: str):
+    return comando[comando.index(bandeira) + 1] if bandeira in comando else None
+
+
+AMBIENTE_DE_QUEM_ABRE = {
+    "PATH": "caminho", "CLAUDECODE": "1", "CLAUDE_CODE_ENTRYPOINT": "cli",
+    "CLAUDE_CODE_SESSION_ID": "sessao", "CLAUDE_EFFORT": "alto", "CLAUDE_PID": "1",
+    "MCP_TIMEOUT": "1", "CLAUDE_CODE_GIT_BASH_PATH": "bash",
+    "CLAUDE_CODE_OAUTH_TOKEN": "conta"}
+HERDADO_DA_SESSAO_QUE_ABRE = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT",
+                              "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT",
+                              "CLAUDE_PID", "MCP_TIMEOUT")
+QUE_A_SESSAO_DE_TESTE_PRECISA = ("PATH", "CLAUDE_CODE_GIT_BASH_PATH",
+                                 "CLAUDE_CODE_OAUTH_TOKEN")
+
+
+def casos_da_sessao_isolada(caso) -> None:
+    configuracao = Path("configuracao-da-sessao.json")
+    comando = comando_da_sessao("pedido", MODELO_PADRAO, 3, configuracao)
+    caso("a sessão de teste só tem as ferramentas declaradas",
+         valor_da_bandeira(comando, "--tools") == FERRAMENTAS)
+    caso("a sessão de teste lê só a configuração do projeto, não a de quem a abre",
+         valor_da_bandeira(comando, "--setting-sources") == "project")
+    caso("a sessão de teste não herda servidor de contexto",
+         "--strict-mcp-config" in comando)
+    caso("a sessão de teste lê a configuração própria da rodada",
+         valor_da_bandeira(comando, "--settings") == str(configuracao))
+    limpo = ambiente_sem_a_sessao_que_abre(AMBIENTE_DE_QUEM_ABRE)
+    caso("a sessão de teste não herda as marcas da sessão que a abre",
+         not any(nome in limpo for nome in HERDADO_DA_SESSAO_QUE_ABRE))
+    caso("a sessão de teste mantém o caminho, o bash do git e a conta",
+         all(nome in limpo for nome in QUE_A_SESSAO_DE_TESTE_PRECISA))
+
+
 def testar() -> int:
     resultados = []
 
     def caso(rotulo: str, passou: bool) -> None:
         resultados.append((rotulo, bool(passou)))
+
+    casos_das_recusas(caso)
+    casos_da_prova_pelo_bash(caso)
+    casos_do_caminho_curto(caso)
+    casos_da_sessao_isolada(caso)
 
     for rotulo, pedido in LEITURAS_QUE_VALEM:
         caso(f"vale como leitura inteira: {rotulo}",

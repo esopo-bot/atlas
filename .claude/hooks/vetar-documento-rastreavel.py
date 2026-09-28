@@ -23,13 +23,13 @@ MARCA_DE_COMENTARIO = "#"
 MARCA_DE_PASTA = "/"
 
 RECUSA = (
-    "Regra 13 da camada: isto quer gerar '{}' em caminho que o git RASTREIA, "
+    "Regra 13 da camada: isto quer gerar '{}' em caminho que o git rastreia, "
     "e documento binário não se revisa — a varredura não o lê e ninguém o lê "
     "num diff, então ele entra no commit às cegas. Foi assim que uma "
     "apresentação com dado pessoal ficou horas na raiz de um repositório, com "
     "uma trava só entre ela e o repositório público.\n"
     "O caminho: grave em pasta que este repositório já declarou fora do "
-    "git{}. Se este documento DEVE ser versionado, declare o caminho em "
+    "git{}. Se este documento deve ser versionado, declare o caminho em "
     f"{ARQUIVO_DOS_DOCUMENTOS_VERSIONADOS} e a cerca cala."
 )
 PASTAS_QUE_SERVEM = " — as que existem aqui: {}"
@@ -238,9 +238,9 @@ def testar() -> int:
         de_la = str(ao_lado / "conhecimento" / "proposta.pptx")
         if not veredito(de_la):
             falhas.append(
-                "documento em caminho rastreado de OUTRA árvore de trabalho "
+                "documento em caminho rastreado de outra árvore de trabalho "
                 "— devia barrar e passou. O git se pergunta na árvore do "
-                "ALVO; antes disso a cerca calava em toda worktree")
+                "alvo; antes disso a cerca calava em toda worktree")
         if raiz_do_alvo(de_la, raiz) != ao_lado:
             falhas.append("a raiz do alvo devia ser a árvore dele")
         if raiz_do_alvo("conhecimento/x.pptx", raiz) != raiz:

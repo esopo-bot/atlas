@@ -264,6 +264,7 @@ def _pontuar_a_sessao(pasta: str, quantas: int) -> dict:
          "--allowedTools", FERRAMENTAS_DA_SIMULACAO],
         tempo=TEMPO_DA_SIMULACAO, cwd=pasta)
     parede = time.monotonic() - partida
+    sessao = _colher_json(bruto)
 
     perguntas = _perguntas(quantas)
     resposta = resposta_da_sessao(bruto, [chave for _, chave, _ in perguntas])
@@ -418,6 +419,24 @@ def testar() -> int:
         {"type": "assistant", "message": {"content": [
             {"type": "text", "text": "relato da entrega"}]}},
         {"type": "result", "result": "relato da entrega"}])
+    modulo = sys.modules[__name__]
+    corre_de_verdade = modulo.corre_a_lista
+    resultado_de_mentira = json.dumps({
+        "type": "result", "result": "{}", "num_turns": 3,
+        "total_cost_usd": 0.01, "usage": {"input_tokens": 7}})
+    modulo.corre_a_lista = lambda lista, **_: (
+        (0, resultado_de_mentira) if lista[0] == "claude" else (1, ""))
+    try:
+        with tempfile.TemporaryDirectory(prefix="saude-pontuar-") as pasta:
+            pontuada = _pontuar_a_sessao(pasta, 1)
+    except Exception as falha:
+        pontuada = {"falha": repr(falha)}
+    finally:
+        modulo.corre_a_lista = corre_de_verdade
+    caso("a sessão pontuada leva o resultado dela, com custo e turnos, para "
+         "o relatório dos dois braços",
+         pontuada.get("sessao", {}).get("total_cost_usd") == 0.01
+         and pontuada["sessao"].get("num_turns") == 3)
     caso("a resposta que uma cobrança de parada empurrou para trás da última "
          "mensagem ainda se lê",
          resposta_da_sessao(empurrada, ["onde_abrir"]).get("onde_abrir")

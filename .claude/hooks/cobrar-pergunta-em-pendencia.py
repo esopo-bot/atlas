@@ -2,6 +2,7 @@ import importlib.util
 import io
 import contextlib
 import json
+import os
 import re
 import sys
 import tempfile
@@ -48,10 +49,10 @@ ACAO_QUE_NAO_SE_DESFAZ = re.compile(
     r"|\bdestru\w+|\bsobrescr\w+", re.I)
 
 COBRANCA = (
-    "A resposta deixou decisão do dono em PROSA: «{frase}». Decisão dele vai "
+    "A resposta deixou decisão do dono em prosa: «{frase}». Decisão dele vai "
     "pela ferramenta de pergunta, e a ferramenta não é passe livre. Quatro "
     "condições: só quando necessário, porque o que já está autorizado não "
-    "se pergunta e o que dá para medir se mede; a dúvida INVESTIGADA antes, "
+    "se pergunta e o que dá para medir se mede; a dúvida investigada antes, "
     "e a pergunta chega com o que a medição mostrou; prós e contras de cada "
     "opção; e o recomendado primeiro na lista. Nenhuma opção mais curta do "
     "que o pedido real. Se a frase acima não era decisão dele, diga isso em "
@@ -261,7 +262,7 @@ def testar() -> int:
         numero = [0]
 
         def cobrado(registros, laco=False, commit=True, do_evento=None,
-                    cru=None):
+                    cru=None, pelo_arquivo=False):
             numero[0] += 1
             arquivo = pasta / f"t{numero[0]}.jsonl"
             arquivo.write_text(
@@ -272,7 +273,8 @@ def testar() -> int:
                        CHAVE_DO_LACO: laco}
             if do_evento is not None:
                 entrada[CHAVE_DA_FALA_FINAL] = do_evento
-            return decisao(entrada, {"commit": commit})
+            return decisao(entrada,
+                           None if pelo_arquivo else {"commit": commit})
 
         def turno(texto, *antes):
             return [de_gente("pedido"), *antes, do_agente(fala(texto))]
@@ -282,28 +284,28 @@ def testar() -> int:
         caso("a cobrança carrega as quatro condições, senão vira convite a "
              "perguntar tudo",
              all(marca in cobrado(turno(OFERTA))
-                 for marca in ("só quando necessário", "INVESTIGADA",
+                 for marca in ("só quando necessário", "investigada",
                                "prós e contras", "recomendado")))
         caso("CONTROLE: resposta sem pendência cala — inclusive a lista do "
              "que espera pelo dono, que o briefing manda escrever",
              cobrado(turno(RELATO_LONGO + "O que faltou: nada. Espera por "
                            "você: o pedido de incorporação, quando quiser "
                            "abrir.")) == "")
-        caso("CONTROLE: oferta sobre ação que a configuração JÁ autoriza "
+        caso("CONTROLE: oferta sobre ação que a configuração já autoriza "
              "cala — cobrá-la empurraria a sessão para uma pergunta que a "
              "cerca vizinha recusa, e as duas entrariam em laço",
              cobrado(turno(RELATO_LONGO + "Quer que eu faça o commit dessas "
                            "mudanças?")) == "")
-        caso("a autorização vale para TODA forma de oferta que o detector "
+        caso("a autorização vale para toda forma de oferta que o detector "
              "pega, não só para a que pede licença",
              cobrado(turno(RELATO_LONGO + "Proponho fazer o commit agora."))
              == "" and cobrado(turno(RELATO_LONGO + "Se quiser, eu executo "
                                      "o commit.")) == "")
-        caso("e a MESMA oferta é cobrada onde a configuração não autoriza",
+        caso("e a mesma oferta é cobrada onde a configuração não autoriza",
              "commit" in cobrado(turno(RELATO_LONGO + "Quer que eu faça o "
                                        "commit dessas mudanças?"),
                                  commit=False))
-        caso("oferta autorizada NÃO encobre a outra: ação que não se desfaz "
+        caso("oferta autorizada não encobre a outra: ação que não se desfaz "
              "na mesma frase é decisão do dono",
              "apague" in cobrado(turno(RELATO_LONGO + "Quer que eu faça o "
                                        "commit e apague a pasta?")))
@@ -311,16 +313,16 @@ def testar() -> int:
              "reorganizo" in cobrado(turno(
                  RELATO_LONGO + "Quer que eu faça o commit? Se quiser, eu "
                  "reorganizo a página.")))
-        caso("turno que JÁ usou a ferramenta de pergunta cala",
+        caso("turno que já usou a ferramenta de pergunta cala",
              cobrado([de_gente("pedido"), do_agente(USO_DA_FERRAMENTA),
                       RESULTADO_DE_FERRAMENTA, do_agente(fala(OFERTA))])
              == "")
-        caso("resultado de ferramenta NÃO abre turno novo: a pergunta feita "
+        caso("resultado de ferramenta não abre turno novo: a pergunta feita "
              "antes dele ainda é deste turno",
              cobrado([de_gente("pedido"), do_agente(USO_DA_FERRAMENTA),
                       RESULTADO_DE_FERRAMENTA, RESULTADO_DE_FERRAMENTA,
                       do_agente(fala(OFERTA))]) == "")
-        caso("pergunta feita num turno ANTIGO não absolve a oferta do turno "
+        caso("pergunta feita num turno antigo não absolve a oferta do turno "
              "que está parando",
              "reorganizo" in cobrado([
                  de_gente("antigo"), do_agente(USO_DA_FERRAMENTA),
@@ -331,7 +333,7 @@ def testar() -> int:
                       de_gente(MARCA_DE_AVISO_DO_CLIENTE + " tarefa pronta"),
                       dict(de_gente("lembrete"), isMeta=True),
                       do_agente(fala(OFERTA))]) == "")
-        caso("pergunta feita por SUBAGENTE não é pergunta da sessão",
+        caso("pergunta feita por subagente não é pergunta da sessão",
              "reorganizo" in cobrado([
                  de_gente("pedido"),
                  do_agente(USO_DA_FERRAMENTA, isSidechain=True),
@@ -342,17 +344,17 @@ def testar() -> int:
                       {"type": "user", "message": {"content": [
                           {"type": "image", "source": {}}]}},
                       do_agente({"type": "tool_use", "name": "Read"})]) == "")
-        caso("fala final em VÁRIOS blocos se lê inteira: oferta no primeiro "
+        caso("fala final em vários blocos se lê inteira: oferta no primeiro "
              "bloco não some porque o segundo veio depois",
              "reorganizo" in cobrado([de_gente("pedido"), do_agente(
                  fala(OFERTA), fala("O que faltou: nada."))]))
-        caso("a fala final vem do EVENTO de parada quando ele a traz: o "
+        caso("a fala final vem do evento de parada quando ele a traz: o "
              "arquivo pode ainda não ter a resposta",
              "reorganizo" in cobrado(turno("Feito e provado."),
                                      do_evento=OFERTA)
              and cobrado(turno(OFERTA),
                          do_evento=RELATO_LONGO + "Feito e provado.") == "")
-        caso("fala CITADA e bloco de código não são oferta da sessão",
+        caso("fala citada e bloco de código não são oferta da sessão",
              cobrado(turno(RELATO_LONGO + 'O log registra a fala alheia: '
                            '"Quer que eu reorganize a página?" e o molde '
                            '`se quiser, eu faço`.\n```\nQuer que eu rode?'
@@ -364,7 +366,7 @@ def testar() -> int:
              and "Confirma" in cobrado(turno(
                  RELATO_LONGO + "Há um arquivo herdado. Confirma o que "
                  "fazer com ele?")))
-        caso("pergunta ao dono APONTADA para outro lugar é decisão "
+        caso("pergunta ao dono apontada para outro lugar é decisão "
              "pendente, mesmo sem oferta em primeira pessoa",
              "três perguntas no comentário" in cobrado(turno(
                  FALA_COM_PERGUNTAS_NO_COMENTARIO)))
@@ -381,7 +383,7 @@ def testar() -> int:
                            "foi mesclada ontem.")) == ""
              and cobrado(turno(RELATO_LONGO + "Proposta do portão no "
                                "servidor: mesclada ontem.")) == "")
-        caso("CONTROLE: pergunta apontada num turno que JÁ usou a ferramenta "
+        caso("CONTROLE: pergunta apontada num turno que já usou a ferramenta "
              "de pergunta cala",
              cobrado([de_gente("pedido"), do_agente(USO_DA_FERRAMENTA),
                       RESULTADO_DE_FERRAMENTA,
@@ -396,6 +398,36 @@ def testar() -> int:
         caso("fala curta cala: pergunta de uma linha a gente presente não "
              "é relato com pendência escondida",
              cobrado(turno("Quer que eu rode?")) == "")
+
+        vizinha = cerca_vizinha()
+        casa = pasta / "casa-que-liga-as-tres"
+        configuracao = casa / vizinha.ARQUIVO_CONFIGURACAO
+        configuracao.parent.mkdir(parents=True)
+        configuracao.write_text(json.dumps({vizinha.CHAVE_DAS_AUTORIZACOES: {
+            "commit": True, "push": True, "publicar": True}}),
+            encoding="utf-8")
+        raiz_guardada = os.environ.get(vizinha.VARIAVEL_DA_RAIZ)
+        os.environ[vizinha.VARIAVEL_DA_RAIZ] = str(casa)
+        try:
+            caso("pelo arquivo que liga as três chaves, a oferta de publicar "
+                 "é cobrada: publicar é do dono, sempre, e a chave não "
+                 "autoriza nada",
+                 "publicação da release" in cobrado(turno(
+                     RELATO_LONGO + "Quer que eu faça a publicação da "
+                     "release?"), pelo_arquivo=True))
+            caso("pelo mesmo arquivo, o commit autorizado não encobre o "
+                 "publique da mesma frase",
+                 "publique a release" in cobrado(turno(
+                     RELATO_LONGO + "Quer que eu faça o commit e publique a "
+                     "release?"), pelo_arquivo=True))
+            caso("CONTROLE: pelo mesmo arquivo, a oferta de commit, que a "
+                 "chave autoriza, cala",
+                 cobrado(turno(RELATO_LONGO + "Quer que eu faça o commit "
+                               "dessas mudanças?"), pelo_arquivo=True) == "")
+        finally:
+            os.environ.pop(vizinha.VARIAVEL_DA_RAIZ, None)
+            if raiz_guardada is not None:
+                os.environ[vizinha.VARIAVEL_DA_RAIZ] = raiz_guardada
 
         def nao_mediu(cru):
             try:
@@ -424,7 +456,7 @@ def testar() -> int:
             saiu = json.loads(dito.getvalue())
         except ValueError:
             saiu = {}
-        caso("pela porta da frente, o gancho BLOQUEIA a parada com a razão "
+        caso("pela porta da frente, o gancho bloqueia a parada com a razão "
              "— provar só a decisão deixa a emissão quebrar sem ninguém ver",
              saiu.get("decision") == "block"
              and "apago a pasta" in saiu.get("reason", ""))

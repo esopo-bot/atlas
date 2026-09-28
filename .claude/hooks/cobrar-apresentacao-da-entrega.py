@@ -57,7 +57,7 @@ COBRA = (
     "entregue{voz}, e defenda por que pode ir a produção. Só então o relato "
     "escrito. Apresentação anunciada e não feita conta como falta.")
 AVISO_QUE_NAO_SEGURA_A_PARADA_POR_APRESENTACAO = (
-    "SÓ NO REGISTRO DE DEPURAÇÃO, sem bloqueio: com gente no terminal esta "
+    "Só no registro de depuração, sem bloqueio: com gente no terminal esta "
     "cobrança da apresentação não chega à conversa nem à tela, e a parada "
     "segue.\n\n")
 FALTOU_NAVEGACAO = "uma navegação ao endereço declarado pelo navegador do dono"
@@ -438,7 +438,7 @@ def testar() -> int:
     caso("mescla sem navegacao nem voz cobra os dois",
          FALTOU_OS_DOIS in cobranca("x", com_voz, uma_mescla,
                                     apresentacao_no_transcrito([], endereco, mescla)))
-    caso("navegacao ANTES da mescla nao conta: apresentou o que ainda nao existia",
+    caso("navegacao antes da mescla nao conta: apresentou o que ainda nao existia",
          FALTOU_NAVEGACAO in cobranca("x", sem_voz, uma_mescla,
                                       apresentacao_no_transcrito([navega_cedo], endereco, mescla)))
     caso("playwright no shell nao e o navegador do dono",
@@ -452,12 +452,12 @@ def testar() -> int:
                   apresentacao_no_transcrito([navega, fala], endereco, mescla)) == "")
     caso("sem mescla desta sessao cala, mesmo sem apresentacao",
          cobranca("x", com_voz, [], {"navegou": False, "falou": False}) == "")
-    caso("comando de shell que ESCREVE em projetos/<nome> aponta o vizinho",
+    caso("comando de shell que escreve em projetos/<nome> aponta o vizinho",
          any("projetos" in c and "vizinho-x" in c for c in
              pastas_de_vizinho_escritas_no_comando(
                  "git -C D:/raiz/projetos/vizinho-x/ merge --no-ff frente",
                  Path("D:/raiz"))))
-    caso("comando que so LE o vizinho nao aponta ninguem: ler nao e entregar",
+    caso("comando que so le o vizinho nao aponta ninguem: ler nao e entregar",
          pastas_de_vizinho_escritas_no_comando(
              "grep -ril feedback D:/raiz/projetos/vizinho-x", Path("D:/raiz")) == set())
     caso("git de leitura no vizinho tambem nao aponta ninguem",

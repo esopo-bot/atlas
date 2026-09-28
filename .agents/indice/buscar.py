@@ -207,12 +207,12 @@ def com_barra(caminho) -> str:
         "\\", "/").rstrip("/")
 
 
-def raizes_do_git() -> list:
+def raizes_do_git(cwd: str = "") -> list:
     try:
         feito = subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=TETO_DO_GIT)
+            errors="replace", timeout=TETO_DO_GIT, cwd=cwd or None)
     except (OSError, subprocess.SubprocessError):
         return []
     comum = feito.stdout.strip()
@@ -482,6 +482,22 @@ def testar() -> int:
              and pedido["search"][1]["data"] == ["termo raro"]
              and pedido["search"][1]["annsField"] == CAMPO_DO_VETOR_ESPARSO
              and pedido["rerank"]["strategy"] == "rrf")
+        def ordem_fundida(pernas: list, k: int) -> list:
+            nota = {}
+            for perna in pernas:
+                for posicao, trecho in enumerate(perna, 1):
+                    nota[trecho] = nota.get(trecho, 0.0) + 1 / (k + posicao)
+            return sorted(nota, key=nota.get, reverse=True)
+
+        enchimento = [f"e{n}" for n in range(78)]
+        denso = ["so-num"] + enchimento + ["nos-dois"]
+        esparso = [f"s{n}" for n in range(79)] + ["nos-dois"]
+        fundida = ordem_fundida([denso, esparso],
+                                pedido["rerank"]["params"]["k"])
+        caso("o k da fusão é o declarado: com ele, o trecho que as duas "
+             "pernas acham em 80º passa à frente do que só uma acha em 1º — "
+             "com k 60 a ordem se inverte, e é essa ordem que a busca devolve",
+             fundida.index("nos-dois") < fundida.index("so-num"))
         caso("cada perna do híbrido pede mais do que o topo final, para a "
              "fusão ter o que reordenar",
              pedido["search"][0]["limit"] == 5 * FUNIL_DA_FUSAO

@@ -13,10 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gh"))
 import gh
 
 BANDEIRA_DE_TESTE = "--testar"
-USO = ("posta o relato de entrega da sessão como comentário na issue: o que "
-       "foi pedido, o que foi executado, o que foi entregue e o que é do "
-       "dono agora — cada item com link. Item para o dono etiqueta a issue e "
-       "move o cartão para a coluna de espera; issue cujo corpo abre com "
+USO = ("grava o relato de entrega da sessão num bloco marcado no corpo da "
+       "issue, reescrito inteiro a cada relato: o que foi pedido, o que foi "
+       "executado, o que foi entregue e o que é do dono agora — cada item "
+       "com link. Item para o dono abre um comentário que o marca pelo login "
+       "da configuração local, etiqueta a issue e move o cartão para a "
+       "coluna de espera; issue cujo corpo abre com "
        "`Retomar em: aaaa-mm-dd` no futuro espera o relógio, e fica com "
        "`retomar-em`. Sai 0 quando tudo foi, 2 quando recusou sem postar, e "
        "3 quando o relato FOI postado e a etiqueta ou o cartão falhou: "
@@ -55,9 +57,10 @@ RECADO_QUADRO_NAO_IMPORTOU = (
     "não importou ({motivo})")
 RECADO_QUADRO_FALHOU = "cartão não movido: {motivo}"
 RECADO_PELA_METADE = (
-    "ENTREGA PELA METADE — o relato JÁ ESTÁ na issue: NÃO rode este "
-    "instrumento de novo, comentário postado duas vezes é ruído que ninguém "
-    "apaga. Refaça à mão só o que falhou: {falhas}")
+    "ENTREGA PELA METADE — o relato JÁ ESTÁ no corpo da issue: NÃO rode este "
+    "instrumento de novo, o comentário ao dono sairia duas vezes, e "
+    "comentário duplicado é ruído que ninguém apaga. Refaça à mão só o que "
+    "falhou: {falhas}")
 MODULO_DO_EXECUTOR = ".agents/encadeador"
 NOME_DO_EXECUTOR = "encadeador"
 
@@ -80,6 +83,9 @@ LOCAL_SEM_COMMIT = ("`{endereco}`: o commit `{commit}` não existe em "
 LOCAL_GIT_FALHOU = ("NÃO MEDIDO: o git não respondeu sobre `{vizinho}` "
                     "({motivo}) — `{endereco}` ficou sem conferência")
 
+NOME_DO_BLOCO = "relato de entrega da sessao"
+CHAMADA_DO_DONO = ("a entrega da sessão deixou isto para você:\n\n{itens}\n\n"
+                   "O relato inteiro está no corpo desta issue.")
 TITULO = "## Entrega da sessão"
 BLOCO_DO_PEDIDO = "**O que você pediu**"
 BLOCO_DO_EXECUTADO = "**O que foi executado**"
@@ -89,7 +95,8 @@ NADA_PARA_VOCE = "_Nada espera por você._"
 LINHA_DO_ITEM = "- {texto} — {link}"
 LINHA_SIMPLES = "- {texto}"
 
-RECUSA_SEM_ISSUE = "sem issue: o relato de entrega é comentário, e comentário tem dono"
+RECUSA_SEM_ISSUE = ("sem issue: o relato de entrega mora no corpo de uma issue, "
+                    "e sem ela não tem onde morar")
 RECUSA_SEM_PEDIDO = ("sem `--pedido`: o relato abre pelo que VOCÊ pediu, "
                      "colado, senão ninguém verifica se foi isso mesmo")
 RECUSA_SEM_EXECUTADO = "sem `--executado`: entrega sem trabalho executado não é entrega"
@@ -98,9 +105,14 @@ RECUSA_SEM_LINK = ("`{bandeira}` sem link: `{item}`. Todo item entregue e "
                    "abre — número solto obriga a garimpar")
 RECUSA_SEM_ENDERECO = ("sem repositório declarado: preencha "
                        "`issues.repositorio` em {arquivo}")
-FALHA_AO_POSTAR = "não consegui comentar na issue {issue}: {motivo}"
-RECADO_POSTADO = "entrega relatada na issue {issue}"
-RECADO_DO_ENSAIO = "ENSAIO — o relato que iria para a issue {issue}:\n\n{corpo}"
+FALHA_AO_GRAVAR = "não gravei o relato no corpo da issue {issue}: {motivo}"
+RECADO_POSTADO = "entrega relatada na issue {issue}, no bloco do corpo"
+RECADO_CHAMOU_O_DONO = "comentário na issue {issue} chamando o dono"
+RECADO_DO_ENSAIO = ("ENSAIO — o relato que reescreveria o bloco dele no corpo "
+                    "da issue {issue}:\n\n{corpo}")
+RECADO_DO_ENSAIO_DA_CHAMADA = (
+    "\ne o comentário ao dono, com a marca da configuração local, seria:\n\n"
+    "{chamada}")
 RECADO_ETIQUETA = "etiqueta `{etiqueta}` posta"
 RECADO_ETIQUETA_FALHOU = "não consegui pôr a etiqueta `{etiqueta}`: {motivo}"
 RECADO_QUADRO_SEM_MODULO = ("cartão não movido: o módulo do executor de "
@@ -334,23 +346,33 @@ def postar(issue, pedido: str, executado: list, entregue: list, seu: list,
                                    cwd=cwd)):
         return 2, recusa
     corpo = corpo_do_relato(pedido, executado, entregue or [], seu or [])
+    chamada = CHAMADA_DO_DONO.format(itens="\n".join(_linhas_com_link(seu)))
     if ensaio:
-        return 0, RECADO_DO_ENSAIO.format(issue=issue, corpo=corpo)
+        return 0, RECADO_DO_ENSAIO.format(issue=issue, corpo=corpo) + (
+            RECADO_DO_ENSAIO_DA_CHAMADA.format(chamada=chamada) if seu else "")
     configuracao = configuracao_do_executor(cwd)
     repositorio = _campo(configuracao, CAMPO_DO_REPOSITORIO)
     if not repositorio:
         return 2, RECUSA_SEM_ENDERECO.format(arquivo=ARQUIVO_DO_EXECUTOR)
     conta = _campo(configuracao, CAMPO_DA_CONTA)
-    feito = gh.na_conta(conta, ["issue", "comment", str(issue), "--repo",
-                                 repositorio, "--body-file", "-"],
-                         entrada=corpo)
-    if feito is None or feito.returncode != 0:
-        return 2, FALHA_AO_POSTAR.format(issue=issue, motivo=gh.berro(feito))
-    recados, falhas = [RECADO_POSTADO.format(issue=issue)], []
+    ficou, dito = gh.gravar_o_bloco(conta, repositorio, issue, NOME_DO_BLOCO,
+                                    corpo)
+    if not ficou:
+        return 2, FALHA_AO_GRAVAR.format(issue=issue, motivo=dito)
+    recados, falhas = [RECADO_POSTADO.format(issue=issue), dito], []
     if seu:
-        ditos, falhas = avisar_o_dono(configuracao, conta, repositorio, issue,
-                                      cwd, hoje or date.today())
+        comentou, falha, sem_marca = gh.comentar_para_o_dono(
+            conta, repositorio, issue, chamada, gh.quem_se_marca(configuracao))
+        if comentou:
+            recados += [RECADO_CHAMOU_O_DONO.format(issue=issue), sem_marca]
+        else:
+            recados.append(falha)
+            falhas.append(falha)
+        ditos, falhas_do_aviso = avisar_o_dono(configuracao, conta,
+                                               repositorio, issue, cwd,
+                                               hoje or date.today())
         recados += ditos
+        falhas += falhas_do_aviso
     if falhas:
         recados.append(RECADO_PELA_METADE.format(falhas="; ".join(falhas)))
     return (SAIDA_PELA_METADE if falhas else 0,
@@ -362,6 +384,7 @@ import pathlib
 import sys
 
 CAIXA = pathlib.Path(os.environ["ENTREGA_TESTE_CAIXA"])
+sys.stdin.reconfigure(encoding="utf-8")
 argv = sys.argv[1:]
 (CAIXA / "chamadas.txt").open("a").write(
     " ".join(argv) + chr(9) + os.environ.get("GH_TOKEN", "sem-token") + chr(10))
@@ -371,7 +394,12 @@ elif argv[:2] == ["issue", "comment"]:
     if (CAIXA / "recusa.txt").exists():
         sys.stderr.write("nao vai\\n")
         sys.exit(2)
-    (CAIXA / "postado.md").open("a").write(sys.stdin.read())
+    (CAIXA / "postado.md").open("a", encoding="utf-8").write(sys.stdin.read())
+elif argv[:2] == ["issue", "edit"] and "--body-file" in argv:
+    if (CAIXA / "edicao-recusada.txt").exists():
+        sys.stderr.write("corpo nao vai\\n")
+        sys.exit(1)
+    (CAIXA / "corpo.md").write_text(sys.stdin.read(), encoding="utf-8")
 elif argv[:2] == ["issue", "view"]:
     if (CAIXA / "corpo-nao-se-le.txt").exists():
         sys.stderr.write("issue nao se deixou ler\\n")
@@ -442,7 +470,8 @@ def testar() -> int:
 
     with tempfile.TemporaryDirectory() as pasta:
         raiz = Path(pasta)
-        caso("entrega sem issue não existe — comentário tem dono",
+        caso("entrega sem issue não existe — o relato mora no corpo de uma "
+             "issue",
              recusa_do_pedido("", "p", ["e"], [], []) == RECUSA_SEM_ISSUE)
         caso("entrega sem o pedido colado é relatório, não prestação de contas",
              recusa_do_pedido(1, "  ", ["e"], [], []) == RECUSA_SEM_PEDIDO)
@@ -545,37 +574,91 @@ def testar() -> int:
             "repositorio": "dono/repo", "conta_gh": "conta-x"}})
         codigo, recado = postar(7, "quero X", ["fiz Y"], [], [], cwd=cwd,
                                 ensaio=True)
-        caso("no ensaio o relato aparece e nada é postado",
+        caso("no ensaio o relato aparece e nada é postado nem gravado",
              codigo == 0 and "quero X" in recado
              and not (Path(os.environ["ENTREGA_TESTE_CAIXA"])
-                      / "postado.md").exists())
+                      / "postado.md").exists()
+             and not (Path(os.environ["ENTREGA_TESTE_CAIXA"])
+                      / "corpo.md").exists())
+
+        def relato_no_corpo(caixa: Path) -> str:
+            onde = caixa / "corpo.md"
+            return (gh.texto_do_bloco(onde.read_text(encoding="utf-8"),
+                                      NOME_DO_BLOCO) or ""
+                    if onde.exists() else "")
+
+        def comentado(caixa: Path) -> str:
+            onde = caixa / "postado.md"
+            return onde.read_text(encoding="utf-8") if onde.exists() else ""
 
         caixa = _bancada(raiz)
         codigo, recado = postar(7, "quero X", ["fiz Y"],
                                 ["o PR|https://x/pull/1"], [], cwd=cwd)
-        postado = (caixa / "postado.md").read_text(encoding="utf-8")
         chamadas = (caixa / "chamadas.txt").read_text(encoding="utf-8")
-        caso("sem item para o dono, o relato é postado e mais nada acontece",
-             codigo == 0 and "quero X" in postado
+        caso("SEM NADA PARA O DONO: o relato vai ao bloco do corpo e nenhum "
+             "comentário se abre, nem etiqueta",
+             codigo == 0 and "quero X" in relato_no_corpo(caixa)
+             and "issue comment" not in chamadas
              and "--add-label" not in chamadas)
-        caso("o relato é postado pela conta declarada nas issues",
-             "token-de-conta-x" in chamadas)
+        caso("o relato é gravado pela conta declarada nas issues, e o recado "
+             "traz a frase que o gancho do relato reconhece",
+             "token-de-conta-x" in chamadas
+             and RECADO_POSTADO.format(issue=7) in recado)
+        codigo, recado = postar(7, "quero Z", ["fiz W"],
+                                ["o PR|https://x/pull/2"], [], cwd=cwd)
+        corpo_final = ((caixa / "corpo.md").read_text(encoding="utf-8")
+                       if (caixa / "corpo.md").exists() else "")
+        caso("relatar de novo reescreve o MESMO bloco: o relato velho sai do "
+             "corpo, e continua no histórico de edição",
+             codigo == 0 and "quero Z" in relato_no_corpo(caixa)
+             and "quero X" not in corpo_final
+             and corpo_final.count(gh.marcas_do_bloco(NOME_DO_BLOCO)[0]) == 1)
 
+        com_login = _com_configuracao(raiz, {"issues": {
+            "repositorio": "dono/repo", "conta_gh": "conta-x",
+            "quem_se_marca": "a-pessoa"}})
         caixa = _bancada(raiz)
         codigo, recado = postar(7, "quero X", ["fiz Y"], [],
-                                ["mescla o PR|https://x/pull/1"], cwd=cwd)
+                                ["mescla o PR|https://x/pull/1"],
+                                cwd=com_login)
         chamadas = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+        caso("COM ALGO PARA O DONO: o relato vai ao corpo e UM comentário "
+             "abre marcando o login da configuração local, com o link",
+             codigo == 0 and "quero X" in relato_no_corpo(caixa)
+             and comentado(caixa).startswith("@a-pessoa ")
+             and "https://x/pull/1" in comentado(caixa)
+             and chamadas.count("issue comment") == 1)
         caso("com item para o dono, a issue ganha a etiqueta de espera",
-             codigo == 0 and ETIQUETA_PARADO_EM_VOCE in chamadas)
+             ETIQUETA_PARADO_EM_VOCE in chamadas)
         caso("sem o módulo do executor, o cartão não move e a sessão diz por "
              "quê — em vez de calar e parecer que moveu",
              RECADO_QUADRO_SEM_MODULO in recado)
 
         caixa = _bancada(raiz)
+        codigo, recado = postar(7, "quero X", ["fiz Y"], [],
+                                ["mescla o PR|https://x/pull/1"], cwd=cwd)
+        caso("SEM LOGIN CONFIGURADO: o comentário ao dono sai sem marca, e o "
+             "recado avisa o campo que falta",
+             codigo == 0 and comentado(caixa)
+             and "@" not in comentado(caixa)
+             and "quem_se_marca" in recado)
+
+        caixa = _bancada(raiz)
+        (caixa / "edicao-recusada.txt").write_text("x", encoding="utf-8")
+        codigo, recado = postar(7, "quero X", ["fiz Y"], [],
+                                ["mescla o PR|https://x/pull/1"], cwd=cwd)
+        caso("corpo que o gh recusa gravar vira recusa, não silêncio, e nada "
+             "se comenta",
+             codigo == 2 and "não gravei" in recado and not comentado(caixa))
+
+        caixa = _bancada(raiz)
         (caixa / "recusa.txt").write_text("x", encoding="utf-8")
-        codigo, recado = postar(7, "quero X", ["fiz Y"], [], [], cwd=cwd)
-        caso("gh que recusa vira recusa, não silêncio",
-             codigo == 2 and "não consegui comentar" in recado)
+        codigo, recado = postar(7, "quero X", ["fiz Y"], [],
+                                ["mescla o PR|https://x/pull/1"], cwd=cwd)
+        caso("comentário ao dono que o gh recusa sai PELA METADE: o relato "
+             "já está no corpo, e o recado diz o que falhou",
+             codigo == SAIDA_PELA_METADE and "quero X" in relato_no_corpo(caixa)
+             and "não consegui comentar" in recado)
 
         hoje = date(2026, 9, 20)
         do_dono = ["mescla o PR|https://x/pull/1"]
@@ -672,12 +755,13 @@ def testar() -> int:
              "data não se entende, chama o dono, e sai PELA METADE",
              codigo == SAIDA_PELA_METADE and "data" in recado.lower()
              and f"--add-label {ETIQUETA_PARADO_EM_VOCE}" in chamadas)
-        codigo, recado, chamadas, _ = entrega_com(
+        codigo, recado, chamadas, caixa = entrega_com(
             arquivos=("corpo-nao-se-le.txt",))
-        caso("corpo que NÃO SE LEU não decide pela ausência: chama o dono, "
-             "diz que não leu, e sai PELA METADE para alguém conferir",
-             codigo == SAIDA_PELA_METADE and "não li" in recado
-             and f"--add-label {ETIQUETA_PARADO_EM_VOCE}" in chamadas)
+        caso("corpo que NÃO SE LÊ não recebe o relato: a entrega recusa, diz "
+             "que não leu, e não comenta nem etiqueta nada",
+             codigo == 2 and "não li" in recado
+             and "issue comment" not in chamadas
+             and "--add-label" not in chamadas)
 
         codigo, recado, chamadas, caixa = entrega_com(
             "sem cabeçalho", arquivos=("etiqueta-recusada.txt",),
@@ -686,12 +770,14 @@ def testar() -> int:
              "confere só o código recebia sucesso de entrega pela metade",
              codigo == SAIDA_PELA_METADE)
         caso("a entrega pela metade ainda diz a frase que o gancho do "
-             "relato reconhece, manda NÃO rodar de novo, e postou UM "
-             "comentário só",
+             "relato reconhece, manda NÃO rodar de novo, gravou UM relato no "
+             "corpo e abriu UM comentário só",
              RECADO_POSTADO.format(issue=7) in recado
              and "NÃO rode" in recado
-             and (caixa / "postado.md").read_text(
-                 encoding="utf-8").count(TITULO) == 1)
+             and (caixa / "corpo.md").read_text(
+                 encoding="utf-8").count(TITULO) == 1
+             and (caixa / "postado.md").read_text(encoding="utf-8").count(
+                 CHAMADA_DO_DONO.split(":")[0]) == 1)
         caso("e o cartão ainda é tentado depois de a etiqueta falhar, com a "
              "situação de espera, dita por extenso",
              (caixa / "quadro-chamado.txt").exists()
@@ -780,7 +866,8 @@ def montar_parser() -> argparse.ArgumentParser:
                         help="`o que|link` por item que espera pelo dono")
     parser.add_argument("--cwd", default=".")
     parser.add_argument("--ensaio", action="store_true",
-                        help="mostra o relato sem postar")
+                        help="mostra o relato e o comentário ao dono sem "
+                             "gravar nem comentar")
     parser.add_argument(BANDEIRA_DE_TESTE, action="store_true")
     return parser
 

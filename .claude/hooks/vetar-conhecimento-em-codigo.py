@@ -55,7 +55,7 @@ RECUSA = (
     "Regra 14 da camada: isto quer {}. Conhecimento não nasce em pasta de "
     "código: lá ninguém o "
     "procura, e ele viaja por engano no commit do repositório errado. "
-    "Escreva em `conhecimento/`, ou — se o texto é DAQUELE repositório "
+    "Escreva em `conhecimento/`, ou — se o texto é daquele repositório "
     "(README, docs/) — crie dentro dele, que o fluxo de revisão dele julga. "
     "Para mudar a cerca: `diretorios_so_codigo` em {}."
 )
@@ -248,7 +248,7 @@ DEIXA_PASSAR = [
     ("doc dentro de um repositório", "projetos/app/docs/uso.md"),
     ("código no diretório declarado", "projetos/solta/main.py"),
     ("nota fora do diretório declarado", "conhecimento/nota.md"),
-    ("arquivo de conhecimento que JÁ EXISTE", "projetos/ja-existe.md"),
+    ("arquivo de conhecimento que já existe", "projetos/ja-existe.md"),
 ]
 
 
@@ -311,8 +311,8 @@ def testar() -> int:
                     os.environ[VARIAVEL_DA_RAIZ_DO_PROJETO] = ambiente
             return DECISAO_DE_NEGAR in saida.getvalue()
 
-        caso("nota nascendo em pasta de código de OUTRA árvore de trabalho é "
-             "barrada PELO GANCHO — o território sai da árvore do ALVO, e "
+        caso("nota nascendo em pasta de código de outra árvore de trabalho é "
+             "barrada pelo gancho — o território sai da árvore do alvo, e "
              "antes disso a cerca calava em toda worktree",
              veredito_do_gancho(de_la))
         caso("e o gancho continua barrando na árvore declarada",
@@ -321,7 +321,7 @@ def testar() -> int:
              raiz_do_alvo(de_la, raiz) == ao_lado
              and raiz_do_alvo("projetos/nota.md", raiz) == raiz)
 
-        caso("gancho que veta e não entende o pedido RECUSA, e nomeia a "
+        caso("gancho que veta e não entende o pedido recusa, e nomeia a "
              "falha — quem não consegue julgar não pode dizer sim",
              recusou_sem_entender(TypeError("forma que o gancho não conhece")))
 

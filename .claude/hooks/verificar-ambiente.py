@@ -64,7 +64,7 @@ SHELLS_QUE_LANCAM = ("bash", "bash.exe", "sh", "sh.exe", "pwsh", "pwsh.exe",
                      "powershell", "powershell.exe", "cmd", "cmd.exe")
 PROBLEMA_INTERPRETADOR_DO_GANCHO = (
     "o interpretador {0!r}, que as linhas de gancho do settings.json chamam "
-    "DIRETO, não responde nesta máquina — então NENHUMA cerca roda, e o que "
+    "direto, não responde nesta máquina — então nenhuma cerca roda, e o que "
     "elas barram passa. O nome foi medido na instalação e não é fato do "
     "mundo: se o Python mudou de lugar, rode, da raiz, `python <pasta do "
     "clone do atlas>/montar.py --atualizar` para remedir, ou troque o nome "
@@ -305,7 +305,7 @@ ACUSA = [
     ("interpretador que o lançador lista, existe no PATH e não roda — o "
      "atalho da loja",
      dict(declarado={"comando": ["python3"]})),
-    ("o interpretador que a linha de gancho chama DIRETO não roda — sem ele "
+    ("o interpretador que a linha de gancho chama direto não roda — sem ele "
      "nenhuma cerca roda, e o que elas barram passa",
      dict(settings=gancho_que_chama("python3"))),
     ("nem o caminho absoluto que apodreceu escapa",
@@ -342,7 +342,7 @@ CALA = [
     ("a linha sem variável no texto com um Python 3 que responde não acusa "
      "nada",
      dict(settings=gancho_sem_variavel_que_chama("python"))),
-    ("linha de gancho pelo LANÇADOR não é cobrada por interpretador — ali "
+    ("linha de gancho pelo lançador não é cobrada por interpretador — ali "
      "quem escolhe é o bash, a cada execução",
      dict(settings=gancho_que_chama(
          'bash \\"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\\"'))),

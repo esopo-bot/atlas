@@ -94,11 +94,11 @@ pasta com o `AGENTS.md`) como diretório atual, como o briefing supõe.
 | 2 | INTERPRETADOR | `python -c "import sys; print(sys.version_info[0])"` | `3`. `which` e o nome `python3` não são prova: no Windows `python3` pode ser o atalho da loja, que está no PATH e não roda | NO-GO: nenhum instrumento abaixo vale; a sessão conserta antes |
 | 3 | RAIZ | `git rev-parse --show-toplevel` e `ls AGENTS.md` | a raiz do git igual ao diretório atual, e o `AGENTS.md` listado. Em subpasta a sessão roda sem skill nem gancho da raiz e nada avisa (regra 1) | NO-GO: reabra na raiz |
 | 4 | ABERTURA | `python .agents/camada/camada.py --abertura` | `Abertura íntegra: 4 peça(s) de pé.` As quatro peças, cada uma PRESENTE ou AUSENTE: instruções, servidores declarados, endereço do quadro, índice. Duas ausências não são falta: repositório sem servidor e sem módulo do índice abrem íntegros | peça AUSENTE vai na primeira resposta, sem chute; as três últimas se destrincham nos itens 6, 10 e 13 |
-| 5 | AUTORIZAÇÕES | `python -c "import json; print(json.load(open('nucleo/configuracao.json', encoding='utf-8'))['autorizacoes'])"` | os três valores citados: commit, push, publicar. Omissão não é permissão (regra 9) | NO-GO para sessão que vai commitar ou publicar sem os ter lido |
+| 5 | AUTORIZAÇÕES | `python -c "import json; print(json.load(open('nucleo/configuracao.json', encoding='utf-8'))['autorizacoes'])"` | os valores de `commit` e `push`, citados. Omissão não é permissão (regra 9). Publicar não tem chave: é do dono, sempre, e `publicar` que aparecer ali é chave aposentada, que gancho nenhum lê | NO-GO para sessão que vai commitar ou empurrar sem os ter lido |
 | 6 | QUADRO | `python .agents/camada/camada.py --quadro` | o endereço `dono/repositório` onde toda issue nasce, mesmo a de código que mora em outro lugar. Em relatório que vai para arquivo rastreado, `PRESENTE <quadro>` sem o valor: o repositório da camada é público | `nucleo/executor.json` é local e não viaja para worktree nem nuvem: AUSENTE, declarado. NO-GO só no passo que posta: issue, relato, linha do quadro |
-| 7 | CERCA VIVA | `cd nucleo; cat regras.json`, literal, sozinho, numa chamada só | RECUSADO, com a mensagem da regra 1 inteira. Passou e imprimiu o arquivo: as cercas não estão nesta sessão. Só a recusa prova que a linha do gancho achou o Python e a raiz, que o despachante subiu e que a cerca carregou; a sonda enterrada num script com outros itens passa sem ser vista | NO-GO para sessão que escreve, commita ou mescla (regra 9 sem guarda); informativo na sessão que só pesquisa |
+| 7 | CERCA VIVA | `git add .credenciais/sonda-da-partida-que-nao-existe.txt`, literal, sozinho, numa chamada só | RECUSADO, com a mensagem da regra 8 inteira. O arquivo não existe, então sem cerca nada sobe: o git só diz que o caminho não casou, e essa resposta quer dizer que as cercas não estão nesta sessão. Só a recusa prova que a linha do gancho achou o Python e a raiz, que o despachante subiu e que a cerca carregou; a sonda enterrada num script com outros itens passa sem ser vista | NO-GO para sessão que escreve, commita ou mescla (regra 9 sem guarda); informativo na sessão que só pesquisa |
 | 8 | GANCHOS DESTA SESSÃO | `git log -1 --format='%cI %h' -- .claude/settings.json .claude/hooks .codex .devin` | data anterior ao carimbo do item 1. Gancho novo só carrega em sessão nova, e nada avisa | data posterior: NÃO MEDIDO, reabra a sessão |
-| 9 | ÁRVORE | `git status --short; git branch --show-current; git worktree list` | os três valores citados. Sujeira que você não fez é outra sessão viva: não commite, não apague, não conserte. Repete-se antes de todo `git` | NO-GO para commit se a branch atual for de longa duração (`branches_por_incorporacao`); na partida é informativo |
+| 9 | ÁRVORE | `git status --short; git branch --show-current; git worktree list` | os três valores citados. Sujeira que você não fez é outra sessão viva: não commite, não apague, não conserte. Repete-se antes de todo `git` | NO-GO para commit se a branch atual for de longa duração (as de `.claude/branches-protegidas.txt`, regra 12); na partida é informativo |
 
 Última linha da fase, literal: `PARTIDA COMPLETA`. Sem ela a fase não vale.
 
@@ -159,10 +159,17 @@ seção do seu agente substitui só o que ela nomeia.
   confiança dos três ganchos de `.codex/hooks.json`, porque gancho que o dono
   não revisou é ignorado sem linha de log. Ela se dá só pelo `/hooks` do Codex
   de terminal: o aplicativo de mesa não tem esse comando. Fica em
-  `~/.codex/config.toml`, uma entrada por gancho em `[hooks.state]` com o
-  hash do arquivo, e vale também para o aplicativo de mesa (medido). Mudou o
-  `.codex/hooks.json`, a confiança se dá de novo. Só o
+  `~/.codex/config.toml`, uma entrada por gancho em `[hooks.state]` com a
+  impressão da definição dele, e vale também para o aplicativo de mesa
+  (medido). Mudou o `.codex/hooks.json`, a confiança se dá de novo. Só o
   dono confia.
+- Item 7 soma a leitura da confiança, que não chama o Codex nem gasta
+  crédito: `python .agents/camada/camada.py --confianca-do-codex`. Ela refaz
+  a impressão de cada gancho do `.codex/hooks.json` de hoje e compara com a
+  confiada. `confiança velha` é o arquivo que mudou depois da última
+  confiança: o Codex pula aquele gancho em silêncio, e o dono confia de novo.
+  Acusou logo depois de o dono confiar: a conta do Codex mudou, e a prova
+  volta a ser a sonda.
 - Item 8 soma `python <pasta do clone do atlas>/montar.py --codex` (ensaio): o espelho do `.mcp.json`
   em `~/.codex/config.toml` tem de estar em dia. `codex mcp list` mostra
   declaração; vivo é a chamada do item 10.
@@ -253,9 +260,9 @@ Depois do veredito vem o briefing: leia `.agents/prompts/bootstart.md`
 inteiro e diga, em uma linha, qual caminho da tabela dele o pedido segue. O
 relatório e essa linha abrem a primeira resposta, e **não a encerram**: com
 GO ou GO DEGRADADO, o pedido do dono é atendido na mesma vez, logo abaixo.
-Parar no relatório deixa o dono sem o que pediu (medido). Relatório colado em
-issue ou comentário leva a mesma tabela; em arquivo rastreado, sem o valor
-do quadro nem nome de conta.
+Parar no relatório deixa o dono sem o que pediu (medido). Relatório colado no
+corpo da issue leva a mesma tabela; em arquivo rastreado, sem o valor do
+quadro nem nome de conta.
 
 ## Depois da partida
 
@@ -293,7 +300,8 @@ enxerga.
 5. **Repita 2 e 3 numa conversa nova**, porque uma medição não é medição: a
    escolha de skill varia entre conversas.
 
-A entrega é uma tabela, colada num comentário da issue que pediu a prova:
+A entrega é uma tabela, colada no corpo da issue que pediu a prova, na seção
+dela:
 
 | passo | resultado | prova colada |
 | --- | --- | --- |

@@ -10,12 +10,6 @@ qualquer repositório, e nunca o caso de quem a escreveu. Todo candidato passa
 pelas nove barreiras, **na ordem** — lista fora de ordem não é portão, porque
 a barreira seguinte só faz sentido depois de a anterior ter deixado passar.
 
-## O que a camada não é
-
-Não é diário, não é registro de decisão pessoal, não é catálogo de tudo que
-existe, não é lugar de opinião sobre fornecedor, e não é vitrine de trabalho:
-ela não conta o que foi feito — ensina o que funciona.
-
 ## As nove barreiras, na ordem
 
 1. **Procedência.** De onde veio isto? Vale: fato medido nesta máquina,

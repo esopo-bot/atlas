@@ -75,15 +75,15 @@ E_ENTRE_OS_ULTIMOS = " e "
 VIRGULA = ", "
 
 AVISO = (
-    "O clone de `{nome}` está ATRÁS do remoto, e é dele que você está "
+    "O clone de `{nome}` está atrás do remoto, e é dele que você está "
     "lendo agora.\n"
     "{linhas}\n"
-    "Isto NÃO impede a leitura, e sai uma vez por sessão: ler o código do "
+    "Isto não impede a leitura, e sai uma vez por sessão: ler o código do "
     "vizinho continua sendo a forma mais barata de não depender do time "
     "dele. O que o aviso cobra é outra coisa — conclusão tirada daqui tem "
     "de dizer de que commit e de que data ela saiu.\n"
     "Antes de concluir:\n"
-    "  - confira pelo remoto SÓ os arquivos que sustentam a sua conclusão, "
+    "  - confira pelo remoto só os arquivos que sustentam a sua conclusão, "
     "não o repositório inteiro. Pelo servidor de contexto do provedor, "
     "listando os commits daquele caminho desde a data do clone; lista "
     "vazia quer dizer que a leitura local ainda vale.\n"
@@ -433,7 +433,7 @@ def testar() -> int:
              lido("Bash", "command",
                   "grep -rn x 'projetos/vizinho-alheio/src'")
              == "vizinho-alheio")
-        caso("nome que apenas COMEÇA igual não conta, senão o aviso sai no "
+        caso("nome que apenas começa igual não conta, senão o aviso sai no "
              "repositório errado",
              lido("Read", "file_path",
                   "projetos/vizinho-alheio-outro/a.go") == "")
@@ -441,26 +441,26 @@ def testar() -> int:
              lido("Read", "file_path", "projetos/meu-proprio/a.go") == "")
         caso("pedido sem alvo nenhum, fora do vizinho, não desperta o aviso",
              lido("Bash", "command", "git status") == "")
-        caso("tema de MESMO NOME dentro de outro projeto não é o vizinho: "
+        caso("tema de mesmo nome dentro de outro projeto não é o vizinho: "
              "o que conta é o alvo cair sob a pasta do vizinho, não o nome "
              "aparecer no caminho",
              lido("Read", "file_path",
                   str(de_outro / "src" / "temas" / "vizinho-alheio" / "a.ts"))
              == "")
-        caso("procurar a PALAVRA não é ler o vizinho",
+        caso("procurar a palavra não é ler o vizinho",
              lido("Bash", "command", "grep -rn vizinho-alheio projetos/outro")
              == "")
         caso("o padrão de uma busca é texto procurado, nunca alvo",
              lido("Grep", "pattern", "projetos/vizinho-alheio") == "")
-        caso("pasta de mesmo nome FORA desta raiz não é o vizinho daqui",
+        caso("pasta de mesmo nome fora desta raiz não é o vizinho daqui",
              lido("Read", "file_path",
                   str(Path(pasta) / "outra" / "projetos" / "vizinho-alheio"
                       / "a.go")) == "")
-        caso("caminho que entra no vizinho e SAI dele não é leitura do "
+        caso("caminho que entra no vizinho e sai dele não é leitura do "
              "vizinho",
              lido("Read", "file_path",
                   "projetos/vizinho-alheio/../outro/a.go") == "")
-        caso("de DENTRO do vizinho, pedido sem alvo explícito é leitura "
+        caso("de dentro do vizinho, pedido sem alvo explícito é leitura "
              "dele: o diretório de trabalho resolve o que o comando cala",
              lido("Bash", "command", "cat a.go", onde=do_vizinho / "src")
              == "vizinho-alheio")
@@ -473,7 +473,7 @@ def testar() -> int:
             entrada[CHAVE_DO_DIRETORIO] = str(raiz_com_espaco)
             return vizinho_do_pedido(entrada, raiz_com_espaco, nomes)
 
-        caso("caminho entre ASPAS com espaço no meio é um alvo só: partido "
+        caso("caminho entre aspas com espaço no meio é um alvo só: partido "
              "no espaço, nenhum dos pedaços cai sob o vizinho e o aviso "
              "emudece justo no caso comum desta máquina",
              lido_da_raiz_com_espaco(f'Get-Content "{alvo_com_espaco}"')
@@ -491,7 +491,7 @@ def testar() -> int:
                  == "vizinho-alheio")
         finally:
             del os.environ["ALVO_DA_BANCADA_DO_AVISO"]
-        caso("de dentro do vizinho, alvo absoluto de FORA não desperta o "
+        caso("de dentro do vizinho, alvo absoluto de fora não desperta o "
              "aviso daquele clone",
              lido("Read", "file_path", str(de_outro / "a.go"),
                   onde=do_vizinho) == "")
@@ -519,7 +519,7 @@ def testar() -> int:
                             str(raiz / "projetos" / "vizinho-alheio" / "a.go")),
                      raiz, agora, marcas) == SEM_AVISO)
 
-        caso("clone cujo estado NÃO se mediu não gasta a marca de uma vez "
+        caso("clone cujo estado não se mediu não gasta a marca de uma vez "
              "por sessão: marca que nasce antes da medida cala a segunda "
              "tentativa e faz a parada cobrar um aviso que nunca saiu",
              not list(marcas.glob(f"{PREFIXO_DA_MARCA}*")))
@@ -531,7 +531,7 @@ def testar() -> int:
         primeira = decisao(le_o_vizinho, raiz, agora, marcas)
         segunda = decisao(le_o_vizinho, raiz, agora, marcas)
         caso("cadastro de vizinhos ilegível, com a sessão olhando a pasta "
-             "dos vizinhos, AVISA que não mediu: calar aqui tem a mesma "
+             "dos vizinhos, avisa que não mediu: calar aqui tem a mesma "
              "cara de não há clone atrasado",
              "NÃO MEDIU" in primeira)
         caso("e o aviso de não mediu sai uma vez por sessão: a primeira "
@@ -542,7 +542,7 @@ def testar() -> int:
              cobranca_da_parada({CHAVE_DA_SESSAO: "s-cega",
                                  CHAVE_DO_EVENTO: EVENTO_DE_PARADA},
                                 marcas) == SEM_AVISO)
-        caso("cadastro ilegível SEM olhar vizinho nenhum cala: instalação "
+        caso("cadastro ilegível sem olhar vizinho nenhum cala: instalação "
              "virgem não tem cadastro, e avisar a cada sessão dela ensina a "
              "ignorar o aviso",
              decisao(pedido("Read", "file_path", str(raiz / "LEIAME.md"),
@@ -551,7 +551,7 @@ def testar() -> int:
 
         sem_pasta_de_vizinhos = base / "virgem"
         (sem_pasta_de_vizinhos / "nucleo").mkdir(parents=True)
-        caso("instalação SEM pasta de vizinhos cala mesmo quando o texto "
+        caso("instalação sem pasta de vizinhos cala mesmo quando o texto "
              "procurado tem cara de caminho de vizinho: não há vizinho que "
              "a sessão possa estar lendo",
              decisao(pedido("Bash", "command",
@@ -579,7 +579,7 @@ def testar() -> int:
         finally:
             (globals()["rodar_git"], globals()["cabeca_local"],
              globals()["ramo_atual"]) = de_verdade
-        caso("remoto que não responde se consulta UMA vez, não a cada "
+        caso("remoto que não responde se consulta uma vez, não a cada "
              "leitura: cada consulta espera a rede, e três leituras "
              "seguidas não podem pagar três esperas",
              consultas.count("ls-remote") == 1)
@@ -595,13 +595,13 @@ def testar() -> int:
         finally:
             globals()["CERCA_IRMA"] = irma_de_verdade
             CACHE_DA_CERCA_IRMA.clear()
-        caso("cerca irmã que não carrega AVISA que não mediu, em vez de "
+        caso("cerca irmã que não carrega avisa que não mediu, em vez de "
              "virar conjunto vazio calado",
              "NÃO MEDIU" in sem_irma)
 
         (raiz / ARQUIVO_EXECUTOR).write_text(json.dumps({"projetos": {}}),
                                              encoding="utf-8")
-        caso("cadastro LIDO e vazio cala: vazio medido não é falha",
+        caso("cadastro lido e vazio cala: vazio medido não é falha",
              decisao(pedido("Read", "file_path",
                             str(raiz / "projetos" / "vizinho-alheio" / "a"),
                             sessao="s-vazio"), raiz, agora, marcas)
@@ -637,7 +637,7 @@ def testar() -> int:
     caso("o aviso denuncia a segunda defasagem, que é a silenciosa",
          "26 commit(s)" in texto and "origin/main" in texto)
     caso("o aviso não bloqueia, e diz isso",
-         "NÃO impede a leitura" in texto)
+         "não impede a leitura" in texto)
     caso("o aviso cobra a data na conclusão, que é a causa real do erro",
          "de que commit e de que data" in texto)
     caso("o aviso manda conferir só os arquivos que sustentam a conclusão",

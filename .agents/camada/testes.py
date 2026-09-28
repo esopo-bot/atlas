@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 from pathlib import Path
 
@@ -99,10 +100,12 @@ from camada import (
     casos_da_suite,
     catalogo_e_corpo,
     chaves,
+    chaves_aposentadas,
     chaves_declaradas,
     declarados_fora_do_git,
     caminho_que_o_git_ignora,
     colher_json,
+    resposta_da_sessao,
     conta,
     corre,
     custo_das_execucoes,
@@ -110,12 +113,34 @@ from camada import (
     de_quem_e_a_chave,
     entrega,
     onde_a_issue_nasce,
+    confianca_dos_ganchos_do_codex,
+    impressao_do_gancho,
+    rotulo_do_evento,
+    tempo_do_gancho,
+    ARQUIVO_DOS_GANCHOS_DO_CODEX,
+    PASTA_DO_CODEX_NA_CASA,
+    CONFIGURACAO_DO_CODEX,
+    GANCHO_CONFIADO,
+    GANCHO_COM_CONFIANCA_VELHA,
+    GANCHO_NUNCA_CONFIADO,
+    GANCHO_DESLIGADO,
     arvores_de_trabalho,
     UMA_ARVORE_SO,
     ARVORES_NAO_MEDIDAS,
     abertura,
+    aviso_do_historico,
+    INSTRUMENTO_DO_HISTORICO,
+    ganchos_contra_a_integracao,
+    avancar_a_raiz,
+    CHAVE_DA_RAIZ_QUE_ESPELHA,
     instrucoes_da_raiz,
     servidores_de_contexto,
+    aperto_de_mao,
+    BANDEIRA_DA_CONEXAO,
+    CONEXAO_CAIU,
+    CONEXAO_DE_PE,
+    CONEXAO_NAO_MEDIDA,
+    TEMPO_DO_APERTO_DE_MAO,
     estado_do_cliente_sobre_os_servidores,
     ESTADO_DO_CLIENTE_AUSENTE,
     ARQUIVO_DE_ESTADO_DO_CLIENTE,
@@ -128,6 +153,7 @@ from camada import (
     ARQUIVO_DOS_ALVOS_DO_INDICE,
     INSTRUMENTO_DO_INDICE,
     BUSCADOR_DO_INDICE,
+    MARCA_DA_COLECAO_SEM_ALVO,
     ARQUIVO_DO_EXECUTOR,
     veredito_da_entrega,
     SAIDA_LIMPA,
@@ -227,9 +253,23 @@ INSTRUMENTO_UM_POUCO_LERDO = (
     "print('OK: 1 casos')\n")
 INSTRUMENTO_SEM_BANCADA = "valor = 1\n"
 ORCAMENTO_QUE_SO_DA_PARA_UMA = 0.001
+TEMPO_MINIMO_DAS_BANCADAS_LONGAS = 120
+TEMPO_MEDIDO_DO_SERVIDOR_MAIS_LENTO = 29
+BANCADAS_LONGAS_DOS_GANCHOS = (".claude/hooks/vetar-branch-protegida.py",
+                               ".claude/hooks/cobrar-destino-da-entrega.py")
+TEMPO_MEDIDO_DA_SUITE_DO_ENCADEADOR = 220
+SUITES_DO_ENCADEADOR = (".agents/encadeador/testes.py",
+                        "modulos/encadeador/.agents/encadeador/testes.py")
 TETO_QUE_NENHUMA_BANCADA_LENTA_ALCANCA = 1
 ASSINATURA_DE_MENTIRA = ("-c user.name=t -c user.email=t@t "
                          "-c commit.gpgsign=false")
+
+
+def dito_na_abertura(raiz: Path) -> str:
+    dito = io.StringIO()
+    with contextlib.redirect_stdout(dito):
+        abertura(raiz)
+    return dito.getvalue()
 
 
 def arvore_com_instrumentos_de_mentira(onde: Path) -> Path:
@@ -258,6 +298,66 @@ def criar_atalho_de_pasta(destino: Path, atalho: Path) -> bool:
     feito = subprocess.run(["cmd", "/c", "mklink", "/J", str(atalho),
                             str(destino)], capture_output=True, text=True)
     return feito.returncode == 0 and atalho.exists()
+
+
+PONTE_QUE_O_CODEX_CONFIOU = ("bash .claude/hooks/interpretador.sh "
+                             ".agents/travessia/ponte.py --codex")
+IMPRESSOES_QUE_O_CODEX_GRAVOU = {
+    "PreToolUse": ("sha256:985933213bd55f88d47385e2817be498"
+                   "41e1dfc2d8768acbf2299d783bfbf95d"),
+    "SessionStart": ("sha256:a3a7563002fb26cf1af3898dfe51a25e"
+                     "1ebedc37fa9bcc9f46b627ce78cc5f30"),
+    "Stop": ("sha256:31d884f679faa76fa60512cd31d4efc3"
+             "9179ef90ddf0e9b5c6f70132751e4920")}
+TEMPO_DA_PONTE_DE_MENTIRA_S = 60
+SEGREDO_DE_MENTIRA_DO_CODEX = "valor-que-nunca-sai-na-tela"
+PREFIXO_DE_CAMINHO_LITERAL_DE_MENTIRA = "\\\\?\\"
+
+
+def gancho_da_ponte_de_mentira(comando: str = PONTE_QUE_O_CODEX_CONFIOU,
+                               **campos) -> dict:
+    return dict({"type": "command", CHAVE_DO_COMANDO: comando,
+                 "timeout": TEMPO_DA_PONTE_DE_MENTIRA_S}, **campos)
+
+
+def ponte_de_mentira(comando: str = PONTE_QUE_O_CODEX_CONFIOU,
+                     eventos: tuple = tuple(IMPRESSOES_QUE_O_CODEX_GRAVOU),
+                     **campos) -> dict:
+    return {evento: [{CHAVE_DOS_GANCHOS: [
+        gancho_da_ponte_de_mentira(comando, **campos)]}] for evento in eventos}
+
+
+def estados_confiados_de_mentira(**estado) -> dict:
+    return {f":{rotulo_do_evento(evento)}:0:0":
+            dict({"trusted_hash": impressao}, **estado)
+            for evento, impressao in IMPRESSOES_QUE_O_CODEX_GRAVOU.items()}
+
+
+def ler_confianca_de_mentira(ganchos, estados, prefixo: str = "",
+                             configuracao_crua: str = None) -> tuple:
+    with tempfile.TemporaryDirectory(prefix="confianca-do-codex-") as pasta:
+        raiz, casa = Path(pasta) / "raiz", Path(pasta) / "casa"
+        arquivo = raiz / ARQUIVO_DOS_GANCHOS_DO_CODEX
+        arquivo.parent.mkdir(parents=True)
+        if ganchos is not None:
+            arquivo.write_text(json.dumps({CHAVE_DOS_GANCHOS: ganchos}),
+                               encoding="utf-8")
+        configuracao = casa / PASTA_DO_CODEX_NA_CASA / CONFIGURACAO_DO_CODEX
+        configuracao.parent.mkdir(parents=True)
+        linhas = [f'chave_de_mentira = "{SEGREDO_DE_MENTIRA_DO_CODEX}"']
+        for sufixo, estado in (estados or {}).items():
+            chave = json.dumps(prefixo + str(arquivo.resolve()) + sufixo)
+            linhas.append(f"[hooks.state.{chave}]")
+            linhas.extend(f"{nome} = {json.dumps(valor)}"
+                          for nome, valor in estado.items())
+        if estados is not None or configuracao_crua is not None:
+            configuracao.write_text(
+                configuracao_crua or "\n".join(linhas) + "\n",
+                encoding="utf-8")
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            codigo = confianca_dos_ganchos_do_codex(raiz, casa=casa)
+    return codigo, saida.getvalue()
 
 
 def testar() -> int:
@@ -782,6 +882,35 @@ def testar() -> int:
     caso("fluxo sem evento de resultado devolve o último objeto, nunca vazio",
          colher_json('[{"type": "system"}, {"type": "assistant", "i": 2}]')
          .get("i") == 2)
+    resposta_gravada = {
+        "onde_abrir": "Na raiz do repositório, a pasta que tem o AGENTS.md",
+        "quantas_regras": 20,
+        "posso_commitar": "depende — commit segue as autorizações declaradas",
+        "segredo_em_texto_rastreado": "${VARIAVEL}, nunca o valor",
+        "branch_de_longa_duracao": "Não se toca nela",
+        "o_que_e_pronto": "Só quando um instrumento provou"}
+    chaves_do_gabarito = [p[1] for p in perguntas(20)]
+    empurrada = json.dumps([
+        {"type": "system", "subtype": "init"},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": json.dumps(resposta_gravada,
+                                                ensure_ascii=False)}]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "Relato da entrega: somar.py escrito, "
+                                     "o --testar passa."}]}},
+        {"type": "result", "subtype": "success",
+         "result": "Relato da entrega: somar.py escrito, o --testar passa.",
+         "num_turns": 9}], ensure_ascii=False)
+    lida = resposta_da_sessao(empurrada, chaves_do_gabarito)
+    caso("a resposta que a cobrança de parada empurrou para trás da última "
+         "mensagem ainda se lê, e acerta as seis do gabarito — lendo só o "
+         "resultado final a sessão tirava zero nas seis",
+         all(prova(lida) for _, _, prova in perguntas(20)))
+    no_fim = json.dumps([{"type": "result", "result": json.dumps(
+        {"onde_abrir": "no fim"})}])
+    caso("e a resposta na última mensagem continua valendo",
+         resposta_da_sessao(no_fim, chaves_do_gabarito).get("onde_abrir")
+         == "no fim")
     gabarito = {p[1]: p[2] for p in perguntas(14)}
     caso("commitar: 'não' passa", gabarito["posso_commitar"](
         {"posso_commitar": "não — sem autorização declarada"}))
@@ -997,6 +1126,75 @@ def testar() -> int:
              and "não se deixou ler"
              in servidores_de_contexto(onde, casa=casa)[1])
 
+        falsos = onde / "servidores-de-mentira"
+        falsos.mkdir()
+        (falsos / "responde.py").write_text(
+            "import json, sys\n"
+            "pedido = json.loads(sys.stdin.readline())\n"
+            "print(json.dumps({'jsonrpc': '2.0', 'id': pedido['id'], "
+            "'result': {'capabilities': {}}}), flush=True)\n"
+            "sys.stdin.read()\n", encoding="utf-8")
+        (falsos / "login.py").write_text(
+            "import json, sys\n"
+            "pedido = json.loads(sys.stdin.readline())\n"
+            "print('InvalidGrant: o token do perfil venceu', file=sys.stderr)\n"
+            "print(json.dumps({'jsonrpc': '2.0', 'id': pedido['id'], "
+            "'error': {'code': -32602, 'message': 'InvalidGrant'}}), "
+            "flush=True)\n", encoding="utf-8")
+        (falsos / "mudo.py").write_text(
+            "import time\ntime.sleep(60)\n", encoding="utf-8")
+        (falsos / "sai.py").write_text(
+            "import sys\nprint('quebrou ao subir', file=sys.stderr)\n"
+            "sys.exit(3)\n", encoding="utf-8")
+        de_mentira = {
+            "de-pe": {"command": sys.executable,
+                      "args": [str(falsos / "responde.py")]},
+            "login-vencido": {"command": sys.executable,
+                              "args": [str(falsos / "login.py")]},
+            "mudo": {"command": sys.executable,
+                     "args": [str(falsos / "mudo.py")]},
+            "sai": {"command": sys.executable,
+                    "args": [str(falsos / "sai.py")]},
+            "remoto": {"type": "http", "url": "http://127.0.0.1:9/mcp"},
+            "inexistente": {"command": "comando-que-nao-existe-na-maquina"}}
+        estados = {nome: aperto_de_mao(onde, nome, declaracao, 2)
+                   for nome, declaracao in de_mentira.items()}
+        caso("o servidor stdio que responde ao initialize fica de pé",
+             estados["de-pe"][0] == CONEXAO_DE_PE)
+        caso("o -32602 com InvalidGrant vira login do perfil vencido, ato do "
+             "dono, e a linha nomeia o servidor",
+             estados["login-vencido"][0] == CONEXAO_CAIU
+             and "login do perfil vencido" in estados["login-vencido"][1]
+             and "login-vencido" in estados["login-vencido"][1])
+        caso("o servidor vivo que não responde no prazo fica NÃO MEDIDO, "
+             "nomeado: no prazo, lento e mudo são iguais, e dois servidores "
+             "bons levaram 8 e 28 s para responder",
+             estados["mudo"][0] == CONEXAO_NAO_MEDIDA
+             and "mudo" in estados["mudo"][1])
+        caso("o servidor que sai sem responder cai, nomeado",
+             estados["sai"][0] == CONEXAO_CAIU
+             and "sai" in estados["sai"][1])
+        caso("o prazo do aperto de mão cobre o servidor mais lento medido",
+             TEMPO_DO_APERTO_DE_MAO > TEMPO_MEDIDO_DO_SERVIDOR_MAIS_LENTO)
+        caso("o servidor que nem sobe cai, nomeado",
+             estados["inexistente"][0] == CONEXAO_CAIU)
+        caso("o servidor http fica NÃO MEDIDO, nunca de pé",
+             estados["remoto"][0] == CONEXAO_NAO_MEDIDA)
+        alvo_do_mcp.write_text(json.dumps({"mcpServers": de_mentira}),
+                               encoding="utf-8")
+        partida = time.monotonic()
+        de_pe, dito = servidores_de_contexto(onde, casa=casa, conexao=True,
+                                             tempo_da_conexao=2)
+        caso("com a conexão pedida, servidor que caiu derruba a peça, e os "
+             "apertos correm em paralelo: o todo cabe perto de um tempo "
+             "limite, não da soma deles",
+             de_pe is False and "login-vencido" in dito and "mudo" in dito
+             and time.monotonic() - partida < 8)
+        de_pe, dito = servidores_de_contexto(onde, casa=casa)
+        caso("sem a conexão pedida, a abertura não sobe servidor nenhum e diz "
+             "que provou só a declaração, e como provar a conexão",
+             de_pe is True and BANDEIRA_DA_CONEXAO in dito)
+
         caso("sem o instrumento do índice, o índice não é cobrado: o módulo "
              "não está instalado, e isso não é falta",
              indice_da_abertura(onde)[0] is None)
@@ -1014,6 +1212,14 @@ def testar() -> int:
              "e a linha ensina o buscador local, para quem não tem servidor "
              "de contexto",
              de_pe is True and BUSCADOR_DO_INDICE in dito)
+        sobra = ("  " + MARCA_DA_COLECAO_SEM_ALVO
+                 + " alvos.json: /x/saiu (hybrid_code_chunks_sobra)")
+        instrumento.write_text(
+            f"print('índice LIGADO')\nprint({sobra!r})\n", encoding="utf-8")
+        de_pe, dito = indice_da_abertura(onde)
+        caso("coleção do banco sem alvo declarado chega à abertura como aviso "
+             "— a peça segue de pé, mas a sobra que responde à busca aparece",
+             de_pe is True and sobra in dito and "LIGADO" not in dito)
         instrumento.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
         de_pe, dito = indice_da_abertura(onde)
         caso("índice que não responde é falta que NOMEIA o buscador por "
@@ -1039,6 +1245,372 @@ def testar() -> int:
         caso("com as quatro peças de pé, a abertura sai zero e diz quantas "
              "provou",
              integra == 0 and "íntegra" in dito.getvalue())
+
+    with tempfile.TemporaryDirectory(prefix="camada-historico-") as da_arvore:
+        arvore = Path(da_arvore)
+        caso("sem o módulo do histórico instalado, a abertura não diz nada "
+             "dele",
+             aviso_do_historico(arvore) == "")
+        instrumento = arvore / INSTRUMENTO_DO_HISTORICO
+        instrumento.parent.mkdir(parents=True)
+        instrumento.write_text(
+            "import pathlib, sys\n"
+            "estado = pathlib.Path(__file__).with_name('estado.txt')\n"
+            "codigo = int(estado.read_text()) if estado.exists() else 1\n"
+            "print({0: 'nenhuma issue fechada sem histórico', "
+            "1: '1 issue(s) fechada(s) sem histórico desde o marco: #7', "
+            "2: 'não medido: sem endereço'}[codigo])\n"
+            "sys.exit(codigo)\n", encoding="utf-8")
+        caso("issue fechada sem histórico vira aviso da abertura, com o "
+             "número",
+             "sem histórico" in aviso_do_historico(arvore)
+             and "#7" in aviso_do_historico(arvore))
+        instrumento.with_name("estado.txt").write_text("0", encoding="utf-8")
+        caso("depois que o histórico nasce, o aviso para de acusar",
+             aviso_do_historico(arvore) == "")
+        instrumento.with_name("estado.txt").write_text("2", encoding="utf-8")
+        caso("o histórico que não se mediu diz que não mediu, nunca que está "
+             "em dia",
+             "não medido" in aviso_do_historico(arvore))
+        (arvore / ARQUIVO_DAS_INSTRUCOES).write_text("regras",
+                                                     encoding="utf-8")
+        executor = arvore / ARQUIVO_DO_EXECUTOR
+        executor.parent.mkdir(parents=True, exist_ok=True)
+        executor.write_text(
+            json.dumps({"issues": {"repositorio": "quem-instala/o-quadro"}}),
+            encoding="utf-8")
+        instrumento.with_name("estado.txt").write_text("1", encoding="utf-8")
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            abertura(arvore)
+        caso("a abertura imprime o aviso do histórico quando o quadro está "
+             "declarado",
+             "#7" in dito.getvalue())
+
+    with tempfile.TemporaryDirectory(prefix="camada-avisos-da-abertura-") as pasta:
+        principal = Path(pasta) / "principal"
+        instrumento = principal / ".agents" / "vigia" / "vigia.py"
+        instrumento.parent.mkdir(parents=True)
+        instrumento.write_text(
+            "import pathlib, sys\n"
+            "estado = pathlib.Path(__file__).with_name('estado.txt')\n"
+            "codigo = int(estado.read_text()) if estado.exists() else 1\n"
+            "falas = {1: 'vigia ligado: 3 alertas', 2: 'uso: vigia.py'}\n"
+            "if codigo in falas:\n"
+            "    print(falas[codigo])\n"
+            "sys.exit(codigo)\n", encoding="utf-8")
+        estado = instrumento.with_name("estado.txt")
+        (principal / ARQUIVO_DAS_INSTRUCOES).write_text("regras",
+                                                        encoding="utf-8")
+        executor = principal / ARQUIVO_DO_EXECUTOR
+        executor.parent.mkdir(parents=True)
+        executor.write_text(json.dumps({"modo": "completo"}),
+                            encoding="utf-8")
+        dito = dito_na_abertura(principal)
+        caso("sem a lista dos avisos no executor.json, a abertura não chama "
+             "módulo nenhum, nem o instrumento que falaria",
+             ARQUIVO_DAS_INSTRUCOES in dito and "vigia" not in dito)
+        inscrito = {"instrumento": ".agents/vigia/vigia.py",
+                    "bandeira": "--abertura", "rotulo": "vigia"}
+        executor.write_text(json.dumps({"avisos_da_abertura": [inscrito]}),
+                            encoding="utf-8")
+        caso("o módulo inscrito na lista do executor.json fala na abertura "
+             "com a linha dele",
+             "vigia ligado: 3 alertas" in dito_na_abertura(principal))
+        estado.write_text("2", encoding="utf-8")
+        caso("o módulo inscrito que falha diz não medido com o rótulo dele",
+             "vigia: não medido — uso: vigia.py"
+             in dito_na_abertura(principal))
+        estado.write_text("0", encoding="utf-8")
+        dito = dito_na_abertura(principal)
+        caso("o módulo inscrito que sai limpo não diz nada",
+             ARQUIVO_DAS_INSTRUCOES in dito and "vigia" not in dito)
+        estado.unlink()
+        executor.write_text(json.dumps({"avisos_da_abertura": [
+            "vigia", {"instrumento": 7},
+            dict(inscrito, instrumento=".agents/sumido/sumido.py"),
+            inscrito]}), encoding="utf-8")
+        dito = dito_na_abertura(principal)
+        caso("o instrumento inscrito que não existe nesta árvore cala, e o "
+             "inscrito de pé fala",
+             "vigia ligado" in dito and "sumido" not in dito)
+        caso("item torto da lista diz não medido com quantos são, sem calar "
+             "o inscrito de pé",
+             "avisos_da_abertura de nucleo/executor.json: não medido — 2 "
+             "item(ns)" in dito and "vigia ligado" in dito)
+        executor.write_text(json.dumps({"avisos_da_abertura": "vigia"}),
+                            encoding="utf-8")
+        dito = dito_na_abertura(principal)
+        caso("lista que não é lista diz não medido, nunca que não há módulo "
+             "inscrito",
+             "avisos_da_abertura de nucleo/executor.json: não medido — não é "
+             "lista" in dito and "vigia ligado" not in dito)
+        executor.write_text("{ isto nao e json", encoding="utf-8")
+        caso("executor.json ilegível diz que a lista não se mediu",
+             "avisos_da_abertura de nucleo/executor.json: não medido — "
+             "JSONDecodeError" in dito_na_abertura(principal))
+        executor.write_text(json.dumps({"avisos_da_abertura": [inscrito]}),
+                            encoding="utf-8")
+        (principal / ".gitignore").write_text("/nucleo/executor.json\n",
+                                              encoding="utf-8")
+        corre(f"git init -q -b main && git add -A "
+              f"&& git {ASSINATURA_DE_MENTIRA} commit -qm um", cwd=principal)
+        ligada = Path(pasta) / "ligada"
+        corre(f'git worktree add -q --detach "{ligada.as_posix()}"',
+              cwd=principal)
+        caso("de dentro da worktree, a lista se lê no executor.json da raiz "
+             "principal",
+             not (ligada / ARQUIVO_DO_EXECUTOR).exists()
+             and "vigia ligado" in dito_na_abertura(ligada))
+
+    with tempfile.TemporaryDirectory(prefix="camada-ganchos-") as da_arvore:
+        arvore = Path(da_arvore)
+        (arvore / ARQUIVO_DAS_INSTRUCOES).write_text("regras",
+                                                     encoding="utf-8")
+        cerca = arvore / PASTA_DOS_GANCHOS / "cerca.py"
+        cerca.parent.mkdir(parents=True)
+        cerca.write_text("valor = 1\n", encoding="utf-8")
+        corre(f"git init -q -b trabalho && git add -A "
+              f"&& git {ASSINATURA_DE_MENTIRA} commit -qm um", cwd=arvore)
+        _, do_primeiro = corre("git rev-parse --short HEAD", cwd=arvore)
+        dito = ganchos_contra_a_integracao(arvore)
+        caso("sem a integração declarada, os ganchos contra a integração "
+             "saem não medido, com a chave que falta, nunca em dia",
+             "não medido" in dito
+             and f"{CHAVE_DAS_BRANCHES}.{CHAVE_DA_INTEGRACAO}" in dito)
+        executor = arvore / ARQUIVO_DO_EXECUTOR
+        executor.parent.mkdir(parents=True)
+        executor.write_text(json.dumps({
+            "issues": {"repositorio": "quem-instala/o-quadro"},
+            CHAVE_DAS_BRANCHES: {CHAVE_DA_INTEGRACAO: "integra"}}),
+            encoding="utf-8")
+        dito = ganchos_contra_a_integracao(arvore)
+        caso("ref da integração ausente sai não medido e nomeia a ref que "
+             "procurou, sem buscar no remoto",
+             "não medido" in dito and "origin/integra" in dito)
+        corre("git update-ref refs/remotes/origin/integra HEAD", cwd=arvore)
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            abertura(arvore)
+        caso("árvore com os ganchos iguais aos da integração cala: nem a "
+             "função nem a abertura dizem palavra sobre ganchos",
+             ganchos_contra_a_integracao(arvore) == ""
+             and "Ganchos" not in saida.getvalue())
+        corre("git checkout -q -b adiante", cwd=arvore)
+        cerca.write_text("valor = 2\n", encoding="utf-8")
+        corre(f"git {ASSINATURA_DE_MENTIRA} commit -qam conserto", cwd=arvore)
+        corre("git update-ref refs/remotes/origin/integra HEAD", cwd=arvore)
+        corre("git checkout -q trabalho", cwd=arvore)
+        dito = ganchos_contra_a_integracao(arvore)
+        caso("árvore com ganchos atrás da integração avisa DEFASADOS com o "
+             "commit dos ganchos daqui, a ref comparada e a mescla que avança",
+             "DEFASADOS" in dito and do_primeiro.strip() in dito
+             and "origin/integra" in dito
+             and "git merge origin/integra" in dito
+             and "sem commit" not in dito)
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            integra = abertura(arvore)
+        caso("ganchos defasados avisam na abertura e não viram peça "
+             "faltando: a abertura segue íntegra e sai zero",
+             integra == 0 and "DEFASADOS" in saida.getvalue()
+             and "íntegra" in saida.getvalue())
+        protegidas = arvore / ".claude" / "branches-protegidas.txt"
+        protegidas.write_text("trabalho\n", encoding="utf-8")
+        dito = ganchos_contra_a_integracao(arvore)
+        caso("em branch de longa duração que não é a integração, o avanço é "
+             "uma worktree nova da integração, nunca a mescla nela",
+             "DEFASADOS" in dito and "worktree nova" in dito
+             and "git merge" not in dito)
+        protegidas.write_text("integra\n", encoding="utf-8")
+        corre("git checkout -q -b integra", cwd=arvore)
+        dito = ganchos_contra_a_integracao(arvore)
+        caso("na própria branch da integração, mesmo protegida, o avanço é a "
+             "mescla da ref dela, que só adianta a branch",
+             "DEFASADOS" in dito and "git merge origin/integra" in dito
+             and "worktree nova" not in dito)
+        corre("git checkout -q trabalho && git branch -q -d integra",
+              cwd=arvore)
+        protegidas.unlink()
+        corre("git merge -q --ff-only origin/integra", cwd=arvore)
+        cerca.write_text("valor = 3\n", encoding="utf-8")
+        corre(f"git {ASSINATURA_DE_MENTIRA} commit -qam propria", cwd=arvore)
+        cerca.write_text("valor = 4\n", encoding="utf-8")
+        dito = ganchos_contra_a_integracao(arvore)
+        caso("ganchos só à frente da integração dizem que não há o que "
+             "avançar e confessam a mudança sem commit, sem acusar defasagem",
+             "DEFASADOS" not in dito and "não há o que avançar" in dito
+             and "sem commit" in dito)
+
+    with tempfile.TemporaryDirectory(prefix="camada-raiz-") as da_pasta:
+        pasta = Path(da_pasta)
+        origem = pasta / "origem.git"
+        corre(f"git init -q --bare -b integra {origem.as_posix()}", cwd=pasta)
+        semente = pasta / "semente"
+        corre(f"git clone -q {origem.as_posix()} semente", cwd=pasta)
+        (semente / "leiame.md").write_text("um\n", encoding="utf-8")
+        corre(f"git checkout -q -b integra && git add -A "
+              f"&& git {ASSINATURA_DE_MENTIRA} commit -qm um "
+              f"&& git push -q origin integra", cwd=semente)
+        raiz = pasta / "raiz"
+        corre(f"git clone -q -b integra {origem.as_posix()} raiz", cwd=pasta)
+        executor = raiz / ARQUIVO_DO_EXECUTOR
+        executor.parent.mkdir(parents=True, exist_ok=True)
+        executor.write_text(json.dumps(
+            {CHAVE_DAS_BRANCHES: {CHAVE_DA_INTEGRACAO: "integra"}}),
+            encoding="utf-8")
+        lar = pasta / "lar"
+
+        def empurrar(mensagem: str) -> None:
+            (semente / "leiame.md").write_text(mensagem + "\n",
+                                               encoding="utf-8")
+            corre(f"git {ASSINATURA_DE_MENTIRA} commit -qam {mensagem} "
+                  f"&& git push -q origin integra", cwd=semente)
+
+        def ponta(onde: Path, ref: str = "HEAD") -> str:
+            return corre(f"git rev-parse {ref}", cwd=onde)[1].strip()
+
+        def avancar(onde: Path) -> str:
+            return avancar_a_raiz(onde, lar=lar, minha="esta-sessao")
+
+        def declarar(valor: str) -> None:
+            corre(f"git config {CHAVE_DA_RAIZ_QUE_ESPELHA} {valor}", cwd=raiz)
+
+        empurrar("dois")
+        antes, ref_antes = ponta(raiz), ponta(raiz, "origin/integra")
+        caso("sem a declaração, a raiz não busca nem avança, e não se diz "
+             "nada dela",
+             avancar(raiz) == "" and ponta(raiz) == antes
+             and ponta(raiz, "origin/integra") == ref_antes)
+        configuracao = raiz / ARQUIVO_DE_CONFIGURACAO
+        configuracao.write_text(json.dumps(
+            {"raiz_so_espelha_a_integracao": True}), encoding="utf-8")
+        caso("a chave velha no arquivo de configuração não declara nada: a "
+             "declaração é da configuração local do git",
+             avancar(raiz) == "" and ponta(raiz) == antes)
+        configuracao.unlink()
+        declarar("false")
+        caso("com a declaração falsa, a raiz também não busca nem avança",
+             avancar(raiz) == "" and ponta(raiz) == antes)
+        declarar("true")
+        dito = avancar(raiz)
+        caso("com a declaração, a raiz limpa e atrás busca a integração e "
+             "avança por avanço rápido, dizendo quantos commits",
+             "avançou 1 commit" in dito and ponta(raiz) == ponta(semente))
+        caso("a raiz na ponta da integração diz que está em dia",
+             "em dia" in avancar(raiz))
+        clone = pasta / "clone-da-raiz"
+        corre(f"git clone -q {raiz.as_posix()} {clone.as_posix()}", cwd=pasta)
+        caso("clone da raiz não herda a declaração local, e a abertura nele "
+             "não busca nem avança",
+             avancar(clone) == "")
+
+        (semente / ".gitignore").write_text("local.cfg\n", encoding="utf-8")
+        corre(f"git add -A && git {ASSINATURA_DE_MENTIRA} commit -qm ignora "
+              f"&& git push -q origin integra", cwd=semente)
+        avancar(raiz)
+        (raiz / "local.cfg").write_text("só desta máquina\n", encoding="utf-8")
+        (semente / ".gitignore").write_text("", encoding="utf-8")
+        (semente / "local.cfg").write_text("da integração\n", encoding="utf-8")
+        corre(f"git add -A && git {ASSINATURA_DE_MENTIRA} commit -qm rastreia "
+              f"&& git push -q origin integra", cwd=semente)
+        agora = ponta(raiz)
+        dito = avancar(raiz)
+        caso("o avanço não passa por cima de arquivo que a raiz ignora e a "
+             "integração passou a rastrear: não avança e o arquivo fica",
+             "NÃO avançou" in dito and ponta(raiz) == agora
+             and (raiz / "local.cfg").read_text(encoding="utf-8")
+             == "só desta máquina\n")
+        (raiz / "local.cfg").unlink()
+        avancar(raiz)
+
+        transcritos = lar / ".claude" / "projects" / re.sub(
+            r"[:/\\.]", "-", str(Path(corre(
+                "git rev-parse --path-format=absolute --git-common-dir",
+                cwd=raiz)[1].strip()).parent))
+        transcritos.mkdir(parents=True)
+        (transcritos / "outra-sessao.jsonl").write_text("{}\n",
+                                                        encoding="utf-8")
+        empurrar("sessao")
+        agora = ponta(raiz)
+        dito = avancar(raiz)
+        caso("com outra sessão viva na raiz, não avança: trocaria os arquivos "
+             "debaixo dela",
+             "NÃO avançou" in dito and "sessão" in dito
+             and ponta(raiz) == agora)
+        (transcritos / "outra-sessao.jsonl").unlink()
+        (transcritos / "esta-sessao.jsonl").write_text("{}\n",
+                                                       encoding="utf-8")
+        dito = avancar(raiz)
+        caso("a própria sessão viva não conta: a raiz avança",
+             "avançou 1 commit" in dito and ponta(raiz) == ponta(semente))
+        empurrar("ilegivel")
+        agora = ponta(raiz)
+        gancho_de_verdade = a_camada.GANCHO_DAS_SESSOES_VIVAS
+        a_camada.GANCHO_DAS_SESSOES_VIVAS = ".claude/hooks/nao-existe.py"
+        try:
+            dito = avancar(raiz)
+        finally:
+            a_camada.GANCHO_DAS_SESSOES_VIVAS = gancho_de_verdade
+        caso("sem ler se há sessão viva, a raiz não avança: sai não medido",
+             "não medido" in dito and ponta(raiz) == agora)
+        avancar(raiz)
+
+        empurrar("pesquisa")
+        agora = ponta(raiz)
+        os.environ["ATLAS_SO_LEITURA"] = "1"
+        try:
+            dito = avancar(raiz)
+        finally:
+            os.environ.pop("ATLAS_SO_LEITURA", None)
+        caso("a sessão que só pesquisa não busca nem avança a raiz, e diz por "
+             "quê",
+             "pesquisa" in dito and ponta(raiz) == agora)
+        avancar(raiz)
+
+        empurrar("tres")
+        (raiz / "leiame.md").write_text("mexido na raiz\n", encoding="utf-8")
+        agora = ponta(raiz)
+        dito = avancar(raiz)
+        caso("a raiz com arquivo rastreado mudado não avança, e nomeia o "
+             "arquivo e o atraso",
+             "NÃO avançou" in dito and "leiame.md" in dito
+             and "1 commit" in dito and ponta(raiz) == agora)
+        corre("git checkout -q -- leiame.md", cwd=raiz)
+        frente = pasta / "frente"
+        corre(f"git worktree add -q {frente.as_posix()} -b frente", cwd=raiz)
+        dito = avancar(frente)
+        caso("de dentro de uma worktree, quem avança é a árvore principal, "
+             "com a declaração e a integração dela",
+             "avançou 1 commit" in dito and ponta(raiz) == ponta(semente)
+             and ponta(frente) != ponta(semente))
+        corre("git checkout -q -b outra", cwd=raiz)
+        empurrar("quatro")
+        agora = ponta(raiz)
+        dito = avancar(raiz)
+        caso("a raiz em branch que não é a integração não avança, e diz em "
+             "que branch está",
+             "outra" in dito and "integra" in dito and ponta(raiz) == agora)
+        corre("git checkout -q integra", cwd=raiz)
+        (raiz / "local.md").write_text("local\n", encoding="utf-8")
+        corre(f"git add local.md && git {ASSINATURA_DE_MENTIRA} commit -qm "
+              f"local", cwd=raiz)
+        agora = ponta(raiz)
+        dito = avancar(raiz)
+        caso("a raiz com commit que a integração não tem não avança por cima "
+             "dele, e diz quantos são",
+             "NÃO avançou" in dito and "1 commit" in dito
+             and ponta(raiz) == agora)
+        corre(f"git remote set-url origin "
+              f"{(pasta / 'nao-existe.git').as_posix()}", cwd=raiz)
+        dito = avancar(raiz)
+        caso("a busca que falha sai não medido, nunca em dia",
+             "não medido" in dito and "em dia" not in dito)
+        saida = io.StringIO()
+        with contextlib.redirect_stdout(saida):
+            abertura(raiz)
+        caso("a abertura imprime o recado da raiz",
+             "A raiz" in saida.getvalue())
 
     with tempfile.TemporaryDirectory(prefix="camada-entrega-") as sozinho:
         repositorio = Path(sozinho) / "repositorio"
@@ -1100,6 +1672,33 @@ def testar() -> int:
             com_commit = o_que_ainda_nao_saiu(repositorio, "claude/vazia")
         caso("a mesma branch, com um commit que só existe aqui, segue acusada",
              com_commit == SAIDA_COM_ACHADO)
+
+        corre('git push -q origin HEAD:refs/heads/homolog && git remote set-head origin main && git checkout -q --detach origin/homolog', cwd=repositorio)
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            destacada = o_que_ainda_nao_saiu(repositorio, "HEAD")
+        caso("em HEAD destacado sem integração declarada, o remoto que já "
+             "contém a cabeça é o destino: comparar com origin/HEAD acusava "
+             "como sem destino o que já estava na integração",
+             destacada == SAIDA_LIMPA and "origin/homolog" in dito.getvalue())
+        corre(f'echo e > e.txt && git add e.txt && git {assinatura} commit -qm cinco && git push -q origin HEAD:refs/heads/outra', cwd=repositorio)
+        (repositorio / "nucleo").mkdir(exist_ok=True)
+        (repositorio / ARQUIVO_DO_EXECUTOR).write_text(json.dumps(
+            {"branches": {"integracao": "homolog"}}), encoding="utf-8")
+        dito = io.StringIO()
+        with contextlib.redirect_stdout(dito):
+            declarada = o_que_ainda_nao_saiu(repositorio, "HEAD")
+        caso("em HEAD destacado com integração declarada, a medida é contra "
+             "ela, mesmo que outro remoto já contenha a cabeça",
+             declarada == SAIDA_COM_ACHADO
+             and "NÃO estão em origin/homolog" in dito.getvalue())
+        (repositorio / ARQUIVO_DO_EXECUTOR).unlink()
+        corre(f'echo f > f.txt && git add f.txt && git {assinatura} commit -qm seis', cwd=repositorio)
+        with contextlib.redirect_stdout(io.StringIO()):
+            so_aqui = o_que_ainda_nao_saiu(repositorio, "HEAD")
+        caso("em HEAD destacado sem declaração e sem remoto que contenha a "
+             "cabeça, o commit que só existe aqui segue acusado",
+             so_aqui == SAIDA_COM_ACHADO)
 
     with tempfile.TemporaryDirectory(prefix="camada-poda-") as sozinho:
         repositorio = Path(sozinho) / "repositorio"
@@ -1169,6 +1768,44 @@ def testar() -> int:
         corre('git branch -q -D entregue && git push -q origin --delete entregue', cwd=repositorio)
         caso("podadas as duas pontas, a entrega fica limpa",
              o_que_saiu_e_ficou(repositorio, "main") == 0)
+
+        chamadas_da_entrega, espera_de_cada_chamada = [], 0.05
+
+        def rodar_cronometrando(*argumentos, **nomeados):
+            comando = argumentos[0] if isinstance(argumentos[0], str) \
+                else " ".join(argumentos[0])
+            comeco = time.perf_counter()
+            time.sleep(espera_de_cada_chamada)
+            try:
+                return rodar_de_verdade(*argumentos, **nomeados)
+            finally:
+                chamadas_da_entrega.append(
+                    (comando, comeco, time.perf_counter()))
+
+        a_camada.subprocess.run = rodar_cronometrando
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                a_camada.entrega(repositorio, sem_pedido=True)
+        finally:
+            a_camada.subprocess.run = rodar_de_verdade
+        comandos_da_entrega = [c for c, _, _ in chamadas_da_entrega]
+        caso("uma medida da entrega lista as árvores de trabalho uma vez só e "
+             "resolve a referência da incorporação num rev-parse só — "
+             "medido, cada git repetido pesava na espera da parada",
+             sum("worktree list" in c for c in comandos_da_entrega) == 1
+             and sum(c in (a_camada.COMANDO_DA_REFERENCIA.format("origin/main"),
+                           a_camada.COMANDO_DO_TOPO.format("origin/main"))
+                     for c in comandos_da_entrega) == 1)
+        do_que_nao_saiu = [(comeco, fim) for c, comeco, fim
+                           in chamadas_da_entrega
+                           if "@{u}" in c or "..HEAD" in c]
+        da_poda = [comeco for c, comeco, _ in chamadas_da_entrega
+                   if "for-each-ref" in c or "--verify" in c]
+        caso("a poda não espera a medida do que não saiu terminar: as duas "
+             "leem o git ao mesmo tempo, e a entrega sai na espera da mais "
+             "lenta, não na soma",
+             bool(do_que_nao_saiu) and bool(da_poda)
+             and min(da_poda) < max(fim for _, fim in do_que_nao_saiu))
 
         corre(f'git checkout -q -b garfo && echo d > d.txt && git add -A && git {assinatura} commit -qm quatro', cwd=repositorio)
         corre(f'git checkout -q main && git {assinatura} merge -q --no-ff -m mescla garfo', cwd=repositorio)
@@ -1722,6 +2359,68 @@ def testar() -> int:
         caso("chave citada por .py rastreado não vira saldo",
              chaves(raiz) == 0)
 
+        def saida_das_chaves() -> tuple:
+            dito = io.StringIO()
+            with contextlib.redirect_stdout(dito):
+                codigo = chaves(raiz)
+            return codigo, dito.getvalue()
+
+        leitor.write_text('dado["lida"]\ndado["autorizacoes"]\n'
+                          f'dado["{CHAVE_DAS_EXCECOES_SEM_LEITOR}"]\n',
+                          encoding="utf-8")
+        declarar({"lida": 1, "autorizacoes": {"commit": True}})
+        codigo_sem_publicar, _ = saida_das_chaves()
+        caso("CONTROLE: sem `publicar` em lugar nenhum, nenhum aviso de "
+             "chave aposentada", chaves_aposentadas(raiz) == [])
+        declarar({"lida": 1, "autorizacoes": {"commit": True,
+                                              "publicar": False}})
+        avisos = chaves_aposentadas(raiz)
+        caso("`autorizacoes.publicar` que sobrou na configuração avisa, "
+             "mesmo desligada: gancho nenhum a lê",
+             len(avisos) == 1 and "`autorizacoes.publicar`" in avisos[0]
+             and ARQUIVO_DE_CONFIGURACAO in avisos[0])
+        codigo_com_publicar, dito = saida_das_chaves()
+        caso("a rotina de chaves imprime o aviso e sai com o mesmo código "
+             "do arranjo sem publicar: o aviso não reprova",
+             codigo_com_publicar == codigo_sem_publicar == 0
+             and avisos and avisos[0] in dito)
+        caso("a camada avisa e não reescreve o arquivo de quem instalou",
+             '"publicar": false' in (raiz / ARQUIVO_DE_CONFIGURACAO)
+             .read_text(encoding="utf-8"))
+        declarar({"lida": 1, "autorizacoes": {"commit": True}})
+        executor = raiz / ARQUIVO_DO_EXECUTOR
+        executor.write_text(json.dumps({"projetos": {
+            "cadastro-que-nao-se-imprime": {
+                "repositorio": "pasta-que-nao-se-imprime",
+                "autorizacoes": {"publicar": True}},
+            "outro": {"autorizacoes": {"commit": True}}}}), encoding="utf-8")
+        avisos = chaves_aposentadas(raiz)
+        caso("`publicar` no cadastro de um vizinho avisa, contando os "
+             "cadastros sem nomear nenhum: o executor é local e carrega "
+             "nome de repositório",
+             len(avisos) == 1 and ARQUIVO_DO_EXECUTOR in avisos[0]
+             and "1 cadastro" in avisos[0]
+             and "que-nao-se-imprime" not in avisos[0])
+        executor.write_text(json.dumps({"projetos": ["lista", "torta"]}),
+                            encoding="utf-8")
+        caso("`projetos` que não é dicionário não derruba a rotina",
+             chaves_aposentadas(raiz) == [])
+        executor.write_text(json.dumps({"projetos": {
+            "a": "texto", "b": {"autorizacoes": ["publicar"]}}}),
+            encoding="utf-8")
+        caso("cadastro e `autorizacoes` que não são dicionário também não",
+             chaves_aposentadas(raiz) == [])
+        executor.write_text("{", encoding="utf-8")
+        avisos = chaves_aposentadas(raiz)
+        caso("executor que não se deixa ler vira NÃO MEDIDO, não silêncio",
+             len(avisos) == 1 and "NÃO MEDIDA" in avisos[0]
+             and ARQUIVO_DO_EXECUTOR in avisos[0])
+        executor.unlink()
+        leitor.write_text(f'dado["lida"]\n'
+                          f'dado["{CHAVE_DAS_EXCECOES_SEM_LEITOR}"]\n',
+                          encoding="utf-8")
+        declarar({"lida": 1})
+
         caso("exceção declarada não é confundida com órfã na linha de "
              "detalhe: quem lê a saída vê o motivo, não o alarme",
              EXCECAO_DECLARADA.format("por isto") != SALDO_SEM_LEITOR
@@ -1957,6 +2656,29 @@ def testar() -> int:
              and matricula(raiz) == 1
              and chaves(raiz) == 1)
 
+    with tempfile.TemporaryDirectory(prefix="camada-bancadas-juntas-") as pasta:
+        repositorio = Path(pasta) / "repositorio"
+        repositorio.mkdir()
+        pecas = arvore_com_instrumentos_de_mentira(repositorio)
+        nomes = ("a.py", "b.py", "c.py")
+        for nome, demora in zip(nomes, (1.8, 1.5, 1.2)):
+            (pecas / nome).write_text(
+                f"import time\ntime.sleep({demora})\n" + INSTRUMENTO_QUE_PASSA,
+                encoding="utf-8")
+        dito = io.StringIO()
+        partida = time.monotonic()
+        with contextlib.redirect_stdout(dito):
+            veredito = bancada_dos_tocados(repositorio)
+        duracao = time.monotonic() - partida
+        linhas = [linha for linha in dito.getvalue().splitlines()
+                  if "OK  " in linha and ".agents/pecas/" in linha]
+        caso("bancadas tocadas rodam juntas e suas linhas saem na ordem dos "
+             "instrumentos, mesmo quando terminam em outra ordem",
+             veredito == SAIDA_LIMPA and duracao < 4.2
+             and len(linhas) == len(nomes)
+             and all(f".agents/pecas/{nome}" in linha
+                     for nome, linha in zip(nomes, linhas)))
+
     with tempfile.TemporaryDirectory(prefix="camada-bancada-") as sozinho:
         repositorio = Path(sozinho) / "repositorio"
         repositorio.mkdir()
@@ -2183,6 +2905,17 @@ def testar() -> int:
                                 {".agents/pecas": 180}) == 180
              and teto_desta_bancada(".agents/pecas/testes.py", 60,
                                     {".agents/pecas": 180}) == 180)
+        caso("as duas bancadas longas dos ganchos têm teto próprio acima do "
+             "tempo medido, senão o ritual as fecha como TETO e o verde "
+             "esconde a cerca que mais protege",
+             all(teto_desta_bancada(gancho, TEMPO_DE_UMA_BANCADA_TOCADA)
+                 >= TEMPO_MINIMO_DAS_BANCADAS_LONGAS
+                 for gancho in BANCADAS_LONGAS_DOS_GANCHOS))
+        caso("a suíte do encadeador tem teto próprio acima do tempo medido, "
+             "na fonte e na cópia, senão o ritual que a toca fecha como TETO",
+             all(teto_desta_bancada(suite, TEMPO_DE_UMA_BANCADA_TOCADA)
+                 > TEMPO_MEDIDO_DA_SUITE_DO_ENCADEADOR
+                 for suite in SUITES_DO_ENCADEADOR))
         propria.unlink()
 
         novo = pecas / "recem-nascido.py"
@@ -2330,6 +3063,106 @@ def testar() -> int:
         caso("a cópia sai do disco mesmo quando a sessão estoura o tempo",
              len(estouradas) == 1 and not estouradas[0].exists())
 
+    gancho = gancho_da_ponte_de_mentira()
+    caso("a impressão de cada gancho é a que o próprio Codex gravou ao "
+         "confiar, refeita aqui para os três eventos da ponte sem chamar o "
+         "Codex — é ela que deixa a confiança se ler de graça",
+         all(impressao_do_gancho(rotulo_do_evento(evento), None, gancho)
+             == impressao
+             for evento, impressao in IMPRESSOES_QUE_O_CODEX_GRAVOU.items()))
+    caso("o filtro entra na impressão onde o Codex o usa, e sai onde ele o "
+         "ignora",
+         impressao_do_gancho("pre_tool_use", "Bash", gancho)
+         != impressao_do_gancho("pre_tool_use", None, gancho)
+         and impressao_do_gancho("stop", "Bash", gancho)
+         == impressao_do_gancho("stop", None, gancho))
+    caso("tempo ausente vale o padrão do Codex, zero sobe ao mínimo, e o "
+         "gancho de encerramento fica no teto curto",
+         tempo_do_gancho("pre_tool_use", None) == 600
+         and tempo_do_gancho("pre_tool_use", 0) == 1
+         and tempo_do_gancho("session_end", 10) == 3)
+    confiada = ler_confianca_de_mentira(ponte_de_mentira(),
+                                        estados_confiados_de_mentira())
+    caso("ponte igual à confiada: os três ganchos confiados, e a rotina passa",
+         confiada[0] == SAIDA_LIMPA
+         and confiada[1].count(f"— {GANCHO_CONFIADO}\n") == 3)
+    velha = ler_confianca_de_mentira(
+        ponte_de_mentira(PONTE_QUE_O_CODEX_CONFIOU.replace(
+            " .agents", " -X utf8 .agents")),
+        estados_confiados_de_mentira())
+    caso("a ponte mudou depois da confiança: o Codex pula os ganchos em "
+         "silêncio, e a rotina acusa a confiança velha de cada um — antes, "
+         "só se descobria quando uma escrita proibida passava",
+         velha[0] == SAIDA_COM_ACHADO
+         and velha[1].count(f"— {GANCHO_COM_CONFIANCA_VELHA}\n") == 3)
+    nunca = ler_confianca_de_mentira(ponte_de_mentira(), {})
+    caso("pasta que o dono nunca confiou, como worktree nova, sai dita e "
+         "passa: o Codex não trabalha nela",
+         nunca[0] == SAIDA_LIMPA
+         and nunca[1].count(f"— {GANCHO_NUNCA_CONFIADO}\n") == 3)
+    novo = ler_confianca_de_mentira(
+        ponte_de_mentira(eventos=(*IMPRESSOES_QUE_O_CODEX_GRAVOU,
+                                  "PostToolUse")),
+        estados_confiados_de_mentira())
+    caso("gancho novo na ponte confiada, sem confiança própria, é acusado: "
+         "os confiados não o escondem",
+         novo[0] == SAIDA_COM_ACHADO
+         and f"post_tool_use:0:0 — {GANCHO_NUNCA_CONFIADO}" in novo[1])
+    desligado = ler_confianca_de_mentira(
+        ponte_de_mentira(), estados_confiados_de_mentira(enabled=False))
+    caso("gancho desligado no /hooks não roda, mesmo com a impressão certa",
+         desligado[0] == SAIDA_COM_ACHADO and GANCHO_DESLIGADO in desligado[1])
+    literal = ler_confianca_de_mentira(
+        ponte_de_mentira(), estados_confiados_de_mentira(),
+        prefixo=PREFIXO_DE_CAMINHO_LITERAL_DE_MENTIRA)
+    caso("a chave gravada com o prefixo de caminho literal do Windows casa "
+         "com a pasta", literal[0] == SAIDA_LIMPA)
+    fora = ler_confianca_de_mentira(ponte_de_mentira(statusMessage="checando"),
+                                    estados_confiados_de_mentira())
+    caso("campo que a leitura não reproduz sai como não medido, nunca como "
+         "confiado: a impressão guardada não o cobre",
+         fora[0] == SAIDA_NAO_MEDIDO
+         and f"— {GANCHO_CONFIADO}\n" not in fora[1])
+    sem_ponte = ler_confianca_de_mentira(None, estados_confiados_de_mentira())
+    sem_codex = ler_confianca_de_mentira(ponte_de_mentira(), None)
+    caso("sem ponte na pasta, ou sem Codex na máquina, não há confiança a "
+         "ler, e a rotina passa dizendo qual das duas faltou",
+         sem_ponte[0] == SAIDA_LIMPA and sem_codex[0] == SAIDA_LIMPA
+         and sem_ponte[1] != sem_codex[1])
+    torta = ler_confianca_de_mentira(
+        ponte_de_mentira(), None,
+        configuracao_crua=(f'chave_de_mentira = "{SEGREDO_DE_MENTIRA_DO_CODEX}"'
+                           "\n[[[ torto\n"))
+    caso("config.toml torto sai como não medido, sem repetir o conteúdo",
+         torta[0] == SAIDA_NAO_MEDIDO)
+    caso("nenhuma leitura imprime o conteúdo do config.toml do Codex: o "
+         "arquivo guarda segredo",
+         all(SEGREDO_DE_MENTIRA_DO_CODEX not in saida for _, saida in (
+             confiada, velha, nunca, novo, desligado, literal, fora,
+             sem_ponte, sem_codex, torta)))
+
+    with tempfile.TemporaryDirectory(prefix="bancada-import-") as pasta:
+        copia = Path(pasta) / "camada.py"
+        shutil.copyfile(Path(__file__).with_name("camada.py"), copia)
+        sem_bancada = subprocess.run(
+            [sys.executable, "-X", "utf8", str(copia), "--testar"],
+            capture_output=True, text=True, encoding="utf-8", cwd=pasta)
+        caso("sem o arquivo da bancada, o --testar diz ausente e sai zero",
+             sem_bancada.returncode == 0
+             and MARCA_DE_BANCADA_AUSENTE in sem_bancada.stdout)
+        (Path(pasta) / "testes.py").write_text(
+            "from camada import NOME_QUE_O_CAMADA_NAO_TEM\n",
+            encoding="utf-8")
+        quebrada = subprocess.run(
+            [sys.executable, "-X", "utf8", str(copia), "--testar"],
+            capture_output=True, text=True, encoding="utf-8", cwd=pasta)
+        dito = quebrada.stdout + quebrada.stderr
+        caso("bancada que existe e não importa sai com falha e a razão, "
+             "nunca como ausente: erro de import não passa por verde",
+             quebrada.returncode != 0
+             and MARCA_DE_BANCADA_AUSENTE not in dito
+             and "NOME_QUE_O_CAMADA_NAO_TEM" in dito)
+
     total = len(casos)
     if falhas:
         print(f"FALHOU: {len(falhas)} de {total} casos")
@@ -2340,8 +3173,74 @@ def testar() -> int:
     return 0
 
 
+BANDEIRA_DO_BLOCO = "--bloco"
+ABERTURA_DO_BLOCO = '    with tempfile.TemporaryDirectory(prefix="camada-{}-")'
+RECUO_DE_DENTRO_DO_BLOCO = " " * 8
+RECUSA_SEM_NOME_DO_BLOCO = (
+    "diga o bloco: python testes.py --bloco <nome>, com o <nome> do prefixo "
+    "camada-<nome>- de um bloco de testar()")
+SEM_BLOCO_COM_ESSE_NOME = (
+    'nenhum bloco de testar() abre com prefix="camada-{}-": os nomes são os '
+    'prefixos dos `with tempfile.TemporaryDirectory(prefix="camada-...")`')
+BLOCO_QUE_DEPENDE_DE_FORA = (
+    "o bloco {} usa um nome definido fora dele ({}): rode a bancada inteira")
+
+
+def trechos_do_bloco(fonte: str, nome: str) -> list:
+    linhas = fonte.split("\n")
+    abertura = ABERTURA_DO_BLOCO.format(nome)
+    trechos, posicao = [], 0
+    while posicao < len(linhas):
+        if not linhas[posicao].startswith(abertura):
+            posicao += 1
+            continue
+        fim = posicao + 1
+        while fim < len(linhas) and (
+                not linhas[fim].strip()
+                or linhas[fim].startswith(RECUO_DE_DENTRO_DO_BLOCO)):
+            fim += 1
+        trechos.append(textwrap.dedent("\n".join(linhas[posicao:fim])))
+        posicao = fim
+    return trechos
+
+
+def testar_um_bloco(nome: str) -> int:
+    fonte = Path(__file__).read_text(encoding="utf-8").replace("\r\n", "\n")
+    trechos = trechos_do_bloco(fonte, nome)
+    if not trechos:
+        print(SEM_BLOCO_COM_ESSE_NOME.format(nome))
+        return 2
+    falhas, casos = [], []
+
+    def caso(rotulo, passou):
+        casos.append(rotulo)
+        if not passou:
+            falhas.append(rotulo)
+
+    espaco = dict(globals(), caso=caso)
+    for trecho in trechos:
+        try:
+            exec(compile(trecho, f"bloco {nome}", "exec"), espaco)
+        except NameError as falha:
+            print(BLOCO_QUE_DEPENDE_DE_FORA.format(nome, falha))
+            return 2
+    if falhas:
+        print(f"FALHOU: {len(falhas)} de {len(casos)} casos do bloco {nome}")
+        for rotulo in falhas:
+            print(f"  [{rotulo}]")
+        return 1
+    print(f"OK: {len(casos)} casos do bloco {nome}")
+    return 0
+
+
 if __name__ == "__main__":
     for canal in (sys.stdin, sys.stdout, sys.stderr):
         if not getattr(canal, "closed", True) and hasattr(canal, "reconfigure"):
             canal.reconfigure(encoding="utf-8", errors="replace")
+    if BANDEIRA_DO_BLOCO in sys.argv:
+        posicao = sys.argv.index(BANDEIRA_DO_BLOCO)
+        if posicao + 1 >= len(sys.argv):
+            print(RECUSA_SEM_NOME_DO_BLOCO)
+            sys.exit(2)
+        sys.exit(testar_um_bloco(sys.argv[posicao + 1]))
     sys.exit(testar())

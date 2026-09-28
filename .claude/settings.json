@@ -4,12 +4,12 @@
     "deny": []
   },
   "env": {
-    "CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION": "24",
-    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4",
-    "CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS": "4",
+    "CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION": "60",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "6",
+    "CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS": "6",
     "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1"
   },
-  "workflowSizeGuideline": "small",
+  "workflowSizeGuideline": "medium",
   "skipWorkflowUsageWarning": false,
   "hooks": {
     "SessionStart": [
@@ -34,14 +34,6 @@
           {
             "type": "command",
             "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-ambiente.py"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/avisar-motores-auxiliares.py"
           }
         ]
       }

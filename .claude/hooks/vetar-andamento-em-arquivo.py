@@ -51,11 +51,12 @@ APRENDIZADO = (
 MOTIVO_NASCE_COMO_CORPO_DE_ISSUE = (
     "criar {!r}, que já nasce com o corpo de uma issue — as seções {}")
 RECUSA = (
-    "Regra 4 da camada: isto quer {}. O estado do trabalho mora NA ISSUE, "
+    "Regra 4 da camada: isto quer {}. O estado do trabalho mora na issue, "
     "não num arquivo do disco: arquivo de andamento vira uma segunda "
     "verdade, e é ela que mente para a próxima sessão, porque ninguém a "
-    "atualiza junto. Escreva o andamento na issue — o corpo é o estado, o "
-    "comentário é o evento. O `.md` só entra no ENCERRAMENTO, para extrair "
+    "atualiza junto. Escreva o andamento no corpo da issue — o corpo é o "
+    "estado, e comentário é só conversa com o dono. O `.md` só entra no "
+    "encerramento, para extrair "
     "o que vale adiante, e aí ele nasce em `{}/`. Rascunho de corpo de "
     "issue não precisa virar arquivo daqui: mande o texto direto para a "
     "issue, ou escreva-o fora deste repositório."
@@ -229,8 +230,8 @@ DEIXA_PASSAR = [
      "conhecimento/o-que-o-caso-ensinou.md", CORPO_DE_ISSUE),
     ("o molde da skill, em references/",
      ".agents/skills/s/references/moldes.md", CORPO_DE_ISSUE),
-    ("página com UMA seção só, abaixo do mínimo", "nota.md", UMA_MARCA_SO),
-    ("arquivo que JÁ EXISTE", "ja-existe.md", CORPO_DE_ISSUE),
+    ("página com uma seção só, abaixo do mínimo", "nota.md", UMA_MARCA_SO),
+    ("arquivo que já existe", "ja-existe.md", CORPO_DE_ISSUE),
     ("código, que não é arquivo de andamento", "medir.py", CORPO_DE_ISSUE),
     ("arquivo fora deste repositório", "/tmp/rascunho-de-fora.md",
      CORPO_DE_ISSUE),
@@ -266,7 +267,7 @@ def testar() -> int:
         def caso(rotulo, condicao):
             comportamento.append((rotulo, bool(condicao)))
 
-        caso("gancho que veta e não entende o pedido RECUSA, e nomeia a "
+        caso("gancho que veta e não entende o pedido recusa, e nomeia a "
              "falha — quem não consegue julgar não pode dizer sim",
              recusou_sem_entender(TypeError("forma que o gancho não conhece")))
 
@@ -275,8 +276,8 @@ def testar() -> int:
             + MANDA_GRAVAR.format(APRENDIZADO))
         caso("a recusa nomeia a regra 4, diz que o estado mora na issue, "
              "abre a exceção do encerramento e manda gravar o aprendizado",
-             "Regra 4" in mensagem and "NA ISSUE" in mensagem
-             and "ENCERRAMENTO" in mensagem and "regra 4" in mensagem
+             "Regra 4" in mensagem and "na issue" in mensagem
+             and "encerramento" in mensagem and "regra 4" in mensagem
              and APRENDIZADO in mensagem)
         caso("a recusa nomeia as seções que a acusaram",
              "`## Estado`" in mensagem)

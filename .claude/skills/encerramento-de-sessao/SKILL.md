@@ -20,7 +20,8 @@ diga que não há e siga.
    dono declarou; não escreva arquivo novo. Confira também, em cada
    repositório tocado — inclusive o do próprio workspace, que ninguém
    trata como trabalho —, se ficou commit fora da branch que o entrega;
-   achou, relate — corrigir é decisão do dono.
+   achou commit seu, dê destino a ele; o de outra sessão, relate ao dono
+   (regra 16).
 4. **O que atrapalhou hoje, e o que o dono poderia ter feito diferente?**
    Onde a sessão abriu, o que foi pedido de um jeito caro, o que sairia
    mais barato com outra ferramenta. Aponte só o que você **viu**

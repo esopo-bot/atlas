@@ -40,6 +40,7 @@ CERCAS = (
     ("vetar-escrita-em-sessao-de-pesquisa",
      "Write|Edit|NotebookEdit|Bash|PowerShell"),
     ("vetar-documento-rastreavel", "Write|Edit|NotebookEdit"),
+    ("vetar-escrita-na-raiz", "Write|Edit|NotebookEdit"),
     ("vetar-despejo-de-ambiente", "Bash|PowerShell"),
     ("vetar-enxame-de-agentes",
      "Task|Agent|Workflow|Write|Edit|NotebookEdit|Bash|PowerShell|Read"),
@@ -459,7 +460,7 @@ def testar() -> int:
         perguntas = perguntas_de(pasta, so_pergunta)
         if len(perguntas) != 1:
             falhas.append(
-                "cerca que PERGUNTA tem de chegar ao dono pelo despachante — "
+                "cerca que pergunta tem de chegar ao dono pelo despachante — "
                 "esperava 1 pergunta, veio %d. Foi assim que as quatro cercas "
                 "de julgamento ficaram mudas em sessão interativa: o "
                 "despachante só recolhia `deny` e descartava o `ask`, e a "
@@ -477,7 +478,7 @@ def testar() -> int:
         decidido = json.loads(saida.getvalue())[CHAVE_DA_SAIDA]
         if decidido.get(CHAVE_DA_DECISAO) != DECISAO_DE_NEGAR:
             falhas.append(
-                "com uma negando e outra perguntando, quem manda é a NEGA — "
+                "com uma negando e outra perguntando, quem manda é a que nega — "
                 "veio %s" % decidido.get(CHAVE_DA_DECISAO))
         saida = io.StringIO()
         with contextlib.redirect_stdout(saida):
@@ -507,7 +508,7 @@ def testar() -> int:
             chegou = None
         if chegou != esperado:
             falhas.append(
-                "o aviso tem de CHEGAR ao cliente, com o texto dele e uma "
+                "o aviso tem de chegar ao cliente, com o texto dele e uma "
                 "vez só mesmo dito por duas cercas — a bancada provava a "
                 "coleta e não a entrega. Chegou: %r" % (chegou,))
         if esperado in vazado.getvalue():

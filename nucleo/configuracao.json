@@ -12,7 +12,7 @@
     "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código.",
     "`teto_da_largada_em_bytes` é o que TODA sessão paga antes de trabalhar: AGENTS.md, CLAUDE.md, o briefing de abertura que o AGENTS.md manda ler inteiro, o catálogo das skills e o que os ganchos de abertura injetam. É DECISÃO, não medida: página, skill ou texto novo no briefing que passe dele cobra corte ou decisão nova. A largada de hoje sai de `python .agents/camada/camada.py --largada`, nunca desta prosa. Ausente ou nulo, a rotina mede e não cobra: teto que a camada inventasse seria número sem procedência.",
     "O `<projeto>` do nome é a chave de `projetos` em nucleo/executor.json, e a mesma chave vira ETIQUETA da issue. A lista mora no arquivo LOCAL porque carrega nome de repositório — nome de projeto não entra em arquivo rastreado. Sem `projetos` declarado, o nome sai sem o prefixo e a issue nasce sem etiqueta: a camada não inventa projeto de ninguém.",
-    "Pedido de incorporação só se abre em repositório VIZINHO — os declarados `somente_leitura` em `projetos` —, e só com autorização EXPRESSA do dono, uma por vez. Nos repositórios próprios não se abre pedido para a integração: o caminho é branch de trabalho e mescla nela."
+    "Pedido de incorporação se abre para a branch que `branches_por_incorporacao` nomeia — aqui, a de publicação; no vizinho, a lista é a do `nucleo/configuracao.json` dele —, e no vizinho declarado `somente_leitura` em `projetos` só com autorização expressa do dono, uma por vez. Abri-lo é da sessão; aprová-lo é do dono. A branch que a lista não nomeia recebe por mescla, vinda da branch de trabalho (regra 16)."
   ],
   "referencias_que_ficam_fora_do_git": [
     {
@@ -34,6 +34,10 @@
     {
       "caminho": "conhecimento/projetos/",
       "motivo": "a wiki dos repositórios vizinhos, que a skill perfil-de-repositorio escreve: perfil de repositório vizinho não é da camada e fica fora do git."
+    },
+    {
+      "caminho": "conhecimento/issues_encerradas/",
+      "motivo": "o histórico das issues encerradas, que o módulo historico escreve na máquina de quem trabalha: cita conta, ambiente e caminho, e fica fora do git. As páginas do módulo citam a pasta pelo endereço de depois da instalação."
     },
     {
       "caminho": ".agents/voz/",
@@ -62,18 +66,17 @@
   ],
   "autorizacoes": {
     "commit": true,
-    "push": true,
-    "publicar": false
+    "push": true
   },
   "branches_por_incorporacao": [
     "main"
   ],
   "teto_da_largada_em_bytes": 26000,
-  "teto_de_agentes_por_sessao": 24,
+  "teto_de_agentes_por_sessao": 60,
   "chaves_de_configuracao_sem_leitor": [
     {
       "arquivo": "nucleo/executor.json",
-      "chave": "ressalva_de_18_08_2026",
+      "chave": "recado_de_quem_preencheu",
       "motivo": "recado de quem preencheu a configuração para quem for reabri-la: o que já foi medido errado e foi corrigido. Nenhum instrumento a lê, e é isso mesmo — quem lê é gente, antes de mexer no arquivo."
     },
     {
@@ -104,7 +107,7 @@
     {
       "arquivo": ".claude/settings.json",
       "chave": "workflowSizeGuideline",
-      "motivo": "quem a le e o proprio cliente de terminal, nao um instrumento deste repositorio: ela pede que os roteiros que a sessao escreve fiquem pequenos. E conselho, nao limite: sessao que a recebe pode ignora-la. Fica aqui por isso, ao lado da parede que segura de verdade."
+      "motivo": "quem a le e o proprio cliente de terminal, nao um instrumento deste repositorio: ela pede um tamanho para os roteiros que a sessao escreve. E conselho, nao limite: sessao que a recebe pode ignora-la. Fica aqui por isso, ao lado da parede que segura de verdade."
     },
     {
       "arquivo": ".claude/settings.json",

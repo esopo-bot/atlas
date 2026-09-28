@@ -25,8 +25,9 @@ CAMPOS_DE_CAMINHO = ("file_path", "notebook_path")
 REDIRECIONAMENTO_DE_SHELL = re.compile(r">>?\s*([^\s;|&]+)")
 SEPARADORES_DE_COMANDO = re.compile(
     r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
-DOCUMENTO_LITERAL_QUE_NAO_EXPANDE = re.compile(
-    r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
+SEPARADOR_QUE_CAPTURA = re.compile(
+    r"(&&|\|\||;|\||\n|\r|\$\(|`|\))")
+CANO_UNICO = "|"
 ASPA_SIMPLES_COM_CORPO = re.compile(r"'[^']*'")
 ASPA_DUPLA_COM_CORPO = re.compile(r"\"[^\"]*\"")
 EXPANSAO_QUE_EXECUTA = ("$(", "`")
@@ -140,11 +141,18 @@ def desembrulhador():
     return modulo
 
 
+def separar_o_corpo(corpo: str, _shell_que_o_le: str) -> list:
+    return SEPARADORES_DE_COMANDO.split(corpo)
+
+
 def segmentos_que_executam(comando: str) -> list:
-    sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
+    sem_documento = desembrulhador().sem_os_documentos_que_sao_dado(comando)
+    partes = SEPARADOR_QUE_CAPTURA.split(sem_documento)
+    segmentos = partes[0::2]
+    separadores = partes[1::2]
+    apos_cano = [False] + [s == CANO_UNICO for s in separadores]
     crus = desembrulhador().com_os_corpos_desembrulhados(
-        SEPARADORES_DE_COMANDO.split(sem_documento),
-        SEPARADORES_DE_COMANDO.split)
+        segmentos, separar_o_corpo, apos_cano)
     return [sem_o_que_e_so_dado(s) for s in crus]
 
 
@@ -287,7 +295,7 @@ def testar() -> int:
                 and type(falha).__name__ in
                 dado.get("permissionDecisionReason", ""))
 
-    caso("gancho que veta e não entende o pedido RECUSA, e nomeia a falha — "
+    caso("gancho que veta e não entende o pedido recusa, e nomeia a falha — "
          "quem não consegue julgar não pode dizer sim",
          recusou_sem_entender(TypeError("forma que o gancho não conhece")))
 
@@ -424,6 +432,29 @@ def testar() -> int:
          toca_por_shell("eval 'rm .github/workflows/e.yml'"))
     caso("xargs entrega o sh -c que apaga",
          toca_por_shell("ls | xargs -I{} sh -c 'rm .github/workflows/{}'"))
+    caso("o texto que o echo entrega ao sh pelo cano é comando",
+         toca_por_shell("echo 'rm .github/workflows/e.yml' | sh"))
+    caso("o texto que o echo entrega ao bash pelo cano é comando",
+         toca_por_shell("echo 'rm .github/workflows/e.yml' | bash"))
+    caso("pwsh -c embrulha o rm",
+         toca_por_shell('pwsh -c "rm .github/workflows/e.yml"'))
+    caso("o powershell -Command - lê o texto que chega pelo cano",
+         toca_por_shell(
+             "echo 'rm .github/workflows/e.yml' | powershell -Command -"))
+    caso("o texto antes do ponto e vírgula não vai ao shell seguinte",
+         not toca_por_shell("echo 'rm .github/workflows/e.yml'; bash"))
+    caso("dois shells nus seguidos não prendem a sessão",
+         isinstance(caminhos_que_o_pedido_toca({
+             "tool_name": "Bash",
+             "tool_input": {"command": "bash; bash"}}), list))
+    caso("o documento entregue ao bash é comando",
+         toca_por_shell("bash <<'EOF'\nrm .github/workflows/e.yml\nEOF"))
+    caso("o documento que desce pelo cano ao sh é comando",
+         toca_por_shell("cat <<'EOF' | sh\nrm .github/workflows/e.yml\nEOF"))
+    caso("a marca de documento dentro de aspas não apaga o resto do comando",
+         toca_por_shell("echo \"<<'X'\"; rm .github/workflows/e.yml"))
+    caso("o redirecionamento na linha que abre o documento segue comando",
+         toca_por_shell("cat <<'EOF' > .github/workflows/e.yml\nx\nEOF"))
     caso("sh -c que só lê passa",
          not toca_por_shell("sh -c 'cat .github/workflows/e.yml'"))
     caso("ler a automação passa calado",

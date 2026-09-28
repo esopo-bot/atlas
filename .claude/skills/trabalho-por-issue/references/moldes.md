@@ -57,7 +57,7 @@ Fase: investigar | implementar | verificar
 Feito: <...>
 Parcial: <o que está pela metade, e onde parou>
 Falta: <...>
-Decisões: <uma linha cada, com link para o comentário que decidiu>
+Decisões: <uma linha cada, com a data e o porquê; a do dono, com a data em que ele decidiu>
 
 ## Ponto de retomada
 <o bloco da seção "Virar a sessão" da skill, reescrito a cada virada>
@@ -141,13 +141,15 @@ no mesmo corpo.
 
 O título leva o prefixo `<projeto>_pergunta -`, e a etiqueta `parado-em-voce` —
 é ela que faz a coluna do quadro mostrar que a issue espera o dono, e que o
-executor de roteiros não a dispare sozinho.
+executor de roteiros não a dispare sozinho. O prefixo e a etiqueta são a
+convenção da camada, iguais em toda instalação: não saem da configuração.
 
 ## Molde do quadro fixo
 
 Para o trabalho que não acaba: um projeto que segue vivo, uma caixa de entrada,
 um território que acumula defeito. A issue **não fecha** — ela enche e esvazia.
-O corpo é o estado de hoje; os comentários são o log de cada movimento.
+O corpo é o estado de hoje; o que saiu dele fica no histórico de edição, e
+comentário é só conversa com o dono.
 
 Cinco seções, nesta ordem:
 
@@ -197,8 +199,9 @@ A **data** é a de quando a linha passou às mãos do dono da vez — nunca a de
 hoje. Carimbar a data de hoje ao arrumar o quadro zera o relógio de todas as
 linhas de uma vez, e o quadro passa a parecer novo para sempre.
 
-Linha resolvida não some: vira `[x]` riscada com o que a fechou, ou sai por
-poda registrada em comentário.
+Linha resolvida sai do quadro, e o registro curto do fechamento vai à seção
+de fechamentos do próprio corpo, que tem teto — riscado que se acumula faz o
+corpo crescer até ninguém ler.
 
 ### A régua de vencimento
 

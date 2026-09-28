@@ -43,7 +43,7 @@ rotinas sai por `python verificacoes.py --listar`, que não viaja. Divergiu dest
 | 13 — publicar exige revisão semântica | rotina `ensaio` e cerca `vetar-documento-rastreavel`, **em parte** | a varredura acha nome e segredo; jeito de trabalhar e procedência não têm padrão e passam inteiros. A cerca fecha um buraco anterior à varredura: documento binário em caminho que o git rastreia não se lê num diff nem na varredura, e entra no commit às cegas. A parte que falta **não é mecanizável** |
 | 14 — conhecimento nasce na língua de quem vai lê-lo | ganchos `vetar-conhecimento-em-codigo` e `vetar-comentario-explicativo` | os ganchos recusam a página nascendo em pasta de código e o porquê nascendo em comentário. A escolha do NOME não tem guarda mecânica, por decisão do dono: rotina que conta ocorrência de termo velho pesa em toda sessão e vive vermelha por prosa nova, sem que ninguém aja sobre o número. Ficou a regra — usar o nome que a casa já usa, não inventar jargão — e o julgamento de quem escreve |
 | 15 — editou a fonte, regenere a cópia | gancho `vetar-escrita-em-copia-gerada`; regra nativa de edição no settings de quem instala; rotina `sincronia` | o gancho recusa a escrita na cópia nomeando a fonte; a regra nativa `Edit(...)` do `settings.json`, gerada pelo instalador para o espelho das skills, a regra de código, a página de regras, a automação e as cópias de módulo do registro, recusa mesmo com o gancho desligado, sem nomear a fonte (provado no cliente); a rotina regenera e compara o texto inteiro |
-| 16 — nada sem destino | ganchos `cobrar-destino-da-entrega` e `vetar-escrita-fora-da-execucao`; rotina `entrega` | o primeiro cobra na parada da sessão — com gente no terminal, só no registro de depuração —, busca o remoto antes de medir a integração contra a principal, para não acusar pedido já mesclado por ref local velha, e separa a sujeira herdada (arquivo mexido antes da abertura da sessão, lida do primeiro instante do transcript) da sujeira desta sessão: a herdada é nomeada e não trava; o que não é da sessão — poda, sujeira herdada, integração herdada — sai uma vez por sessão, e a cobrança de commit mostra só o commit, sem o resto da saída da rotina `entrega`; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina `entrega` lista as duas pontas — o que não saiu da branch e o que já saiu e ficou: a branch contida na branch de incorporação e ainda de pé, local e remota, que se acumula porque ninguém a vê; guardar uma delas é declará-la em `.claude/branches-protegidas.txt`. As três guardas olham para o disco e para o git; nenhuma vê o rastreador, e issue vizinha que fala do mesmo trabalho sem apontar para a que o consolidou fica sem guarda mecânica |
+| 16 — nada sem destino | ganchos `cobrar-destino-da-entrega` e `vetar-escrita-fora-da-execucao`; rotina `entrega` | o primeiro cobra na parada da sessão — com gente no terminal, só no registro de depuração —, e separa a sujeira herdada (arquivo mexido antes da abertura da sessão, lida do primeiro instante do transcript) da sujeira desta sessão: a herdada é nomeada e não trava; o que não é da sessão — poda, sujeira herdada, integração herdada — sai uma vez por sessão, e a cobrança de commit mostra só o commit, sem o resto da saída da rotina `entrega`; o segundo recusa escrita fora da raiz da execução, que não entra em commit nenhum; a rotina `entrega` lista as duas pontas — o que não saiu da branch e o que já saiu e ficou: a branch contida na branch de incorporação e ainda de pé, local e remota, que se acumula porque ninguém a vê; guardar uma delas é declará-la em `.claude/branches-protegidas.txt`. As três guardas olham para o disco e para o git; nenhuma vê o rastreador, e issue vizinha que fala do mesmo trabalho sem apontar para a que o consolidou fica sem guarda mecânica |
 | 17 — explique na altura de quem lê | nada | **não mecanizável**: altura de explicação não se mede por padrão |
 | 18 — número não mora em prosa | nada | **só prosa**; mecanizável em parte: uma rotina pode varrer as páginas por algarismo solto em prosa, sem comando nem data ao lado, e acusar — ninguém a escreveu |
 | 19 — não pare sem necessidade | nada | **não mecanizável**: necessidade de parar é julgamento sobre o trabalho, não padrão |
@@ -97,7 +97,10 @@ não na parada, e o aviso dela segue na conversa.
 
 Negam de vez os que protegem o que não se desfaz — branch de longa
 duração, política, território de outra pessoa, cópia gerada, automação, a
-fronteira da execução, o documento rastreável e a sessão de pesquisa:
+fronteira da execução, o documento rastreável, a sessão de pesquisa e a
+raiz que se declarou espelho da integração
+(`git config camada.raizSoEspelhaAIntegracao true`), onde só se grava o que
+o git ignora:
 
 - `vetar-automacao`
 - `vetar-branch-protegida`
@@ -108,6 +111,7 @@ fronteira da execução, o documento rastreável e a sessão de pesquisa:
 - `vetar-enxame-de-agentes`
 - `vetar-escrita-em-somente-leitura`
 - `vetar-escrita-fora-da-execucao`
+- `vetar-escrita-na-raiz`
 
 O julgamento de cada veto não mudou: o que barrava continua barrando.
 Mudou quem dá a última palavra em sessão interativa.
@@ -129,6 +133,11 @@ execução pelo desenho de sempre — veredito de pergunta na evidência,
 execução em `aguardando-resposta`, resposta pela retomada. O verbo `ask`
 não muda esse desenho; ele só encurta o caminho quando há alguém na frente
 do terminal.
+
+A ponte que leva as cercas a outra ferramenta de agente,
+`.agents/travessia/ponte.py`, põe a mesma marca: o motor não tem ninguém no
+terminal dele. O modo de permissão que ela repassa é só o que a outra
+ferramenta declarou; ela não inventa nenhum.
 
 **Em `bypassPermissions` com gente — decisão do dono.** Esse modo desliga
 as perguntas de permissão, e a documentação do cliente não garante que a
@@ -180,8 +189,9 @@ Para essa classe a trava é revisão adversarial, não gancho: alguém, ou algum
 etapa, pergunta *por que não o contrário?* antes de a decisão virar ação.
 
 **Nada fica sem destino.** A cobrança da regra 16 é sobre a branch de
-entrega **e** o passo seguinte: ou o trabalho vai para lá com o pedido de
-incorporação ABERTO, ou é descartado com a razão dita em uma linha.
+entrega **e** o passo seguinte: ou o trabalho vai para lá — por mescla, ou
+com o pedido de incorporação ABERTO onde a promoção é por pedido —, ou é
+descartado com a razão dita em uma linha.
 Trabalho parado antes disso não chegou a lugar nenhum, só parece pronto —
 mesmo que o commit já esteja na branch certa.
 

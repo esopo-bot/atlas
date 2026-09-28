@@ -23,14 +23,136 @@ JUNCAO_DE_FONTES = " e "
 FERRAMENTAS_DE_ESCRITA = ("Write", "Edit", "NotebookEdit")
 CAMPOS_DE_CAMINHO = ("file_path", "notebook_path")
 
-SEPARADORES_DE_COMANDO = re.compile(r"&&|\|\||;|\||\n|\r|\$\(|`|\)")
-EXPANSAO_QUE_ASPA_DUPLA_NAO_SEGURA = re.compile(r"\$\(|`|\)")
-DOCUMENTO_LITERAL_QUE_NAO_EXPANDE = re.compile(
-    r"<<-?\s*(['\"])(\w+)\1.*?(?:^\2\s*$|\Z)", re.S | re.M)
 REDIRECIONAMENTO_DE_SHELL = re.compile(r">>?\s*([^\s;|&<>]+)")
 ASPA_SIMPLES = "'"
 ASPA_DUPLA = '"'
 ASPAS = "\"'"
+CONTRABARRA = "\\"
+ABRE_ASPA_ANSI = "$'"
+FERRAMENTA_BASH = "Bash"
+FERRAMENTA_POWERSHELL = "PowerShell"
+CRASE = "`"
+CRASE_ESCAPADA = CONTRABARRA + CRASE
+NA_ASPA_SIMPLES = "aspa simples"
+NA_ASPA_DUPLA = "aspa dupla"
+NA_ASPA_ANSI = "aspa $'...'"
+NO_TEXTO_LITERAL = "texto literal de várias linhas"
+NO_TEXTO_QUE_EXPANDE = "texto de várias linhas que expande"
+NO_DOCUMENTO_LITERAL = "corpo do documento literal"
+NO_DOCUMENTO_QUE_EXPANDE = "corpo do documento que expande"
+ONDE_O_ESCAPE_VALE = (None, NA_ASPA_DUPLA, NA_ASPA_ANSI, NO_TEXTO_QUE_EXPANDE,
+                      NO_DOCUMENTO_QUE_EXPANDE)
+ONDE_SO_HA_TEXTO = (NA_ASPA_SIMPLES, NA_ASPA_ANSI, NO_TEXTO_LITERAL)
+ONDE_SO_HA_DADO = (NO_DOCUMENTO_LITERAL, NO_DOCUMENTO_QUE_EXPANDE)
+ONDE_A_CRASE_ESCAPADA_ANINHA = (None, NA_ASPA_DUPLA)
+ASPAS_SIMPLES_DO_POWERSHELL = ("'\N{LEFT SINGLE QUOTATION MARK}"
+                               "\N{RIGHT SINGLE QUOTATION MARK}"
+                               "\N{SINGLE LOW-9 QUOTATION MARK}"
+                               "\N{SINGLE HIGH-REVERSED-9 QUOTATION MARK}")
+ASPAS_DUPLAS_DO_POWERSHELL = ('"\N{LEFT DOUBLE QUOTATION MARK}'
+                              "\N{RIGHT DOUBLE QUOTATION MARK}"
+                              "\N{DOUBLE LOW-9 QUOTATION MARK}")
+ESCAPE_DO_SHELL = {FERRAMENTA_BASH: CONTRABARRA, FERRAMENTA_POWERSHELL: CRASE}
+CONTINUACAO_DE_LINHA_NO_SHELL = {
+    FERRAMENTA_BASH: re.compile(r"\\\n"),
+    FERRAMENTA_POWERSHELL: re.compile(r"`\r?\n"),
+}
+O_QUE_A_CONTINUACAO_DEIXA = {FERRAMENTA_BASH: "", FERRAMENTA_POWERSHELL: " "}
+ONDE_A_LINHA_CONTINUA = {
+    FERRAMENTA_BASH: (None, NA_ASPA_DUPLA, NO_DOCUMENTO_QUE_EXPANDE),
+    FERRAMENTA_POWERSHELL: (None,),
+}
+ASPA_QUE_ABRE_NO_SHELL = {
+    FERRAMENTA_BASH: (
+        (NA_ASPA_ANSI, re.compile(re.escape(ABRE_ASPA_ANSI))),
+        (NA_ASPA_SIMPLES, re.compile(ASPA_SIMPLES)),
+        (NA_ASPA_DUPLA, re.compile(ASPA_DUPLA))),
+    FERRAMENTA_POWERSHELL: (
+        (NO_TEXTO_LITERAL,
+         re.compile(rf"@[{ASPAS_SIMPLES_DO_POWERSHELL}][ \t]*(?=\r?\n)")),
+        (NO_TEXTO_QUE_EXPANDE,
+         re.compile(rf"@[{ASPAS_DUPLAS_DO_POWERSHELL}][ \t]*(?=\r?\n)")),
+        (NA_ASPA_SIMPLES, re.compile(f"[{ASPAS_SIMPLES_DO_POWERSHELL}]")),
+        (NA_ASPA_DUPLA, re.compile(f"[{ASPAS_DUPLAS_DO_POWERSHELL}]"))),
+}
+FECHO_DA_ASPA_NO_SHELL = {
+    FERRAMENTA_BASH: {
+        NA_ASPA_ANSI: re.compile(ASPA_SIMPLES),
+        NA_ASPA_SIMPLES: re.compile(ASPA_SIMPLES),
+        NA_ASPA_DUPLA: re.compile(ASPA_DUPLA)},
+    FERRAMENTA_POWERSHELL: {
+        NO_TEXTO_LITERAL: re.compile(rf"\n[{ASPAS_SIMPLES_DO_POWERSHELL}]@"),
+        NO_TEXTO_QUE_EXPANDE:
+            re.compile(rf"\n[{ASPAS_DUPLAS_DO_POWERSHELL}]@"),
+        NA_ASPA_SIMPLES: re.compile(f"[{ASPAS_SIMPLES_DO_POWERSHELL}]"),
+        NA_ASPA_DUPLA: re.compile(f"[{ASPAS_DUPLAS_DO_POWERSHELL}]")},
+}
+SUBSTITUICAO_QUE_ABRE_NO_SHELL = {
+    FERRAMENTA_BASH: {
+        None: (("$(", ")"), ("(", ")"), (CRASE, CRASE)),
+        NA_ASPA_DUPLA: (("$(", ")"), (CRASE, CRASE)),
+        NO_DOCUMENTO_QUE_EXPANDE: (("$(", ")"), (CRASE, CRASE))},
+    FERRAMENTA_POWERSHELL: {
+        None: (("$(", ")"), ("(", ")"), ("{", "}")),
+        NA_ASPA_DUPLA: (("$(", ")"),),
+        NO_TEXTO_QUE_EXPANDE: (("$(", ")"),)},
+}
+CORTE_NO_CODIGO_DO_SHELL = {
+    FERRAMENTA_BASH: re.compile(r"&&|\|\||\|&|;|\||&|\n|\r|\)|\{(?=\s)"),
+    FERRAMENTA_POWERSHELL: re.compile(r"&&|\|\||;|\||&|\n|\r|\)|\}"),
+}
+QUEBRAS_DE_LINHA = ("\n", "\r")
+CORTE_QUANDO_A_LEITURA_NAO_FECHA = {
+    FERRAMENTA_BASH: re.compile(r"&&|\|\||;|\||&|\n|\r|\$\(|\(|`|\)"),
+    FERRAMENTA_POWERSHELL: re.compile(
+        r"&&|\|\||;|\||&|\n|\r|\$\(|\(|\)|\{|\}"),
+}
+DOCUMENTO_QUE_ABRE_NO_SHELL = {FERRAMENTA_BASH: re.compile(
+    r"<<(?!<)(-?)[ \t]*((?:'[^'\n]*'|\"[^\"\n]*\"|\\.|[^\s;&|<>()'\"\\])+)")}
+CADEIA_QUE_NAO_ABRE_DOCUMENTO = {FERRAMENTA_BASH: re.compile(r"<<<")}
+MARCAS_QUE_TORNAM_O_DOCUMENTO_LITERAL = "'\"\\"
+FECHO_DO_DOCUMENTO = r"\n{}{}[ \t\r]*(?=\n|\Z)"
+TABULACOES_QUE_O_MENOS_TIRA = r"\t*"
+SHELL_QUE_LE_O_DOCUMENTO = re.compile(
+    r"(?<![\w.-])(?:sh|bash|zsh|dash|ksh)(?:\.exe)?(?![\w.-])", re.I)
+PREFIXOS_ANTES_DO_PROGRAMA = ("sudo", "env", "exec", "command", "nohup",
+                              "nice", "time", "xargs", "builtin")
+LETRA_DE_OPCAO_NO_SHELL = "-"
+MARCA_DE_ATRIBUICAO_NO_SHELL = "="
+CANO_UNICO = "|"
+CANO_COM_O_ERRO = "|&"
+CANOS = (CANO_UNICO, CANO_COM_O_ERRO)
+PROGRAMA_QUE_DEVOLVE_O_DOCUMENTO = "cat"
+AVALIADORES_DO_SHELL = ("eval", "iex", "invoke-expression")
+LEITORES_DE_ARQUIVO_NO_SHELL = ("source", ".")
+ABRE_A_SUBSTITUICAO_DE_PROCESSO = "<"
+LEITOR_DO_TEXTO_QUE_A_SUBSTITUICAO_DEVOLVE = {
+    FERRAMENTA_BASH: "eval", FERRAMENTA_POWERSHELL: "iex"}
+LETRA_QUE_ENTREGA_O_CODIGO_AO_SHELL = "c"
+TEXTO_ENTRE_ASPAS_NO_SEGMENTO = re.compile(
+    r"'[^']*(?:'|$)|\"(?:\\.|[^\"\\])*(?:\"|$)")
+COMENTARIO_NO_SHELL = {
+    FERRAMENTA_BASH: re.compile(r"(?<![^\s;&|()<>])#[^\n]*"),
+    FERRAMENTA_POWERSHELL: re.compile(
+        r"<#.*?#>|(?<![^\s;&|(){}])#[^\n]*", re.S),
+}
+PALAVRA_QUE_ABRE_O_COMANDO_NO_SHELL = {FERRAMENTA_BASH: re.compile(
+    r"(?:!|\}|do|done|then|else|elif|fi|if|while|until|time|coproc)"
+    r"(?=[\s;&|()]|\Z)")}
+ESPACOS_ENTRE_PALAVRAS = " \t\r\n"
+CAMINHO_DO_WINDOWS_NA_PALAVRA = re.compile(r"[A-Za-z]:\\|^\\\\|^\.{1,2}\\")
+O_QUE_A_CONTRABARRA_ESCAPA_NA_ASPA_DUPLA = "$`\"\\\n"
+CODIGOS_DOS_ESCAPES_DA_ASPA_ANSI = {"n": 10, "t": 9, "r": 13, "a": 7,
+                                    "b": 8, "e": 27, "E": 27, "f": 12,
+                                    "v": 11}
+CODIGOS_DOS_ESCAPES_DO_POWERSHELL = {"0": 0, "a": 7, "b": 8, "e": 27,
+                                     "f": 12, "n": 10, "r": 13, "t": 9,
+                                     "v": 11}
+ESCAPE_NUMERICO_DA_ASPA_ANSI = re.compile(r"x([0-9A-Fa-f]{1,2})|([0-7]{1,3})")
+BASE_HEXADECIMAL = 16
+BASE_OCTAL = 8
+PROGRAMAS_QUE_SO_MUDAM_DE_PASTA = ("cd", "pushd", "popd")
+CARACTERE_QUE_PEDE_ASPA = re.compile(r"[\s'\"\\`$;&|<>(){}#*?\[\]~]")
 
 COMANDO_CD = "cd"
 COMANDOS_QUE_ESCREVEM_NOS_ARGUMENTOS = ("rm", "rmdir", "mv", "tee", "touch",
@@ -115,7 +237,7 @@ APRENDIZADO = (
 )
 
 RECUSA = (
-    "Regra 15 da camada: isto quer escrever em {!r}, que é CÓPIA GERADA de "
+    "Regra 15 da camada: isto quer escrever em {!r}, que é cópia gerada de "
     "{}. O que for escrito "
     "na cópia se perde na próxima sincronização, sem aviso nenhum: o "
     "instalador reescreve a cópia a partir da fonte, e a edição some junto "
@@ -138,7 +260,7 @@ APRENDIZADO_MODULO_INSTALADO = (
     + ATUALIZAR_DA_RAIZ_DESTE_REPOSITORIO + "."
 )
 RECUSA_MODULO_INSTALADO = (
-    "Regra 15 da camada: isto quer escrever em {!r}, que é CÓPIA GERADA "
+    "Regra 15 da camada: isto quer escrever em {!r}, que é cópia gerada "
     "pelo módulo {} do atlas. Esta é uma instalação, não o repositório de "
     "desenvolvimento — não existe fonte local para editar aqui. O caminho "
     "é editar a fonte no repositório atlas (`modulos/{}/...`) e, para "
@@ -281,44 +403,352 @@ def fonte_nomeada_na_marca(alvo: Path) -> str:
     return JUNCAO_DE_FONTES.join(FONTE_NOMEADA_NA_MARCA.findall(primeira))
 
 
-def cortar_respeitando_aspas(comando: str):
-    segmentos, atual, aspa_aberta = [], [], None
+def shell_da_ferramenta(ferramenta) -> str:
+    return (ferramenta if ferramenta in ESCAPE_DO_SHELL
+            else FERRAMENTA_BASH)
+
+
+def tamanho_do_casado(padrao, comando: str, i: int) -> int:
+    achado = padrao.match(comando, i) if padrao else None
+    return achado.end() - i if achado else 0
+
+
+def aspa_que_abre(comando: str, i: int, shell: str):
+    for aspa, abertura in ASPA_QUE_ABRE_NO_SHELL[shell]:
+        if achada := abertura.match(comando, i):
+            return aspa, achada.end() - i
+    return None
+
+
+def tamanho_do_fecho_da_aspa(comando: str, i: int, aspa_aberta, shell: str,
+                             fecho_do_documento=None) -> int:
+    fecho = (fecho_do_documento if aspa_aberta in ONDE_SO_HA_DADO
+             else FECHO_DA_ASPA_NO_SHELL[shell].get(aspa_aberta))
+    return tamanho_do_casado(fecho, comando, i)
+
+
+def substituicao_que_abre(comando: str, i: int, aspa_aberta, shell: str):
+    for abertura, fecho in SUBSTITUICAO_QUE_ABRE_NO_SHELL[shell].get(
+            aspa_aberta, ()):
+        if comando.startswith(abertura, i):
+            return abertura, fecho
+    return None
+
+
+def tamanho_da_continuacao_de_linha(comando: str, i: int, aspa_aberta,
+                                    shell: str) -> int:
+    if aspa_aberta not in ONDE_A_LINHA_CONTINUA[shell]:
+        return 0
+    return tamanho_do_casado(CONTINUACAO_DE_LINHA_NO_SHELL[shell], comando, i)
+
+
+def documento_que_abre(comando: str, i: int, shell: str):
+    if cadeia := tamanho_do_casado(CADEIA_QUE_NAO_ABRE_DOCUMENTO.get(shell),
+                                   comando, i):
+        return cadeia, None
+    abertura = DOCUMENTO_QUE_ABRE_NO_SHELL.get(shell)
+    achado = abertura.match(comando, i) if abertura else None
+    if not achado:
+        return None
+    menos, palavra = achado.groups()
+    delimitador = "".join(letra for letra in palavra if letra
+                          not in MARCAS_QUE_TORNAM_O_DOCUMENTO_LITERAL)
+    fecho = re.compile(FECHO_DO_DOCUMENTO.format(
+        TABULACOES_QUE_O_MENOS_TIRA if menos else "",
+        re.escape(delimitador)))
+    corpo = (NO_DOCUMENTO_LITERAL if delimitador != palavra
+             else NO_DOCUMENTO_QUE_EXPANDE)
+    return achado.end() - i, (corpo, fecho)
+
+
+def nome_do_programa_no_shell(token: str) -> str:
+    return Path(sem_o_par_de_aspas_que_envolve(token).replace(
+        CONTRABARRA, "/")).name
+
+
+def programa_do_segmento(segmento: str) -> str:
+    palavras = [lida for _, lida in palavras_como_o_shell_le(
+        segmento, FERRAMENTA_BASH)]
+    while palavras and (
+            palavras[0].startswith(LETRA_DE_OPCAO_NO_SHELL)
+            or MARCA_DE_ATRIBUICAO_NO_SHELL in palavras[0]
+            or nome_do_programa_no_shell(palavras[0])
+            in PREFIXOS_ANTES_DO_PROGRAMA):
+        palavras.pop(0)
+    return nome_do_programa_no_shell(palavras[0]) if palavras else ""
+
+
+def o_documento_e_lido_por_um_shell(segmentos_da_linha: list) -> bool:
+    return any(SHELL_QUE_LE_O_DOCUMENTO.fullmatch(programa_do_segmento(s))
+               for s in segmentos_da_linha)
+
+
+def entrega_o_codigo_ao_shell(opcao: str) -> bool:
+    return (opcao.startswith(LETRA_DE_OPCAO_NO_SHELL)
+            and not opcao.startswith(LETRA_DE_OPCAO_NO_SHELL * 2)
+            and LETRA_QUE_ENTREGA_O_CODIGO_AO_SHELL in opcao[1:])
+
+
+def a_substituicao_e_o_codigo_de_um_shell(antes: str, aspa_aberta) -> bool:
+    fechado = antes + (ASPA_DUPLA if aspa_aberta == NA_ASPA_DUPLA else "")
+    palavras = [lida for _, lida in palavras_como_o_shell_le(
+        fechado, FERRAMENTA_BASH)]
+    abre_palavra_nova = aspa_aberta is None and (
+        not antes or antes[-1] in ESPACOS_ENTRE_PALAVRAS)
+    anteriores = palavras if abre_palavra_nova else palavras[:-1]
+    if not anteriores:
+        return False
+    programa = programa_do_segmento(fechado) or anteriores[0]
+    le_o_arquivo_que_a_substituicao_abre = (
+        aspa_aberta is None
+        and antes.endswith(ABRE_A_SUBSTITUICAO_DE_PROCESSO)
+        and (bool(SHELL_QUE_LE_O_DOCUMENTO.fullmatch(programa))
+             or programa in LEITORES_DE_ARQUIVO_NO_SHELL))
+    return (programa.lower() in AVALIADORES_DO_SHELL
+            or le_o_arquivo_que_a_substituicao_abre or bool(
+                SHELL_QUE_LE_O_DOCUMENTO.fullmatch(programa)
+                and entrega_o_codigo_ao_shell(anteriores[-1])))
+
+
+def o_documento_e_o_codigo_da_substituicao(segmentos: list,
+                                           pilha: list) -> bool:
+    codigo_desde = pilha[-1][-1] if pilha else None
+    if codigo_desde is None:
+        return False
+    conteudo = [s for s in segmentos[codigo_desde:] if s.strip()]
+    return len(conteudo) == 1 and (programa_do_segmento(conteudo[0])
+                                   == PROGRAMA_QUE_DEVOLVE_O_DOCUMENTO)
+
+
+def tamanho_da_palavra_que_abre_o_comando(comando: str, i: int, atual: list,
+                                          shell: str) -> int:
+    if "".join(atual).strip():
+        return 0
+    return tamanho_do_casado(PALAVRA_QUE_ABRE_O_COMANDO_NO_SHELL.get(shell),
+                             comando, i)
+
+
+def cortar_respeitando_aspas(comando: str,
+                             ferramenta: str = FERRAMENTA_BASH):
+    shell = shell_da_ferramenta(ferramenta)
+    segmentos, atual, aspa_aberta, pilha = [], [], None, []
+    apos_cano, cano_pendente = [], False
+    pendentes, fecho_do_documento, inicio_da_linha = [], None, 0
     i = 0
     while i < len(comando):
         c = comando[i]
-        if aspa_aberta == ASPA_SIMPLES:
-            atual.append(c)
-            aspa_aberta = None if c == ASPA_SIMPLES else aspa_aberta
-            i += 1
-        elif aspa_aberta == ASPA_DUPLA and c == ASPA_DUPLA:
-            atual.append(c)
-            aspa_aberta = None
-            i += 1
-        elif aspa_aberta is None and c in ASPAS:
-            atual.append(c)
-            aspa_aberta = c
-            i += 1
-        elif corte := (EXPANSAO_QUE_ASPA_DUPLA_NAO_SEGURA if aspa_aberta
-                       else SEPARADORES_DE_COMANDO).match(comando, i):
+        fecha_a_substituicao = (aspa_aberta is None and pilha
+                                and comando.startswith(pilha[-1][0], i))
+        if (aspa_aberta in ONDE_A_CRASE_ESCAPADA_ANINHA
+                and comando.startswith(CRASE_ESCAPADA, i)
+                and any(aberta[0] == CRASE for aberta in pilha)):
             segmentos.append("".join(atual))
+            apos_cano.append(cano_pendente)
+            cano_pendente = False
+            atual = []
+            i += len(CRASE_ESCAPADA)
+        elif continuacao := tamanho_da_continuacao_de_linha(
+                comando, i, aspa_aberta, shell):
+            atual.append(O_QUE_A_CONTINUACAO_DEIXA[shell])
+            i += continuacao
+        elif c == ESCAPE_DO_SHELL[shell] and aspa_aberta in ONDE_O_ESCAPE_VALE:
+            if aspa_aberta not in ONDE_SO_HA_DADO:
+                atual.append(comando[i:i + 2])
+            i += 2
+        elif tamanho := tamanho_do_fecho_da_aspa(
+                comando, i, aspa_aberta, shell, fecho_do_documento):
+            if aspa_aberta in ONDE_SO_HA_DADO:
+                aspa_aberta, fecho_do_documento = (
+                    pendentes.pop(0) if pendentes else (None, None))
+            else:
+                atual.append(comando[i:i + tamanho])
+                aspa_aberta = None
+            i += tamanho
+        elif aspa_aberta in ONDE_SO_HA_TEXTO:
+            atual.append(c)
+            i += 1
+        elif fecha_a_substituicao:
+            fecho, aspa_aberta, fecho_do_documento, codigo_desde = (
+                pilha.pop())
+            segmentos.append("".join(atual))
+            apos_cano.append(cano_pendente)
+            cano_pendente = False
+            atual = []
+            i += len(fecho)
+            if codigo_desde is not None:
+                segmentos.append(
+                    LEITOR_DO_TEXTO_QUE_A_SUBSTITUICAO_DEVOLVE[shell])
+                apos_cano.append(True)
+        elif abertura := substituicao_que_abre(comando, i, aspa_aberta,
+                                               shell):
+            segmentos.append("".join(atual))
+            codigo_desde = (len(segmentos)
+                            if a_substituicao_e_o_codigo_de_um_shell(
+                                segmentos[-1], aspa_aberta) else None)
+            pilha.append((abertura[1], aspa_aberta, fecho_do_documento,
+                          codigo_desde))
+            aspa_aberta = None
+            apos_cano.append(cano_pendente)
+            cano_pendente = False
+            atual = []
+            i += len(abertura[0])
+        elif aspa_aberta in ONDE_SO_HA_DADO:
+            i += 1
+        elif aspa_aberta is None and (
+                documento := documento_que_abre(comando, i, shell)):
+            tamanho, pendente = documento
+            atual.append(comando[i:i + tamanho])
+            pendentes += [pendente] if pendente else []
+            i += tamanho
+        elif aspa_aberta is None and (comentario := tamanho_do_casado(
+                COMENTARIO_NO_SHELL[shell], comando, i)):
+            i += comentario
+        elif aspa_aberta is None and (
+                palavra := tamanho_da_palavra_que_abre_o_comando(
+                    comando, i, atual, shell)):
+            i += palavra
+        elif aspa_aberta is None and (aspa := aspa_que_abre(comando, i,
+                                                            shell)):
+            atual.append(comando[i:i + aspa[1]])
+            aspa_aberta = aspa[0]
+            i += aspa[1]
+        elif aspa_aberta is None and (
+                corte := CORTE_NO_CODIGO_DO_SHELL[shell].match(comando, i)):
+            segmentos.append("".join(atual))
+            apos_cano.append(cano_pendente)
+            cano_pendente = corte.group() in CANOS
             atual = []
             i = corte.end()
+            if corte.group() not in QUEBRAS_DE_LINHA:
+                continue
+            if pendentes and (
+                    o_documento_e_lido_por_um_shell(
+                        segmentos[inicio_da_linha:])
+                    or o_documento_e_o_codigo_da_substituicao(segmentos,
+                                                              pilha)):
+                pendentes = []
+            elif pendentes:
+                aspa_aberta, fecho_do_documento = pendentes.pop(0)
+                i = corte.start()
+            inicio_da_linha = len(segmentos)
         else:
             atual.append(c)
             i += 1
-    if aspa_aberta is not None:
+    if pilha or (aspa_aberta is not None and aspa_aberta not in ONDE_SO_HA_DADO):
         return None
     segmentos.append("".join(atual))
-    return segmentos
+    apos_cano.append(cano_pendente)
+    return segmentos, apos_cano
 
 
-def separar_desembrulhando(comando: str) -> list:
-    sem_documento = DOCUMENTO_LITERAL_QUE_NAO_EXPANDE.sub(" ", comando)
-    segmentos = cortar_respeitando_aspas(sem_documento)
-    aspas_nao_fecharam = segmentos is None
-    if aspas_nao_fecharam:
-        segmentos = SEPARADORES_DE_COMANDO.split(sem_documento)
-    return desembrulhador().com_os_corpos_desembrulhados(segmentos, separar_desembrulhando)
+def o_que_o_escape_le(segmento: str, i: int, aspa_aberta, shell: str):
+    seguinte = segmento[i + 1:i + 2]
+    if shell == FERRAMENTA_POWERSHELL:
+        codigo = CODIGOS_DOS_ESCAPES_DO_POWERSHELL.get(seguinte)
+        return (seguinte if codigo is None else chr(codigo)), 2
+    if aspa_aberta == NA_ASPA_ANSI:
+        if seguinte in CODIGOS_DOS_ESCAPES_DA_ASPA_ANSI:
+            return chr(CODIGOS_DOS_ESCAPES_DA_ASPA_ANSI[seguinte]), 2
+        if numero := ESCAPE_NUMERICO_DA_ASPA_ANSI.match(segmento, i + 1):
+            hexadecimal, octal = numero.groups()
+            codigo = (int(hexadecimal, BASE_HEXADECIMAL) if hexadecimal
+                      else int(octal, BASE_OCTAL))
+            return chr(codigo), 1 + len(numero.group())
+        return seguinte, 2
+    if (aspa_aberta is None
+            or seguinte in O_QUE_A_CONTRABARRA_ESCAPA_NA_ASPA_DUPLA):
+        return seguinte, 2
+    return segmento[i:i + 2], 2
+
+
+def palavras_como_o_shell_le(segmento: str, shell: str):
+    palavras, crua, lida, aspa_aberta, i = [], [], [], None, 0
+    while i < len(segmento):
+        c = segmento[i]
+        if aspa_aberta is None and c in ESPACOS_ENTRE_PALAVRAS:
+            palavras.append(("".join(crua), "".join(lida)))
+            crua, lida = [], []
+            i += 1
+        elif c == ESCAPE_DO_SHELL[shell] and aspa_aberta in ONDE_O_ESCAPE_VALE:
+            escapado, tamanho = o_que_o_escape_le(segmento, i, aspa_aberta,
+                                                  shell)
+            crua.append(segmento[i:i + tamanho])
+            lida.append(escapado)
+            i += tamanho
+        elif tamanho := tamanho_do_fecho_da_aspa(segmento, i, aspa_aberta,
+                                                 shell):
+            crua.append(segmento[i:i + tamanho])
+            aspa_aberta = None
+            i += tamanho
+        elif aspa_aberta is None and (aspa := aspa_que_abre(segmento, i,
+                                                            shell)):
+            crua.append(segmento[i:i + aspa[1]])
+            aspa_aberta = aspa[0]
+            i += aspa[1]
+        else:
+            crua.append(c)
+            lida.append(c)
+            i += 1
+    palavras.append(("".join(crua), "".join(lida)))
+    if aspa_aberta is not None:
+        return []
+    return [(crua, lida) for crua, lida in palavras if crua]
+
+
+def palavra_como_a_cerca_le(crua: str, lida: str, shell: str) -> str:
+    if (shell == FERRAMENTA_BASH
+            and CAMINHO_DO_WINDOWS_NA_PALAVRA.search(crua)):
+        return sem_o_par_de_aspas_que_envolve(crua)
+    return lida
+
+
+def palavra_citada(palavra: str) -> str:
+    if palavra and not CARACTERE_QUE_PEDE_ASPA.search(palavra):
+        return palavra
+    if ASPA_SIMPLES not in palavra:
+        return ASPA_SIMPLES + palavra + ASPA_SIMPLES
+    if ASPA_DUPLA not in palavra:
+        return ASPA_DUPLA + palavra + ASPA_DUPLA
+    return palavra
+
+
+def segmento_como_o_shell_le(segmento: str, shell: str) -> str:
+    palavras = palavras_como_o_shell_le(segmento, shell)
+    lidas = [palavra_como_a_cerca_le(crua, lida, shell)
+             for crua, lida in palavras]
+    if not lidas or lidas[0] in PROGRAMAS_QUE_SO_MUDAM_DE_PASTA:
+        return ""
+    if all(lida == sem_o_par_de_aspas_que_envolve(crua)
+           for (crua, _), lida in zip(palavras, lidas)):
+        return ""
+    return " ".join(palavra_citada(lida) for lida in lidas)
+
+
+def com_a_leitura_do_shell(segmentos: list, shell: str,
+                           apos_cano: list = None) -> tuple:
+    canos = apos_cano if apos_cano is not None else [False] * len(segmentos)
+    lidos, canos_lidos = [], []
+    for segmento, cano in zip(segmentos, canos):
+        lidos.append(segmento)
+        canos_lidos.append(cano)
+        if como_o_shell_le := segmento_como_o_shell_le(segmento, shell):
+            lidos.append(como_o_shell_le)
+            canos_lidos.append(False)
+    return lidos, canos_lidos
+
+
+def separar_desembrulhando(comando: str,
+                           ferramenta: str = FERRAMENTA_BASH) -> list:
+    shell = shell_da_ferramenta(ferramenta)
+    cortado = cortar_respeitando_aspas(comando, shell)
+    if cortado is None:
+        segmentos = CORTE_QUANDO_A_LEITURA_NAO_FECHA[shell].split(comando)
+        apos_cano = [False] * len(segmentos)
+    else:
+        segmentos, apos_cano = cortado
+    lidos, canos = com_a_leitura_do_shell(segmentos, shell, apos_cano)
+    return desembrulhador().com_os_corpos_desembrulhados(
+        lidos, separar_desembrulhando, canos)
 
 
 def sem_o_par_de_aspas_que_envolve(token: str) -> str:
@@ -638,10 +1068,11 @@ def relativo_a_raiz(caminho: str, raiz: Path, onde: str) -> str:
         return SEM_NOME
 
 
-def caminhos_escritos_pelo_comando(comando: str, onde: str) -> list:
+def caminhos_escritos_pelo_comando(comando: str, onde: str,
+                                   ferramenta: str = FERRAMENTA_BASH) -> list:
     escritos = [(c, onde) for c in
                 desembrulhador().caminhos_escritos_dentro_do_script(comando)]
-    for segmento in separar_desembrulhando(comando):
+    for segmento in separar_desembrulhando(comando, ferramenta):
         tokens = partir_em_tokens(segmento.strip())
         for caminho in caminhos_escritos_pelo_segmento(segmento, tokens,
                                                        onde):
@@ -661,7 +1092,8 @@ def caminhos_escritos_pelo_pedido(entrada: dict, onde: str) -> list:
     if ferramenta not in ("Bash", "PowerShell"):
         return []
     comando = dado.get("command", "")
-    return caminhos_escritos_pelo_comando(comando, onde) if comando else []
+    return (caminhos_escritos_pelo_comando(comando, onde, ferramenta)
+            if comando else [])
 
 
 def recusa_do_pedido(entrada: dict, raiz: Path, onde: str):
@@ -837,6 +1269,11 @@ def pedido_de_shell(comando: str) -> dict:
     return {"tool_name": "Bash", "tool_input": {"command": comando}}
 
 
+def pedido_do_powershell(comando: str) -> dict:
+    return {"tool_name": FERRAMENTA_POWERSHELL,
+            "tool_input": {"command": comando}}
+
+
 def o_que_a_cerca_imprime(pedido: dict, raiz: Path, onde: str) -> dict:
     import contextlib
     import io
@@ -894,7 +1331,7 @@ BARRA = [
      pedido_de_escrita("NotebookEdit", CARTAO_DE_EXECUCOES)),
     ("Edit no arquivo que abre com a marca de gerado",
      pedido_de_escrita("Edit", INSTRUCOES_COM_MARCA)),
-    ("heredoc de interpretador que ESCREVE na cópia — a bandeira do "
+    ("heredoc de interpretador que escreve na cópia — a bandeira do "
      "shell é a mesma, e o alvo mora dentro do script",
      pedido_de_shell(
          "python3 - <<'PY'\nimport pathlib\n"
@@ -982,6 +1419,102 @@ BARRA = [
     ("a / dentro do colchete não fecha o endereço por expressão",
      pedido_de_shell(
          f"sed -i '/[/]/w {INSTRUMENTO_DE_MODULO}' {PAGINA_LIVRE}")),
+    ("a aspa escapada não abre aspa, e o rm entre dois echo é do shell",
+     pedido_de_shell(f'echo \\" ; rm {INSTRUMENTO_DE_MODULO} ; echo \\"')),
+    ("a contrabarra no fim da linha junta a cópia ao rm",
+     pedido_de_shell(f"rm \\\n {INSTRUMENTO_DE_MODULO}")),
+    ("dentro da aspa simples a contrabarra não escapa, e a aspa fecha antes "
+     "do rm", pedido_de_shell(f"echo 'a\\' ; rm {INSTRUMENTO_DE_MODULO}")),
+    ("o ponto e vírgula dentro do $() entre aspas duplas é do shell",
+     pedido_de_shell(f'echo "$(true; rm {INSTRUMENTO_DE_MODULO})"')),
+    ("o ponto e vírgula dentro da crase entre aspas duplas é do shell",
+     pedido_de_shell(f'echo "`true; rm {INSTRUMENTO_DE_MODULO}`"')),
+    ("no PowerShell a contrabarra é texto, e a aspa fecha antes do rm",
+     pedido_do_powershell(
+         f'echo "a\\" ; rm {INSTRUMENTO_DE_MODULO} ; echo \\"b"')),
+    ("no PowerShell a crase escapa a aspa, e o rm entre dois echo é do "
+     "shell", pedido_do_powershell(
+         f'echo `"; rm {INSTRUMENTO_DE_MODULO}; echo `"')),
+    ("a aspa no corpo do documento que expande, dentro do $() entre aspas "
+     "duplas, não esconde o rm",
+     pedido_de_shell(f'echo "$(cat <<EOF\n\'\nEOF\n)"; '
+                     f"rm {INSTRUMENTO_DE_MODULO}\necho ')\"")),
+    ("a contrabarra no fim da linha antes do comando some, e o rm fica "
+     "inteiro", pedido_de_shell(f"\\\nrm {INSTRUMENTO_DE_MODULO}")),
+    ("a contrabarra no fim da linha depois do && também some",
+     pedido_de_shell(f"true &&\\\nrm {INSTRUMENTO_DE_MODULO}")),
+    ("a marca de documento dentro da aspa não apaga o resto do comando",
+     pedido_de_shell(f"echo \"<<'X'\"; rm {INSTRUMENTO_DE_MODULO}")),
+    ("o resto da linha que abre o documento literal é comando",
+     pedido_de_shell(f"cat <<'EOF'; rm {INSTRUMENTO_DE_MODULO}\nx\nEOF")),
+    ("o redirecionamento depois da marca do documento literal é do shell",
+     pedido_de_shell(f"cat <<'EOF' > {INSTRUMENTO_DE_MODULO}\nx\nEOF")),
+    ("o documento literal que o bash lê é comando",
+     pedido_de_shell(f"bash <<'EOF'\nrm {INSTRUMENTO_DE_MODULO}\nEOF")),
+    ("o documento literal que vai pelo cano ao sh é comando",
+     pedido_de_shell(f"cat <<'EOF' | sh\nrm {INSTRUMENTO_DE_MODULO}\nEOF")),
+    ("a aspa dentro do comentário não esconde a linha seguinte",
+     pedido_de_shell(f"echo ok # \"\nrm {INSTRUMENTO_DE_MODULO}\n# \"")),
+    ("as chaves agrupam comandos",
+     pedido_de_shell(f"{{ rm {INSTRUMENTO_DE_MODULO}; }}")),
+    ("a exclamação na frente não disfarça",
+     pedido_de_shell(f"! rm {INSTRUMENTO_DE_MODULO}")),
+    ("o then do if não disfarça",
+     pedido_de_shell(f"if true; then rm {INSTRUMENTO_DE_MODULO}; fi")),
+    ("o do do laço não disfarça",
+     pedido_de_shell(f"for f in a; do rm {INSTRUMENTO_DE_MODULO}; done")),
+    ("no PowerShell o comentário de bloco na frente não disfarça",
+     pedido_do_powershell(f"<# c #> rm {INSTRUMENTO_DE_MODULO}")),
+    ("no PowerShell a aspa dentro do comentário não esconde a linha "
+     "seguinte", pedido_do_powershell(
+         f"echo ok # \"\nrm {INSTRUMENTO_DE_MODULO}\n# \"")),
+    ("a contrabarra no meio do programa não disfarça o rm",
+     pedido_de_shell(f"r\\m {INSTRUMENTO_DE_MODULO}")),
+    ("a contrabarra no meio do caminho não disfarça a cópia",
+     pedido_de_shell("rm .agents/mod/m\\od.py")),
+    ("no PowerShell a crase no meio do programa não disfarça o rm",
+     pedido_do_powershell(f"r`m {INSTRUMENTO_DE_MODULO}")),
+    ("o texto que o echo entrega ao sh pelo cano é comando",
+     pedido_de_shell(f"echo 'rm {INSTRUMENTO_DE_MODULO}' | sh")),
+    ("o texto que o printf entrega ao bash pelo cano é comando",
+     pedido_de_shell(f"printf '%s' 'rm {INSTRUMENTO_DE_MODULO}' | bash")),
+    ("a cadeia do <<< entrega o rm ao bash",
+     pedido_de_shell(f"bash <<< 'rm {INSTRUMENTO_DE_MODULO}'")),
+    ("pwsh -c embrulha o rm",
+     pedido_de_shell(f'pwsh -c "rm {INSTRUMENTO_DE_MODULO}"')),
+    ("powershell -Command embrulha o rm",
+     pedido_de_shell(
+         f'powershell -NoProfile -Command "rm {INSTRUMENTO_DE_MODULO}"')),
+    ("cmd /c embrulha o rm",
+     pedido_de_shell(f'cmd /c "rm {INSTRUMENTO_DE_MODULO}"')),
+    ("no PowerShell o Invoke-Expression embrulha o rm",
+     pedido_do_powershell(f'Invoke-Expression "rm {INSTRUMENTO_DE_MODULO}"')),
+    ("no PowerShell o iex embrulha o rm",
+     pedido_do_powershell(f"iex 'rm {INSTRUMENTO_DE_MODULO}'")),
+    ("no PowerShell o texto que chega ao iex pelo cano é comando",
+     pedido_do_powershell(f"'rm {INSTRUMENTO_DE_MODULO}' | iex")),
+    ("o documento dentro do bash -c é comando",
+     pedido_de_shell(
+         f"bash -c \"$(cat <<'EOF'\nrm {INSTRUMENTO_DE_MODULO}\nEOF\n)\"")),
+    ("o documento dentro do eval é comando",
+     pedido_de_shell(f"eval \"$(cat <<'EOF'\n"
+                     f"rm {INSTRUMENTO_DE_MODULO}\nEOF\n)\"")),
+    ("o documento do bash -c com a substituição aberta na linha de cima "
+     "é comando",
+     pedido_de_shell(f"bash -c \"$(\ncat <<'EOF'\n"
+                     f"rm {INSTRUMENTO_DE_MODULO}\nEOF\n)\"")),
+    ("o nome do shell entre aspas lê o documento e apaga a cópia",
+     pedido_de_shell(f"\"bash\" <<EOF\nrm {INSTRUMENTO_DE_MODULO}\nEOF")),
+    ("o documento entregue ao sh com posicional apaga a cópia",
+     pedido_de_shell(f"echo 'rm {INSTRUMENTO_DE_MODULO}' | sh -s -- x")),
+    ("o eval roda o texto que a substituição devolve",
+     pedido_de_shell(f"eval $(echo 'rm {INSTRUMENTO_DE_MODULO}')")),
+    ("o source lê o comando da substituição de processo",
+     pedido_de_shell(f"source <(echo 'rm {INSTRUMENTO_DE_MODULO}')")),
+    ("o |& entrega o texto ao bash como o cano",
+     pedido_de_shell(f"echo 'rm {INSTRUMENTO_DE_MODULO}' |& bash")),
+    ("no PowerShell o iex roda o texto que o parêntese devolve",
+     pedido_do_powershell(f"iex (echo 'rm {INSTRUMENTO_DE_MODULO}')")),
 ]
 
 SO_AVISA = [
@@ -994,7 +1527,7 @@ SO_AVISA = [
 ]
 
 DEIXA_PASSAR = [
-    ("Write na FONTE do espelho", pedido_de_escrita("Write", ESPELHO_NA_FONTE)),
+    ("Write na fonte do espelho", pedido_de_escrita("Write", ESPELHO_NA_FONTE)),
     ("Write no território do repositório, que a sincronização não reescreve",
      pedido_de_escrita("Write", TERRITORIO_DE_MODULO)),
     ("Write no cartão do módulo, que não vira cópia",
@@ -1005,11 +1538,11 @@ DEIXA_PASSAR = [
      pedido_de_leitura(ESPELHO_NA_COPIA)),
     ("cat da cópia de módulo pelo shell",
      pedido_de_shell(f"cat {INSTRUMENTO_DE_MODULO}")),
-    ("interpretador que só LÊ a cópia continua livre — regra 8, ler é livre",
+    ("interpretador que só lê a cópia continua livre — regra 8, ler é livre",
      pedido_de_shell(
          "python3 - <<'PY'\n"
          f"print(open('{INSTRUMENTO_DE_MODULO}').read())\nPY")),
-    ("interpretador que só LÊ a cópia continua livre",
+    ("interpretador que só lê a cópia continua livre",
      pedido_de_shell(
          "python3 - <<'PY'\n"
          f"print(open('{INSTRUMENTO_DE_MODULO}').read())\n"
@@ -1054,6 +1587,47 @@ DEIXA_PASSAR = [
          f"sed -i 's/w$/x/' {PAGINA_LIVRE} && grep x {ESPELHO_NA_COPIA}")),
     ("o colchete com a / dentro, num s que não escreve",
      pedido_de_shell(f"sed -i 's/[/]/x/g' {PAGINA_LIVRE}")),
+    ("a aspa dupla de verdade segura o ponto e vírgula",
+     pedido_de_shell(f'echo "x; rm {INSTRUMENTO_DE_MODULO}"')),
+    ("a contrabarra dentro da aspa simples é texto, e a aspa segura o "
+     "ponto e vírgula",
+     pedido_de_shell(f"echo 'a\\b; rm {INSTRUMENTO_DE_MODULO}'")),
+    ("fora das aspas a contrabarra torna o ponto e vírgula texto",
+     pedido_de_shell("echo x\\; y")),
+    ("a aspa simples dentro do $() segura o ponto e vírgula",
+     pedido_de_shell(f"echo \"$(echo 'a; rm {INSTRUMENTO_DE_MODULO}')\"")),
+    ("no PowerShell a crase escapa a aspa, e a aspa segue segurando o "
+     "ponto e vírgula", pedido_do_powershell(
+         f'echo "a`" ; rm {INSTRUMENTO_DE_MODULO} ; echo `"b"')),
+    ("no PowerShell a contrabarra não escapa, e a aspa abre o texto",
+     pedido_do_powershell(
+         f'echo \\" ; rm {INSTRUMENTO_DE_MODULO} ; echo \\"')),
+    ("no PowerShell a contrabarra na aspa simples é texto",
+     pedido_do_powershell(f"echo 'a\\b; rm {INSTRUMENTO_DE_MODULO}'")),
+    ("o documento que expande só com texto é dado",
+     pedido_de_shell(f"cat <<EOF\nrm {INSTRUMENTO_DE_MODULO}\nEOF")),
+    ("a cadeia do <<< é texto entre aspas",
+     pedido_de_shell(f"cat <<< 'x; rm {INSTRUMENTO_DE_MODULO}; y'")),
+    ("depois do documento que expande a aspa volta a segurar o ponto e "
+     "vírgula", pedido_de_shell(
+         f"cat <<EOF\nx\nEOF\necho 'x; rm {INSTRUMENTO_DE_MODULO}; y'")),
+    ("o grep que procura sh não roda o texto que chega pelo cano",
+     pedido_de_shell(f"echo 'rm {INSTRUMENTO_DE_MODULO}' | grep sh")),
+    ("o nome do shell dentro da aspa não faz do documento um comando",
+     pedido_de_shell(f"echo \"conserta o bash $(cat <<'EOF'\n"
+                     f"rm {INSTRUMENTO_DE_MODULO}\nEOF\n)\"")),
+    ("a mensagem do commit que vem do documento é dado",
+     pedido_de_shell(f"git commit -m \"$(cat <<'EOF'\n"
+                     f"rm {INSTRUMENTO_DE_MODULO}\nEOF\n)\"")),
+    ("o documento que o bash -c recebe como posicional é dado",
+     pedido_de_shell(f"bash -c 'echo \"$1\"' x \"$(cat <<'EOF'\n"
+                     f"rm {INSTRUMENTO_DE_MODULO}\nEOF\n)\"")),
+    ("o documento literal sem terminador é dado, não apaga a cópia",
+     pedido_de_shell(f"cat <<'EOF'\nrm {INSTRUMENTO_DE_MODULO}")),
+    ("o nome do shell como argumento do echo não apaga a cópia",
+     pedido_de_shell(f"echo pwsh 'rm {INSTRUMENTO_DE_MODULO}'")),
+    ("dois shells nus seguidos não entram em laço",
+     pedido_de_shell("bash; bash")),
 ]
 
 DESTE_REPOSITORIO_BARRA = [
@@ -1134,8 +1708,8 @@ def testar() -> int:
         de_outra_arvore = recusa_do_pedido(
             pedido_de_escrita("Edit", str(ao_lado / INSTRUMENTO_DE_MODULO)),
             raiz, onde)
-        caso("escrita em cópia gerada DENTRO de outra árvore de trabalho é "
-             "barrada — a raiz sai do ALVO quando ele cai fora da declarada, "
+        caso("escrita em cópia gerada dentro de outra árvore de trabalho é "
+             "barrada — a raiz sai do alvo quando ele cai fora da declarada, "
              "e antes disso a cerca calava em toda worktree",
              de_outra_arvore
              and de_outra_arvore[0] == INSTRUMENTO_DE_MODULO)
@@ -1157,14 +1731,14 @@ def testar() -> int:
                         + '")\np.write_text(t)\nPY')
         na_mesma_linha = ('python -c \'Path("' + INSTRUMENTO_DE_MODULO
                           + '").write_text(t)\'')
-        caso("script que apenas MENCIONA a cópia e escreve em outro arquivo "
-             "PASSA — antes a cerca colhia todo texto entre aspas que "
+        caso("script que apenas menciona a cópia e escreve em outro arquivo "
+             "passa — antes a cerca colhia todo texto entre aspas que "
              "parecesse caminho e recusava por menção",
              not recusa_do_pedido(pedido_de_shell(menciona), raiz, onde))
-        caso("script que escreve NA cópia por variável é barrado — o nome que "
+        caso("script que escreve na cópia por variável é barrado — o nome que "
              "guarda o caminho é seguido até a linha que escreve",
              recusa_do_pedido(pedido_de_shell(por_variavel), raiz, onde))
-        caso("script que escreve NA cópia na mesma linha é barrado",
+        caso("script que escreve na cópia na mesma linha é barrado",
              recusa_do_pedido(pedido_de_shell(na_mesma_linha), raiz, onde))
 
         espelho = recusa_do_pedido(

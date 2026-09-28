@@ -61,6 +61,11 @@ LOG_REGISTRO_GRAVADO = "  registrado: {} — {} arquivo(s) da camada"
 LOG_REGISTRO_EM_DIA = "  em dia:  {} — {} arquivo(s) da camada"
 LOG_A_CASA_NAO_SE_REGISTRA = ("  pulado:  esta é a casa da camada, e casa não "
                               "se registra como destino")
+LOG_CABECALHO_DO_MODULO_NA_CASA = ("Instalando módulo na casa da camada: {} — "
+                                   "camada {}\n")
+LOG_A_CASA_NAO_SE_MONTA = ("\n  pulado:  esta é a casa da camada, e casa não "
+                           "se monta como destino — o .claude/settings.json e "
+                           "as pastas vazias ficam como estão")
 
 
 LOG_REGRAS_EM_DIA = "Regras: {} em dia com a fonte."
@@ -84,6 +89,10 @@ ERRO_SINCRONIZAR_FORA_DE_CASA = (
     "ele regeraria esses arquivos a partir deste repositório.\n"
     "Para atualizar a camada instalada aqui, use, daqui, "
     + INSTALADOR_NO_CLONE + " {}.")
+ERRO_MONTAR_OU_ATUALIZAR_NA_CASA = (
+    "A casa da camada não é destino de instalação. "
+    "Para regenerar a camada aqui, use --sincronizar. "
+    "Parei sem escrever nada.")
 
 LOG_TOTAL_DE_PAGINAS = "\n{} páginas {} — camada {}."
 ACAO_QUE_VIAJAM = "viajam para quem instala"
@@ -392,6 +401,9 @@ CASO_SINCRONIZAR_SO_EM_CASA = ("--sincronizar para fora da casa do "
 CASO_SINCRONIZAR_EM_CASA_PASSA = "--sincronizar passa calado na casa dele"
 CASO_AUTORIZACAO_NASCE_NEGADA = ("toda autorização do molde nasce em false — "
                                  "omissão não é permissão, regra 9")
+CASO_PUBLICAR_NAO_TEM_CHAVE = ("o molde não traz a chave publicar: publicar é "
+                               "do dono, sempre, e chave que gancho nenhum lê "
+                               "seria instrução morta")
 CASO_MAIN_ENTRA_POR_INCORPORACAO = ("o molde declara a main como branch de "
                                     "incorporação, não de gravação")
 CASO_CONSELHO_EM_CASA = "em casa, a divergência manda sincronizar"
@@ -503,6 +515,21 @@ CASO_MODULO_SOLTO_NAO_TIRA_PAGINA = (
 CASO_A_CASA_NAO_SE_REGISTRA = (
     "a casa da camada não grava registro de instalação em si mesma: o "
     "registro é o que separa destino de casa")
+CASO_MODULO_NA_CASA_NAO_MONTA_A_CASA = (
+    "--modulo rodado na casa da camada instala o módulo pedido e não trata a "
+    "casa como destino: o .claude/settings.json fica igual e nenhum .gitkeep "
+    "nasce")
+CASO_MODULO_FORA_DA_CASA_SEGUE_MONTANDO = (
+    "--modulo rodado fora da casa segue montando o destino: o módulo, as "
+    "regras nativas no .claude/settings.json e os .gitkeep")
+CASO_MONTAR_NA_CASA_RECUSADO = (
+    "sem bandeira na casa sai com erro, pede --sincronizar e não muda settings")
+CASO_ATUALIZAR_NA_CASA_RECUSADO = (
+    "--atualizar na casa sai com erro, pede --sincronizar e não muda settings")
+CASO_MONTAR_FORA_DA_CASA_GRAVA = (
+    "sem bandeira fora da casa monta e grava settings")
+CASO_ATUALIZAR_FORA_DA_CASA_GRAVA = (
+    "--atualizar fora da casa atualiza e grava settings")
 CASO_VERSAO_E_O_COMMIT = (
     "--versao diz o commit da pasta do instalador; pasta sem git é recusada "
     "com o recado de clonar")
@@ -655,10 +682,11 @@ CAMINHOS_QUE_ACORDAM_A_REGRA_DE_CODIGO = (
     "**/*.sh", "**/*.sql")
 SECAO_DOS_PEDIDOS_DE_EXEMPLO = "\n## Pedidos de exemplo\n"
 FECHAMENTO_DO_FRONTMATTER = "\n---\n"
-GANCHOS_APOSENTADOS = (".claude/hooks/injetar-padrao-de-codigo.py",)
+GANCHOS_APOSENTADOS = (".claude/hooks/injetar-padrao-de-codigo.py",
+                       ".claude/hooks/avisar-motores-auxiliares.py")
 LOG_REGRA_POR_CAMINHO = "Regra por caminho gerada de {}: {}"
 LOG_GANCHO_APOSENTADO_REMOVIDO = ("  removido do settings.json: {} — aposentado, a "
-                                  "regra por caminho o substitui")
+                                  "camada não o usa mais")
 CARTAO_DO_MODULO = "LEIAME.md"
 
 CHAVE_DOS_GANCHOS = "hooks"
@@ -755,6 +783,7 @@ ARQUIVO_DO_DESPACHANTE_DE_CERCAS = ".claude/hooks/despachar-cercas.py"
 ARQUIVO_DO_COMANDO_DE_ABERTURA = ".claude/commands/bootstart.md"
 ARQUIVO_DO_COMANDO_DE_PARTIDA = ".claude/commands/partida.md"
 ARQUIVO_DO_GANCHO_DE_DOCUMENTO = ".claude/hooks/vetar-documento-rastreavel.py"
+ARQUIVO_DO_GANCHO_DA_RAIZ = ".claude/hooks/vetar-escrita-na-raiz.py"
 ARQUIVO_DOS_DOCUMENTOS_VERSIONADOS = ".claude/documentos-versionados.txt"
 ARQUIVO_DOS_TRECHOS_PERDOADOS = ".claude/trechos-que-a-varredura-perdoa.txt"
 ARQUIVO_DO_GANCHO_DE_RELATO = ".claude/hooks/cobrar-relato-da-sessao.py"
@@ -767,7 +796,6 @@ ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA = (
 ARQUIVO_DO_GANCHO_DE_CLONE_ATRASADO = (
     ".claude/hooks/avisar-clone-desatualizado.py")
 ARQUIVO_DO_GANCHO_DE_INDICE_FORA = ".claude/hooks/avisar-indice-fora.py"
-ARQUIVO_DO_GANCHO_DE_MOTORES = ".claude/hooks/avisar-motores-auxiliares.py"
 ARQUIVO_DO_GANCHO_DE_CD = ".claude/hooks/vetar-caminho-relativo-apos-cd.py"
 ARQUIVO_DO_GANCHO_DE_PESQUISA = (
     ".claude/hooks/vetar-escrita-em-sessao-de-pesquisa.py")
@@ -796,11 +824,11 @@ COMANDO_DO_VETO_DE_POLITICA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_POLITICA)
 COMANDO_DO_AVISO_DE_SESSAO_PARALELA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA)
 COMANDO_DO_AVISO_DE_CLONE_ATRASADO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_CLONE_ATRASADO)
 COMANDO_DO_AVISO_DE_INDICE_FORA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_INDICE_FORA)
-COMANDO_DO_AVISO_DE_MOTORES = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_MOTORES)
 COMANDO_DO_VETO_DE_PESQUISA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_PESQUISA)
 
 COMANDO_DO_DESPACHANTE_DE_CERCAS = comando_do_gancho(ARQUIVO_DO_DESPACHANTE_DE_CERCAS)
 COMANDO_DO_VETO_DE_DOCUMENTO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DOCUMENTO)
+COMANDO_DO_VETO_DA_RAIZ = comando_do_gancho(ARQUIVO_DO_GANCHO_DA_RAIZ)
 COMANDO_DO_VETO_DE_DESPEJO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DESPEJO)
 COMANDO_DO_VETO_DE_ENXAME = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_ENXAME)
 
@@ -931,9 +959,6 @@ GANCHO_DA_COBRANCA_DO_CLONE_ATRASADO = GanchoDeclarado(
 GANCHO_DO_AVISO_DE_INDICE_FORA = GanchoDeclarado(
     "aviso de índice fora do ar", EVENTO_DE_ABERTURA, SEM_MATCHER,
     COMANDO_DO_AVISO_DE_INDICE_FORA, ARQUIVO_DO_GANCHO_DE_INDICE_FORA)
-GANCHO_DO_AVISO_DE_MOTORES = GanchoDeclarado(
-    "aviso dos motores auxiliares desta máquina", EVENTO_DE_ABERTURA,
-    SEM_MATCHER, COMANDO_DO_AVISO_DE_MOTORES, ARQUIVO_DO_GANCHO_DE_MOTORES)
 GANCHO_DO_VETO_DE_PESQUISA = GanchoDeclarado(
     "veto de escrita na sessão de pesquisa", EVENTO_ANTES_DA_FERRAMENTA,
     MATCHER_DA_ESCRITA_E_DO_SHELL, COMANDO_DO_VETO_DE_PESQUISA,
@@ -946,6 +971,10 @@ GANCHO_DO_VETO_DE_DOCUMENTO = GanchoDeclarado(
     "veto de documento onde o git rastreia", EVENTO_ANTES_DA_FERRAMENTA,
     MATCHER_DA_ESCRITA, COMANDO_DO_VETO_DE_DOCUMENTO,
     ARQUIVO_DO_GANCHO_DE_DOCUMENTO)
+GANCHO_DO_VETO_DA_RAIZ = GanchoDeclarado(
+    "veto de escrita na raiz que só espelha a integração",
+    EVENTO_ANTES_DA_FERRAMENTA, MATCHER_DA_ESCRITA, COMANDO_DO_VETO_DA_RAIZ,
+    ARQUIVO_DO_GANCHO_DA_RAIZ)
 GANCHO_DO_VETO_DE_DESPEJO = GanchoDeclarado(
     "veto de despejo de ambiente", EVENTO_ANTES_DA_FERRAMENTA,
     MATCHER_DO_SHELL, COMANDO_DO_VETO_DE_DESPEJO,
@@ -1115,13 +1144,16 @@ MOLDE_DA_CONFIGURACAO = {
     "padrao_de_nome": "${PADRAO_DO_NOME_DA_ISSUE}",
     "enderecos_do_onde_esta": ["conhecimento/mapa-do-repositorio.md",
                                "conhecimento/projetos/indice.json"],
-    "autorizacoes": {"commit": False, "push": False, "publicar": False},
+    "autorizacoes": {"commit": False, "push": False},
     "branches_por_incorporacao": ["main"],
     "teto_da_largada_em_bytes": None,
     "regras": [
-        "As três autorizações nascem em false, como manda a regra 9: omissão "
-        "não é permissão. Ligue à mão a que este repositório quiser dar à "
-        "automação — enquanto estiver em false, o gancho recusa e diz por quê.",
+        "As autorizações `commit` e `push` nascem em false, como manda a "
+        "regra 9: omissão não é permissão. Ligue à mão a que este repositório "
+        "quiser dar à automação — enquanto estiver em false, o gancho recusa "
+        "e diz por quê. Publicar não tem chave: é do dono, sempre. O gancho "
+        "`vetar-branch-protegida` recusa as formas comuns; quem trava é a "
+        "regra do servidor, onde o dono a ligou.",
         "`branches_por_incorporacao` são as branches em que NÃO se grava "
         "direto, nem com autorização ligada: a entrada nelas é o pedido de "
         "incorporação. Isto é diferente de `.claude/branches-protegidas.txt`, "
@@ -1288,7 +1320,7 @@ ARQUIVOS = {
 
 ESQUELETO = {
     'projetos/LEIAME.md': '# projetos\n\nOs repositórios de código, um por pasta, cada um com o seu próprio git.\nPor isso esta pasta fica fora do git da raiz.\n',
-    '.credenciais/LEIAME.txt': 'Senhas, chaves e tokens.\n\nEsta pasta fica fora de todo git, inclusive de repositorio privado.\nNenhum agente abre arquivo daqui.\n\nTOKENS DE MCP\n\nEscreva NOME=valor no arquivo mcp.env, ao lado deste, e rode:\n\n    python .credenciais/publicar-mcp-env.py\n\nNo .mcp.json fica so ${NOME} - segredo nunca no arquivo. Nenhum valor e\nexibido pelo publicador: so os nomes.\n\nPOR QUE O PUBLICADOR FAZ DUAS COISAS NO LINUX\n\nSao dois canais, e a diferenca foi medida: o aplicativo aberto pelo icone\nnao le o perfil do shell, entao variavel publicada so para o terminal nao\nchega nele - e o servidor MCP morre em silencio, com o mcp.env perfeito.\n\n  - uma linha em ~/.profile e ~/.bashrc carrega o mcp.env na abertura do\n    shell. Terminal novo enxerga na hora, e o valor continua morando aqui.\n  - um arquivo em ~/.config/environment.d/ e o canal que a sessao grafica\n    le. O icone so enxerga depois de deslogar e logar.\n\nO segundo canal e COPIA do valor, e por isso: trocou token, rode o\npublicador de novo. No Windows nao ha essa divisao - cada NOME=valor vira\nvariavel do usuario, e uma sessao ja aberta so enxerga depois de fechar e\nabrir o terminal.\n\nQUANDO FALTA ALGUMA COISA\n\nO que este workspace espera do ambiente se declara pelo NOME em\nnucleo/ambiente.json, e o gancho verificar-ambiente acusa a falta na\nabertura da sessao. Nome de variavel nao e segredo; valor e.\n',
+    '.credenciais/LEIAME.txt': 'Senhas, chaves e tokens.\n\nEsta pasta fica fora de todo git, inclusive de repositorio privado.\nNenhum agente abre arquivo daqui para ler na tela.\n\nA EXCECAO: O FECHAMENTO DE ISSUE\n\nO ritual que fecha uma issue le e escreve aqui, sempre por roteiro: o valor\nentra pelo stdin e sai direto para o arquivo, nunca pela tela, pelo echo,\npelo transcript, pelo git, pela issue ou pelo historico. O que se diz em\nvoz alta e o nome, nunca o valor.\n\n  acessos/        o valor de cada credencial, um arquivo por acesso\n  INVENTARIO.md   uma linha por conta, conta de teste ou estado salvo de\n                  navegador: o papel, o ambiente e o arquivo de acessos/\n                  onde o valor mora. Nunca o valor.\n\nO historico da issue guarda so o ponteiro para a linha do INVENTARIO.md.\n\nTOKENS DE MCP\n\nEscreva NOME=valor no arquivo mcp.env, ao lado deste, e rode:\n\n    python .credenciais/publicar-mcp-env.py\n\nNo .mcp.json fica so ${NOME} - segredo nunca no arquivo. Nenhum valor e\nexibido pelo publicador: so os nomes.\n\nPOR QUE O PUBLICADOR FAZ DUAS COISAS NO LINUX\n\nSao dois canais, e a diferenca foi medida: o aplicativo aberto pelo icone\nnao le o perfil do shell, entao variavel publicada so para o terminal nao\nchega nele - e o servidor MCP morre em silencio, com o mcp.env perfeito.\n\n  - uma linha em ~/.profile e ~/.bashrc carrega o mcp.env na abertura do\n    shell. Terminal novo enxerga na hora, e o valor continua morando aqui.\n  - um arquivo em ~/.config/environment.d/ e o canal que a sessao grafica\n    le. O icone so enxerga depois de deslogar e logar.\n\nO segundo canal e COPIA do valor, e por isso: trocou token, rode o\npublicador de novo. No Windows nao ha essa divisao - cada NOME=valor vira\nvariavel do usuario, e uma sessao ja aberta so enxerga depois de fechar e\nabrir o terminal.\n\nQUANDO FALTA ALGUMA COISA\n\nO que este workspace espera do ambiente se declara pelo NOME em\nnucleo/ambiente.json, e o gancho verificar-ambiente acusa a falta na\nabertura da sessao. Nome de variavel nao e segredo; valor e.\n',
     '.credenciais/publicar-mcp-env.py': 'import os\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nENVFILE = Path(__file__).with_name("mcp.env")\nSEM_COFRE = "mcp.env não existe ao lado deste script."\nFALHA_AO_PUBLICAR = "FALHA ao publicar {}: {}"\nMARCA_QUE_TORNA_A_LINHA_IDEMPOTENTE = (\n    "# carrega os nomes do mcp.env no shell (publicar-mcp-env.py)")\nLINHA_QUE_CALA_SE_O_COFRE_SUMIR = (\n    \'[ -f "%s" ] && { set -a; . "%s"; set +a; }  %s\\n\')\nPERFIS_DO_SHELL = (".profile", ".bashrc")\nPASTA_DO_CANAL_DA_SESSAO_GRAFICA = (".config", "environment.d")\nARQUIVO_DO_CANAL_DA_SESSAO_GRAFICA = "90-mcp.conf"\nSO_O_DONO_LE = 0o600\nAVISO_DE_SESSAO_ABERTA = ("Sessão aberta não enxerga variável nova: feche e "\n                          "abra o terminal ou o VS Code.")\nAVISO_DOS_DOIS_CANAIS = ("Terminal novo já os enxerga; o ícone (sessão "\n                         "gráfica), só depois de deslogar e logar.")\n\nif not ENVFILE.exists():\n    sys.exit(SEM_COFRE)\n\nnomes = []\nfor linha in ENVFILE.read_text(encoding="utf-8").splitlines():\n    if not linha or linha.startswith("#") or "=" not in linha:\n        continue\n    nome, _, valor = linha.partition("=")\n    nomes.append((nome.strip(), valor))\n\nif os.name == "nt":\n    for nome, valor in nomes:\n        publicou = subprocess.run(["setx", nome, valor],\n                                  capture_output=True, text=True, encoding="utf-8", errors="replace")\n        if publicou.returncode != 0:\n            sys.exit(FALHA_AO_PUBLICAR.format(\n                nome, publicou.stderr.strip()[:100]))\n    print("Publicadas:", ", ".join(n for n, _ in nomes))\n    print(AVISO_DE_SESSAO_ABERTA)\nelse:\n    carrega = LINHA_QUE_CALA_SE_O_COFRE_SUMIR % (\n        ENVFILE, ENVFILE, MARCA_QUE_TORNA_A_LINHA_IDEMPOTENTE)\n    for nome_do_perfil in PERFIS_DO_SHELL:\n        perfil = Path.home() / nome_do_perfil\n        texto = perfil.read_text(encoding="utf-8") if perfil.exists() else ""\n        if MARCA_QUE_TORNA_A_LINHA_IDEMPOTENTE in texto:\n            print(f"já instalado: {perfil}")\n            continue\n        with perfil.open("a", encoding="utf-8") as arquivo:\n            if texto and not texto.endswith("\\n"):\n                arquivo.write("\\n")\n            arquivo.write(carrega)\n        print(f"instalado:   {perfil}")\n\n    pasta = Path.home().joinpath(*PASTA_DO_CANAL_DA_SESSAO_GRAFICA)\n    pasta.mkdir(parents=True, exist_ok=True)\n    canal_da_sessao_grafica = pasta / ARQUIVO_DO_CANAL_DA_SESSAO_GRAFICA\n    canal_da_sessao_grafica.write_text(\n        "".join(f"{n}={v}\\n" for n, v in nomes), encoding="utf-8")\n    canal_da_sessao_grafica.chmod(SO_O_DONO_LE)\n    print(f"drop-in:     {canal_da_sessao_grafica}")\n    print("Nomes no mcp.env:", ", ".join(n for n, _ in nomes))\n    print(AVISO_DOS_DOIS_CANAIS)\n',
     'recursos/LEIAME.md': '# recursos\n\nMaterial de terceiro: template comprado, kit de design, manual, base de\nreferência. Não é seu código e não entra no seu git — costuma ser pesado\ne ter licença própria. O agente lê daqui normalmente.\n',
 }
@@ -1310,7 +1342,6 @@ FONTES = (PAGINA_REGRAS,
           ".agents/prompts/partida.md",
           "conhecimento/verificacao-pos-atualizacao.md",
           "conhecimento/organizar-conhecimento-e-projetos.md",
-          "conhecimento/motores-auxiliares.md",
           "conhecimento/windows-e-git-bash.md",
           ".agents/evidencia/evidencia.py",
           ".agents/evidencia/recibo.schema.json",
@@ -1320,13 +1351,12 @@ FONTES = (PAGINA_REGRAS,
           ".agents/gh/gh.py",
           ".agents/caixa/caixa.py",
           ".agents/entrega/entrega.py",
-          ".agents/gasto/gasto.py",
           ".agents/gatilho/gatilho.py",
-          ".agents/motores/motores.py",
           ".agents/travessia/travessia.py",
           ".agents/travessia/ponte.py",
           ARQUIVO_DO_DESPACHANTE_DE_CERCAS,
           ARQUIVO_DO_GANCHO_DE_DOCUMENTO,
+          ARQUIVO_DO_GANCHO_DA_RAIZ,
           ARQUIVO_DO_GANCHO_DE_BRANCH,
           ARQUIVO_DO_GANCHO_DE_CONHECIMENTO,
           ARQUIVO_DO_GANCHO_DE_AUTOMACAO,
@@ -1349,7 +1379,6 @@ FONTES = (PAGINA_REGRAS,
           ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA,
           ARQUIVO_DO_GANCHO_DE_CLONE_ATRASADO,
           ARQUIVO_DO_GANCHO_DE_INDICE_FORA,
-          ARQUIVO_DO_GANCHO_DE_MOTORES,
           ARQUIVO_DO_GANCHO_DE_PESQUISA,
           ARQUIVO_DO_GANCHO_DE_DESPEJO,
           ARQUIVO_DO_GANCHO_DE_ENXAME,
@@ -1466,7 +1495,7 @@ SECOES_INSTRUCOES = [
         "o que existe; a wiki deles, `conhecimento/projetos/`, é perfil, não "
         "prova.",
         "Rode `python montar.py --sincronizar` depois de editar página, "
-        "skill, módulo ou `nucleo/`.",
+        "skill, módulo ou `nucleo/`, e prove com `--verificar` (regra 15).",
         "Onde as issues nascem: `nucleo/configuracao.json`, campo "
         "`repositorio_das_issues`, que aponta o arquivo local com o endereço. "
         "Toda issue nasce lá, mesmo quando o código mora em outro repositório "
@@ -1486,6 +1515,8 @@ SECOES_INSTRUCOES = [
         "dúvida, pergunte.",
         "Não altere o que não foi pedido.",
         "Escreva em pt-BR: conclusão primeiro, frases curtas.",
+        "Estas ordens orientam o agente e não o impedem: a trava que vale "
+        "para qualquer agente mora no servidor, e configurá-la é do dono.",
     ]),
 ]
 
@@ -1633,7 +1664,7 @@ def arquivos_de_um_modulo(pasta: Path, rastreados=None) -> dict:
     return arquivos
 
 
-MODULOS_QUE_JA_VEM_LIGADOS = ("encadeador", "indice", "auditor")
+MODULOS_QUE_JA_VEM_LIGADOS = ("encadeador", "indice", "auditor", "historico")
 MODULOS_QUE_NAO_VIAJAM = ()
 MARCA_DE_MODULO_PRIVADO = "MODULO_PRIVADO"
 
@@ -1985,6 +2016,11 @@ def recusar_sincronizar_fora_de_casa(raiz: Path) -> None:
         sys.exit(ERRO_SINCRONIZAR_FORA_DE_CASA.format(
             BANDEIRA_SINCRONIZAR, raiz, casa_do_instalador(),
             BANDEIRA_ATUALIZAR))
+
+
+def recusar_montar_ou_atualizar_na_casa(raiz: Path) -> None:
+    if e_a_casa_do_desenvolvimento(raiz):
+        sys.exit(ERRO_MONTAR_OU_ATUALIZAR_NA_CASA)
 
 
 def e_instrucao_do_dono(pagina: Path) -> bool:
@@ -3245,6 +3281,18 @@ def montar_modulos(raiz: Path, sobrescrever: bool) -> None:
         instalar_modulo(raiz, nome, sobrescrever)
 
 
+def instalar_modulos_na_casa(raiz: Path) -> int:
+    print(LOG_CABECALHO_DO_MODULO_NA_CASA.format(raiz, marco_da_camada()))
+    for nome in dict.fromkeys(modulos_pedidos()):
+        print(LOG_MODULO_INSTALADO_AGORA.format(nome))
+        instalar_modulo(raiz, nome, sobrescrever=False)
+    print(LOG_SKILLS_ESPELHADAS.format(ORIGEM_SKILLS, ACAO_ESPELHADAS_PARA,
+                                       COPIA_SKILLS))
+    espelhar_e_relatar(raiz)
+    print(LOG_A_CASA_NAO_SE_MONTA)
+    return 0
+
+
 def estado_do_modulo(raiz: Path, arquivos: dict) -> str:
     presentes = sum(1 for caminho in arquivos if (raiz / caminho).exists())
     if presentes == 0:
@@ -3315,7 +3363,6 @@ def garantir_ajustes(raiz: Path, numero: int) -> None:
     garantir_configuracao_do_repositorio(raiz)
     garantir_gancho_declarado(raiz, GANCHO_DO_DESPACHANTE_DE_CERCAS)
     garantir_gancho_declarado(raiz, GANCHO_DO_AVISO_DE_INDICE_FORA)
-    garantir_gancho_declarado(raiz, GANCHO_DO_AVISO_DE_MOTORES)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_DESTINO)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_RELATO)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_APRESENTACAO)
@@ -3826,6 +3873,105 @@ def na_casa_de_mentira(casa: Path, chamada, gravacao=None,
         globals().update(de_verdade)
 
 
+MODULO_PEDIDO_NO_TESTE_DA_CASA = "observabilidade"
+ARQUIVO_DO_MODULO_PEDIDO_NO_TESTE = ".agents/observabilidade/emissor.py"
+SETTINGS_DA_CASA_NO_TESTE = ('{\n  "permissions": {\n    "allow": [],\n'
+                             '    "deny": []\n  }\n}\n')
+
+
+def rodar_o_modulo_pelo_main(casa: Path, onde: Path, nome: str) -> None:
+    argumentos_de_verdade, pasta_de_verdade = sys.argv, Path.cwd()
+    sys.argv = [Path(__file__).name, BANDEIRA_MODULO, nome]
+    os.chdir(onde)
+    try:
+        na_casa_de_mentira(casa, main)
+    finally:
+        os.chdir(pasta_de_verdade)
+        sys.argv = argumentos_de_verdade
+
+
+def rodar_pelo_main_no_teste(casa: Path, onde: Path,
+                            argumentos: list) -> tuple:
+    argumentos_de_verdade, pasta_de_verdade = sys.argv, Path.cwd()
+    sys.argv = [Path(__file__).name, *argumentos]
+    os.chdir(onde)
+    try:
+        try:
+            return na_casa_de_mentira(casa, main), ""
+        except SystemExit as saida:
+            return saida.code, str(saida.code)
+    finally:
+        os.chdir(pasta_de_verdade)
+        sys.argv = argumentos_de_verdade
+
+
+def casos_da_montagem_e_atualizacao_na_casa(caso) -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as pasta:
+        casa, alvo = Path(pasta) / "casa", Path(pasta) / "alvo"
+        copiar_a_camada_para(casa)
+        gravar(casa / ARQUIVO_SETTINGS, SETTINGS_DA_CASA_NO_TESTE)
+        rodar_git_calado(casa, "add", "-A")
+        alvo.mkdir()
+        rodar_git_calado(alvo, "init", "-q", ".")
+
+        for argumentos, rotulo in (([], CASO_MONTAR_NA_CASA_RECUSADO),
+                                   ([BANDEIRA_ATUALIZAR],
+                                    CASO_ATUALIZAR_NA_CASA_RECUSADO)):
+            codigo, mensagem = rodar_pelo_main_no_teste(casa, casa,
+                                                        argumentos)
+            caso(rotulo, codigo != 0 and BANDEIRA_SINCRONIZAR in mensagem
+                 and (casa / ARQUIVO_SETTINGS).read_text(encoding="utf-8")
+                 == SETTINGS_DA_CASA_NO_TESTE)
+
+        codigo, _ = rodar_pelo_main_no_teste(casa, alvo, [])
+        caso(CASO_MONTAR_FORA_DA_CASA_GRAVA,
+             codigo == 0 and (alvo / ARQUIVO_SETTINGS).is_file())
+        gravar(alvo / ARQUIVO_SETTINGS, SETTINGS_DA_CASA_NO_TESTE)
+        codigo, _ = rodar_pelo_main_no_teste(casa, alvo,
+                                            [BANDEIRA_ATUALIZAR])
+        caso(CASO_ATUALIZAR_FORA_DA_CASA_GRAVA,
+             codigo == 0 and (alvo / ARQUIVO_SETTINGS).read_text(
+                 encoding="utf-8") != SETTINGS_DA_CASA_NO_TESTE)
+
+
+def gitkeeps_de_destino_presentes(raiz: Path) -> list:
+    return [caminho for caminho in ARQUIVOS
+            if caminho.endswith(ARQUIVO_DE_PASTA_VAZIA)
+            and (raiz / caminho).exists()]
+
+
+def casos_do_modulo_na_casa(caso) -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as pasta:
+        casa = Path(pasta).resolve() / "casa"
+        alvo = Path(pasta).resolve() / "alvo"
+        copiar_a_camada_para(casa)
+        gravar(casa / ARQUIVO_SETTINGS, SETTINGS_DA_CASA_NO_TESTE)
+        rodar_git_calado(casa, "add", "-A")
+        alvo.mkdir()
+        rodar_git_calado(alvo, "init", "-q", ".")
+
+        rodar_o_modulo_pelo_main(casa, casa, MODULO_PEDIDO_NO_TESTE_DA_CASA)
+        caso(CASO_MODULO_NA_CASA_NAO_MONTA_A_CASA,
+             (casa / ARQUIVO_DO_MODULO_PEDIDO_NO_TESTE).is_file()
+             and (casa / ARQUIVO_SETTINGS).read_text(encoding="utf-8")
+             == SETTINGS_DA_CASA_NO_TESTE
+             and gitkeeps_de_destino_presentes(casa) == [])
+
+        rodar_o_modulo_pelo_main(casa, alvo, MODULO_PEDIDO_NO_TESTE_DA_CASA)
+        negadas = ler_json_ou_vazio(alvo / ARQUIVO_SETTINGS).get(
+            CHAVE_DAS_PERMISSOES, {}).get(CHAVE_DO_DENY, [])
+        caso(CASO_MODULO_FORA_DA_CASA_SEGUE_MONTANDO,
+             (alvo / ARQUIVO_DO_MODULO_PEDIDO_NO_TESTE).is_file()
+             and f"Edit(/{COPIA_SKILLS}/**)" in negadas
+             and gitkeeps_de_destino_presentes(alvo) == [
+                 caminho for caminho in ARQUIVOS
+                 if caminho.endswith(ARQUIVO_DE_PASTA_VAZIA)])
+
+
 def arquivos_da_camada(paginas: dict, modulos: dict) -> set:
     return set(paginas) | {rotulo for arquivos in modulos.values()
                            for rotulo in arquivos}
@@ -4142,6 +4288,8 @@ def testar() -> int:
     casos_do_espelho_sem_barra(caso)
     casos_do_orfao_no_espelho_de_skills(caso)
     casos_do_modulo_privado(caso)
+    casos_do_modulo_na_casa(caso)
+    casos_da_montagem_e_atualizacao_na_casa(caso)
     casos_do_gancho_em_qualquer_concha(caso)
     casos_da_ponte_do_devin_com_ensaio(caso)
     caso(CASO_MOLDE_POR_PREENCHER,
@@ -4305,6 +4453,8 @@ def testar() -> int:
 
     caso(CASO_AUTORIZACAO_NASCE_NEGADA,
          set(MOLDE_DA_CONFIGURACAO["autorizacoes"].values()) == {False})
+    caso(CASO_PUBLICAR_NAO_TEM_CHAVE,
+         "publicar" not in MOLDE_DA_CONFIGURACAO["autorizacoes"])
     caso(CASO_MAIN_ENTRA_POR_INCORPORACAO,
          MOLDE_DA_CONFIGURACAO["branches_por_incorporacao"] == ["main"])
     with tempfile.TemporaryDirectory() as pasta:
@@ -4981,6 +5131,7 @@ def main() -> int:
         return sincronizar(raiz)
 
     if pediram(BANDEIRA_ATUALIZAR):
+        recusar_montar_ou_atualizar_na_casa(raiz)
         return atualizar(raiz)
 
     if pediram(BANDEIRA_CODEX):
@@ -4994,6 +5145,10 @@ def main() -> int:
             ARQUIVO_DOS_GANCHOS_DA_OUTRA, BANDEIRA_DEVIN, BANDEIRA_ESCREVER))
         return 0
 
+    if modulos_pedidos() and e_a_casa_do_desenvolvimento(raiz):
+        return instalar_modulos_na_casa(raiz)
+
+    recusar_montar_ou_atualizar_na_casa(raiz)
     return montar(raiz)
 
 

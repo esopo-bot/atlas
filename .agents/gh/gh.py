@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -6,7 +8,9 @@ import sys
 BANDEIRA_DE_TESTE = "--testar"
 USO = ("roda o `gh` na conta declarada, e devolve o berro legível quando ele "
        "recusa. Importado por quem fala com issue, etiqueta ou quadro — o "
-       "token sai do `gh auth token --user`, e nunca de variável no disco")
+       "token sai do `gh auth token --user`, e nunca de variável no disco. "
+       "Também escreve um bloco marcado no corpo da issue (lê, grava só o "
+       "bloco, relê) e o comentário que marca o dono")
 
 GH_PADRAO = "gh"
 VARIAVEL_DO_GH = "ATLAS_GH"
@@ -15,6 +19,36 @@ ASPAS = "\"'"
 TEMPO_DO_GH = 60
 LIMITE_DO_ERRO = 300
 NAO_RODOU = "o gh não rodou"
+
+MARCA_QUE_ABRE = "<!-- {} -->"
+MARCA_QUE_FECHA = "<!-- /{} -->"
+TETO_DO_BLOCO = 12_000
+AVISO_DO_TETO = "\n\n_(cortado no teto de {} caracteres do bloco)_"
+TENTATIVAS_DO_BLOCO = 3
+LIMITE_DO_CORPO_EM_BYTES = 262_144
+CAMPO_DAS_ISSUES = "issues"
+CAMPO_DE_QUEM_SE_MARCA = "quem_se_marca"
+LOGIN_QUE_SERVE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+VALOR_POR_PREENCHER = "${"
+FALHA_AO_LER_O_CORPO = "não li o corpo da issue {issue}: {motivo}"
+FALHA_AO_GRAVAR_O_CORPO = "não gravei o corpo da issue {issue}: {motivo}"
+FALHA_AO_COMENTAR = "não consegui comentar na issue {issue}: {motivo}"
+BLOCO_NAO_FICOU = (
+    "gravei o bloco `{nome}` no corpo da issue {issue} e reli {vezes} "
+    "vez(es), e ele NÃO está lá como escrevi. Outra escrita no mesmo corpo é "
+    "a explicação mais provável: quem grava por último vence. Leia o corpo e "
+    "rode de novo")
+BLOCO_REGRAVADO = (
+    "a releitura achou o bloco `{nome}` fora do corpo da issue {issue} depois "
+    "de gravado — outra escrita no mesmo corpo — e eu o regravei {vezes} "
+    "vez(es) a partir do corpo novo")
+CORPO_CHEIO = (
+    "não gravei: com o bloco `{nome}`, o corpo da issue {issue} passaria de "
+    "{limite} bytes, o teto do rastreador. Pode o corpo antes")
+AVISO_SEM_QUEM_SE_MARCA = (
+    "o comentário saiu sem marcar ninguém: `issues.quem_se_marca` não está "
+    "preenchido em nucleo/executor.json, e sem a marca o dono só o vê se "
+    "abrir a issue")
 
 
 def _sem_as_aspas_que_envolvem(token: str) -> str:
@@ -71,21 +105,144 @@ def berro(feito) -> str:
             or str(feito.returncode))[:LIMITE_DO_ERRO]
 
 
-FALSO = """import os
+def marcas_do_bloco(nome: str) -> tuple:
+    return MARCA_QUE_ABRE.format(nome), MARCA_QUE_FECHA.format(nome)
+
+
+def partes_do_bloco(corpo: str, abre: str, fecha: str) -> tuple:
+    inicio = corpo.find(abre)
+    fim = corpo.find(fecha)
+    if inicio < 0 or fim < 0 or fim < inicio:
+        return ()
+    return (corpo[:inicio + len(abre)], corpo[inicio + len(abre):fim],
+            corpo[fim:])
+
+
+def no_teto(texto: str) -> str:
+    limpo = (texto or "").strip()
+    if len(limpo) <= TETO_DO_BLOCO:
+        return limpo
+    aviso = AVISO_DO_TETO.format(TETO_DO_BLOCO)
+    return limpo[:TETO_DO_BLOCO - len(aviso)].rstrip() + aviso
+
+
+def texto_do_bloco(corpo: str, nome: str):
+    partes = partes_do_bloco(corpo or "", *marcas_do_bloco(nome))
+    return partes[1].strip() if partes else None
+
+
+def corpo_com_o_bloco(corpo: str, nome: str, texto: str) -> str:
+    abre, fecha = marcas_do_bloco(nome)
+    miolo = "\n" + no_teto(texto) + "\n"
+    partes = partes_do_bloco(corpo or "", abre, fecha)
+    if partes:
+        return partes[0] + miolo + partes[2]
+    return (corpo or "").rstrip("\n") + "\n\n" + abre + miolo + fecha + "\n"
+
+
+def ler_o_corpo(conta: str, repositorio: str, issue) -> tuple:
+    feito = na_conta(conta, ["issue", "view", str(issue), "--repo",
+                             repositorio, "--json", "body"])
+    if feito is None or feito.returncode != 0:
+        return None, FALHA_AO_LER_O_CORPO.format(issue=issue,
+                                                 motivo=berro(feito))
+    try:
+        corpo = json.loads(feito.stdout or "{}").get("body")
+    except (ValueError, AttributeError) as falha:
+        return None, FALHA_AO_LER_O_CORPO.format(
+            issue=issue, motivo=f"{type(falha).__name__}: {falha}")
+    if not isinstance(corpo, str):
+        return None, FALHA_AO_LER_O_CORPO.format(
+            issue=issue, motivo="o rastreador não devolveu o corpo")
+    return corpo.replace("\r", ""), ""
+
+
+def gravar_o_bloco(conta: str, repositorio: str, issue, nome: str,
+                   texto: str) -> tuple:
+    esperado = no_teto(texto)
+    gravacoes = 0
+    while True:
+        atual, erro = ler_o_corpo(conta, repositorio, issue)
+        if erro:
+            return False, erro
+        if texto_do_bloco(atual, nome) == esperado:
+            return True, (BLOCO_REGRAVADO.format(nome=nome, issue=issue,
+                                                 vezes=gravacoes - 1)
+                          if gravacoes > 1 else "")
+        if gravacoes >= TENTATIVAS_DO_BLOCO:
+            return False, BLOCO_NAO_FICOU.format(nome=nome, issue=issue,
+                                                 vezes=gravacoes)
+        proposto = corpo_com_o_bloco(atual, nome, esperado)
+        if len(proposto.encode("utf-8")) > LIMITE_DO_CORPO_EM_BYTES:
+            return False, CORPO_CHEIO.format(nome=nome, issue=issue,
+                                             limite=LIMITE_DO_CORPO_EM_BYTES)
+        feito = na_conta(conta, ["issue", "edit", str(issue), "--repo",
+                                 repositorio, "--body-file", "-"], proposto)
+        if feito is None or feito.returncode != 0:
+            return False, FALHA_AO_GRAVAR_O_CORPO.format(issue=issue,
+                                                         motivo=berro(feito))
+        gravacoes += 1
+
+
+def quem_se_marca(configuracao: dict) -> str:
+    issues = (configuracao or {}).get(CAMPO_DAS_ISSUES)
+    valor = issues.get(CAMPO_DE_QUEM_SE_MARCA) if isinstance(issues, dict) \
+        else None
+    if not isinstance(valor, str):
+        return ""
+    valor = valor.strip().lstrip("@")
+    if VALOR_POR_PREENCHER in valor or not LOGIN_QUE_SERVE.match(valor):
+        return ""
+    return valor
+
+
+def texto_que_marca(texto: str, login: str) -> tuple:
+    if not login:
+        return texto, AVISO_SEM_QUEM_SE_MARCA
+    return f"@{login} {texto}", ""
+
+
+def comentar_para_o_dono(conta: str, repositorio: str, issue, texto: str,
+                         login: str) -> tuple:
+    marcado, aviso = texto_que_marca(texto, login)
+    feito = na_conta(conta, ["issue", "comment", str(issue), "--repo",
+                             repositorio, "--body-file", "-"], marcado)
+    if feito is None or feito.returncode != 0:
+        return False, FALHA_AO_COMENTAR.format(issue=issue,
+                                               motivo=berro(feito)), aviso
+    return True, "", aviso
+
+
+FALSO = """import json
+import os
 import pathlib
 import sys
 
 CAIXA = pathlib.Path(os.environ["GH_TESTE_CAIXA"])
+CORPO = CAIXA / "corpo.md"
+OUTRO = CAIXA / "outro-escritor.txt"
 argv = sys.argv[1:]
 (CAIXA / "chamadas.txt").open("a").write(
     " ".join(argv) + chr(9) + os.environ.get("GH_TOKEN", "sem-token") + chr(10))
+recebido = b""
 if "--body-file" in argv:
-    (CAIXA / "corpo-recebido.bin").write_bytes(sys.stdin.buffer.read())
+    recebido = sys.stdin.buffer.read()
+    (CAIXA / "corpo-recebido.bin").write_bytes(recebido)
 if argv[:2] == ["auth", "token"]:
     print("token-de-" + argv[-1])
 elif (CAIXA / "recusa.txt").exists():
     sys.stderr.write("nao vai\\n")
     sys.exit(2)
+elif argv[:2] == ["issue", "view"]:
+    sys.stdout.reconfigure(encoding="utf-8")
+    print(json.dumps({"body": CORPO.read_text(encoding="utf-8")
+                      if CORPO.exists() else ""}))
+elif argv[:2] == ["issue", "edit"] and recebido:
+    CORPO.write_bytes(recebido)
+    vezes = int(OUTRO.read_text(encoding="utf-8")) if OUTRO.exists() else 0
+    if vezes > 0:
+        CORPO.write_bytes((CAIXA / "corpo-do-outro.md").read_bytes())
+        OUTRO.write_text(str(vezes - 1), encoding="utf-8")
 sys.exit(0)
 """
 
@@ -152,6 +309,86 @@ def testar() -> int:
              feito is not None and "nao vai" in berro(feito))
         caso("berro de comando que nem rodou também tem texto",
              berro(None) == NAO_RODOU)
+
+        (caixa / "recusa.txt").unlink()
+        abre, fecha = marcas_do_bloco("o bloco")
+        corpo = "# topo\n\n## Estado\nfeito\n"
+        caso("corpo sem o bloco não tem partes: quem escreve sabe que vai criar",
+             partes_do_bloco(corpo, abre, fecha) == ())
+        com_ele = corpo_com_o_bloco(corpo, "o bloco", "primeira versão")
+        caso("bloco que não existe nasce no fim, entre as marcas, e o resto do "
+             "corpo fica como estava",
+             com_ele.startswith(corpo.rstrip("\n"))
+             and texto_do_bloco(com_ele, "o bloco") == "primeira versão"
+             and com_ele.rstrip("\n").endswith(fecha))
+        outro = corpo_com_o_bloco(com_ele, "o vizinho", "do vizinho")
+        trocado = corpo_com_o_bloco(outro, "o bloco", "segunda versão")
+        caso("reescrever o bloco troca a seção INTEIRA e não toca o bloco "
+             "vizinho nem o texto de gente",
+             texto_do_bloco(trocado, "o bloco") == "segunda versão"
+             and "primeira versão" not in trocado
+             and texto_do_bloco(trocado, "o vizinho") == "do vizinho"
+             and trocado.startswith("# topo\n\n## Estado\nfeito\n"))
+        caso("marca de fechar antes da de abrir não é bloco: escrever ali "
+             "apagaria texto de gente",
+             partes_do_bloco(fecha + "\nmeio\n" + abre, abre, fecha) == ())
+        longo = no_teto("x" * (TETO_DO_BLOCO * 2))
+        caso("texto maior que o teto do bloco sai cortado e diz que cortou — "
+             "o corpo tem teto, e bloco sem teto o enche",
+             len(longo) <= TETO_DO_BLOCO and longo.endswith(
+                 AVISO_DO_TETO.format(TETO_DO_BLOCO)))
+
+        (caixa / "corpo.md").write_text(corpo, encoding="utf-8")
+        ok, dito = gravar_o_bloco("alguem", "dono/repo", 7, "o bloco", "vale")
+        caso("gravar o bloco lê, grava e relê: ele fica no corpo da issue",
+             ok and texto_do_bloco((caixa / "corpo.md").read_text(
+                 encoding="utf-8"), "o bloco") == "vale")
+
+        do_outro = corpo_com_o_bloco(corpo, "o do outro", "escrito pelo outro")
+        (caixa / "corpo-do-outro.md").write_text(do_outro, encoding="utf-8")
+        (caixa / "corpo.md").write_text(corpo, encoding="utf-8")
+        (caixa / "outro-escritor.txt").write_text("99", encoding="utf-8")
+        ok, dito = gravar_o_bloco("alguem", "dono/repo", 7, "o bloco", "meu")
+        caso("DOIS ESCRITORES: o segundo grava por cima toda vez, e a "
+             "releitura acusa em vez de dar por gravado",
+             not ok and "NÃO está lá" in dito)
+
+        (caixa / "corpo.md").write_text(corpo, encoding="utf-8")
+        (caixa / "outro-escritor.txt").write_text("1", encoding="utf-8")
+        ok, dito = gravar_o_bloco("alguem", "dono/repo", 7, "o bloco", "meu")
+        final = (caixa / "corpo.md").read_text(encoding="utf-8")
+        caso("o segundo grava por cima uma vez: a releitura acusa, regrava a "
+             "partir do corpo novo, e o bloco do outro sobrevive",
+             ok and "regravei" in dito
+             and texto_do_bloco(final, "o bloco") == "meu"
+             and texto_do_bloco(final, "o do outro") == "escrito pelo outro")
+        (caixa / "outro-escritor.txt").unlink()
+
+        (caixa / "corpo.md").write_text("y" * LIMITE_DO_CORPO_EM_BYTES,
+                                        encoding="utf-8")
+        antes = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+        ok, dito = gravar_o_bloco("alguem", "dono/repo", 7, "o bloco", "meu")
+        depois = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+        caso("corpo que passaria do teto do rastreador não se grava, e nada "
+             "sobe",
+             not ok and str(LIMITE_DO_CORPO_EM_BYTES) in dito
+             and "edit" not in depois[len(antes):])
+
+        caso("o login de quem se marca sai da configuração local",
+             quem_se_marca({"issues": {"quem_se_marca": "a-pessoa"}})
+             == "a-pessoa")
+        caso("login com molde por preencher, ausente ou fora do formato não "
+             "marca ninguém",
+             quem_se_marca({"issues": {"quem_se_marca": "${LOGIN}"}}) == ""
+             and quem_se_marca({}) == ""
+             and quem_se_marca({"issues": "x"}) == ""
+             and quem_se_marca({"issues": {"quem_se_marca": "a b"}}) == "")
+        texto, aviso = texto_que_marca("espera por você", "a-pessoa")
+        caso("com login, o comentário abre marcando a pessoa, e não há aviso",
+             texto.startswith("@a-pessoa ") and not aviso)
+        texto, aviso = texto_que_marca("espera por você", "")
+        caso("sem login, o comentário sai sem marca e o aviso diz o campo",
+             "@" not in texto and "quem_se_marca" in aviso)
 
         os.environ[VARIAVEL_DO_GH] = "/caminho/que/nao/existe/gh"
         caso("gh que não existe devolve None, e não estoura na cara de quem "

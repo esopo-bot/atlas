@@ -1,6 +1,6 @@
 ---
 name: trabalho-por-issue
-description: Use quando o pedido for pela ISSUE em si — para ESCREVER ("abre uma issue disso", "registra isso", "deixa anotado onde eu parei") e também para LER ("quantas issues abertas tem", "quais issues estão abertas", "o que está aberto no projeto X", "lista as issues", "tem issue sobre isso?"). Antes de qualquer consulta, leia onde as issues nascem — `nucleo/configuracao.json` aponta o arquivo local, campo `issues.repositorio`; procurar no repositório de código devolve zero, e zero parece resposta. Use também ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela REGISTRA e CONSULTA o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da encerramento-de-sessao; procurar o que já existe antes de criar é da busca-de-codigo-existente; escrever ou atualizar documentação é da documentar-processo.
+description: Use quando o pedido for pela issue em si — para escrever (abrir, registrar, deixar anotado onde parou — "abre uma issue disso") e para ler o quadro (contar, listar ou procurar issue, de um projeto ou de todos — "quantas issues estão abertas?"). Antes de qualquer consulta, leia onde as issues nascem — `nucleo/configuracao.json` aponta o arquivo local, campo `issues.repositorio`; procurar no repositório de código devolve zero, e zero parece resposta. Use também ao retomar trabalho que já tem número de issue, antes de disparar o executor de roteiros sobre um pedido em prosa, ao registrar teste ou verificação, e ao encerrar sessão que continua depois. Ela registra e consulta o trabalho, não o faz. Três vizinhas — a colheita do fim do dia é da encerramento-de-sessao; procurar o que já existe antes de criar é da busca-de-codigo-existente; escrever ou atualizar documentação é da documentar-processo.
 ---
 
 # Trabalho por issue
@@ -17,7 +17,7 @@ O estado do trabalho mora na issue, **não num arquivo do disco**. Não existe
 uma segunda verdade: ele começa igual à issue, ninguém o atualiza junto, e é
 ele que a próxima sessão lê. A issue passa a mentir sem ninguém perceber.
 
-**A única hora em que o `.md` entra é o ENCERRAMENTO** — para extrair o que
+**A única hora em que o `.md` entra é o encerramento** — para extrair o que
 vale adiante, e aí ele nasce em `conhecimento/`, como lição, não como cópia do
 estado. É a seção "Fechar", no fim desta skill.
 
@@ -55,7 +55,7 @@ está em `references/moldes.md`; abra só ao preencher pela primeira vez.
 
 **Consulta também passa por aqui, e é onde o erro sai mais barato de cometer.**
 Perguntado quantas issues um projeto tem, o caminho errado é medir no
-repositório de CÓDIGO: o comando responde certo, devolve zero, e zero parece
+repositório de código: o comando responde certo, devolve zero, e zero parece
 resposta — a sessão então cruza a contagem para "provar" que mediu, e entrega um
 falso negativo com cara de fato. Nenhuma trava pega isso, porque resposta errada
 não deixa rastro.
@@ -109,7 +109,7 @@ quatro coisas, e a issue não nasce sem as quatro:
 2. **Critérios de pronto** — cada um verificável por comando. O teste: começa
    pelo instrumento ou pelo adjetivo?
 3. **Riscos** — o que pode quebrar, e o que já quebrou antes por perto.
-4. **O que NÃO fazer** — o limite explícito. É o campo que mais salva sessão
+4. **O que não fazer** — o limite explícito. É o campo que mais salva sessão
    sem cabeça: ela não tem você para dizer "aí não".
 
 Como perguntar: **de uma vez só**, numa mensagem, com a recomendação
@@ -150,41 +150,24 @@ Como se monta:
   abrir — e diz ao dono qual absorveu qual.
 - **O pacote se registra na issue prioritária**, com a ordem obrigatória das
   entregas, a tabela "entrega / por que junta / prova compartilhada" e a
-  lista do que ficou de fora com o motivo. Cada issue absorvida recebe um
-  comentário curto com o link e fecha como duplicada, para nenhuma delas ser
-  atacada sozinha por engano.
+  lista do que ficou de fora com o motivo. Cada issue absorvida ganha, na
+  primeira linha do corpo, o link da que a absorveu, e fecha como duplicada,
+  para nenhuma delas ser atacada sozinha por engano.
 
 ### Quando a resposta é de domínio, e não de código
 
-Às vezes a entrevista trava numa regra de negócio que nenhum instrumento
-responde — só um especialista humano do assunto. Aí não se chuta e não se
-pergunta em prosa solta: monta-se um **dossiê de validação**, uma dúvida por
-card, cada afirmação sustentada pelo trecho de código que a prova.
-
-O molde está em `references/validacao-por-especialista.md`; abra ao montar o
-dossiê. Ele traz o diagrama do fluxo de dados, o trecho de código que
-sustenta cada afirmação, a tabela numérica que ilustra a decisão, o veredito
-estruturado por card, e o prompt que transforma as respostas em pedido
-técnico. O que volta do especialista entra na issue como decisão — nunca
-como memória de quem leu.
+Regra de negócio que só um especialista humano responde não se chuta nem se
+pergunta em prosa solta: vira um **dossiê de validação**, uma dúvida por
+card, cada afirmação sustentada pelo trecho de código que a prova. O molde
+está em `references/validacao-por-especialista.md`. O que volta do
+especialista entra na issue como decisão.
 
 ### A medição, antes de escrever
 
-A sessão sem cabeça herda o estado do disco. Meça o que ela vai encontrar —
-nada aqui é palpite:
-
-```bash
-git rev-parse HEAD                              # o commit de partida: SHA, nunca HEAD
-git status --porcelain                          # a árvore está limpa?
-git worktree list                               # há alvo paralelo, e em que commit?
-git branch --sort=-committerdate --format='%(refname:short) %(committerdate:relative)' | head
-gh pr list --base <base da configuração> --json number,title,headRefName
-```
-
-O que essas cinco linhas respondem, e que vai na issue: **conflita com
-trabalho em andamento?** Branch recente no mesmo assunto, worktree parado num
-commit velho, PR aberto sobre a base — cada um é motivo para o trabalho novo
-esperar, mudar de base, ou nascer em outro lugar. Achou conflito: diga ao dono
+A sessão sem cabeça herda o estado do disco. Antes de criar a issue, meça se
+ela **conflita com trabalho em andamento** — branch recente no mesmo
+assunto, worktree parado num commit velho, PR aberto sobre a base. Os
+comandos estão em `references/receitas.md`. Achou conflito: diga ao dono
 **antes** de criar a issue.
 
 ### Mais duas recusas, quando o pedido é cru
@@ -221,7 +204,7 @@ seções **sobre** o molde comum — `O pedido, como veio`, `O prompt para a
 sessão`, `Onde rodar`, `Branch e trabalho em andamento` e `Commit de
 partida`. Estão no mesmo arquivo, na seção "Molde da issue para sessão sem
 cabeça": um molde, um lugar. Elas existem porque essa sessão não pode
-perguntar nada — o que não estiver ali, ela inventa ou trava. Duas regras
+perguntar nada — o que não estiver ali, ela inventa ou trava. Três regras
 sobre elas:
 
 - **O pedido original vai verbatim.** Não corrija, não resuma, não melhore o
@@ -256,27 +239,39 @@ veredito**. O teste: ele começa pelo instrumento ou pelo adjetivo? Critério
 bom cabe numa linha e não precisa de você para ser lido. A tabela de
 exemplos — o que serve e o que não serve — está em `references/moldes.md`.
 
-Critério que pede **medição repetida** — mediana de N rodadas, antes e
-depois — diz quanto cada conjunto leva e lembra que a etapa de sessão do
-executor morre em 3600 s: a issue manda a cópia local do roteiro declarar
-`tempo-limite` na etapa que mede. Sem isso a etapa morre com o trabalho
-feito e sem commit, e a retomada refaz o pronto. A receita está no
+Critério que pede **medição repetida** diz quanto cada conjunto leva, e a
+issue manda a etapa que mede declarar `tempo-limite`: sem ele a etapa morre
+no teto do executor com o trabalho feito e sem commit. A receita está no
 `execucoes/LEIAME.md` do módulo.
 
-## O que vai em comentário — e o que não vai
+## O corpo é o estado; o comentário é conversa com o dono
 
-O corpo é o estado; o comentário é o evento. Comentário tem **quatro tipos e
-mais nenhum**:
+**Todo o estado mora no corpo**, na seção a que pertence: verificação,
+decisão, virada de sessão, relato de entrega, passo do executor, relatório de
+rodada. Cada escrita **reescreve a seção inteira e tira o que deixou de ser
+verdade** — nada de "correção:" em rodapé, nada de riscado que se acumula. O
+que saiu não se perde: o histórico de edição do corpo guarda cada versão
+inteira (medido pela GraphQL, `userContentEdits`), e os commits guardam o
+resto.
 
-| Tipo             | Quando                                          |
-| ---------------- | ----------------------------------------------- |
-| Verificação      | rodou um instrumento e tem a saída              |
-| Decisão          | escolheu um caminho e descartou outro, com o porquê |
-| Bloqueio         | parou por algo fora do seu alcance, e o que destrava |
-| Virada de sessão | encerrou uma fase e deixou o ponto de retomada  |
+**Comentário só existe quando a sessão fala com o dono**, e todo comentário o
+marca pelo login de `issues.quem_se_marca`, na configuração local:
 
-O teste de admissão é uma pergunta: *isto muda o que a próxima sessão vai
-fazer?* Se não muda, é diário — e diário não entra.
+| Quando                            | Exemplo                                        |
+| --------------------------------- | ---------------------------------------------- |
+| Pergunta                          | a decisão é dele, e a sessão não pode chutar   |
+| Pedido de aprovação               | a etapa espera o sim dele                      |
+| Bloqueio que só ele destrava      | acesso, credencial, mescla na publicação       |
+| Item que passou a esperar por ele | o `--seu` do relato de entrega                 |
+
+O teste de admissão é uma pergunta: *o dono precisa responder ou agir?* Se
+não precisa, é corpo. E o que não muda o que a próxima sessão vai fazer não
+vai nem ao corpo: é diário, e diário não entra.
+
+Quem escreve o corpo por instrumento — o relato de entrega, o relatório da
+caixa, o passo do executor — escreve só no **bloco marcado** dele, entre
+`<!-- nome -->` e `<!-- /nome -->`, e relê para conferir que ficou. Duas
+sessões no mesmo corpo apagam uma à outra, e é a releitura que acusa.
 
 ## A sequência da sessão
 
@@ -285,10 +280,11 @@ repositório>`**, o valor vem do perfil do passo zero — nunca de palpite.
 
 1. **Abrir.** Escreva o corpo, aplique as três recusas, publique.
    `<do repositório: rótulo, quadro e estado inicial>`
-2. **Ler antes de tudo.** Toda sessão começa lendo o corpo e os comentários
-   que o ponto de retomada mandar ler — e só esses.
+2. **Ler antes de tudo.** Toda sessão começa lendo o corpo. Comentário se lê
+   só para achar a resposta do dono a uma pergunta que o corpo diz estar
+   pendente — e a resposta, lida, vai ao corpo como decisão.
 3. **Investigar.** Termina quando "Onde mexer" sai de "ainda desconhecido" e
-   os critérios continuam de pé (ou mudaram, com um comentário de decisão).
+   os critérios continuam de pé (ou mudaram, com a decisão escrita no corpo).
 4. **Implementar.** Antes de qualquer passo que o repositório já faz — subir
    peça de infraestrutura, publicar, liberar acesso —, vale a **regra 11**,
    "não invente passo onde já existe receita". O texto e o motivo estão em
@@ -311,24 +307,18 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 
 - **A promoção é um passo explícito**, depois dos critérios provados — nunca
   efeito colateral de salvar o trabalho do dia.
-- **Entregar é a integração conter o trabalho.** Onde o repositório autoriza
-  push, a branch de trabalho entrega **mesclando** na integração declarada;
-  empurrá-la é sincronizar. Da branch de trabalho para a integração não cabe
-  pedido de incorporação. O pedido cabe em dois casos: da integração para a
-  branch de publicação, que só recebe trabalho por ele; e no vizinho somente
-  leitura, onde ainda exige autorização expressa do dono. Onde o cadastro nega push, a entrega é do dono — diga a
-  ele o que ficou commitado e pare. O gancho de destino cobra a integração de
-  cada vizinho tocado pelo cadastro do projeto.
-- **Integração aberta em outra árvore de trabalho não impede a mescla.** O
-  `git switch <integração>` recusa ("already used by worktree"). Mescle em
-  HEAD destacado: `git switch --detach origin/<integração>`, depois
-  `git merge --no-ff -F <arquivo> <branch de trabalho>`. Confira que a árvore
-  da mescla é a que a bancada provou (`git rev-parse HEAD^{tree}` igual ao da
-  branch) e empurre `HEAD:<integração>`. A mensagem vai por arquivo, porque
-  o `git merge` não lê `-F -`.
+- **Entregar é a integração conter o trabalho**, pelo caminho que a
+  **regra 16** tira da configuração: mescla ou pedido de incorporação. Antes
+  de escolher, leia `branches_por_incorporacao` e `autorizacoes.push`; no
+  vizinho, o cadastro do projeto e a configuração dele.
+- **Integração aberta em outra árvore de trabalho não impede a mescla**:
+  mescle em HEAD destacado, pela receita de `references/receitas.md`.
 - **O corpo do pedido de revisão cobre o que o diff entrega.** Antes de
   pedir revisão, confira as seções do corpo contra a lista real de commits:
   o que o diff tem e o corpo não conta, o revisor aprova sem ver.
+- **Pedido aberto pela conta de automação nasce com o dono como revisor e
+  responsável** (`gh pr create --reviewer <dono> --assignee <dono>`; o
+  login não entra em texto rastreado): sem os dois, some da lista do dono.
 - **Não invente o nome nem a sequência.** Estão no perfil do passo zero. Não
   estão lá? Pergunte, e grave a resposta — é a regra 11.
 - **Na dúvida sobre o que pode ser empurrado, não empurre.** Push que aciona
@@ -341,20 +331,18 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
 
 ## Rodada de verificação: evidência, não relato
 
-Cada verificação vira **um comentário** com evidência colada:
+A prova fica **ao lado do critério, no corpo**, e o critério se marca junto:
 
 ```markdown
-### Verificação — <a etapa, conforme o repositório chama>
-Comando: `<o comando exato>`
-Saída:
-    <3 a 10 linhas: as que decidem, não o registro inteiro>
-Veredito: passou | falhou | inconclusivo — <uma frase>
+- [x] <o critério> — prova: `<o comando exato>` → <a linha da saída que decide>
 ```
 
-**Sem comando e sem saída não é verificação, é opinião.** Depois da evidência,
-atualize **só o bloco `## Estado`** e marque o critério — e marque só depois
-da verificação ponta a ponta, nunca quando o código foi escrito. Critério
-marcado cedo é a issue mentindo para a próxima sessão.
+Saída que não cabe numa linha vai logo abaixo do critério, recuada: 3 a 10
+linhas, as que decidem, nunca o registro inteiro. **Sem comando e sem saída
+não é verificação, é opinião.** Marque só depois da verificação ponta a
+ponta, nunca quando o código foi escrito — critério marcado cedo é a issue
+mentindo para a próxima sessão. Reverificou e o veredito mudou? Reescreva a
+linha; a versão velha fica no histórico de edição.
 
 ## Virar a sessão: o ponto de retomada
 
@@ -369,12 +357,12 @@ Não toque em: <limites>
 Arquivos: <caminhos>
 Pronto quando: <o critério>
 Primeiro comando: `<comando literal>`
-Leia só: o corpo desta issue e os comentários <n>, <n>.
+Leia só: o corpo desta issue.
 ```
 
-A linha `Leia só` é a que faz a ponte valer a pena. A resposta para "esta
-issue tem quarenta comentários" não é escrever melhor: é garantir que
-ninguém precise ler os quarenta.
+A linha `Leia só` é a que faz a ponte valer a pena: o corpo basta. Comentário
+velho não se lê — o que ele dizia de estado ou já está no corpo, ou deixou de
+ser verdade.
 
 ## A fronteira de confiança
 
@@ -392,10 +380,19 @@ escolhida. Chamada de rede em rajada é o que derruba limite de taxa.
 ## Fechar
 
 Feche com motivo explícito (resolvido ou descartado) e pode o corpo — o
-obsoleto continua vivo no comentário. A lição que vale adiante sai para
-`conhecimento/`.
+obsoleto continua vivo no histórico de edição dele. A lição que vale adiante
+sai para `conhecimento/`.
 
-**`Closes #N` no pedido de incorporação só entra quando TODO critério está
+**Antes de fechar, o corpo diz onde mora o que se aprendeu**, na seção
+`## Onde mora o que se aprendeu`: o ponteiro da credencial (o valor vai para
+a gaveta `.credenciais/`, nunca para a issue), a linha da conta de teste no
+inventário da gaveta, o link do perfil do vizinho e o da linha da caixa.
+Fechada a issue, o módulo `historico` destila o corpo final num histórico
+local, por projeto, indexado — como e por quê em
+[historico](../../../conhecimento/historico.md). O `--abertura` acusa a issue
+fechada sem histórico.
+
+**`Closes #N` no pedido de incorporação só entra quando todo critério está
 marcado com evidência.** Caixa marcada não fecha issue; critério conferido
 fecha. A mescla que carrega um `Closes` fecha a issue sem ler os critérios, e
 o que ficou pela metade desaparece da fila sem ninguém decidir — a issue

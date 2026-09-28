@@ -32,7 +32,7 @@ Para qualquer agente de IA neste repositório.
   clonados moram em `projetos/<nome>` — `ls projetos/` lista o que existe; a
   wiki deles, `conhecimento/projetos/`, é perfil, não prova.
 - Rode `python montar.py --sincronizar` depois de editar página, skill, módulo
-  ou `nucleo/`.
+  ou `nucleo/`, e prove com `--verificar` (regra 15).
 - Onde as issues nascem: `nucleo/configuracao.json`, campo
   `repositorio_das_issues`, que aponta o arquivo local com o endereço. Toda
   issue nasce lá, mesmo quando o código mora em outro repositório — procurar no
@@ -50,6 +50,8 @@ Para qualquer agente de IA neste repositório.
   de máquina em arquivo, commit, branch ou issue. Na dúvida, pergunte.
 - Não altere o que não foi pedido.
 - Escreva em pt-BR: conclusão primeiro, frases curtas.
+- Estas ordens orientam o agente e não o impedem: a trava que vale para
+  qualquer agente mora no servidor, e configurá-la é do dono.
 
 ## As regras da camada
 
