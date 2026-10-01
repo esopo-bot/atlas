@@ -1,8 +1,9 @@
 {
   "comentario": "O que este workspace espera do ambiente da máquina — nomes, nunca valores. O gancho .claude/hooks/verificar-ambiente.py verifica na abertura da sessão. O arquivo é seu: a atualização da camada nunca o reescreve. O porquê: conhecimento/estado-que-nao-viaja.md.",
   "receita": "conhecimento/estado-que-nao-viaja.md",
-  "comando": ["git", "gh", "node", "npm", "python", "npx", "docker"],
+  "comando": ["git", "node", "npm", "python", "npx", "ck"],
   "pasta": [],
   "arquivo": [],
-  "variavel": []
+  "variavel": [],
+  "so_na_maquina_local": {"comando": ["gh"]}
 }

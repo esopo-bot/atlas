@@ -48,9 +48,3 @@ description: O padrão de código deste repositório — KISS, YAGNI, Tidy First
 - **Nome diz o que é.** Se precisou de comentário para explicar, o nome está
   errado.
 - **Menor diff coerente:** mudança se fatia em entregas que passam sozinhas.
-
-## Pedidos de exemplo
-
-- "vou escrever esse módulo agora, me lembra o padrão de código que vale aqui"
-- "esse arquivo tá cheio de comentário explicando o que o código faz. revisa ele pelo padrão daqui"
-- "posso deixar essa abstração pronta pra um caso que ainda não existe?"

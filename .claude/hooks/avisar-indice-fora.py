@@ -1,36 +1,28 @@
 import json
 import os
-import socket
+import shutil
 import sys
 from pathlib import Path
 
 VARIAVEL_DA_RAIZ_DO_PROJETO = "CLAUDE_PROJECT_DIR"
 NIVEIS_DO_GANCHO_ATE_A_RAIZ = 2
 ONDE_O_MODULO_PODE_ESTAR = (
-    ".agents/indice/docker-compose.yml",
-    "modulos/indice/.agents/indice/docker-compose.yml",
+    ".agents/indice/buscar.py",
+    "modulos/indice/.agents/indice/buscar.py",
 )
-
-PECAS = (
-    ("o banco de vetores", "INDICE_PORTA_MILVUS", 19530),
-    ("quem gera os vetores", "INDICE_PORTA_OLLAMA", 11434),
-)
-TEMPO_DE_ESPERA_S = 1.5
+PROGRAMA_DO_INDICE = "ck"
 
 EVENTO_DE_INICIO_DE_SESSAO = "SessionStart"
 SILENCIO = 0
 BANDEIRA_DE_TESTE = "--testar"
 
 AVISO = (
-    "A busca por significado no código está fora do ar — {}.\n"
-    "Enquanto isso a ferramenta do índice devolve erro, e a alternativa é "
-    "`grep`, que custa umas cinco vezes mais contexto por pergunta e não "
-    "acha por significado.\n"
-    "Para levantar: `docker compose -f .agents/indice/docker-compose.yml "
-    "up -d`. Se você não vai usar o índice nesta sessão, ignore — isto é "
-    "aviso, não parede."
+    "O `ck` não está no PATH — a busca do acervo "
+    "(`python .agents/indice/buscar.py`) cai no grep, por palavra e sem "
+    "ranking, e a ronda do índice não indexa.\n"
+    "A receita de instalar está em conhecimento/indice.md. Se você não vai "
+    "usar o índice nesta sessão, ignore — isto é aviso, não parede."
 )
-UMA_PECA = "{} não respondeu na porta {}"
 
 
 def raiz_do_projeto_nunca_o_cwd() -> Path:
@@ -44,34 +36,19 @@ def o_modulo_esta_por_perto(raiz: Path) -> bool:
     return any((raiz / onde).is_file() for onde in ONDE_O_MODULO_PODE_ESTAR)
 
 
-def a_porta_responde(porta: int, tempo=TEMPO_DE_ESPERA_S) -> bool:
-    try:
-        with socket.create_connection(("127.0.0.1", porta), timeout=tempo):
-            return True
-    except OSError:
-        return False
+def o_programa_no_path() -> str:
+    return shutil.which(PROGRAMA_DO_INDICE) or ""
 
 
-def pecas_fora(ambiente, responde=a_porta_responde) -> list:
-    caidas = []
-    for rotulo, variavel, padrao in PECAS:
-        declarada = str(ambiente.get(variavel) or padrao)
-        porta = int(declarada) if declarada.isdigit() else padrao
-        if not responde(porta):
-            caidas.append(UMA_PECA.format(rotulo, porta))
-    return caidas
-
-
-def decisao(raiz: Path, ambiente, responde=a_porta_responde) -> str:
+def decisao(raiz: Path, localizar=o_programa_no_path) -> str:
     if not o_modulo_esta_por_perto(raiz):
         return ""
-    caidas = pecas_fora(ambiente, responde)
-    return AVISO.format(" e ".join(caidas)) if caidas else ""
+    return "" if localizar() else AVISO
 
 
 def main() -> int:
     try:
-        aviso = decisao(raiz_do_projeto_nunca_o_cwd(), os.environ)
+        aviso = decisao(raiz_do_projeto_nunca_o_cwd())
     except Exception:
         return SILENCIO
     if aviso:
@@ -92,54 +69,43 @@ def testar() -> int:
 
     with tempfile.TemporaryDirectory(prefix="aviso-indice-") as pasta:
         raiz = Path(pasta)
-        tudo_fora = lambda porta: False
-        tudo_de_pe = lambda porta: True
+        sem_ck = lambda: ""
+        com_ck = lambda: "/bin/ck"
 
         caso("sem o módulo instalado o gancho cala — quem não usa o índice "
-             "não é avisado de container que não lhe interessa",
-             decisao(raiz, {}, tudo_fora) == "")
+             "não é avisado de programa que não lhe interessa",
+             decisao(raiz, sem_ck) == "")
 
         alvo = raiz / ONDE_O_MODULO_PODE_ESTAR[0]
         alvo.parent.mkdir(parents=True, exist_ok=True)
-        alvo.write_text("services:\n", encoding="utf-8")
-        caso("índice declarado e containers de pé: cala",
-             decisao(raiz, {}, tudo_de_pe) == "")
+        alvo.write_text("", encoding="utf-8")
+        caso("módulo instalado e o ck no PATH: cala, sem sondar serviço",
+             decisao(raiz, com_ck) == "")
 
-        dito = decisao(raiz, {}, tudo_fora)
-        caso("índice declarado e containers fora: avisa", bool(dito))
-        caso("e nomeia as duas peças com as portas",
-             "19530" in dito and "11434" in dito)
-        caso("e diz como levantar", "docker compose" in dito)
+        dito = decisao(raiz, sem_ck)
+        caso("módulo instalado e sem o ck: avisa e nomeia o ck",
+             "`ck`" in dito and "PATH" in dito)
+        caso("e diz que a busca cai no grep, e onde está a receita",
+             "grep" in dito and "conhecimento/indice.md" in dito)
         caso("e deixa claro que é aviso, não parede",
-             "não é parede" in dito or "não parede" in dito
-             or "aviso, não parede" in dito)
-
-        so_o_milvus = lambda porta: porta != 19530
-        dito = decisao(raiz, {}, so_o_milvus)
-        caso("com só uma peça fora, só ela é nomeada",
-             "19530" in dito and "11434" not in dito)
+             "aviso, não parede" in dito)
+        caso("e não fala mais de banco, porta nem contêiner",
+             "porta" not in dito and "docker" not in dito)
 
         outra = raiz / ONDE_O_MODULO_PODE_ESTAR[1]
         outra.parent.mkdir(parents=True, exist_ok=True)
-        outra.write_text("services:\n", encoding="utf-8")
+        outra.write_text("", encoding="utf-8")
         alvo.unlink()
-        caso("a fonte em modulos/ tambem conta: aqui os containers sobem "
-             "dela, sem o modulo instalado em .agents/",
-             bool(decisao(raiz, {}, tudo_fora)))
-
-        caso("porta declarada por variável substitui a padrão",
-             "29530" in decisao(raiz, {"INDICE_PORTA_MILVUS": "29530"},
-                                tudo_fora))
-        caso("variável com lixo cai na porta padrão, em vez de estourar",
-             "19530" in decisao(raiz, {"INDICE_PORTA_MILVUS": "abc"},
-                                tudo_fora))
+        caso("a fonte em modulos/ também conta: aqui o módulo mora nela, sem "
+             "a cópia instalada em .agents/",
+             bool(decisao(raiz, sem_ck)))
 
     if falhas:
         for f in falhas:
             print(f"FALHOU: {f}")
         print(f"FALHOU: {len(falhas)} de {len(rodados)} casos")
         return 1
-    print(f"OK: o aviso de índice fora — {len(rodados)} casos")
+    print(f"OK: o aviso do ck ausente — {len(rodados)} casos")
     return 0
 
 

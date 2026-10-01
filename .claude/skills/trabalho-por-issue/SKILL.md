@@ -261,7 +261,7 @@ marca pelo login de `issues.quem_se_marca`, na configuração local:
 | --------------------------------- | ---------------------------------------------- |
 | Pergunta                          | a decisão é dele, e a sessão não pode chutar   |
 | Pedido de aprovação               | a etapa espera o sim dele                      |
-| Bloqueio que só ele destrava      | acesso, credencial, mescla na publicação       |
+| Bloqueio que só ele destrava      | acesso, credencial, mescla que a chave nega    |
 | Item que passou a esperar por ele | o `--seu` do relato de entrega                 |
 
 O teste de admissão é uma pergunta: *o dono precisa responder ou agir?* Se
@@ -313,6 +313,8 @@ motivo em `conhecimento/regras-da-camada.md`. O que a skill acrescenta:
   vizinho, o cadastro do projeto e a configuração dele.
 - **Integração aberta em outra árvore de trabalho não impede a mescla**:
   mescle em HEAD destacado, pela receita de `references/receitas.md`.
+- **Pedido aprovado, onde `autorizacoes.mesclar` libera, a sessão mescla**,
+  pela receita do mesmo arquivo.
 - **O corpo do pedido de revisão cobre o que o diff entrega.** Antes de
   pedir revisão, confira as seções do corpo contra a lista real de commits:
   o que o diff tem e o corpo não conta, o revisor aprova sem ver.
@@ -398,11 +400,3 @@ fecha. A mescla que carrega um `Closes` fecha a issue sem ler os critérios, e
 o que ficou pela metade desaparece da fila sem ninguém decidir — a issue
 passa a dizer que está pronta. Na dúvida, cite a issue sem o verbo que fecha
 (`sobre #N`) e feche à mão depois de conferir.
-
-## Pedidos de exemplo
-
-- "abre uma issue disso: o relatório de fechamento sai com o total errado quando tem estorno"
-- "quero retomar aquele trabalho da issue 142, por onde eu continuo?"
-- "preciso parar agora mas volto amanhã no mesmo assunto, deixa registrado onde eu parei"
-- "quantas issues abertas o projeto tem hoje?"
-- "quais issues estão abertas no atlas? me lista"

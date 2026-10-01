@@ -53,9 +53,3 @@ reprova página órfã.
 Vale a regra 5 de `conhecimento/regras-da-camada.md`: na dúvida, é pessoal, e
 fica no workspace. Deixar de promover se corrige amanhã; vazar não se
 despublica.
-
-## Pedidos de exemplo
-
-- "acabei de fechar o ajuste do cache aqui, tem alguma coisa nele que serve pros outros repositórios?"
-- "roda a análise de promoção nesse trabalho que eu acabei de terminar"
-- "terminei a correção do parser de datas. o que dela vale a pena virar genérico?"

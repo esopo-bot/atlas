@@ -238,9 +238,9 @@ apague os estágios do meio; se não usa branch de integração, tire o estágio
 que mede o merge. O que o exemplo ensina não é a topologia — é que **a
 fronteira é de etapa, não de sempre**: a etapa de trabalho só commita na
 branch de trabalho, e quem leva o resultado para a branch de integração
-declarada é a ENTREGA, depois da aprovação manual. Mesclar a branch de
-publicação e publicar seguem do dono, sempre. E o corpo do pedido cobre
-o que o diff entrega.
+declarada é a ENTREGA, depois da aprovação manual. Mesclar o pedido
+aprovado segue `autorizacoes.mesclar` da raiz (regra 9); publicar segue do
+dono, sempre. E o corpo do pedido cobre o que o diff entrega.
 
 #### O que sai da configuração no roteiro de entrega
 
@@ -260,7 +260,8 @@ teste de que ele é mecanismo, e não o processo de alguém.
 O estágio que escreve o corpo exige, com estes títulos: **o que foi
 testado** (comando e saída), **risco de quebrar em produção**, **mitigação**
 e **plano de reversão** — incluindo o que a reversão *não* desfaz. Abrir o
-pedido com esse texto é da sessão; aprová-lo e mesclá-lo é do dono.
+pedido com esse texto é da sessão; aprová-lo é do dono, e a mescla segue
+`autorizacoes.mesclar` (regra 9).
 
 ### Mexida em repositório vizinho
 
@@ -429,6 +430,10 @@ alguém pensou em verificar, e já passou verde com defeito grave dentro.
    conserto comparado só com a base. Antes de atacar um gancho, leia a
    issue mais recente que o tocou.
 5. **Confira contra a documentação oficial de hoje**, com a versão.
+
+Antes de virar linha, o achado passa pelos céticos. No Claude Code, a rodada
+é o workflow salvo `/ceticos` (`.claude/workflows/ceticos.js`); a skill
+`verificacao-adversarial` diz quando e com que `args` chamá-lo.
 
 Achado vira linha no quadro, com o comando que o reproduz:
 `python .agents/caixa/caixa.py defeito|melhoria --id <kebab> --assunto "..."`.

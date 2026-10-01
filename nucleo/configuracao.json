@@ -7,7 +7,7 @@
     "conhecimento/projetos/indice.json"
   ],
   "regras": [
-    "A automação deste repositório commita e empurra em branch de trabalho, E MESCLA NA INTEGRAÇÃO — a integração é dela. Para a branch que `branches_por_incorporacao` nomeia não se mescla nem se empurra: a entrada lá é o pedido de incorporação, que o DONO aprova. Publicar continua do dono.",
+    "A automação deste repositório commita e empurra em branch de trabalho, E MESCLA NA INTEGRAÇÃO — a integração é dela. Na branch que `branches_por_incorporacao` nomeia não se mescla por git nem se empurra: a entrada lá é o pedido de incorporação, que o DONO aprova. Aprovado, quem o mescla é a sessão, pela conta do robô, porque `autorizacoes.mesclar` está ligado — decisão do dono em 29/09/2026, só nesta raiz. Publicar continua do dono.",
     "Enquanto houver ${...} sem valor nesta configuração, não se cria issue — pergunta-se ao dono.",
     "Toda issue deste trabalho nasce no repositório das issues declarado acima, mesmo quando o código mora em outro. Nunca criar issue em repositório de código.",
     "`teto_da_largada_em_bytes` é o que TODA sessão paga antes de trabalhar: AGENTS.md, CLAUDE.md, o briefing de abertura que o AGENTS.md manda ler inteiro, o catálogo das skills e o que os ganchos de abertura injetam. É DECISÃO, não medida: página, skill ou texto novo no briefing que passe dele cobra corte ou decisão nova. A largada de hoje sai de `python .agents/camada/camada.py --largada`, nunca desta prosa. Ausente ou nulo, a rotina mede e não cobra: teto que a camada inventasse seria número sem procedência.",
@@ -66,12 +66,13 @@
   ],
   "autorizacoes": {
     "commit": true,
-    "push": true
+    "push": true,
+    "mesclar": true
   },
   "branches_por_incorporacao": [
     "main"
   ],
-  "teto_da_largada_em_bytes": 26000,
+  "teto_da_largada_em_bytes": 24400,
   "teto_de_agentes_por_sessao": 60,
   "chaves_de_configuracao_sem_leitor": [
     {

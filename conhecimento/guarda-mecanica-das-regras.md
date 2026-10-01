@@ -28,15 +28,15 @@ rotinas sai por `python verificacoes.py --listar`, que não viaja. Divergiu dest
 
 | Regra | Quem a cobra | Como |
 | --- | --- | --- |
-| 1 — abra a sessão na raiz | nada | teve gancho, o `vetar-caminho-relativo-apos-cd`, aposentado por decisão do dono: era, sozinho, a maior fonte de recusa por chamada, inclusive de comando legítimo. Ficou o conselho no briefing — caminho absoluto no argumento, ou `git -C` —, porque `cd <pasta>` seguido de caminho relativo pode fazer o cliente parar e pedir permissão. O resto da regra nunca foi mecanizável: quem abre a sessão no lugar errado não tem a camada carregada para ser avisado |
+| 1 — abra a sessão na raiz | gancho `orientar-recusa-do-isolamento`, só conselho | teve gancho que recusava, o `vetar-caminho-relativo-apos-cd`, aposentado por decisão do dono: era, sozinho, a maior fonte de recusa por chamada, inclusive de comando legítimo. Ficou o conselho no briefing — caminho absoluto no argumento, ou `git -C` —, porque `cd <pasta>` seguido de caminho relativo pode fazer o cliente parar e pedir permissão. E ficou o conselho na hora da recusa: quando o isolamento de worktree do próprio cliente recusa um comando de shell, o gancho junta ao erro a forma que passa — o roteiro `.py` para laço e composição, sem `-C`, `--git-dir` nem `cd` para fora da worktree, porque o isolamento não lê o roteiro; ou, quando o recusado era o redirecionamento ao checkout principal, as refs que se leem daqui e, para mescla, o HEAD destacado. Ele não recusa nada: quem recusa é o cliente. O resto da regra nunca foi mecanizável: quem abre a sessão no lugar errado não tem a camada carregada para ser avisado |
 | 2 — só é pronto o que um instrumento provou | rotina `verificacao` do motor; rotina `bancada`; gancho `cobrar-apresentacao-da-entrega` | o gancho cobra na parada a entrega com interface em vizinho que declara `apresentacao` no cadastro local: mescla desta sessão na integração dele sem, depois da mescla, uma navegação ao endereço declarado pelo navegador do dono (e a narração por voz, se o cadastro pede) sai na parada com a receita, só no registro de depuração e sem segurá-la, por decisão do dono — porque para tela o instrumento que prova é o dono vendo, e prova por Playwright no shell não conta; a `verificacao` acusa veredito `segue` com `provado` vazio, e re-executa cada prova declarada; a `bancada` roda o `--testar` de cada instrumento que a sessão tocou, medido pelo git — árvore suja, arquivo recém-nascido e commit desta branch que a integração ainda não tem. Sem ela nenhuma rotina do ritual roda bancada: quem prova instrumento é a `instalada`, que está fora do ritual, e bancada vermelha fica dias sem ninguém ver. Ela prova só o que a sessão mexeu, porque a bancada inteira custa minutos — `python .agents/saude/saude.py testes` mede quanto, e a maior parte é de um instrumento só — e o ritual roda várias vezes por sessão; o que não coube no orçamento sai nomeado, com o comando que prova o resto |
 | 3 — antes de criar, procure e cite | nada | **só prosa** |
 | 4 — a memória mora no disco | gancho `vetar-andamento-em-arquivo`; as recusas dos ganchos de veto | o gancho recusa o arquivo de andamento nascendo com o corpo de uma issue, e nomeia a exceção: o `.md` do encerramento, em `conhecimento/`. Para o resto da regra nenhuma rotina reprova, mas **toda recusa manda gravar** o aprendizado em `conhecimento/`, com a linha concreta do que gravar — memória previne, gancho ensina |
 | 5 — ao dar por pronto, faça a análise de promoção | nada | **só prosa** |
 | 6 — trabalhe econômico | rotina `largada`; o instalador; cerca `vetar-enxame-de-agentes` | cobra o teto de bytes que toda sessão paga, declarado em `nucleo/configuracao.json` — e quem instala nasce com o teto medido na árvore recém-montada, escrito pelo `montar.py` na configuração com a data: o salto seguinte já é acusado, e subir o teto é decisão do dono. A regra tem uma segunda parede, contra o gasto que não é de bytes e sim de gente: a cerca conta os agentes que a sessão pôs para rodar e nega o disparo acima do `teto_de_agentes_por_sessao`. Ela conta identidade distinta, não pedido, porque agente nascido dentro do motor de roteiro nunca pede a ferramenta de subagente — só aparece quando usa alguma. A parede existe porque enxame não é profundidade: poucas perguntas viram dezenas de agentes, e o gasto deles não aparece na conta que a sessão mostra |
 | 7 — rede com cortesia | nada | **só prosa** |
-| 8 — segredo não entra em git nenhum | gancho `orientar-credencial`; cerca `vetar-despejo-de-ambiente`; rotina `ensaio` | o gancho intercepta leitura e shell: orienta quem lê credencial — `.env`, `.credenciais/` e as gavetas e os nomes que o Agent Governance Toolkit da Microsoft já conhecia (`~/.ssh`, `~/.aws`, `.git-credentials`, `id_rsa`, `.netrc`…) —, veta quem a entrega ao git ou ao gh, e veta a chamada ao endpoint de metadata da nuvem (`169.254.169.254`, `metadata.google.internal`), que é a credencial da máquina; a cerca recusa comando que despeja o ambiente inteiro sem nomear a variável — `env`, `printenv`, `os.environ` iterado —, porque despejo largo põe credencial no transcript, onde ninguém a apaga; o ensaio varre texto, caminho e mensagem de commit antes de publicar |
-| 9 — destrutivo é do dono; commit e push | ganchos `vetar-branch-protegida`, `vetar-pergunta-ja-respondida`, `vetar-escrita-em-somente-leitura`, `vetar-comentario-explicativo` e `vetar-escrita-em-politica` | os dois primeiros leem `autorizacoes` e, sem declaração, negam; o terceiro recusa escrita em território de outra pessoa; o quarto recusa o agente editar a lista de exceções da própria cerca; o quinto recusa, durante etapa do executor, escrita nos arquivos que decidem quais cercas existem — `settings.json`, as listas que os ganchos leem, `nucleo/regras.json` e o código dos próprios ganchos — e, na mesma etapa, `curl` ou `wget` despejados num shell e `bash <(curl …)`: código baixado da rede executando sem leitura, que é o jeito de reescrever qualquer cerca por dentro |
+| 8 — segredo não entra em git nenhum | gancho `orientar-credencial`; cerca `vetar-despejo-de-ambiente`; rotina `ensaio` | o gancho intercepta leitura e shell: orienta quem lê credencial — `.env`, `.credenciais/` e as gavetas e os nomes que o Agent Governance Toolkit da Microsoft já conhecia (`~/.ssh`, `~/.aws`, `.git-credentials`, `id_rsa`, `.netrc`…) —, veta quem a entrega ao git ou ao gh, e veta a chamada ao endpoint de metadata da nuvem (`169.254.169.254`, `metadata.google.internal`), que é a credencial da máquina; a cerca recusa comando que despeja o ambiente inteiro sem nomear a variável — `env`, `printenv`, `os.environ` iterado —, porque despejo largo põe credencial no transcript, onde ninguém a apaga; o ensaio varre texto, caminho e mensagem de commit antes de publicar; a segunda rede, o `gitleaks` no PATH desta máquina, varre a árvore espelhada antes do push e pega forma de segredo que o regex próprio não conhece, com arquivo e regra e sem o valor; nome de pessoa e caminho de máquina ela não pega, e seguem só no regex; sem o binário, o ensaio avisa e segue, e a publicação recusa dizendo como instalar |
+| 9 — destrutivo é do dono; commit, push e mescla | ganchos `vetar-branch-protegida`, `vetar-pergunta-ja-respondida`, `vetar-escrita-em-somente-leitura`, `vetar-comentario-explicativo` e `vetar-escrita-em-politica`; cerca `vetar-escrita-do-varredor-fora-da-memoria` | os dois primeiros leem `autorizacoes` e, sem declaração, negam — o primeiro julga a mescla do pedido por `autorizacoes.mesclar`, só na raiz, e recusa como publicar a que foge de `gh pr merge <número> --merge` — a conta que mescla é só prosa, que a receita escolhe e o gancho não mede; o terceiro recusa escrita em território de outra pessoa; o quarto recusa o agente editar a lista de exceções da própria cerca; o quinto recusa, durante etapa do executor, escrita nos arquivos que decidem quais cercas existem — `settings.json`, as listas que os ganchos leem, `nucleo/regras.json` e o código dos próprios ganchos — e, na mesma etapa, `curl` ou `wget` despejados num shell e `bash <(curl …)`: código baixado da rede executando sem leitura, que é o jeito de reescrever qualquer cerca por dentro; a cerca recusa ao subagente `varredor`, reconhecido pelo `agent_type` do evento, Write, Edit e NotebookEdit fora de `.claude/agent-memory-local/varredor/`, com o caminho resolvido antes de comparar — o `memory` do subagente liga Write e Edit em qualquer caminho, e o dono decidiu em 28/09/2026 prendê-los na pasta da memória; a sessão principal e os outros agentes passam calados |
 | 10 — texto na régua | rotina `camada` | roda o validador de markdown sobre todo `.md` que o git rastreia |
 | 11 — não invente passo onde já existe receita | nada | **só prosa** |
 | 12 — branch de longa duração e integração contínua | ganchos `vetar-branch-protegida` e `vetar-automacao`; regra nativa de edição nos caminhos de automação, no settings de quem instala; o executor de roteiros | recusam na hora, pelo nome da branch e pelo caminho da configuração; o veto de branch recusa também o commit direto na integração e na base que `nucleo/executor.json` declara — `projetos.<nome>.branches` no vizinho, e o bloco `branches` da raiz na própria raiz, na worktree dela (achada pelo mesmo remoto `origin`) e no vizinho que não declara —; deixa passar a mescla `--no-ff` de branch de trabalho, que é o caminho da entrega, o `git merge --continue` que conclui a mescla parada em conflito e o `git commit` com `--dry-run`, `--help` ou `-h`, que não gravam; acha o cadastro do vizinho pelo nome da pasta ou pelo nome do repositório no remoto `origin`, o que cobre a worktree de vizinho com outro nome; separador dentro de aspas ou de documento literal não desliga o acompanhamento da troca de branch; vizinho sem cadastro fica como antes; o executor recusa o disparo quando a integração declarada não existe no remoto do alvo (`git ls-remote --heads origin <integração>` vazio), antes de gravar estado — sem remoto declarado não há o que medir, e ele segue calado — inclusive `.git/hooks/`, que não entra no git e roda a cada commit sem ninguém rever |
@@ -48,6 +48,17 @@ rotinas sai por `python verificacoes.py --listar`, que não viaja. Divergiu dest
 | 18 — número não mora em prosa | nada | **só prosa**; mecanizável em parte: uma rotina pode varrer as páginas por algarismo solto em prosa, sem comando nem data ao lado, e acusar — ninguém a escreveu |
 | 19 — não pare sem necessidade | nada | **não mecanizável**: necessidade de parar é julgamento sobre o trabalho, não padrão |
 | 20 — decisão do dono não se reabre sem citar a data e o motivo | nada | **não mecanizável**: reabrir decisão é sentido, não padrão; a trava é o próprio dono, que lê a proposta e cobra a data e o fato novo |
+
+**Um gancho mede sem cobrar regra.** O `registrar-negativa` roda quando o
+classificador do modo `auto` nega uma ferramenta e grava uma linha em
+`tmp/negativas-do-classificador.jsonl` da árvore principal da camada, achada
+a partir do gancho, nunca do diretório atual: a ferramenta, o programa, o
+tamanho, o comando e a razão. Nada sai cru. Antes de gravar, ele mascara o
+valor depois de nome com `KEY`, `TOKEN`, `SECRET`, `PASS` ou `AUTH`, o
+portador, toda sequência longa e as formas do detector do histórico; sem o
+detector, o comando não se grava. O evento não aceita texto de volta, então
+o gancho não ensina a sessão: o registro é a medida da revisão periódica, e
+fica na máquina.
 
 ## Negar ou perguntar: o verbo de cada veto
 
@@ -97,14 +108,15 @@ não na parada, e o aviso dela segue na conversa.
 
 Negam de vez os que protegem o que não se desfaz — branch de longa
 duração, política, território de outra pessoa, cópia gerada, automação, a
-fronteira da execução, o documento rastreável, a sessão de pesquisa e a
-raiz que se declarou espelho da integração
+fronteira da execução, o documento rastreável, a sessão de pesquisa, a
+pasta da memória do varredor e a raiz que se declarou espelho da integração
 (`git config camada.raizSoEspelhaAIntegracao true`), onde só se grava o que
 o git ignora:
 
 - `vetar-automacao`
 - `vetar-branch-protegida`
 - `vetar-documento-rastreavel`
+- `vetar-escrita-do-varredor-fora-da-memoria`
 - `vetar-escrita-em-copia-gerada`
 - `vetar-escrita-em-politica`
 - `vetar-escrita-em-sessao-de-pesquisa`
@@ -156,7 +168,7 @@ grep -l DECISAO_DE_PERGUNTAR .claude/hooks/vetar-*.py
 ## O que este quadro ensina
 
 **As regras sem guarda nenhuma são as que o quadro marca com `nada`** —
-hoje 1, 3, 5, 7, 11, 17, 18, 19 e 20. A conta sai do quadro, nunca desta
+hoje 3, 5, 7, 11, 17, 18, 19 e 20. A conta sai do quadro, nunca desta
 prosa:
 
 ```bash
@@ -166,9 +178,10 @@ grep -cE '^\| [0-9]+ [^|]*\| nada \|' conhecimento/guarda-mecanica-das-regras.md
 Três delas (17, 19 e 20) não são mecanizáveis pelo que são — altura de
 explicação, necessidade de parar e reabertura de decisão são julgamento,
 não padrão. As outras são candidatas, e a candidata mais barata é
-sempre a que já tem instrumento e não tem quem o chame. A regra 1 já teve
-gancho e voltou a esta lista quando ele foi aposentado: guarda que recusa
-mais do que protege custa mais que a falta dela.
+sempre a que já tem instrumento e não tem quem o chame. A regra 1 teve
+gancho que recusava e voltou a esta lista quando ele foi aposentado: guarda
+que recusa mais do que protege custa mais que a falta dela. Saiu de novo com
+um gancho que só aconselha, depois da recusa que o próprio cliente faz.
 
 **A regra 4 tem guarda de um lado só.** O item do estado do trabalho tem
 gancho: o `vetar-andamento-em-arquivo` recusa o arquivo que

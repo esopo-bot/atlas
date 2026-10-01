@@ -37,7 +37,7 @@ from encadeador import (
     CLI_FALSO_QUE_MEDE_CUSTO, CLI_FALSO_QUE_ENTREGA_SEM_CUSTO,
     CLI_FALSO_QUE_MORRE_CARO, CLI_FALSO_QUE_ACORDA_DE_NOVO,
     CLI_FALSO_QUE_FALA_E_TRAVA, CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA,
-    CLI_FALSO_QUE_RETOMA_E_ENTREGA,
+    CLI_FALSO_QUE_RETOMA_E_ENTREGA, CLI_FALSO_QUE_BATE_NA_PAREDE_SEM_SESSAO,
     CUSTO_SEM_MEDICAO, MARCA_DE_QUEM_ESPERA_VOCE,
     CLI_FALSO_QUE_ENTREGA_E_DEPOIS_MORRE,
     ESPERA_MAXIMA_S,
@@ -360,6 +360,40 @@ def _bandeiras_omitidas_quando_nao_declaradas(etapa, pasta) -> bool:
 
 
 def _sobre_a_conta_no_remoto(b) -> None:
+    from unittest.mock import patch
+
+    herdado = {"GH_TOKEN": "token-herdado"}
+    chamadas = []
+
+    def git_falso(*ordem, **opcoes):
+        chamadas.append((ordem, opcoes))
+        return subprocess.CompletedProcess(ordem, 0)
+
+    with patch.object(encadeador, "_token_da_conta", return_value=None), \
+            patch.object(encadeador.subprocess, "run", side_effect=git_falso):
+        try:
+            subprocess.run(["git", "push"], env=_ambiente_da_conta(
+                "do-remoto", base=herdado))
+            recusa = ""
+        except ValueError as erro:
+            recusa = str(erro)
+    b.caso("remoto sem token recusa a conta e orienta o login",
+           "do-remoto" in recusa and "gh auth login" in recusa)
+    b.caso("remoto sem token nao chama git push", not chamadas)
+
+    with patch.object(encadeador, "_token_da_conta", return_value="token-obtido"), \
+            patch.object(encadeador.subprocess, "run", side_effect=git_falso):
+        subprocess.run(["git", "push"], env=_ambiente_da_conta(
+            "do-remoto", base=herdado))
+    b.caso("remoto com token usa o obtido no push",
+           chamadas[-1][1]["env"]["GH_TOKEN"] == "token-obtido")
+
+    with patch.object(encadeador.subprocess, "run", side_effect=git_falso):
+        subprocess.run(["git", "push"], env=_ambiente_da_conta(
+            None, base=herdado))
+    b.caso("remoto sem conta usa o token herdado",
+           chamadas[-1][1]["env"]["GH_TOKEN"] == "token-herdado")
+
     vazio = _ambiente_da_conta(None, base={})
     b.caso("sem conta declarada, o ambiente nao ganha configuracao de git",
            "GIT_CONFIG_COUNT" not in vazio)
@@ -594,6 +628,39 @@ def _sobre_a_fila_que_le_as_issues(b) -> None:
 
 
 def _sobre_a_conta_que_age(b) -> None:
+    from unittest.mock import patch
+
+    chamadas = []
+
+    def gh_falso(*ordem, **opcoes):
+        chamadas.append((ordem, opcoes))
+        return subprocess.CompletedProcess(ordem, 0, "", "")
+
+    configuracao_da_conta = {"issues": {"conta_gh": "das-issues"}}
+    with patch.dict(os.environ, {"GH_TOKEN": "token-herdado"}), \
+            patch.object(encadeador, "_token_da_conta", return_value=None), \
+            patch.object(encadeador.subprocess, "run", side_effect=gh_falso):
+        feito = encadeador._gh_na_conta_das_issues(
+            configuracao_da_conta, ["issue", "list"])
+    b.caso("issues sem token recusam com conta e orientacao de login",
+           feito.returncode != 0 and "das-issues" in feito.stderr
+           and "gh auth login" in feito.stderr)
+    b.caso("issues sem token nao chamam gh", not chamadas)
+
+    with patch.dict(os.environ, {"GH_TOKEN": "token-herdado"}), \
+            patch.object(encadeador, "_token_da_conta", return_value="token-obtido"), \
+            patch.object(encadeador.subprocess, "run", side_effect=gh_falso):
+        encadeador._gh_na_conta_das_issues(
+            configuracao_da_conta, ["issue", "list"])
+    b.caso("issues com token usam o obtido",
+           chamadas[-1][1]["env"]["GH_TOKEN"] == "token-obtido")
+
+    with patch.dict(os.environ, {"GH_TOKEN": "token-herdado"}), \
+            patch.object(encadeador.subprocess, "run", side_effect=gh_falso):
+        encadeador._gh_na_conta_das_issues({}, ["issue", "list"])
+    b.caso("issues sem conta usam o token herdado",
+           chamadas[-1][1]["env"]["GH_TOKEN"] == "token-herdado")
+
     sem_remoto = Path(b.pasta) / "sem-remoto"
     sem_remoto.mkdir()
     _git(sem_remoto, "init")
@@ -2667,18 +2734,207 @@ def _sobre_o_custo_da_sessao(b) -> None:
              "entrada": 1, "saida": 1,
              "cache-lido": 1, "cache-criado": 1})
 
-    _executar("t-duas-pernas", CLI_FALSO_QUE_RETOMA_E_ENTREGA)
+    _executar("t-duas-pernas", CLI_FALSO_QUE_RETOMA_E_ENTREGA.format(
+        marca=no_shell(Path(b.pasta) / "tetos-das-duas-pernas")))
     evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-duas-pernas",
                                     "mede")
-    b.caso("sessão retomada soma o custo das pernas: cada processo relata só "
-           "o que ele gastou, então guardar a última perde as anteriores",
-         (evidencia.get("custo") or {}).get("usd") == 1.5)
-    b.caso("e soma os tokens das pernas campo a campo",
+    b.caso("sessão retomada grava o custo da última perna: o --resume devolve "
+           "o acumulado da conversa, e somar as pernas contaria a primeira "
+           "de novo",
+         (evidencia.get("custo") or {}).get("usd") == 0.2537)
+    b.caso("e os tokens são os do acumulado por modelo da última perna, não a "
+           "soma das duas",
          (evidencia.get("custo") or {}).get("tokens") == {
-             "entrada": 3, "saida": 6,
+             "entrada": 3, "saida": 1365,
              "cache-lido": 9, "cache-criado": 12})
     b.caso("e os turnos das duas pernas continuam somados, como já eram",
          evidencia.get("turnos") == 8)
+
+    custo = _custo_de_duas_sessoes_novas(b.pasta)
+    b.caso("perna que abre sessão nova, sem --resume, depois da parede de uso "
+           "sem session_id, soma o custo: a sessão nova começa do zero",
+         custo is not None and round(custo["usd"], 4) == 0.3)
+
+
+def _custo_de_duas_sessoes_novas(pasta):
+    cli = Path(pasta) / "cli-parede-sem-sessao.sh"
+    cli.write_text(CLI_FALSO_QUE_BATE_NA_PAREDE_SEM_SESSAO.format(
+        marca=no_shell(Path(pasta) / "bateu-na-parede")), encoding="utf-8")
+    cli.chmod(0o755)
+    guardados = (encadeador.SESSAO, encadeador._dormir_ate_a_janela_abrir)
+    encadeador.SESSAO = encadeador.partir_comando_do_ambiente(
+        _comando_de_script(cli))
+    encadeador._dormir_ate_a_janela_abrir = lambda *_: None
+    try:
+        *_, marcas = encadeador._sessao_com_retomada(
+            {"nome": "mede", "tipo": "sessao", "prompt": "oi",
+             "tempo-limite": TETO_DO_DUBLE},
+            cwd=pasta, ambiente=Bancada._ambiente_sem_a_issue_de_fora(),
+            log=Path(pasta) / "parede-sem-sessao.log", rotulo="mede")
+    finally:
+        encadeador.SESSAO, encadeador._dormir_ate_a_janela_abrir = guardados
+    return marcas.get("custo")
+
+
+def _teto_de_dolar_do_comando(comando):
+    if "--max-budget-usd" not in comando:
+        return None
+    return float(comando[comando.index("--max-budget-usd") + 1])
+
+
+def _comando_com_o_teto_do_ambiente(valor, etapa, pasta):
+    guardado = dict(os.environ)
+    os.environ["ENCADEADOR_TETO_DE_DOLAR"] = valor
+    try:
+        return importlib.reload(encadeador)._comando_sessao(etapa, pasta)
+    finally:
+        os.environ.clear()
+        os.environ.update(guardado)
+        importlib.reload(encadeador)
+
+
+def _sobre_o_teto_de_dolar(b) -> None:
+    from encadeador import CLI_FALSO_QUE_ESTOURA_O_TETO_DE_DOLAR
+
+    def etapa(**extra):
+        return {"nome": "x", "tipo": "sessao", "prompt": "faça", **extra}
+
+    sem_modelo = _teto_de_dolar_do_comando(_comando_sessao(etapa(), b.pasta))
+    sonnet = _teto_de_dolar_do_comando(
+        _comando_sessao(etapa(modelo="sonnet"), b.pasta))
+    haiku = _teto_de_dolar_do_comando(
+        _comando_sessao(etapa(modelo="claude-haiku-5"), b.pasta))
+    b.caso("toda etapa sessao sai com --max-budget-usd, mesmo sem modelo "
+           "declarado",
+           sem_modelo is not None and sem_modelo > 0)
+    b.caso("o teto segue a faixa do modelo: haiku abaixo de sonnet, sonnet "
+           "abaixo de quem não declarou e roda no padrão do CLI",
+           None not in (haiku, sonnet, sem_modelo)
+           and haiku < sonnet < sem_modelo)
+    teto_do = encadeador._teto_de_dolar_do_modelo
+    b.caso("o fable tem faixa própria, e a etapa sem modelo cai nela, porque "
+           "é nele que ela roda hoje",
+           teto_do("claude-fable-5-1") == 20 and teto_do("") == 20
+           and sem_modelo == 20)
+    b.caso("as outras faixas não mudam com a do fable",
+           [teto_do(modelo) for modelo in
+            ("claude-opus-5-5", "sonnet", "claude-haiku-5")] == [10, 6, 2])
+    b.caso("ENCADEADOR_TETO_DE_DOLAR troca o teto de toda etapa, de "
+           "qualquer faixa",
+           _teto_de_dolar_do_comando(_comando_com_o_teto_do_ambiente(
+               "0.5", etapa(modelo="sonnet"), b.pasta)) == 0.5)
+    sem_teto = _comando_com_o_teto_do_ambiente("", etapa(), b.pasta)
+    b.caso("ENCADEADOR_TETO_DE_DOLAR vazio omite a bandeira, não a passa em "
+           "branco",
+           "--max-budget-usd" not in sem_teto and "" not in sem_teto)
+
+    parada = json.dumps({"type": "result", "subtype": "error_max_budget_usd",
+                         "is_error": True, "num_turns": 2, "result": None,
+                         "errors": ["Reached maximum budget ($0.1)"]})
+    b.caso("teto de dólar não é teto de turnos: a etapa não se retoma",
+           not _bateu_no_teto(parada))
+    b.caso("nem é parede de uso: a etapa não dorme esperando a janela, "
+           "nem com parede declarada no fluxo",
+           _espera_do_limite(parada, None) == 0
+           and _espera_do_limite(parada, {"status": "blocked",
+                                          "resetsAt": time.time() + 600}) == 0)
+    diagnostico = _porque_morreu(1, parada, "/tmp/x.log")
+    b.caso("o teto de dólar é nomeado na evidência, com a razão que a sessão "
+           "devolveu",
+           "teto de dólar" in diagnostico
+           and "Reached maximum budget ($0.1)" in diagnostico)
+    b.caso("e a evidência diz onde subir o teto",
+           "ENCADEADOR_TETO_DE_DOLAR" in diagnostico)
+
+    marca = Path(b.pasta) / "rodadas-do-teto-de-dolar"
+    cli = Path(b.pasta) / "cli-teto-de-dolar.sh"
+    cli.write_text(CLI_FALSO_QUE_ESTOURA_O_TETO_DE_DOLAR.format(
+        marca=no_shell(marca)), encoding="utf-8")
+    cli.chmod(0o755)
+    roteiro = _roteiro(b.pasta, "m-teto-de-dolar.json", {"etapas": [
+        {"nome": "gasta", "tipo": "sessao", "prompt": "oi",
+         "tempo-limite": TETO_DO_DUBLE}]})
+    subprocess.run(
+        [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+         "--roteiro", roteiro, "--trabalho", "t-teto-de-dolar",
+         "--dir", b.evidencias, "--cwd", b.pasta],
+        capture_output=True, text=True, encoding="utf-8",
+        timeout=TETO_DO_ENVELOPE,
+        env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
+                 ENCADEADOR_SESSAO=_comando_de_script(cli)))
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-teto-de-dolar",
+                                    "gasta")
+    rodadas = (marca.read_text(encoding="utf-8").split() if marca.exists()
+               else [])
+    b.caso("etapa parada pelo teto de dólar roda uma vez só: nem retomada, "
+           "nem relançada",
+           rodadas == ["rodou"])
+    b.caso("e a evidência para, morta, dizendo que foi o teto de dólar",
+           evidencia.get("veredito") == "para"
+           and evidencia.get("motivo") == "morta"
+           and "teto de dólar" in json.dumps(evidencia, ensure_ascii=False))
+    b.caso("e grava o que a sessão gastou até parar",
+           (evidencia.get("custo") or {}).get("usd") == 0.2332)
+
+    def executar_com_o_teto(trabalho, fonte, teto):
+        cli = Path(b.pasta) / f"cli-{trabalho}.sh"
+        cli.write_text(fonte, encoding="utf-8")
+        cli.chmod(0o755)
+        return subprocess.run(
+            [sys.executable, str(ESTE_INSTRUMENTO), "executar",
+             "--roteiro", roteiro, "--trabalho", trabalho,
+             "--dir", b.evidencias, "--cwd", b.pasta],
+            capture_output=True, text=True, encoding="utf-8",
+            timeout=TETO_DO_ENVELOPE,
+            env=dict(Bancada._ambiente_sem_a_issue_de_fora(),
+                     ENCADEADOR_SESSAO=_comando_de_script(cli),
+                     ENCADEADOR_TETO_DE_DOLAR=teto))
+
+    def tetos_passados(marca):
+        return ([float(teto) for teto in marca.read_text(
+            encoding="utf-8").split()] if marca.exists() else [])
+
+    marca = Path(b.pasta) / "tetos-da-retomada"
+    executar_com_o_teto("t-teto-que-sobra", CLI_FALSO_QUE_RETOMA_E_ENTREGA
+                        .format(marca=no_shell(marca)), "1")
+    b.caso("a perna retomada leva o que sobra do teto da etapa: o teto menos "
+           "o que a primeira perna já gastou",
+           tetos_passados(marca) == [1.0, 0.7668])
+
+    marca = Path(b.pasta) / "tetos-sem-sobra"
+    executar_com_o_teto("t-teto-sem-sobra", CLI_FALSO_QUE_RETOMA_E_ENTREGA
+                        .format(marca=no_shell(marca)), "0.2332")
+    evidencia = _evidencia_da_etapa(Path(b.evidencias) / "t-teto-sem-sobra",
+                                    "gasta")
+    b.caso("etapa que já gastou o teto inteiro não se retoma: o CLI roda uma "
+           "vez só, mesmo parada no teto de turnos",
+           tetos_passados(marca) == [0.2332])
+    b.caso("e morre com a razão do teto de dólar, gravando o que a primeira "
+           "perna gastou",
+           evidencia.get("veredito") == "para"
+           and evidencia.get("motivo") == "morta"
+           and "teto de dólar" in json.dumps(evidencia, ensure_ascii=False)
+           and (evidencia.get("custo") or {}).get("usd") == 0.2332)
+
+    marca = Path(b.pasta) / "rodadas-do-teto-torto"
+    feito = executar_com_o_teto(
+        "t-teto-torto", CLI_FALSO_QUE_ESTOURA_O_TETO_DE_DOLAR.format(
+            marca=no_shell(marca)), "dez")
+    b.caso("ENCADEADOR_TETO_DE_DOLAR que não é número recusa antes de rodar: "
+           "erro de configuração com o nome da variável e o valor lido, e o "
+           "CLI nem abre",
+           feito.returncode == EXIT_ERRO_DE_USO_OU_AMBIENTE
+           and "ENCADEADOR_TETO_DE_DOLAR" in feito.stderr
+           and "'dez'" in feito.stderr and not marca.exists())
+
+    from encadeador import problema_do_teto_de_dolar_declarado
+    b.caso("zero, negativo, nan e infinito também recusam; número positivo, "
+           "vazio e variável ausente passam",
+           all(problema_do_teto_de_dolar_declarado(torto)
+               for torto in ("dez", "0", "-1", "nan", "inf"))
+           and not any(problema_do_teto_de_dolar_declarado(certo)
+                       for certo in ("0.5", " 10 ", "", None)))
+
 
 def _sobre_a_assinatura_da_etapa(b) -> None:
     def _roteiro_com(comando):
@@ -4170,7 +4426,168 @@ def _sobre_a_notificacao_nos_marcos(b) -> None:
            and "notifica" not in resposta.stdout.lower())
 
 
+def _sobre_o_sdk(b):
+    import asyncio
+    from importlib.machinery import ModuleSpec
+    from types import ModuleType, SimpleNamespace
+    from unittest.mock import patch, mock_open
+
+    pacote = ModuleType("claude_agent_sdk")
+    pacote.__spec__ = ModuleSpec("claude_agent_sdk", loader=None)
+    opcoes = []
+    mensagens = []
+    cancelamentos = []
+    modo = ["sucesso"]
+    uso = {"input_tokens": 3, "output_tokens": 4,
+           "cache_read_input_tokens": 5, "cache_creation_input_tokens": 6}
+    resultado = dict(subtype="success", total_cost_usd=0.25, usage=uso,
+                     session_id="sessao-simulada", num_turns=2, is_error=False,
+                     result="pronto", structured_output={"veredito": "segue"})
+    tipo = type("ResultMessage", (SimpleNamespace,), {})
+
+    def receber_opcoes(**valores):
+        opcoes.append(valores)
+        return SimpleNamespace(**valores)
+
+    async def consultar(*, prompt, options):
+        if modo[0] == "antes":
+            raise RuntimeError("falhou antes")
+        if modo[0] == "tempo-antes":
+            raise TimeoutError("falhou antes do transporte")
+        for mensagem in mensagens:
+            yield mensagem
+        if modo[0] == "depois":
+            raise RuntimeError("falhou depois")
+        if modo[0] == "parede-depois":
+            raise RuntimeError("rate limit depois de executar")
+        if modo[0] == "demora":
+            try:
+                await asyncio.sleep(10)
+            finally:
+                cancelamentos.append(True)
+
+    pacote.query = consultar
+    pacote.ClaudeAgentOptions = receber_opcoes
+    etapa = {"nome": "mede", "tipo": "sessao", "prompt": "oi",
+             "modelo": "sonnet", "max-turnos": 7,
+             "ferramentas-negadas": ["Write"], "bare": True}
+    ambiente = {"ENCADEADOR_ETAPA": "1", "GH_TOKEN": "conta-simulada"}
+    argumentos = dict(cwd=".", env=ambiente, entrada="oi", tempo=1,
+                      log=Path("sdk.log"), rotulo="mede")
+    comando = encadeador._comando_sessao(etapa, ".", "anterior", 1)
+    retorno_cli = (0, "cli", "", {})
+    with patch.dict(sys.modules, {"claude_agent_sdk": pacote}), \
+            patch.object(Path, "open", mock_open()), \
+            patch.object(encadeador, "_rodar_sessao_pelo_cli",
+                         return_value=retorno_cli) as cli:
+        mensagens[:] = [tipo(**resultado)]
+        recebido = encadeador._rodar_sessao_em_fluxo(comando, **argumentos)
+        b.caso("SDK entrega os mesmos campos e custo do resultado CLI",
+               encadeador._resultado_da_sessao(recebido[1]) ==
+               dict(resultado, type="result") and recebido[0] == 0
+               and encadeador._custo_da_sessao(recebido[1]) ==
+               encadeador._custo_da_sessao(json.dumps(resultado)))
+        b.caso("SDK recebe orçamento restante, retomada, esquema e ambiente",
+               opcoes[-1]["max_budget_usd"] == 5
+               and opcoes[-1]["resume"] == "anterior"
+               and opcoes[-1]["max_turns"] == 7
+               and opcoes[-1]["model"] == "sonnet"
+               and opcoes[-1]["disallowed_tools"] == ["Write"]
+               and opcoes[-1]["env"] == ambiente
+               and opcoes[-1]["cwd"] == "."
+               and opcoes[-1]["output_format"]["schema"] ==
+               json.loads(encadeador._guia_da_sessao()))
+        b.caso("ganchos locais e de projeto seguem ativos sem can_use_tool, e a "
+               "bandeira que pula permissoes vira o modo bypassPermissions",
+               opcoes[-1]["setting_sources"] == ["project", "local"]
+               and "can_use_tool" not in opcoes[-1]
+               and opcoes[-1]["permission_mode"] == "bypassPermissions"
+               and "bare" in opcoes[-1]["extra_args"])
+        adicionais = encadeador._opcoes_do_sdk(
+            comando + ["--allowed-tools", "Read,Grep", "--settings", "{}",
+                       "--outra-opcao", "valor"], ".", ambiente)
+        b.caso("SDK traduz ferramentas permitidas e conserva opções adicionais",
+               adicionais["allowed_tools"] == ["Read", "Grep"]
+               and adicionais["settings"] == "{}"
+               and adicionais["extra_args"]["outra-opcao"] == "valor")
+        modo[0] = "antes"
+        recebido = encadeador._rodar_sessao_em_fluxo(comando, **argumentos)
+        b.caso("falha antes de mensagem usa CLI", recebido == retorno_cli
+               and cli.call_count == 1)
+        b.caso("fallback só recebe o tempo restante",
+               0 < cli.call_args.kwargs["tempo"] < argumentos["tempo"])
+        modo[0] = "tempo-antes"
+        recebido = encadeador._rodar_sessao_em_fluxo(comando, **argumentos)
+        b.caso("erro de transporte antes de mensagem usa CLI",
+               recebido == retorno_cli and cli.call_count == 2)
+        modo[0] = "depois"
+        recebido = encadeador._rodar_sessao_em_fluxo(comando, **argumentos)
+        b.caso("falha depois de mensagem preserva custo e não repete CLI",
+               recebido[0] != 0 and "falhou depois" in recebido[2]
+               and encadeador._custo_da_sessao(recebido[1])["usd"] == 0.25
+               and cli.call_count == 2
+               and not encadeador._bateu_no_teto(recebido[1]))
+        with patch.object(encadeador.importlib.util, "find_spec", return_value=None):
+            recebido = encadeador._rodar_sessao_em_fluxo(comando, **argumentos)
+        b.caso("pacote ausente usa CLI", recebido == retorno_cli
+               and cli.call_count == 3)
+        modo[0] = "demora"
+        estouro = None
+        try:
+            encadeador._rodar_sessao_em_fluxo(
+                comando, **dict(argumentos, tempo=0.01))
+        except encadeador.TempoEstourado as erro:
+            estouro = erro
+        b.caso("tempo limite cancela SDK e preserva custo sem repetir CLI",
+               estouro is not None and cancelamentos == [True]
+               and estouro.custo["usd"] == 0.25 and cli.call_count == 3)
+        modo[0] = "sucesso"
+        mensagens[:] = [tipo(**dict(resultado, subtype="error_max_turns"))]
+        with patch.object(encadeador, "RETOMADAS", 1):
+            recebido = encadeador._sessao_com_retomada(
+                etapa, cwd=".", ambiente=ambiente,
+                log=Path("sdk.log"), rotulo="mede")
+        b.caso("retomada mantém custo acumulado e desconta orçamento",
+               recebido[3]["custo"]["usd"] == 0.25
+               and recebido[3]["turnos"] == 4
+               and opcoes[-1]["max_budget_usd"] == 5.75
+               and opcoes[-1]["resume"] == "sessao-simulada")
+        pelo_sdk = recebido
+        saida_cli = json.dumps(dict(resultado, type="result", subtype="error_max_turns"))
+        cli.return_value = (0, saida_cli, "", {"sessao": "sessao-simulada",
+                            "ditos": [], "limite": None, "turnos": 2})
+        with patch.object(encadeador, "sdk_disponivel", return_value=False), \
+                patch.object(encadeador, "RETOMADAS", 1):
+            pelo_cli = encadeador._sessao_com_retomada(
+                etapa, cwd=".", ambiente=ambiente,
+                log=Path("sdk.log"), rotulo="mede")
+        b.caso("mesmas entradas acumulam mesmos campos no SDK e CLI",
+               pelo_cli == pelo_sdk
+               and cli.call_args.args[0][
+                   cli.call_args.args[0].index("--max-budget-usd") + 1] == "5.75")
+        chamadas_antes = cli.call_count
+        modo[0] = "parede-depois"
+        with patch.object(encadeador, "_dormir_ate_a_janela_abrir") as dormir:
+            recebido = encadeador._sessao_com_retomada(
+                etapa, cwd=".", ambiente=ambiente,
+                log=Path("sdk.log"), rotulo="mede")
+        b.caso("erro depois da execução não recomeça por parede ou teto",
+               recebido[0] == 1 and recebido[3]["custo"]["usd"] == 0.25
+               and dormir.call_count == 0 and cli.call_count == chamadas_antes)
+        with patch.object(encadeador.shutil, "which", return_value=None):
+            falta = encadeador._falta_o_claude([etapa], ambiente)
+        b.caso("SDK disponível dispensa executável global na checagem", not falta)
+        with patch.object(encadeador, "_rodar_aprovacao_manual",
+                          return_value="aguardando") as aprovacao:
+            recebido = encadeador.rodar_etapa(
+                {"nome": "aprovar", "tipo": "aprovacao-manual"},
+                1, "trabalho", ".", ".", ambiente, 3)
+        b.caso("aprovação permanece entre etapas", recebido == "aguardando"
+               and aprovacao.call_count == 1 and cli.call_count == chamadas_antes)
+
+
 TEMAS = (
+    _sobre_o_sdk,
     _sobre_a_entrada_da_suite,
     _sobre_o_ambiente_que_um_tema_troca,
     _sobre_a_issue_de_politica,
@@ -4202,6 +4619,7 @@ TEMAS = (
     _sobre_o_teto_declarado_na_sessao,
     _sobre_a_troca_do_cli_da_sessao,
     _sobre_o_custo_da_sessao,
+    _sobre_o_teto_de_dolar,
     _sobre_a_assinatura_da_etapa,
     _sobre_os_ciclos_e_o_disco,
     _sobre_o_prompt_montado,

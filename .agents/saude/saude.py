@@ -362,6 +362,9 @@ SOB_PEDIDO_TAMBEM = (
 SOB_PEDIDO = SOB_PEDIDO_TAMBEM + (
     ("simulacao", TITULO_SIMULACAO, medir_simulacao),
 )
+NOMES_DAS_MEDIDAS = tuple(nome for nome, _titulo, _medir
+                          in MEDIDAS + SOB_PEDIDO)
+MEDIDA_DESCONHECIDA = "medida que não existe: {}. As que existem: {}."
 
 
 def relatorio(escolhidas):
@@ -539,6 +542,23 @@ def testar() -> int:
     caso("medida sem a chave rodou não vira acusação",
          medidas_que_nao_rodaram({"camada": {"paginas": 3}, "outra": 1}) == [])
 
+    leitor = leitor_de_argumentos()
+    caso("nenhum posicional do leitor de argumentos junta nargs=\"*\" com "
+         "choices, que o Python 3.11 recusa com a lista vazia",
+         not any(acao.nargs == "*" and acao.choices
+                 for acao in leitor._actions if not acao.option_strings))
+    caso("sem medida nenhuma a leitura dos argumentos devolve a lista vazia",
+         leitor.parse_args([]).medida == [])
+    caso("medida desconhecida é nomeada, uma vez só, na ordem do pedido",
+         medidas_desconhecidas(["voar", "tamanho", "nadar", "voar"])
+         == ["voar", "nadar"])
+    caso("medida conhecida não vira acusação",
+         medidas_desconhecidas(list(NOMES_DAS_MEDIDAS)) == [])
+    ajuda = leitor.format_help()
+    caso("a ajuda e a linha de uso nomeiam toda medida",
+         all(nome in leitor.format_usage() and nome in ajuda
+             for nome in NOMES_DAS_MEDIDAS))
+
     total = len(casos)
     if falhas:
         for falha in falhas:
@@ -549,14 +569,28 @@ def testar() -> int:
     return 0
 
 
-def main():
+def medidas_desconhecidas(pedidas) -> list:
+    return list(dict.fromkeys(pedida for pedida in pedidas
+                              if pedida not in NOMES_DAS_MEDIDAS))
+
+
+def leitor_de_argumentos() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=USO)
     ap.add_argument("medida", nargs="*",
-                    choices=[m[0] for m in MEDIDAS + SOB_PEDIDO] or None,
-                    help="quais medidas rodar (padrão: todas)")
+                    metavar="{" + ",".join(NOMES_DAS_MEDIDAS) + "}",
+                    help="quais medidas rodar, entre "
+                         + ", ".join(NOMES_DAS_MEDIDAS) + " (padrão: todas)")
     ap.add_argument("--resumo", action="store_true",
                     help="imprime só o JSON do resumo, para comparar entre rodadas")
+    return ap
+
+
+def main():
+    ap = leitor_de_argumentos()
     a = ap.parse_args()
+    if desconhecidas := medidas_desconhecidas(a.medida):
+        ap.error(MEDIDA_DESCONHECIDA.format(", ".join(desconhecidas),
+                                            ", ".join(NOMES_DAS_MEDIDAS)))
     if a.resumo:
         import contextlib
         with contextlib.redirect_stdout(io.StringIO()):

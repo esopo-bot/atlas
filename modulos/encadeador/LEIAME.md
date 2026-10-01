@@ -20,6 +20,20 @@ próprio `modelo` sempre vence o valor central. `bare` (booleano) some com
 a camada da sessão — mesmo uso de sempre, só que agora declarável no
 roteiro em vez de só por variável de ambiente.
 
+Toda etapa `sessao` leva `--max-budget-usd` com o teto da faixa do modelo,
+em `TETO_DE_DOLAR_POR_FAIXA`; sem modelo declarado vale o de fable, o modelo
+em que a etapa roda hoje. `ENCADEADOR_TETO_DE_DOLAR` troca o teto de toda
+etapa; vazia, tira a bandeira; valor que não é número maior que zero recusa
+a execução antes de rodar. O teto vale para a etapa inteira: a retomada leva
+o que sobra dele, e a etapa sem sobra morre em vez de retomar. O CLI só
+confere entre turnos, então a etapa pode passar dele por um turno. A etapa
+que para no teto de dólar morre com a razão na evidência e não se retoma nem
+espera a janela de uso.
+
+O custo na evidência é o da etapa. O `--resume` devolve o acumulado da
+conversa, então vale o da última perna de cada sessão; só a perna que abre
+sessão nova soma.
+
 Por que é módulo e não camada: só serve a quem roda execuções de etapas;
 para todo o resto seria peso morto na largada. E o nome é `encadeador` por
 decisão do dono: o motor daqui nunca tomou emprestada a
@@ -76,3 +90,5 @@ respondesse. Quais são, o que fazem em `bypassPermissions` e por quê está em
 `conhecimento/guarda-mecanica-das-regras.md`, na seção sobre o verbo de cada
 veto. A decisão que precisa do dono continua parando a execução em
 `aguardando-resposta`, e a resposta volta pela retomada.
+
+O Agent SDK é opcional (`pip install claude-agent-sdk==0.2.160`); sem ele, o `claude -p` continua.

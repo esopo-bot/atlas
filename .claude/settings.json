@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/avisar-indice-fora.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento SessionStart -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/avisar-indice-fora.py"
           }
         ]
       },
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-mcp.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento SessionStart -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/preparar-sessao-na-nuvem.py"
           }
         ]
       },
@@ -33,7 +33,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-ambiente.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento SessionStart -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-mcp.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento SessionStart -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/verificar-ambiente.py"
           }
         ]
       }
@@ -44,7 +52,28 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/despachar-cercas.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento PreToolUse -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/despachar-cercas.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento PostToolUseFailure -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/orientar-recusa-do-isolamento.py"
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento PermissionDenied -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/registrar-negativa.py"
           }
         ]
       }
@@ -54,7 +83,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/lembrar-encerramento.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/lembrar-encerramento.py"
           }
         ]
       },
@@ -62,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-destino-da-entrega.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-destino-da-entrega.py"
           }
         ]
       },
@@ -70,7 +99,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-relato-da-sessao.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-relato-da-sessao.py"
           }
         ]
       },
@@ -78,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/avisar-clone-desatualizado.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/avisar-clone-desatualizado.py"
           }
         ]
       },
@@ -86,7 +115,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-apresentacao-da-entrega.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-apresentacao-da-entrega.py"
           }
         ]
       },
@@ -94,7 +123,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-pergunta-em-pendencia.py"
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop -X utf8 -c \"import os,sys,runpy;r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();a=os.path.join(r,sys.argv[1]);os.path.isfile(a) or sys.exit(print('gancho ausente: '+a,file=sys.stderr) or 2);sys.argv=[a];sys.path[0]=os.path.dirname(a);runpy.run_path(a,run_name='__main__')\" .claude/hooks/cobrar-pergunta-em-pendencia.py"
           }
         ]
       }

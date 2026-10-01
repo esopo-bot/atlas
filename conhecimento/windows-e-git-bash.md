@@ -13,9 +13,15 @@ o acha, e ele não roda. Julgue executando, nunca pelo nome:
 python -c "import sys; print(sys.version_info[0])"
 ```
 
-Os ganchos da camada chamam o interpretador pelo nome que a instalação
-mediu, e só voltam ao lançador `.claude/hooks/interpretador.sh` quando
-nenhum respondeu.
+Toda linha de gancho da camada passa pelo lançador
+`.claude/hooks/interpretador.sh`, que escolhe o Python a cada chamada, pela
+lembrança (nome e caminho) ou pela sonda, e prova que ele roda pelo código de
+saída: nome medido numa máquina não viaja no `settings.json`. Sem nenhum
+Python 3 que responda, a cerca de `PreToolUse` sai 2 e barra a ferramenta, e
+os ganchos de abertura e parada saem 0 com um aviso, dizendo o conserto:
+Python 3 no PATH de quem abre o cliente, e o cliente reaberto, porque ele
+herda o PATH de quando abriu (medido em 29/09/2026: depois de instalar o
+Python, o app seguiu com o PATH antigo até reiniciar).
 
 ## O Git Bash converte o que parece caminho
 

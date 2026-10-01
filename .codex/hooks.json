@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/interpretador.sh -X utf8 .agents/travessia/ponte.py --codex",
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento PreToolUse --cliente codex -X utf8 .agents/travessia/ponte.py --codex",
             "timeout": 60
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/interpretador.sh -X utf8 .agents/travessia/ponte.py --codex",
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento SessionStart --cliente codex -X utf8 .agents/travessia/ponte.py --codex",
             "timeout": 60
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/interpretador.sh -X utf8 .agents/travessia/ponte.py --codex",
+            "command": "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento Stop --cliente codex -X utf8 .agents/travessia/ponte.py --codex",
             "timeout": 60
           }
         ]

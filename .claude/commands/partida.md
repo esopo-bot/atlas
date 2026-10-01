@@ -8,8 +8,8 @@ Leia `.agents/prompts/partida.md` inteiro e execute o checklist como ele
 manda: um item por vez, comando rodado e saída colada, resposta no
 vocabulário fechado, e o relatório no molde dele como primeira resposta. Não
 trabalhe de memória: abra o arquivo. Depois do veredito vem o briefing,
-`.agents/prompts/bootstart.md`, e a linha que diz qual caminho da tabela dele
-o pedido segue.
+`.agents/prompts/bootstart.md`, e a linha que diz que skill ou que caminho da
+tabela dele o pedido segue.
 
 O pedido do dono, se houver:
 

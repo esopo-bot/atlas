@@ -185,7 +185,7 @@ de consulta, não de sessão.
       filtrar por padrão de nome não protege nada, porque o valor vai junto.
       Quando o que falta é o nome, liste nomes, não valores.
 
-9. **Destrutivo é do dono; commit e push seguem o que o repositório
+9. **Destrutivo é do dono; commit, push e mescla seguem o que o repositório
    autorizou.**
     - **Arquivo que o git não rastreia não tem histórico.** Onde o git guarda a
       versão anterior, apagar se desfaz; em arquivo ignorado, ou fora de git
@@ -195,15 +195,16 @@ de consulta, não de sessão.
       verdade é do dono, e só depois de provado que a informação está inteira
       em outro lugar.
     - O que a automação pode fazer sozinha se declara em
-      `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`) — é
-      de cada repositório, e o gancho `vetar-branch-protegida` lê dali. Sem
-      declaração, nega: omissão não é permissão. Publicar não tem chave: é do
-      dono, sempre, como forçar ou apagar a branch de publicação e gravar
-      direto na que `branches_por_incorporacao` nomeia. O gancho recusa as
-      formas comuns; quem trava é a regra do servidor, onde o dono a ligou.
+      `nucleo/configuracao.json`, campo `autorizacoes` (`commit`, `push`,
+      `mesclar`) — é de cada repositório, e o gancho `vetar-branch-protegida`
+      lê dali. Sem declaração, nega: omissão não é permissão. Publicar não tem
+      chave: é do dono, sempre, como forçar ou apagar a branch de publicação e
+      gravar direto na que `branches_por_incorporacao` nomeia. O gancho recusa
+      as formas comuns; quem trava é a regra do servidor, onde o dono a ligou.
     - Em repositório vizinho a autorização é outra: vale o `autorizacoes` do
       cadastro do projeto, e só na falta dele o `configuracao.json` do alvo —
-      nos dois lugares, omissão nega.
+      nos dois lugares, omissão nega. `mesclar` não vale no vizinho: a chave só
+      libera na raiz.
     - O que aciona automação — integração contínua, implantação, aviso a outras
       pessoas — é sempre do dono, mesmo onde o resto é liberado: sincronizar
       não é entregar.
@@ -211,8 +212,11 @@ de consulta, não de sessão.
       que `branches_por_incorporacao` não lista é da sessão onde o repositório
       autorizou push — é assim que o trabalho chega à integração. O que é do
       dono é a branch que a lista nomeia, seja a de publicação ou a própria
-      integração: ela recebe por pedido de incorporação, e abri-lo é da sessão,
-      aprová-lo e mesclá-lo é dele. Sincronizar não é nem um nem outro; o
+      integração: ela recebe por pedido de incorporação, e abri-lo é da sessão
+      e aprová-lo é dele. Mesclá-lo também é dele, salvo onde a raiz liga
+      `autorizacoes.mesclar`: aí, com a aprovação que o servidor exige, a
+      sessão mescla pela forma `gh pr merge <número> --merge`, e o gancho
+      recusa a que contorna a aprovação. Sincronizar não é nem um nem outro; o
       caminho de cada branch é o da regra 16.
     - Antes de empurrar para branch compartilhada, olhe os PRs abertos dela:
       push em branch com PR aberto entra na entrega em rota, e o corpo do PR
@@ -422,6 +426,25 @@ de consulta, não de sessão.
       por exemplo — se confirma com o dono na primeira resposta, pela
       ferramenta de pergunta, citando as duas: a frase colada e o campo da
       configuração.
+
+21. **Se a sessão consegue fazer, ela faz e avisa; não devolve serviço ao
+    dono.**
+    - Tudo o que a sessão consegue executar com certeza do que está fazendo —
+      teste, sonda, configuração da máquina, regra de ramo com a conta ativa,
+      apagar pasta que o git já esqueceu — ela executa e conta o resultado.
+      Lista de comandos "prontos para colar" não é entrega: é serviço
+      devolvido, e o dono não está aqui para isso.
+    - Fica para o dono só o que a sessão não pode fazer: o que uma cerca ou o
+      classificador barra de verdade, o que exige credencial que ela não tem, a
+      decisão que muda o trabalho inteiro, e o destrutivo que a regra 9 reserva
+      a ele. Mesmo aí a sessão vai até a fronteira e diz, em uma linha, o que
+      faltou e por quê.
+    - Regra escrita anterior não vale como desculpa para devolver serviço:
+      regra de plano ou de sessão que contradiz esta cai. Incerteza real vira
+      uma pergunta só, pela ferramenta de pergunta; depois do sim, faz sem
+      perguntar de novo.
+    - Decisão do dono de 29/09/2026, depois de receber um roteiro de comandos
+      para colar: "se vc consegue fazer, me avisa e faça".
 
 ## Como propor mudança — e como consultar por código
 

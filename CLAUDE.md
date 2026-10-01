@@ -10,7 +10,7 @@ faz essa leitura por você.
 
 ## O que é só do Claude Code
 
-O que mora em `.claude/` está na árvore do
+O que mora em `.claude/` está na tabela do
 `conhecimento/mapa-do-repositorio.md`. Três exceções:
 
 - `settings.local.json`: pessoal, criado automaticamente, fora do git.

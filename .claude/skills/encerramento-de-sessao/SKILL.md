@@ -42,9 +42,3 @@ consertado exige o commit que o consertou na mesma linha — senão o relatório
 manda a sessão seguinte caçar o que não existe mais. E não declare estado
 final de árvore compartilhada: entre a medida e o texto, outra sessão pode
 ter commitado.
-
-## Pedidos de exemplo
-
-- "vou encerrar por hoje, faz o esfriamento da sessão"
-- "é isso por hoje, fecha o dia e recolhe o que a gente aprendeu"
-- "acabou meu expediente, pode fazer o fechamento"

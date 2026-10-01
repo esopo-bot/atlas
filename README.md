@@ -72,6 +72,24 @@ instalador lê a camada da pasta em que mora, e só o que o git rastreia ali:
 arquivo solto no clone não viaja. Pasta que não é repositório git é recusada,
 com o recado de clonar.
 
+### Sem clone: a máquina que só deixa copiar texto
+
+Onde a política da máquina barra clonar repositório público e baixar zip, mas
+deixa abrir um arquivo em modo raw, a camada chega num arquivo só:
+`camada-em-um-arquivo.py`, deste repositório. Ele é texto ASCII, de alguns
+megabytes, e traz dentro cada arquivo que o clone traria. Abra-o em modo raw,
+selecione tudo, copie, salve com esse nome numa pasta fora do seu repositório
+e rode:
+
+```bash
+python camada-em-um-arquivo.py
+```
+
+Ele confere que chegou inteiro, reconstrói ao lado a pasta `atlas-<versão>`
+como repositório git e imprime o comando do instalador, que dali roda como
+roda do clone. Cópia cortada ou alterada é recusada antes de gravar, com o
+recado de copiar de novo. O git precisa estar na máquina.
+
 Se a pasta for a raiz de um workspace — a que abriga os repositórios —, use
 `python <pasta do clone do atlas>/montar.py --esqueleto` no primeiro passo:
 cria também `projetos/`, `.credenciais/` e `recursos/`.
@@ -87,7 +105,9 @@ python .agents/travessia/travessia.py
 
 ## Atualizar uma máquina que já tem a camada
 
-Traga o clone em dia com `git pull` e, de dentro do seu repositório, rode:
+Traga o clone em dia com `git pull` — ou, sem clone, copie de novo o
+`camada-em-um-arquivo.py` e rode-o, que a versão nova nasce em outra pasta — e,
+de dentro do seu repositório, rode:
 
 ```bash
 python <pasta do clone do atlas>/montar.py --atualizar

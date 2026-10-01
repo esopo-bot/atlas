@@ -1,0 +1,7 @@
+# O que o Claude Code copia da raiz para cada worktree nova que ele cria: só
+# o que casa uma linha e o git ignora. São os arquivos locais da camada, que
+# não viajam pelo git.
+nucleo/executor.json
+.mcp.json
+.agents/indice/alvos.json
+.claude/settings.local.json

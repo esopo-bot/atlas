@@ -22,6 +22,8 @@ TIPO_PASTA = "pasta"
 TIPO_ARQUIVO = "arquivo"
 TIPO_VARIAVEL = "variavel"
 TIPOS = (TIPO_RECEITA, TIPO_COMANDO, TIPO_PASTA, TIPO_ARQUIVO, TIPO_VARIAVEL)
+CHAVE_SO_NA_MAQUINA_LOCAL = "so_na_maquina_local"
+VARIAVEL_DA_NUVEM = "CLAUDE_CODE_REMOTE"
 
 VARIAVEL_COM_PADRAO_OPCIONAL = re.compile(
     r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:-[^}]*)?\}")
@@ -65,10 +67,10 @@ SHELLS_QUE_LANCAM = ("bash", "bash.exe", "sh", "sh.exe", "pwsh", "pwsh.exe",
 PROBLEMA_INTERPRETADOR_DO_GANCHO = (
     "o interpretador {0!r}, que as linhas de gancho do settings.json chamam "
     "direto, não responde nesta máquina — então nenhuma cerca roda, e o que "
-    "elas barram passa. O nome foi medido na instalação e não é fato do "
-    "mundo: se o Python mudou de lugar, rode, da raiz, `python <pasta do "
-    "clone do atlas>/montar.py --atualizar` para remedir, ou troque o nome "
-    "na linha do gancho")
+    "elas barram passa. A linha precisa passar pelo lançador: "
+    "`bash -c '...' gancho --evento <Evento> ...`. O instalador "
+    "(`montar.py --atualizar` em quem instala; na casa, o molde) reescreve "
+    "a linha do gancho")
 AVISO = (
     "AVISO do gancho verificar-ambiente: esta máquina não tem tudo o que o "
     "repositório declara precisar. Perda de migração é silenciosa — este é o "
@@ -105,6 +107,15 @@ def declaracoes(dados: dict) -> list:
         for valor in valores:
             if isinstance(valor, str) and valor.strip():
                 pares.append((tipo, valor.strip()))
+    return pares
+
+
+def declaracoes_que_valem_aqui(dados: dict, env) -> list:
+    pares = declaracoes(dados)
+    so_na_maquina_local = dados.get(CHAVE_SO_NA_MAQUINA_LOCAL)
+    if (isinstance(so_na_maquina_local, dict)
+            and env.get(VARIAVEL_DA_NUVEM) != "true"):
+        pares += declaracoes(so_na_maquina_local)
     return pares
 
 
@@ -227,7 +238,7 @@ def faltas(raiz: Path, env=None, caminho_path=None) -> tuple:
         if motivo_de_ilegivel:
             problemas.append(PROBLEMA_DECLARACAO_ILEGIVEL.format(
                 ARQUIVO_AMBIENTE, motivo_de_ilegivel))
-        for tipo, valor in declaracoes(dados):
+        for tipo, valor in declaracoes_que_valem_aqui(dados, env):
             if tipo == TIPO_RECEITA:
                 receita = valor
             if tipo == TIPO_VARIAVEL and valor in variaveis_ja_acusadas:
@@ -314,6 +325,16 @@ ACUSA = [
     ("a linha sem variável no texto, que roda em qualquer concha, também "
      "acusa o interpretador que não roda",
      dict(settings=gancho_sem_variavel_que_chama("python3"))),
+    ("linha escrita à mão com Python direto e sem resposta acusa",
+     dict(settings=gancho_que_chama('python3 -X utf8 -c "print(1)"'))),
+    ("o que só vale na máquina local é cobrado fora da nuvem",
+     dict(declarado={CHAVE_SO_NA_MAQUINA_LOCAL: {
+         "comando": ["regador-automatico"]}})),
+    ("na nuvem, o que vale em todo lugar continua cobrado",
+     dict(declarado={"comando": ["regador-automatico"],
+                     CHAVE_SO_NA_MAQUINA_LOCAL: {
+                         "comando": ["prensa-de-flores"]}},
+          nuvem=True)),
 ]
 
 CALA = [
@@ -346,8 +367,20 @@ CALA = [
      "quem escolhe é o bash, a cada execução",
      dict(settings=gancho_que_chama(
          'bash \\"${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh\\"'))),
+    ("linha nova com bash -c passa pelo lançador e não acusa Python",
+     dict(settings=gancho_que_chama(
+         "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;"
+         "if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;"
+         "echo atlas: lancador dos ganchos ausente em $l;exit 0' "
+         'gancho --evento SessionStart -X utf8 -c "print(1)"'))),
     ("settings.json ilegível não vira acusação de interpretador",
      dict(settings="{ isto nao e json")),
+    ("na nuvem, o que só vale na máquina local não se cobra",
+     dict(declarado={CHAVE_SO_NA_MAQUINA_LOCAL: {
+         "comando": ["regador-automatico"],
+         "variavel": ["CAIXA_DE_MUSICA"]}}, nuvem=True)),
+    ("só na máquina local que não é objeto não inventa exigência",
+     dict(declarado={CHAVE_SO_NA_MAQUINA_LOCAL: ["regador-automatico"]})),
 ]
 
 
@@ -388,7 +421,7 @@ def testar() -> int:
         ambiente = {"SINO_DE_VENTO_TOKEN": "presente"}
 
         def faltas_do_caso(mcp=None, declarado=None, antigo=None,
-                           settings=None):
+                           settings=None, nuvem=False):
             for nome, conteudo in ((ARQUIVO_MCP, mcp),
                                    (ARQUIVO_AMBIENTE, declarado),
                                    (ARQUIVO_SETTINGS, settings),
@@ -402,7 +435,9 @@ def testar() -> int:
                 else:
                     alvo.write_text(json.dumps(conteudo, ensure_ascii=False),
                                     encoding="utf-8")
-            return faltas(raiz, env=ambiente,
+            env = (dict(ambiente, **{VARIAVEL_DA_NUVEM: "true"}) if nuvem
+                   else ambiente)
+            return faltas(raiz, env=env,
                           caminho_path=str(caixa_de_ferramentas))
 
         falhas = []

@@ -92,9 +92,3 @@ instalada, quem prova é `python .agents/camada/camada.py medir provar`, que
 viaja junto. Se um instrumento
 reprova, o trabalho não está pronto, por mais bonito que o texto esteja. Quem
 commita, empurra e publica está escrito no `AGENTS.md`, e só lá.
-
-## Pedidos de exemplo
-
-- "quero acrescentar uma regra nova na camada genérica. o que ela precisa atravessar antes de entrar?"
-- "vou apagar uma página do conhecimento que ninguém usa mais, pode?"
-- "pensei numa skill nova pra camada. me diz se ela passa ou não"

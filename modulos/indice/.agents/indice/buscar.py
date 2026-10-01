@@ -1,60 +1,45 @@
 import argparse
-import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 BANDEIRA_DE_TESTE = "--testar"
-USO = ("busca no acervo indexado por significado E por termo exato, falando "
-       "HTTP direto com o servidor de vetores e o de embeddings. É a porta "
-       "normal para o acervo: não depende de cliente MCP — que política de "
-       "organização pode barrar sem aviso — e usa só a biblioteca padrão. "
-       "Descobre sozinho o que o indexador já indexou")
+USO = ("busca no acervo pelo ck no modo léxico (BM25: termo e palavra, "
+       "ranqueados), com índice em arquivo dentro de cada alvo e nenhum "
+       "serviço de pé. É a porta normal para o acervo: não depende de "
+       "cliente MCP e nunca pede o modo por significado, que baixaria modelo. "
+       "Sem o ck no PATH, avisa numa linha e cai no grep")
 
 ARQUIVO_DOS_ALVOS = ".agents/indice/alvos.json"
-CAMPO_DO_AMBIENTE = "ambiente"
-CHAVE_DO_MODELO = "EMBEDDING_MODEL"
-CHAVE_DO_SERVIDOR_DE_MODELO = "OLLAMA_HOST"
-CHAVE_DO_BANCO = "MILVUS_ADDRESS"
-
-MODELO_PADRAO = "nomic-embed-text"
-BANCO_PADRAO = "127.0.0.1:19530"
-SERVIDOR_DE_MODELO_PADRAO = "127.0.0.1:11434"
-CAMINHO_DO_VETOR = "/api/embeddings"
-CAMINHO_DA_BUSCA_DENSA = "/v2/vectordb/entities/search"
-CAMINHO_DA_BUSCA_HIBRIDA = "/v2/vectordb/entities/hybrid_search"
-CAMINHO_DA_CONSULTA = "/v2/vectordb/entities/query"
-CAMINHO_DAS_COLECOES = "/v2/vectordb/collections/list"
-CAMINHO_DA_DESCRICAO = "/v2/vectordb/collections/describe"
-CAMINHO_DA_CONTAGEM = "/v2/vectordb/collections/get_stats"
-PREFIXO_DA_COLECAO = "hybrid_code_chunks_"
-MARCA_DO_CAMINHO_NA_DESCRICAO = "codebasePath:"
-LETRAS_DO_RESUMO = 8
-CAMPO_DO_VETOR_DENSO = "vector"
-CAMPO_DO_VETOR_ESPARSO = "sparse_vector"
-CAMPOS_QUE_VOLTAM = ["relativePath", "startLine", "content"]
-FUSAO = {"strategy": "rrf", "params": {"k": 100}}
-FUNIL_DA_FUSAO = 3
-TEMPO_DA_CHAMADA = 90
+CAMPO_DOS_ALVOS = "alvos"
+CAMPO_DO_QUE_IGNORAR = "ignorar"
+PROGRAMA_DO_CK = "ck"
+PASTA_DO_INDICE_DO_CK = ".ck"
+LINHAS_QUE_O_CK_GRAVA = (".ck/", ".ckignore")
+AMOSTRAS_DO_QUE_O_CK_GRAVA = {".ck/": ".ck/manifest.json",
+                              ".ckignore": ".ckignore"}
+COMO_INSTALAR_O_CK = ("baixe o zip da sua plataforma nas versões de "
+                      "github.com/BeaconBay/ck, confira o SHA-256 e ponha o "
+                      "`ck` no PATH (ou `cargo install ck-search`)")
+PREFIXO_LONGO_DO_WINDOWS = "\\\\?\\"
 QUANTOS_POR_PADRAO = 5
 TETO_TOTAL_POR_PADRAO = 30
 TETO_MINIMO = 1
-TETO_DO_GIT = 10
+TETO_DO_GIT = 30
+TEMPO_DA_BUSCA = 600
 LETRAS_DO_TRECHO = 160
-
-TETO_DE_TRECHOS_NA_AMOSTRA = 400
-PERGUNTAS_POR_ALVO = 8
-REPETICOES = 2
-TERMO = re.compile(r"[A-Za-z_][\w\-]{5,}")
-LETRAS_QUE_MARCAM_NOME = "-_"
-FILTRO_DE_TUDO = "id != ''"
-TOPO = 1
-TRES_PRIMEIROS = 3
+LETRAS_MINIMAS_DA_PALAVRA = 3
+TETO_DE_BYTES_DO_GREP = 1_000_000
+AMOSTRA_DE_BINARIO = 4096
+PASTAS_QUE_O_GREP_PULA = {"node_modules", "venv", "__pycache__", "vendor",
+                          "dist", "build", "target"}
+LINHA_DO_GIT_GREP = re.compile(r"^(.*?):(\d+):(.*)$")
+PALAVRA = re.compile(r"[\w.\-]+")
+SEM_ACHADO_NO_CK = "No matches"
 
 RECUSA_SEM_PERGUNTA = "sem pergunta: diga o que você quer achar, entre aspas"
 RECUSA_TETO_INVALIDO = ("--teto-total é o teto de trechos na resposta e "
@@ -64,41 +49,30 @@ RECUSA_TETO_INVALIDO = ("--teto-total é o teto de trechos na resposta e "
 CORTADO_NO_TETO = ("\ncortado no teto de {}: havia {} trecho(s). O resto não "
                    "foi impresso — peça mais com --teto-total, ou estreite "
                    "com --alvo e --quantos")
-RECUSA_ALVO_NAO_INDEXADO = ("alvo que não está indexado: {}. O que existe no "
-                            "banco:\n{}")
-NADA_INDEXADO = ("nada indexado no banco em {}: rode `indexar.py` antes. "
-                 "Zero aqui não quer dizer que a resposta não existe")
-VAZIA = ("  {} — o banco não devolveu trecho nenhum: a coleção existe, mas a "
-         "busca voltou vazia — coleção recém-gravada ou indexação que não "
-         "gravou nada")
+RECUSA_ALVO_DESCONHECIDO = ("alvo que não existe nem está declarado: {}. Os "
+                            "declarados em {}:\n{}")
+ALVO_AUSENTE = "  não medido: {} não existe no disco — alvo declarado em outra árvore"
+AVISO_SEM_CK = ("sem o `ck` no PATH: a busca cai no grep, por palavra e sem o "
+                "ranking do BM25. Para instalar: " + COMO_INSTALAR_O_CK)
+AVISO_DO_DENSO = ("--denso não muda nada: o motor é léxico, e o modo por "
+                  "significado do ck baixaria modelo")
+NAO_MEDIDO_SEM_DENSO = ("não medido: o motor é léxico e não tem denso nem "
+                        "híbrido para comparar; a régua medida está em "
+                        "conhecimento/indice.md")
+EXCLUDE_ACRESCENTADO = ("  {}: {} acrescentado(s) — o índice do ck não "
+                        "aparece no git de {}")
+GIT_NAO_RESPONDEU = ("  não medido: o git de {} não respondeu ({}) — o .ck/ "
+                     "pode aparecer no git status dele")
+VAZIA = "  {} — nenhum trecho casou com a pergunta: tente outra palavra"
 CABECA = "BUSCA {} — \"{}\" em {} alvo(s)"
-MODO_HIBRIDO = "híbrida (significado + termo exato)"
-MODO_DENSO = "densa (só significado)"
+MODO_LEXICO = "léxica pelo ck (BM25: termo e palavra)"
+MODO_GREP = "por grep (sem o ck)"
 LINHA_DO_ALVO = "  {}"
 LINHA_DO_ACHADO = "    [{:.3f}] {}:{}"
 LINHA_DO_TRECHO = "           {}"
-RODAPE = ("\nA pontuação é a semelhança medida, não a certeza: o banco sempre "
-          "devolve os mais próximos que tiver, mesmo quando nenhum serve.")
-FALHOU_A_CHAMADA = "não consegui falar com {}: {}"
-CABECA_DA_MEDICAO = ("MEDIÇÃO — denso puro contra híbrido, {} pergunta(s) por "
-                     "termo exato, cada uma {}x por modo")
-LINHA_DA_MEDICAO = "  {:<52} {:>3} perg.  topo {:>3}/{:<3} três {:>3}/{:<3}"
-TOTAL_DA_MEDICAO = "  {:<52} {:>3} perg.  topo {:>3}/{:<3} três {:>3}/{:<3}"
-RUIDO_DA_MEDICAO = ("  ruído: {} resposta(s) de topo mudaram entre repetições "
-                    "iguais, em {} chamadas")
-VEREDITO_DA_MEDICAO = "  veredito: {}"
-HIBRIDO_VENCE_OU_EMPATA = "o híbrido vence ou empata em tudo"
-HIBRIDO_PERDE = "o híbrido PERDE em {} — o denso não pode sair da porta"
-NAO_MEDIDO = ("  não medido: {} — a medição precisa do banco e do gerador de "
-              "vetores de pé")
-SEM_PERGUNTA_NA_AMOSTRA = ("  {} — nenhum termo único na amostra; nada a "
-                           "perguntar")
-
-
-def colecao_do_alvo(caminho: str) -> str:
-    absoluto = str(Path(caminho).expanduser().resolve())
-    resumo = hashlib.md5(absoluto.encode()).hexdigest()[:LETRAS_DO_RESUMO]
-    return PREFIXO_DA_COLECAO + resumo
+RODAPE = ("\nA pontuação mede palavra em comum, não significado: o BM25 do ck "
+          "ou, no grep, a fração das palavras da pergunta que a linha tem.")
+FALHOU_A_CHAMADA = "não consegui buscar em {}: {}"
 
 
 def configuracao(cwd: str = "") -> dict:
@@ -109,97 +83,8 @@ def configuracao(cwd: str = "") -> dict:
         return {}
 
 
-def endereco(ambiente: dict, chave: str, padrao: str) -> str:
-    valor = (ambiente or {}).get(chave) or padrao
-    return valor if valor.startswith("http") else f"http://{valor}"
-
-
-def http(url: str, corpo: dict):
-    pedido = urllib.request.Request(
-        url, data=json.dumps(corpo).encode("utf-8"),
-        headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(pedido, timeout=TEMPO_DA_CHAMADA) as resposta:
-        return json.loads(resposta.read().decode("utf-8"))
-
-
-class Banco:
-    def __init__(self, ambiente: dict):
-        self.ambiente = ambiente or {}
-        self.base = endereco(self.ambiente, CHAVE_DO_BANCO, BANCO_PADRAO)
-        self.modelo = endereco(self.ambiente, CHAVE_DO_SERVIDOR_DE_MODELO,
-                               SERVIDOR_DE_MODELO_PADRAO)
-        self.vetores = {}
-
-    def vetor(self, pergunta: str) -> list:
-        if pergunta not in self.vetores:
-            dito = http(self.modelo + CAMINHO_DO_VETOR, {
-                "model": self.ambiente.get(CHAVE_DO_MODELO) or MODELO_PADRAO,
-                "prompt": pergunta})
-            self.vetores[pergunta] = dito.get("embedding") or []
-        return self.vetores[pergunta]
-
-    def colecoes(self) -> list:
-        return [c for c in http(self.base + CAMINHO_DAS_COLECOES, {})
-                .get("data") or [] if c.startswith(PREFIXO_DA_COLECAO)]
-
-    def caminho_de(self, colecao: str) -> str:
-        dito = http(self.base + CAMINHO_DA_DESCRICAO,
-                    {"collectionName": colecao}).get("data") or {}
-        return caminho_da_descricao(dito.get("description") or "")
-
-    def quantos_trechos(self, colecao: str) -> int:
-        dito = http(self.base + CAMINHO_DA_CONTAGEM,
-                    {"collectionName": colecao}).get("data") or {}
-        return int(dito.get("rowCount") or 0)
-
-    def alvos_indexados(self) -> list:
-        achados = []
-        for colecao in self.colecoes():
-            caminho = self.caminho_de(colecao) or colecao
-            achados.append((caminho, colecao, self.quantos_trechos(colecao)))
-        return sorted(achados)
-
-    def buscar(self, pergunta: str, colecao: str, quantos: int,
-               hibrida: bool) -> list:
-        vetor = self.vetor(pergunta)
-        if hibrida:
-            dito = http(self.base + CAMINHO_DA_BUSCA_HIBRIDA,
-                        pedido_hibrido(vetor, pergunta, colecao, quantos))
-        else:
-            dito = http(self.base + CAMINHO_DA_BUSCA_DENSA,
-                        pedido_denso(vetor, colecao, quantos))
-        return dito.get("data") or []
-
-    def amostra(self, colecao: str) -> list:
-        dito = http(self.base + CAMINHO_DA_CONSULTA, {
-            "collectionName": colecao, "filter": FILTRO_DE_TUDO,
-            "limit": TETO_DE_TRECHOS_NA_AMOSTRA,
-            "outputFields": CAMPOS_QUE_VOLTAM + ["id"]})
-        return sorted(dito.get("data") or [], key=lambda t: t.get("id", ""))
-
-
-def caminho_da_descricao(descricao: str) -> str:
-    if not descricao.startswith(MARCA_DO_CAMINHO_NA_DESCRICAO):
-        return ""
-    return descricao[len(MARCA_DO_CAMINHO_NA_DESCRICAO):].strip()
-
-
-def pedido_denso(vetor: list, colecao: str, quantos: int) -> dict:
-    return {"collectionName": colecao, "data": [vetor],
-            "annsField": CAMPO_DO_VETOR_DENSO, "limit": quantos,
-            "outputFields": CAMPOS_QUE_VOLTAM}
-
-
-def pedido_hibrido(vetor: list, pergunta: str, colecao: str,
-                   quantos: int) -> dict:
-    funil = quantos * FUNIL_DA_FUSAO
-    return {"collectionName": colecao,
-            "search": [{"data": [vetor], "annsField": CAMPO_DO_VETOR_DENSO,
-                        "limit": funil},
-                       {"data": [pergunta], "annsField": CAMPO_DO_VETOR_ESPARSO,
-                        "limit": funil}],
-            "rerank": FUSAO, "limit": quantos,
-            "outputFields": CAMPOS_QUE_VOLTAM}
+def o_ck() -> str:
+    return shutil.which(PROGRAMA_DO_CK) or ""
 
 
 def com_barra(caminho) -> str:
@@ -207,33 +92,203 @@ def com_barra(caminho) -> str:
         "\\", "/").rstrip("/")
 
 
+def git_da_pasta(pasta, *argumentos) -> tuple:
+    feito = subprocess.run(["git", *argumentos], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace",
+                           timeout=TETO_DO_GIT, cwd=str(pasta))
+    return feito.returncode, feito.stdout
+
+
 def raizes_do_git(cwd: str = "") -> list:
     try:
-        feito = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=TETO_DO_GIT, cwd=cwd or None)
+        codigo, saida = git_da_pasta(cwd or ".", "rev-parse",
+                                     "--path-format=absolute",
+                                     "--git-common-dir")
     except (OSError, subprocess.SubprocessError):
         return []
-    comum = feito.stdout.strip()
-    return [Path(comum).parent] if feito.returncode == 0 and comum else []
+    comum = saida.strip()
+    return [Path(comum).parent] if codigo == 0 and comum else []
 
 
-def mesmo_alvo(pedido: str, caminho: str, raizes=()) -> bool:
+def alvos_declarados(dado: dict, cwd: str = "", raizes=None) -> list:
+    raizes = raizes_do_git(cwd) if raizes is None else raizes
+    base = Path(raizes[0]) if raizes else Path(cwd or ".")
+    declarados = []
+    for alvo in dado.get(CAMPO_DOS_ALVOS) or []:
+        caminho = Path(alvo).expanduser()
+        declarados.append((caminho if caminho.is_absolute()
+                           else base / caminho).resolve())
+    return declarados
+
+
+def formas_do_pedido(pedido: str, cwd: str, raizes) -> list:
+    caminho = Path(pedido).expanduser()
+    if caminho.is_absolute():
+        return [caminho]
+    return [Path(cwd or ".") / caminho] + [Path(r) / caminho for r in raizes]
+
+
+def escolher_alvos(pedido: str, declarados: list, cwd: str = "",
+                   raizes=()) -> list:
+    presentes = [p for p in declarados if p.is_dir()]
     if not pedido:
-        return True
-    candidatos = {com_barra(Path(pedido).expanduser().resolve())}
-    candidatos |= {com_barra(Path(raiz) / pedido) for raiz in raizes}
-    return com_barra(caminho) in candidatos
-
-
-def escolher_alvos(indexados: list, pedido: str, raizes=None) -> list:
-    raizes = raizes_do_git() if raizes is None else raizes
-    exatos = [a for a in indexados if mesmo_alvo(pedido, a[0], raizes)]
+        return presentes or ([] if declarados else [Path(cwd or ".").resolve()])
+    formas = formas_do_pedido(pedido, cwd, raizes)
+    iguais = {com_barra(forma) for forma in formas}
+    exatos = [p for p in presentes if com_barra(p) in iguais]
     if exatos:
         return exatos
     fim = "/" + com_barra(pedido).strip("/")
-    return [a for a in indexados if com_barra(a[0]).endswith(fim)]
+    pelo_fim = [p for p in presentes if com_barra(p).endswith(fim)]
+    if pelo_fim:
+        return pelo_fim
+    return [forma.resolve() for forma in formas[:1] if forma.is_dir()]
+
+
+def ignorado_pelo_git(pasta: Path, amostra: str) -> bool:
+    codigo, _ = git_da_pasta(pasta, "check-ignore", "-q", amostra)
+    return codigo == 0
+
+
+def esconder_do_git(pasta: Path) -> str:
+    try:
+        codigo, _ = git_da_pasta(pasta, "rev-parse", "--is-inside-work-tree")
+        if codigo != 0:
+            return ""
+        faltam = [linha for linha in LINHAS_QUE_O_CK_GRAVA
+                  if not ignorado_pelo_git(
+                      pasta, AMOSTRAS_DO_QUE_O_CK_GRAVA[linha])]
+        if not faltam:
+            return ""
+        codigo, saida = git_da_pasta(pasta, "rev-parse",
+                                     "--path-format=absolute", "--git-path",
+                                     "info/exclude")
+    except (OSError, subprocess.SubprocessError) as erro:
+        return GIT_NAO_RESPONDEU.format(pasta, type(erro).__name__)
+    if codigo != 0 or not saida.strip():
+        return GIT_NAO_RESPONDEU.format(pasta, f"git saiu {codigo}")
+    exclude = Path(saida.strip())
+    atual = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    novas = [linha for linha in faltam if linha not in atual.splitlines()]
+    if not novas:
+        return ""
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    emenda = "" if not atual or atual.endswith("\n") else "\n"
+    with exclude.open("a", encoding="utf-8", newline="\n") as saida_do_arquivo:
+        saida_do_arquivo.write(emenda + "\n".join(novas) + "\n")
+    return EXCLUDE_ACRESCENTADO.format(exclude, ", ".join(novas), pasta)
+
+
+def exclusoes_do_ck(dado: dict) -> list:
+    nomes = [str(padrao).strip("*/") for padrao
+             in dado.get(CAMPO_DO_QUE_IGNORAR) or []]
+    return [parte for nome in nomes if nome
+            for parte in ("--exclude", nome)]
+
+
+def relativo_ao_alvo(caminho: str, pasta: Path) -> str:
+    limpo = caminho[len(PREFIXO_LONGO_DO_WINDOWS):] \
+        if caminho.startswith(PREFIXO_LONGO_DO_WINDOWS) else caminho
+    try:
+        return os.path.relpath(limpo, str(pasta)).replace("\\", "/")
+    except ValueError:
+        return limpo.replace("\\", "/")
+
+
+def achado_do_ck(linha: str, pasta: Path) -> dict:
+    dado = json.loads(linha)
+    return {"arquivo": relativo_ao_alvo(dado.get("path", "?"), pasta),
+            "linha": (dado.get("span") or {}).get("line_start", "?"),
+            "trecho": dado.get("snippet", ""),
+            "pontos": float(dado.get("score") or 0.0)}
+
+
+def buscar_pelo_ck(ck: str, pasta: Path, pergunta: str, quantos: int,
+                   exclusoes=()) -> list:
+    if not (pasta / PASTA_DO_INDICE_DO_CK).is_dir():
+        recado = esconder_do_git(pasta)
+        if recado:
+            print(recado, file=sys.stderr)
+    feito = subprocess.run(
+        [ck, "--lex", "--jsonl", "-q", "--topk", str(quantos), *exclusoes,
+         pergunta, str(pasta)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=TEMPO_DA_BUSCA, cwd=str(pasta))
+    if feito.returncode != 0:
+        if SEM_ACHADO_NO_CK in feito.stderr + feito.stdout:
+            return []
+        raise ValueError((feito.stderr or feito.stdout).strip()[-300:]
+                         or f"o ck saiu {feito.returncode}")
+    return [achado_do_ck(linha, pasta) for linha in feito.stdout.splitlines()
+            if linha.strip().startswith("{")]
+
+
+def palavras_da_pergunta(pergunta: str) -> list:
+    palavras = [p for p in PALAVRA.findall(pergunta.lower())
+                if len(p) >= LETRAS_MINIMAS_DA_PALAVRA]
+    return list(dict.fromkeys(palavras)) or [pergunta.lower().strip()]
+
+
+def linhas_pelo_git_grep(pasta: Path, palavras: list):
+    argumentos = ["grep", "-n", "-I", "-i", "-F", "--no-color", "--untracked"]
+    for palavra in palavras:
+        argumentos += ["-e", palavra]
+    codigo, saida = git_da_pasta(pasta, *argumentos, "--", ".")
+    if codigo not in (0, 1):
+        raise ValueError(f"git grep saiu {codigo}")
+    for linha in saida.splitlines():
+        casou = LINHA_DO_GIT_GREP.match(linha)
+        if casou:
+            yield casou.group(1), int(casou.group(2)), casou.group(3)
+
+
+def arquivos_de_texto(pasta: Path):
+    for raiz, pastas, arquivos in os.walk(pasta):
+        pastas[:] = [p for p in pastas if not p.startswith(".")
+                     and p not in PASTAS_QUE_O_GREP_PULA]
+        for nome in arquivos:
+            caminho = Path(raiz) / nome
+            try:
+                if caminho.stat().st_size > TETO_DE_BYTES_DO_GREP:
+                    continue
+                conteudo = caminho.read_bytes()
+            except OSError:
+                continue
+            if b"\0" in conteudo[:AMOSTRA_DE_BINARIO]:
+                continue
+            yield caminho, conteudo.decode("utf-8", errors="replace")
+
+
+def linhas_pelo_python(pasta: Path, palavras: list):
+    for caminho, texto in arquivos_de_texto(pasta):
+        relativo = caminho.relative_to(pasta).as_posix()
+        for numero, linha in enumerate(texto.splitlines(), 1):
+            minuscula = linha.lower()
+            if any(palavra in minuscula for palavra in palavras):
+                yield relativo, numero, linha
+
+
+def dentro_do_git(pasta: Path) -> bool:
+    try:
+        codigo, saida = git_da_pasta(pasta, "rev-parse",
+                                     "--is-inside-work-tree")
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return codigo == 0 and saida.strip() == "true"
+
+
+def buscar_pelo_grep(pasta: Path, pergunta: str, quantos: int) -> list:
+    palavras = palavras_da_pergunta(pergunta)
+    linhas = (linhas_pelo_git_grep(pasta, palavras) if dentro_do_git(pasta)
+              else linhas_pelo_python(pasta, palavras))
+    achados = []
+    for arquivo, numero, linha in linhas:
+        minuscula = linha.lower()
+        casadas = sum(1 for palavra in palavras if palavra in minuscula)
+        achados.append({"arquivo": arquivo, "linha": numero, "trecho": linha,
+                        "pontos": casadas / len(palavras)})
+    achados.sort(key=lambda a: (-a["pontos"], a["arquivo"], a["linha"]))
+    return achados[:quantos]
 
 
 def uma_linha(texto: str) -> str:
@@ -241,8 +296,9 @@ def uma_linha(texto: str) -> str:
 
 
 def buscar(pergunta: str, dado: dict, alvo: str = "",
-           quantos: int = QUANTOS_POR_PADRAO, hibrida: bool = True,
-           teto_total: int = TETO_TOTAL_POR_PADRAO, banco=None) -> int:
+           quantos: int = QUANTOS_POR_PADRAO,
+           teto_total: int = TETO_TOTAL_POR_PADRAO, cwd: str = "",
+           localizar=o_ck, raizes=None) -> int:
     if not (pergunta or "").strip():
         print(RECUSA_SEM_PERGUNTA, file=sys.stderr)
         return 2
@@ -250,44 +306,45 @@ def buscar(pergunta: str, dado: dict, alvo: str = "",
         print(RECUSA_TETO_INVALIDO.format(TETO_MINIMO, teto_total),
               file=sys.stderr)
         return 2
-    banco = banco or Banco(dado.get(CAMPO_DO_AMBIENTE))
-    try:
-        indexados = banco.alvos_indexados()
-    except (urllib.error.URLError, OSError, ValueError) as erro:
-        print(FALHOU_A_CHAMADA.format(banco.base, erro), file=sys.stderr)
-        return 2
-    if not indexados:
-        print(NADA_INDEXADO.format(banco.base), file=sys.stderr)
-        return 2
-    alvos = escolher_alvos(indexados, alvo)
+    raizes = raizes_do_git(cwd) if raizes is None else raizes
+    declarados = alvos_declarados(dado, cwd, raizes)
+    alvos = escolher_alvos(alvo, declarados, cwd, raizes)
     if not alvos:
-        print(RECUSA_ALVO_NAO_INDEXADO.format(
-            alvo, "\n".join(f"  {c}" for c, _, _ in indexados)),
+        print(RECUSA_ALVO_DESCONHECIDO.format(
+            alvo, ARQUIVO_DOS_ALVOS,
+            "\n".join(f"  {p}" for p in declarados) or "  (nenhum)"),
             file=sys.stderr)
         return 2
-    print(CABECA.format(MODO_HIBRIDO if hibrida else MODO_DENSO, pergunta,
+    if not alvo:
+        for ausente in [p for p in declarados if not p.is_dir()]:
+            print(ALVO_AUSENTE.format(ausente), file=sys.stderr)
+    ck = localizar()
+    if not ck:
+        print(AVISO_SEM_CK, file=sys.stderr)
+    print(CABECA.format(MODO_LEXICO if ck else MODO_GREP, pergunta,
                         len(alvos)))
     achou = mostrados = 0
-    for caminho, colecao, _ in alvos:
+    for pasta in alvos:
         try:
-            achados = banco.buscar(pergunta, colecao, quantos, hibrida)
-        except (urllib.error.URLError, OSError, ValueError) as erro:
-            print(FALHOU_A_CHAMADA.format(caminho, erro), file=sys.stderr)
+            achados = (buscar_pelo_ck(ck, pasta, pergunta, quantos,
+                                      exclusoes_do_ck(dado)) if ck
+                       else buscar_pelo_grep(pasta, pergunta, quantos))
+        except (OSError, subprocess.SubprocessError, ValueError) as erro:
+            print(FALHOU_A_CHAMADA.format(pasta, erro), file=sys.stderr)
             continue
         if not achados:
-            print(VAZIA.format(caminho))
+            print(VAZIA.format(pasta))
             continue
         if mostrados < teto_total:
-            print(LINHA_DO_ALVO.format(caminho))
+            print(LINHA_DO_ALVO.format(pasta))
         for item in achados:
             achou += 1
             if mostrados >= teto_total:
                 continue
             mostrados += 1
-            print(LINHA_DO_ACHADO.format(
-                item.get("distance", 0.0), item.get("relativePath", "?"),
-                item.get("startLine", "?")))
-            print(LINHA_DO_TRECHO.format(uma_linha(item.get("content"))))
+            print(LINHA_DO_ACHADO.format(item["pontos"], item["arquivo"],
+                                         item["linha"]))
+            print(LINHA_DO_TRECHO.format(uma_linha(item["trecho"])))
     if achou > mostrados:
         print(CORTADO_NO_TETO.format(teto_total, achou))
     if achou:
@@ -295,350 +352,149 @@ def buscar(pergunta: str, dado: dict, alvo: str = "",
     return 0 if achou else 1
 
 
-def frequencia_dos_termos(trechos: list) -> dict:
-    contagem = {}
-    for trecho in trechos:
-        for termo in set(t.lower() for t in TERMO.findall(
-                trecho.get("content") or "")):
-            contagem[termo] = contagem.get(termo, 0) + 1
-    return contagem
-
-
-def termo_unico_do_trecho(trecho: dict, frequencia: dict) -> str:
-    candidatos = {t for t in TERMO.findall(trecho.get("content") or "")
-                  if frequencia.get(t.lower()) == 1}
-    if not candidatos:
-        return ""
-    return max(candidatos, key=lambda t: (
-        any(l in t for l in LETRAS_QUE_MARCAM_NOME), len(t), t))
-
-
-def perguntas_da_amostra(trechos: list, quantas: int) -> list:
-    frequencia = frequencia_dos_termos(trechos)
-    passo = max(1, len(trechos) // quantas) if trechos else 1
-    perguntas = []
-    for trecho in trechos[::passo]:
-        termo = termo_unico_do_trecho(trecho, frequencia)
-        if termo:
-            perguntas.append((termo, trecho.get("relativePath"),
-                              trecho.get("startLine")))
-        if len(perguntas) == quantas:
-            break
-    return perguntas
-
-
-def posicao_do_alvo(achados: list, endereco_certo: tuple) -> int:
-    for posicao, item in enumerate(achados, start=1):
-        if (item.get("relativePath"), item.get("startLine")) == endereco_certo:
-            return posicao
-    return 0
-
-
-def placar_vazio() -> dict:
-    return {"perguntas": 0, "topo": {False: 0, True: 0},
-            "tres": {False: 0, True: 0}, "chamadas": 0, "ruido": 0}
-
-
-def somar_no_placar(placar: dict, posicoes: dict) -> None:
-    placar["perguntas"] += 1
-    for hibrida, vistas in posicoes.items():
-        placar["chamadas"] += len(vistas)
-        placar["ruido"] += len(set(vistas)) - 1
-        primeira = vistas[0]
-        placar["topo"][hibrida] += 1 if primeira == TOPO else 0
-        placar["tres"][hibrida] += 1 if 0 < primeira <= TRES_PRIMEIROS else 0
-
-
-def hibrido_vence_ou_empata(placar: dict) -> list:
-    perdas = []
-    for medida in ("topo", "tres"):
-        if placar[medida][True] < placar[medida][False]:
-            perdas.append(medida)
-    return perdas
-
-
-def medir_o_placar(banco: Banco, alvos: list) -> tuple:
-    total, por_alvo = placar_vazio(), []
-    for caminho, colecao, _ in alvos:
-        perguntas = perguntas_da_amostra(banco.amostra(colecao),
-                                         PERGUNTAS_POR_ALVO)
-        placar = placar_vazio()
-        for termo, arquivo, linha in perguntas:
-            posicoes = {}
-            for hibrida in (False, True):
-                posicoes[hibrida] = [
-                    posicao_do_alvo(
-                        banco.buscar(termo, colecao, TRES_PRIMEIROS, hibrida),
-                        (arquivo, linha))
-                    for _ in range(REPETICOES)]
-            somar_no_placar(placar, posicoes)
-            somar_no_placar(total, posicoes)
-        por_alvo.append((caminho, placar))
-    return total, por_alvo
-
-
-def linha_do_placar(molde: str, rotulo: str, placar: dict) -> str:
-    n = placar["perguntas"]
-    return molde.format(rotulo[-52:], n, placar["topo"][False],
-                        placar["topo"][True], placar["tres"][False],
-                        placar["tres"][True])
-
-
-def medir(dado: dict, alvo: str = "") -> tuple:
-    banco = Banco(dado.get(CAMPO_DO_AMBIENTE))
-    try:
-        alvos = escolher_alvos(banco.alvos_indexados(), alvo)
-        total, por_alvo = medir_o_placar(banco, alvos)
-    except (urllib.error.URLError, OSError, ValueError) as erro:
-        print(NAO_MEDIDO.format(erro))
-        return None, []
-    print(CABECA_DA_MEDICAO.format(total["perguntas"], REPETICOES))
-    print(LINHA_DA_MEDICAO.format("alvo", "", "denso", "híbr.", "denso",
-                                  "híbr."))
-    for caminho, placar in por_alvo:
-        print(linha_do_placar(LINHA_DA_MEDICAO, caminho, placar)
-              if placar["perguntas"] else SEM_PERGUNTA_NA_AMOSTRA.format(
-                  caminho[-52:]))
-    print(linha_do_placar(TOTAL_DA_MEDICAO, "TOTAL", total))
-    print(RUIDO_DA_MEDICAO.format(total["ruido"], total["chamadas"]))
-    perdas = hibrido_vence_ou_empata(total)
-    print(VEREDITO_DA_MEDICAO.format(
-        HIBRIDO_VENCE_OU_EMPATA if not perdas
-        else HIBRIDO_PERDE.format(", ".join(perdas))))
-    return total, por_alvo
-
-
-MARCA_DO_TRECHO_DE_MENTIRA = "trecho de mentira"
-RAIZ_DE_MENTIRA = "/acervo"
-DISTANCIA_DE_MENTIRA = 0.9
-
-
 def testar() -> int:
+    import contextlib
+    import io
     import tempfile
+    falhas, rodados = [], []
 
-    passou = falhou = 0
+    def caso(rotulo, passou):
+        rodados.append(rotulo)
+        if not passou:
+            falhas.append(rotulo)
 
-    def caso(nome: str, condicao: bool) -> None:
-        nonlocal passou, falhou
-        if condicao:
-            passou += 1
+    def repositorio(pasta: Path, gitignore: str = "") -> None:
+        (pasta / "docs").mkdir(parents=True)
+        (pasta / "docs" / "a.md").write_text(
+            "# Regra\n\nA regra dezesseis cobra destino da entrega.\n",
+            encoding="utf-8")
+        if gitignore:
+            (pasta / ".gitignore").write_text(gitignore, encoding="utf-8")
+        git_da_pasta(pasta, "init", "-q")
+        git_da_pasta(pasta, "add", ".")
+        git_da_pasta(pasta, "-c", "user.email=a@b", "-c", "user.name=a",
+                     "commit", "-qm", "x")
+
+    def saida_de(*argumentos, **nomeados):
+        fora, erro = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(fora), contextlib.redirect_stderr(erro):
+            codigo = buscar(*argumentos, **nomeados)
+        return codigo, fora.getvalue(), erro.getvalue()
+
+    with tempfile.TemporaryDirectory(prefix="buscar-") as base:
+        base = Path(base)
+        vizinho = base / "vizinho"
+        repositorio(vizinho, gitignore="*.log\n")
+        (vizinho / ".ck").mkdir()
+        (vizinho / ".ck" / "manifest.json").write_text("{}", encoding="utf-8")
+        (vizinho / ".ckignore").write_text("*.png\n", encoding="utf-8")
+        recado = esconder_do_git(vizinho)
+        _, status = git_da_pasta(vizinho, "status", "--short")
+        exclude = (vizinho / ".git" / "info" / "exclude").read_text(
+            encoding="utf-8").splitlines()
+        caso("vizinho com git: as duas linhas vão ao exclude dele, e o git "
+             "status fica limpo",
+             bool(recado) and status.strip() == ""
+             and all(linha in exclude for linha in LINHAS_QUE_O_CK_GRAVA))
+        caso("o .gitignore rastreado do vizinho não muda",
+             (vizinho / ".gitignore").read_text(encoding="utf-8") == "*.log\n")
+        caso("a segunda vez não duplica a linha",
+             esconder_do_git(vizinho) == ""
+             and (vizinho / ".git" / "info" / "exclude").read_text(
+                 encoding="utf-8").splitlines().count(".ck/") == 1)
+
+        raiz = base / "raiz"
+        repositorio(raiz, gitignore=".ck/\n.ckignore\n")
+        antes = (raiz / ".git" / "info" / "exclude").read_text(
+            encoding="utf-8")
+        caso("repositório cujo .gitignore já esconde o .ck: o exclude não "
+             "muda",
+             esconder_do_git(raiz) == ""
+             and (raiz / ".git" / "info" / "exclude").read_text(
+                 encoding="utf-8") == antes)
+
+        solta = base / "solta"
+        solta.mkdir()
+        (solta / "nota.md").write_text("destino da entrega sem git\n",
+                                       encoding="utf-8")
+        caso("pasta sem git: nada se escreve", esconder_do_git(solta) == ""
+             and sorted(p.name for p in solta.iterdir()) == ["nota.md"])
+
+        sem_ck = lambda: ""
+        codigo, fora, erro = saida_de("destino entrega", {}, str(solta),
+                                      cwd=str(base), localizar=sem_ck,
+                                      raizes=[])
+        caso("sem o ck, a busca avisa numa linha e cai no grep em Python, "
+             "sem erro",
+             codigo == 0 and erro.count("\n") == 1 and "grep" in erro
+             and "nota.md:1" in fora and MODO_GREP in fora)
+        codigo, fora, erro = saida_de("destino entrega",
+                                      {"alvos": [str(vizinho)]}, "vizinho",
+                                      cwd=str(base), localizar=sem_ck,
+                                      raizes=[])
+        caso("sem o ck, num alvo com git, o grep é o git grep e o alvo "
+             "declarado casa pelo fim do caminho",
+             codigo == 0 and "docs/a.md:3" in fora)
+        codigo, _, erro = saida_de("x", {"alvos": [str(vizinho)]},
+                                   "nao-existe", cwd=str(base),
+                                   localizar=sem_ck, raizes=[])
+        caso("alvo que não existe nem está declarado é recusado pelo nome, "
+             "com a lista dos declarados",
+             codigo == 2 and "nao-existe" in erro and str(vizinho) in erro)
+        muitos = base / "muitos"
+        muitos.mkdir()
+        (muitos / "tres.md").write_text("destino\ndestino\ndestino\n",
+                                        encoding="utf-8")
+        codigo, fora, _ = saida_de("destino", {}, str(muitos), quantos=5,
+                                   teto_total=1, cwd=str(base),
+                                   localizar=sem_ck, raizes=[])
+        caso("teto-total corta e diz quanto havia",
+             codigo == 0 and "cortado no teto de 1: havia 3" in fora
+             and fora.count("tres.md:") == 1)
+
+        achado = achado_do_ck(json.dumps({
+            "path": PREFIXO_LONGO_DO_WINDOWS + str(vizinho / "docs" / "a.md"),
+            "span": {"line_start": 3}, "snippet": "A regra", "score": 0.5}),
+            vizinho)
+        caso("o achado do ck vira arquivo relativo ao alvo e linha, sem o "
+             "prefixo longo do Windows",
+             achado["arquivo"] == "docs/a.md" and achado["linha"] == 3)
+        caso("o ignorar dos alvos vira --exclude do ck pelo nome da pasta",
+             exclusoes_do_ck({"ignorar": ["**/vendor/**"]})
+             == ["--exclude", "vendor"])
+
+        if o_ck():
+            novo = base / "novo"
+            repositorio(novo)
+            codigo, fora, _ = saida_de("destino entrega", {}, str(novo),
+                                       cwd=str(base), raizes=[])
+            _, status = git_da_pasta(novo, "status", "--short")
+            caso("com o ck, a busca léxica indexa na primeira vez, devolve "
+                 "arquivo:linha e o trecho, e o git do alvo fica limpo",
+                 codigo == 0 and "docs/a.md:" in fora and MODO_LEXICO in fora
+                 and (novo / PASTA_DO_INDICE_DO_CK).is_dir()
+                 and status.strip() == "")
         else:
-            falhou += 1
-            print(f"FALHOU: {nome}")
+            print("não medido: o ck não está no PATH — o caso da busca real "
+                  "não rodou")
 
-    with tempfile.TemporaryDirectory() as pasta:
-        raiz = Path(pasta)
-        acervo = raiz / "acervo"
-        acervo.mkdir()
-
-        esperado = (PREFIXO_DA_COLECAO
-                    + hashlib.md5(str(acervo.resolve()).encode()
-                                  ).hexdigest()[:LETRAS_DO_RESUMO])
-        caso("o nome da coleção sai do md5 do caminho ABSOLUTO — medido "
-             "contra o banco real, e é o que liga alvo a coleção",
-             colecao_do_alvo(str(acervo)) == esperado)
-        caso("o caminho indexado sai da descrição que o servidor grava na "
-             "coleção — é assim que o buscador descobre o acervo sem "
-             "arquivo local",
-             caminho_da_descricao("codebasePath:/x/y ") == "/x/y"
-             and caminho_da_descricao("outra coisa") == "")
-
-        indexados = [("/a/conhecimento", "c1", 10), ("/a/skills", "c2", 3),
-                     ("/b/memory", "c3", 0)]
-        caso("sem --alvo, todo alvo indexado entra na busca",
-             escolher_alvos(indexados, "") == indexados)
-        caso("--alvo bate com o caminho absoluto ou com o fim do caminho",
-             escolher_alvos(indexados, "skills") == [indexados[1]]
-             and escolher_alvos(indexados, "/a/conhecimento")
-             == [indexados[0]])
-        do_windows = [("D:\\casa\\conhecimento", "c1", 10),
-                      ("D:\\casa\\outra\\conhecimento", "c2", 5)]
-        caso("--alvo relativo, de dentro de outra árvore, bate com o alvo "
-             "da raiz principal do git, mesmo com contrabarra no índice",
-             escolher_alvos(do_windows, "conhecimento",
-                            raizes=[Path("D:/casa")]) == [do_windows[0]])
-        caso("--alvo relativo com .. no meio casa o alvo que ele nomeia",
-             escolher_alvos(do_windows, "outra/../conhecimento",
-                            raizes=[Path("D:/casa")]) == [do_windows[0]])
-        caso("sem casamento exato, o fim do caminho ainda casa, com "
-             "contrabarra no índice",
-             escolher_alvos(do_windows, "outra/conhecimento",
-                            raizes=[]) == [do_windows[1]])
-        caso("--alvo que não está indexado não bate com nada — a recusa diz "
-             "o que existe, em vez de devolver vazio calado",
-             escolher_alvos(indexados, "fantasma") == [])
-        caso("a contagem de linhas do banco NÃO decide se a coleção é vazia: "
-             "o Milvus devolve rowCount 0 em coleção recém-gravada com "
-             "trechos, então a busca sempre roda e só a "
-             "resposta vazia diz vazia",
-             "rowCount" not in buscar.__code__.co_names
-             and "quantos_trechos" not in buscar.__code__.co_names)
-
-        pedido = pedido_hibrido([0.1, 0.2], "termo raro", "c1", 5)
-        caso("o pedido híbrido leva o vetor no campo denso e a pergunta em "
-             "texto cru no esparso, fundidos por RRF — é o que o servidor "
-             "MCP fazia, agora por REST",
-             pedido["search"][0]["annsField"] == CAMPO_DO_VETOR_DENSO
-             and pedido["search"][1]["data"] == ["termo raro"]
-             and pedido["search"][1]["annsField"] == CAMPO_DO_VETOR_ESPARSO
-             and pedido["rerank"]["strategy"] == "rrf")
-        def ordem_fundida(pernas: list, k: int) -> list:
-            nota = {}
-            for perna in pernas:
-                for posicao, trecho in enumerate(perna, 1):
-                    nota[trecho] = nota.get(trecho, 0.0) + 1 / (k + posicao)
-            return sorted(nota, key=nota.get, reverse=True)
-
-        enchimento = [f"e{n}" for n in range(78)]
-        denso = ["so-num"] + enchimento + ["nos-dois"]
-        esparso = [f"s{n}" for n in range(79)] + ["nos-dois"]
-        fundida = ordem_fundida([denso, esparso],
-                                pedido["rerank"]["params"]["k"])
-        caso("o k da fusão é o declarado: com ele, o trecho que as duas "
-             "pernas acham em 80º passa à frente do que só uma acha em 1º — "
-             "com k 60 a ordem se inverte, e é essa ordem que a busca devolve",
-             fundida.index("nos-dois") < fundida.index("so-num"))
-        caso("cada perna do híbrido pede mais do que o topo final, para a "
-             "fusão ter o que reordenar",
-             pedido["search"][0]["limit"] == 5 * FUNIL_DA_FUSAO
-             and pedido["limit"] == 5)
-        caso("o pedido denso é a busca de um campo só",
-             pedido_denso([0.1], "c1", 3)["annsField"] == CAMPO_DO_VETOR_DENSO)
-
-        caso("endereço sem esquema ganha http, e com esquema fica",
-             endereco({}, CHAVE_DO_BANCO, "1.2.3.4:19530")
-             == "http://1.2.3.4:19530"
-             and endereco({CHAVE_DO_BANCO: "https://x"}, CHAVE_DO_BANCO, "y")
-             == "https://x")
-        caso("o ambiente declarado manda no endereço, nunca o código",
-             endereco({CHAVE_DO_SERVIDOR_DE_MODELO: "127.0.0.1:9999"},
-                      CHAVE_DO_SERVIDOR_DE_MODELO, "127.0.0.1:11434")
-             == "http://127.0.0.1:9999")
-        caso("trecho de várias linhas vira uma linha e é cortado",
-             uma_linha("a\n  b\n\nc") == "a b c"
-             and len(uma_linha("x" * 500)) == LETRAS_DO_TRECHO)
-
-        trechos = [
-            {"id": "1", "content": "o gancho vetar-andamento-em-arquivo recusa",
-             "relativePath": "a.md", "startLine": 1},
-            {"id": "2", "content": "a função corre roda o comando; recusa",
-             "relativePath": "b.md", "startLine": 9},
-            {"id": "3", "content": "recusa recusa", "relativePath": "c.md",
-             "startLine": 2},
-        ]
-        frequencia = frequencia_dos_termos(trechos)
-        caso("a pergunta por termo exato é o termo que aparece num trecho "
-             "só — nome de gancho ou de função vence palavra comum",
-             termo_unico_do_trecho(trechos[0], frequencia)
-             == "vetar-andamento-em-arquivo"
-             and termo_unico_do_trecho(trechos[1], frequencia) == "comando")
-        caso("trecho sem termo único não vira pergunta: seria pergunta sem "
-             "resposta conhecida",
-             termo_unico_do_trecho(trechos[2], frequencia) == ""
-             and len(perguntas_da_amostra(trechos, 8)) == 2)
-        caso("a resposta conhecida é o endereço arquivo:linha do trecho",
-             perguntas_da_amostra(trechos, 8)[0][1:] == ("a.md", 1))
-
-        achados = [{"relativePath": "b.md", "startLine": 9},
-                   {"relativePath": "a.md", "startLine": 1}]
-        caso("a posição do alvo entre os achados é 1 no topo, 2 no segundo "
-             "e 0 quando não veio",
-             posicao_do_alvo(achados, ("b.md", 9)) == 1
-             and posicao_do_alvo(achados, ("a.md", 1)) == 2
-             and posicao_do_alvo(achados, ("z.md", 1)) == 0)
-
-        placar = placar_vazio()
-        somar_no_placar(placar, {False: [2, 2], True: [1, 1]})
-        somar_no_placar(placar, {False: [0, 0], True: [3, 1]})
-        caso("o placar conta acerto no topo e nos três primeiros por modo, "
-             "e o ruído é a resposta que mudou entre repetições iguais",
-             placar["topo"] == {False: 0, True: 1}
-             and placar["tres"] == {False: 1, True: 2}
-             and placar["ruido"] == 1 and placar["chamadas"] == 8)
-        caso("híbrido que vence ou empata em tudo não tem perda",
-             hibrido_vence_ou_empata(placar) == [])
-        pior = placar_vazio()
-        somar_no_placar(pior, {False: [1], True: [2]})
-        caso("híbrido atrás do denso em qualquer medida é perda nomeada",
-             hibrido_vence_ou_empata(pior) == ["topo"])
-
-        import contextlib
-        import io
-
-        class BancoDeMentira:
-            def __init__(duble, alvos: int, por_alvo: int):
-                duble.alvos = alvos
-                duble.por_alvo = por_alvo
-
-            def alvos_indexados(duble) -> list:
-                return [(f"{RAIZ_DE_MENTIRA}/{n}", f"c{n}", duble.por_alvo)
-                        for n in range(duble.alvos)]
-
-            def buscar(duble, pergunta, colecao, quantos, hibrida) -> list:
-                return [{"distance": DISTANCIA_DE_MENTIRA,
-                         "relativePath": f"{colecao}.md", "startLine": n,
-                         "content": f"{MARCA_DO_TRECHO_DE_MENTIRA} {n}"}
-                        for n in range(duble.por_alvo)]
-
-        def o_que_a_busca_diz(banco, teto: int) -> tuple:
-            na_tela, no_erro = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(na_tela), \
-                    contextlib.redirect_stderr(no_erro):
-                saida = buscar("pergunta", {}, "", QUANTOS_POR_PADRAO, True,
-                               teto, banco)
-            return saida, na_tela.getvalue(), no_erro.getvalue()
-
-        alvos_curtos, por_alvo_curto = 3, 2
-        saida, dito, _ = o_que_a_busca_diz(
-            BancoDeMentira(alvos_curtos, por_alvo_curto),
-            TETO_TOTAL_POR_PADRAO)
-        caso("resultado menor que o teto passa inteiro, e nenhuma linha de "
-             "corte aparece — aviso de corte que não cortou nada ensina a "
-             "ignorar aviso",
-             saida == 0
-             and dito.count(MARCA_DO_TRECHO_DE_MENTIRA)
-             == alvos_curtos * por_alvo_curto
-             and "cortado no teto" not in dito)
-
-        alvos, por_alvo, teto = 4, 5, 10
-        muitos = BancoDeMentira(alvos, por_alvo)
-        saida, dito, _ = o_que_a_busca_diz(muitos, teto)
-        caso("resultado maior que o teto é cortado NO teto e a resposta diz "
-             "quanto havia: busca com muitos alvos despejava o contexto da "
-             "sessão sem ninguém pedir",
-             saida == 0
-             and dito.count(MARCA_DO_TRECHO_DE_MENTIRA) == teto
-             and f"cortado no teto de {teto}: havia {alvos * por_alvo}"
-             in dito)
-        caso("alvo que ficou inteiro fora do teto não ganha nem cabeça — "
-             "cabeça sem achado embaixo parece alvo vazio",
-             dito.count(RAIZ_DE_MENTIRA) == teto // por_alvo)
-
-        for teto_ruim in (0, -1):
-            saida, dito, no_erro = o_que_a_busca_diz(muitos, teto_ruim)
-            caso(f"teto {teto_ruim} recusa com razão e não imprime achado "
-                 "nenhum: teto que não corta desliga a conta em silêncio",
-                 saida == 2 and not dito and "--teto-total" in no_erro)
-
-    total, _ = medir(configuracao("."))
-    if total is not None and total["perguntas"]:
-        caso("MEDIDO no banco desta máquina: o híbrido vence ou empata o "
-             "denso puro no topo e nos três primeiros — senão ele não pode "
-             "ser a porta normal",
-             hibrido_vence_ou_empata(total) == [])
-
-    print(f"{'OK' if not falhou else 'FALHOU'}: {passou + falhou} casos")
-    return 1 if falhou else 0
+    if falhas:
+        for f in falhas:
+            print(f"FALHOU: {f}")
+        print(f"FALHOU: {len(falhas)} de {len(rodados)} casos")
+        return 1
+    print(f"OK: a busca do índice — {len(rodados)} casos")
+    return 0
 
 
 def montar_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=USO)
     parser.add_argument("pergunta", nargs="?", default="",
-                        help="o que você quer achar, em linguagem natural ou "
-                             "o termo exato")
+                        help="o termo exato ou as palavras que o trecho tem")
     parser.add_argument("--alvo", default="",
-                        help="busca só neste caminho indexado (padrão: todos "
-                             "os que o banco tem)")
+                        help="busca só neste alvo: o fim do caminho de um "
+                             "declarado ou uma pasta (padrão: todos os "
+                             "declarados)")
     parser.add_argument("--quantos", type=int, default=QUANTOS_POR_PADRAO,
                         help="trechos por alvo")
     parser.add_argument("--teto-total", type=int,
@@ -647,11 +503,9 @@ def montar_parser() -> argparse.ArgumentParser:
                              "os alvos; o que passar do teto não é impresso "
                              "e a resposta diz quanto havia")
     parser.add_argument("--denso", action="store_true",
-                        help="só o vetor denso, sem o termo exato — para "
-                             "comparar")
+                        help="não muda nada: o motor é léxico")
     parser.add_argument("--medir", action="store_true",
-                        help="mede denso contra híbrido em perguntas com "
-                             "resposta conhecida, tiradas do próprio acervo")
+                        help="não medido: o motor é léxico")
     parser.add_argument("--cwd", default=".")
     parser.add_argument(BANDEIRA_DE_TESTE, action="store_true")
     return parser
@@ -661,13 +515,13 @@ def main() -> int:
     if BANDEIRA_DE_TESTE in sys.argv[1:]:
         return testar()
     a = montar_parser().parse_args()
-    dado = configuracao(a.cwd)
     if a.medir:
-        total, _ = medir(dado, a.alvo)
-        return 0 if total is not None and not hibrido_vence_ou_empata(total) \
-            else 1
-    return buscar(a.pergunta, dado, a.alvo, a.quantos, not a.denso,
-                  a.teto_total)
+        print(NAO_MEDIDO_SEM_DENSO)
+        return 1
+    if a.denso:
+        print(AVISO_DO_DENSO, file=sys.stderr)
+    return buscar(a.pergunta, configuracao(a.cwd), a.alvo, a.quantos,
+                  a.teto_total, a.cwd)
 
 
 if __name__ == "__main__":

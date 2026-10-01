@@ -74,9 +74,3 @@ mudou — e é a mudança que as pessoas precisam saber.
 O conteúdo do processo é do workspace que o executa: fica no repositório de
 documentação dele, nunca numa camada compartilhável. O que se promove é a
 técnica — o formato que funcionou, a armadilha que vale para qualquer um.
-
-## Pedidos de exemplo
-
-- "preciso escrever o passo a passo de como se pede acesso ao ambiente de homologação, pro time novo conseguir sozinho"
-- "essa documentação do fechamento mensal não bate mais com o que a gente faz hoje, atualiza"
-- "o pessoal do suporte vive perguntando como abrir chamado pro fornecedor. documenta esse fluxo"

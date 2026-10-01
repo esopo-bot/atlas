@@ -114,10 +114,18 @@ RECADO_DO_ENSAIO_DA_CHAMADA = (
     "\ne o comentário ao dono, com a marca da configuração local, seria:\n\n"
     "{chamada}")
 RECADO_ETIQUETA = "etiqueta `{etiqueta}` posta"
-RECADO_ETIQUETA_FALHOU = "não consegui pôr a etiqueta `{etiqueta}`: {motivo}"
+RECADO_ETIQUETA_FALHOU = "não consegui mexer na etiqueta `{etiqueta}`: {motivo}"
 RECADO_QUADRO_SEM_MODULO = ("cartão não movido: o módulo do executor de "
                             "roteiros não está instalado, e é dele a fala "
                             "com o quadro")
+RECADO_QUADRO_NA_NUVEM = (
+    "cartão não movido: o quadro só se move pelo GraphQL, e a sessão na "
+    "nuvem o recusa. Mova o cartão para a coluna de espera à mão; rodar a "
+    "entrega de novo duplicaria o comentário ao dono")
+RECADO_CONTA_DA_NUVEM = (
+    "na nuvem a conta `{conta}` não existe, e o relato saiu pela conta da "
+    "sessão. Se ela é a mesma que o comentário marca, o GitHub não avisa "
+    "ninguém: quem marca a si mesmo não recebe notificação")
 
 
 def configuracao_do_executor(cwd: str = "") -> dict:
@@ -228,8 +236,8 @@ def recusa_do_pedido(issue, pedido: str, executado: list, entregue: list,
 
 
 def corpo_e_etiquetas_da_issue(conta: str, repositorio: str, issue) -> tuple:
-    feito = gh.na_conta(conta, ["issue", "view", str(issue), "--repo",
-                                 repositorio, "--json", "body,labels"])
+    argumentos, _ = gh.pela_rest("GET", gh.rota_da_issue(repositorio, issue))
+    feito = gh.na_conta(conta, argumentos)
     if feito is None or feito.returncode != 0:
         return None, set(), gh.berro(feito)
     try:
@@ -263,14 +271,15 @@ def espera_da_issue(corpo: str, hoje: date) -> tuple:
 
 def etiquetar(conta: str, repositorio: str, issue, poe: str,
               tira: str = "") -> tuple:
-    argumentos = ["issue", "edit", str(issue), "--repo", repositorio,
-                  "--add-label", poe]
+    rota = gh.rota_da_issue(repositorio, issue) + "/labels"
+    pedidos = [(poe, gh.pela_rest("POST", rota, {"labels": [poe]}))]
     if tira:
-        argumentos += ["--remove-label", tira]
-    feito = gh.na_conta(conta, argumentos)
-    if feito is None or feito.returncode != 0:
-        return False, RECADO_ETIQUETA_FALHOU.format(
-            etiqueta=poe, motivo=gh.berro(feito))
+        pedidos.append((tira, gh.pela_rest("DELETE", f"{rota}/{tira}")))
+    for etiqueta, (argumentos, entrada) in pedidos:
+        feito = gh.na_conta(conta, argumentos, entrada)
+        if feito is None or feito.returncode != 0:
+            return False, RECADO_ETIQUETA_FALHOU.format(
+                etiqueta=etiqueta, motivo=gh.berro(feito))
     return True, RECADO_ETIQUETA.format(etiqueta=poe)
 
 
@@ -295,7 +304,15 @@ def _executor_instalado(cwd: str) -> tuple:
     return modulo, ""
 
 
+def conta_que_grava(declarada: str) -> tuple:
+    if declarada and gh.na_nuvem() and not gh.token_da_conta(declarada):
+        return "", RECADO_CONTA_DA_NUVEM.format(conta=declarada)
+    return declarada, ""
+
+
 def mover_o_cartao(configuracao: dict, issue, cwd: str = "") -> tuple:
+    if gh.na_nuvem():
+        return QUADRO_DISPENSADO, RECADO_QUADRO_NA_NUVEM
     executor, por_que_nao = _executor_instalado(cwd)
     if executor is None:
         if por_que_nao:
@@ -354,12 +371,14 @@ def postar(issue, pedido: str, executado: list, entregue: list, seu: list,
     repositorio = _campo(configuracao, CAMPO_DO_REPOSITORIO)
     if not repositorio:
         return 2, RECUSA_SEM_ENDERECO.format(arquivo=ARQUIVO_DO_EXECUTOR)
-    conta = _campo(configuracao, CAMPO_DA_CONTA)
+    conta, aviso_da_conta = conta_que_grava(_campo(configuracao,
+                                                   CAMPO_DA_CONTA))
     ficou, dito = gh.gravar_o_bloco(conta, repositorio, issue, NOME_DO_BLOCO,
                                     corpo)
     if not ficou:
         return 2, FALHA_AO_GRAVAR.format(issue=issue, motivo=dito)
-    recados, falhas = [RECADO_POSTADO.format(issue=issue), dito], []
+    recados, falhas = [RECADO_POSTADO.format(issue=issue), aviso_da_conta,
+                       dito], []
     if seu:
         comentou, falha, sem_marca = gh.comentar_para_o_dono(
             conta, repositorio, issue, chamada, gh.quem_se_marca(configuracao))
@@ -379,32 +398,49 @@ def postar(issue, pedido: str, executado: list, entregue: list, seu: list,
             " · ".join(r for r in recados if r))
 
 
-FALSO_GH = """import os
+FALSO_GH = """import json
+import os
 import pathlib
 import sys
 
 CAIXA = pathlib.Path(os.environ["ENTREGA_TESTE_CAIXA"])
 sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
 argv = sys.argv[1:]
-(CAIXA / "chamadas.txt").open("a").write(
-    " ".join(argv) + chr(9) + os.environ.get("GH_TOKEN", "sem-token") + chr(10))
+registro = (CAIXA / "chamadas.txt").open("a", encoding="utf-8")
+token = os.environ.get("GH_TOKEN", "")
+registro.write(" ".join(argv) + chr(9)
+               + (token if token.startswith("token-de-") else "sem-token")
+               + chr(10))
+metodo, rota = (argv[2], argv[3]) if argv[:2] == ["api", "--method"] else ("", "")
+
+
+def existe(nome):
+    return (CAIXA / nome).exists()
+
+
+def recusa(texto, codigo=1):
+    sys.stderr.write(texto + chr(10))
+    sys.exit(codigo)
+
+
 if argv[:2] == ["auth", "token"]:
+    if existe("sem-token.txt"):
+        recusa("no oauth token found", 1)
     print("token-de-" + argv[-1])
-elif argv[:2] == ["issue", "comment"]:
-    if (CAIXA / "recusa.txt").exists():
-        sys.stderr.write("nao vai\\n")
-        sys.exit(2)
-    (CAIXA / "postado.md").open("a", encoding="utf-8").write(sys.stdin.read())
-elif argv[:2] == ["issue", "edit"] and "--body-file" in argv:
-    if (CAIXA / "edicao-recusada.txt").exists():
-        sys.stderr.write("corpo nao vai\\n")
-        sys.exit(1)
-    (CAIXA / "corpo.md").write_text(sys.stdin.read(), encoding="utf-8")
-elif argv[:2] == ["issue", "view"]:
-    if (CAIXA / "corpo-nao-se-le.txt").exists():
-        sys.stderr.write("issue nao se deixou ler\\n")
-        sys.exit(1)
-    import json
+elif metodo == "POST" and rota.endswith("/comments"):
+    if existe("recusa.txt"):
+        recusa("nao vai", 2)
+    (CAIXA / "postado.md").open("a", encoding="utf-8").write(
+        json.loads(sys.stdin.read())["body"])
+elif metodo == "PATCH" and "/labels" not in rota:
+    if existe("edicao-recusada.txt"):
+        recusa("corpo nao vai")
+    (CAIXA / "corpo.md").write_text(json.loads(sys.stdin.read())["body"],
+                                    encoding="utf-8")
+elif metodo == "GET" and "/labels" not in rota:
+    if existe("corpo-nao-se-le.txt"):
+        recusa("issue nao se deixou ler")
     corpo = CAIXA / "corpo.md"
     postas = CAIXA / "etiquetas.txt"
     print(json.dumps({"body": corpo.read_text(encoding="utf-8")
@@ -412,14 +448,17 @@ elif argv[:2] == ["issue", "view"]:
                       "labels": [{"name": nome} for nome in
                                  postas.read_text(encoding="utf-8").split()]
                       if postas.exists() else []}))
-elif argv[:2] == ["issue", "edit"]:
-    if "--remove-label" in argv and (CAIXA / "catalogo-sem-a-etiqueta.txt"
-                                     ).exists():
-        sys.stderr.write("etiqueta a remover nao existe no repositorio\\n")
-        sys.exit(1)
-    if (CAIXA / "etiqueta-recusada.txt").exists():
-        sys.stderr.write("etiqueta nao existe\\n")
-        sys.exit(1)
+elif metodo == "POST" and rota.endswith("/labels"):
+    if existe("etiqueta-recusada.txt"):
+        recusa("etiqueta nao existe")
+    for nome in json.loads(sys.stdin.read())["labels"]:
+        registro.write("+etiqueta " + nome + chr(10))
+elif metodo == "DELETE" and "/labels/" in rota:
+    if existe("catalogo-sem-a-etiqueta.txt"):
+        recusa("etiqueta a remover nao existe no repositorio")
+    if existe("etiqueta-recusada.txt"):
+        recusa("etiqueta nao existe")
+    registro.write("-etiqueta " + rota.rsplit("/", 1)[1] + chr(10))
 sys.exit(0)
 """
 
@@ -468,6 +507,7 @@ def testar() -> int:
             falhou += 1
             print(f"FALHOU: {nome}")
 
+    os.environ.pop(gh.VARIAVEL_DA_NUVEM, None)
     with tempfile.TemporaryDirectory() as pasta:
         raiz = Path(pasta)
         caso("entrega sem issue não existe — o relato mora no corpo de uma "
@@ -598,8 +638,8 @@ def testar() -> int:
         caso("SEM NADA PARA O DONO: o relato vai ao bloco do corpo e nenhum "
              "comentário se abre, nem etiqueta",
              codigo == 0 and "quero X" in relato_no_corpo(caixa)
-             and "issue comment" not in chamadas
-             and "--add-label" not in chamadas)
+             and "/comments --input" not in chamadas
+             and "+etiqueta" not in chamadas)
         caso("o relato é gravado pela conta declarada nas issues, e o recado "
              "traz a frase que o gancho do relato reconhece",
              "token-de-conta-x" in chamadas
@@ -627,7 +667,7 @@ def testar() -> int:
              codigo == 0 and "quero X" in relato_no_corpo(caixa)
              and comentado(caixa).startswith("@a-pessoa ")
              and "https://x/pull/1" in comentado(caixa)
-             and chamadas.count("issue comment") == 1)
+             and chamadas.count("/comments --input") == 1)
         caso("com item para o dono, a issue ganha a etiqueta de espera",
              ETIQUETA_PARADO_EM_VOCE in chamadas)
         caso("sem o módulo do executor, o cartão não move e a sessão diz por "
@@ -697,9 +737,9 @@ def testar() -> int:
              "`retomar-em` e SEM `parado-em-voce`: a entrega somava a "
              "segunda etiqueta e a issue terminava com as duas",
              codigo == 0
-             and "--add-label retomar-em" in chamadas
-             and "--remove-label parado-em-voce" in chamadas
-             and "--add-label parado-em-voce" not in chamadas)
+             and "+etiqueta retomar-em" in chamadas
+             and "-etiqueta parado-em-voce" in chamadas
+             and "+etiqueta parado-em-voce" not in chamadas)
         caso("e o cartão NÃO vai para a coluna do dono: quem espera o "
              "relógio não espera por ele",
              not (caixa / "quadro-chamado.txt").exists()
@@ -709,8 +749,8 @@ def testar() -> int:
             etiquetas="parado-em-voce")
         caso("marca de ordem de bytes antes da linha de retomada não a "
              "esconde: a issue terminava com as duas etiquetas e sucesso",
-             "--add-label retomar-em" in chamadas
-             and "--add-label parado-em-voce" not in chamadas)
+             "+etiqueta retomar-em" in chamadas
+             and "+etiqueta parado-em-voce" not in chamadas)
 
         for corpo, rotulo in (("Retomar em: 2026-09-20\n\nc", "de hoje"),
                               ("Retomar em: 2026-09-19\n\nc", "de ontem")):
@@ -719,49 +759,49 @@ def testar() -> int:
             caso(f"data {rotulo} já venceu: entra `parado-em-voce` e SAI "
                  "`retomar-em`, senão a issue fica nas duas filas",
                  codigo == 0
-                 and "--add-label parado-em-voce" in chamadas
-                 and "--remove-label retomar-em" in chamadas)
+                 and "+etiqueta parado-em-voce" in chamadas
+                 and "-etiqueta retomar-em" in chamadas)
 
         codigo, recado, chamadas, _ = entrega_com(
             "corpo sem cabeçalho", etiquetas="retomar-em outra-qualquer")
         caso("issue SEM a linha de retomada e ainda com `retomar-em` "
              "pendurada perde a etiqueta velha: exclusividade vale também "
              "sem cabeçalho",
-             codigo == 0 and "--add-label parado-em-voce" in chamadas
-             and "--remove-label retomar-em" in chamadas)
+             codigo == 0 and "+etiqueta parado-em-voce" in chamadas
+             and "-etiqueta retomar-em" in chamadas)
         codigo, recado, chamadas, _ = entrega_com(
             "Retomar em: 2026-09-21\n",
             arquivos=("catalogo-sem-a-etiqueta.txt",))
         caso("etiqueta que a issue NÃO tem não se manda tirar: o "
              "rastreador recusa remover nome que o repositório não "
              "conhece, e a entrega saía pela metade sem precisar",
-             codigo == 0 and "--remove-label" not in chamadas)
+             codigo == 0 and "-etiqueta" not in chamadas)
 
         codigo, recado, chamadas, _ = entrega_com("corpo sem cabeçalho")
         caso("CONTROLE: issue sem a linha de retomada segue como sempre — "
              "só ganha `parado-em-voce`",
              codigo == 0
-             and f"--add-label {ETIQUETA_PARADO_EM_VOCE}" in chamadas
-             and "--remove-label" not in chamadas)
+             and f"+etiqueta {ETIQUETA_PARADO_EM_VOCE}" in chamadas
+             and "-etiqueta" not in chamadas)
         codigo, recado, chamadas, _ = entrega_com(
             "\nRetomar em: 2026-12-01\n")
         caso("a linha de retomada vale na PRIMEIRA linha física, como o "
              "dono decidiu: depois de linha vazia ela não conta",
-             f"--add-label {ETIQUETA_PARADO_EM_VOCE}" in chamadas)
+             f"+etiqueta {ETIQUETA_PARADO_EM_VOCE}" in chamadas)
 
         codigo, recado, chamadas, _ = entrega_com(
             "Retomar em: amanhã cedo\n")
         caso("data INVÁLIDA não é cabeçalho ausente: a entrega diz que a "
              "data não se entende, chama o dono, e sai PELA METADE",
              codigo == SAIDA_PELA_METADE and "data" in recado.lower()
-             and f"--add-label {ETIQUETA_PARADO_EM_VOCE}" in chamadas)
+             and f"+etiqueta {ETIQUETA_PARADO_EM_VOCE}" in chamadas)
         codigo, recado, chamadas, caixa = entrega_com(
             arquivos=("corpo-nao-se-le.txt",))
         caso("corpo que NÃO SE LÊ não recebe o relato: a entrega recusa, diz "
              "que não leu, e não comenta nem etiqueta nada",
              codigo == 2 and "não li" in recado
-             and "issue comment" not in chamadas
-             and "--add-label" not in chamadas)
+             and "/comments --input" not in chamadas
+             and "+etiqueta" not in chamadas)
 
         codigo, recado, chamadas, caixa = entrega_com(
             "sem cabeçalho", arquivos=("etiqueta-recusada.txt",),
@@ -840,6 +880,42 @@ def testar() -> int:
         codigo, recado, _, _ = entrega_com("sem cabeçalho")
         caso("CONTROLE: módulo do executor AUSENTE segue saindo zero",
              codigo == 0 and RECADO_QUADRO_SEM_MODULO in recado)
+
+        codigo, recado, chamadas, _ = entrega_com(
+            "sem cabeçalho", arquivos=("sem-token.txt",))
+        caso("FORA DA NUVEM, conta declarada sem token recusa antes de "
+             "gravar: a conta das issues não se troca em silêncio",
+             codigo == 2 and "gh auth login" in recado
+             and "api --method PATCH" not in chamadas)
+
+        os.environ[gh.VARIAVEL_DA_NUVEM] = "true"
+        codigo, recado, chamadas, caixa = entrega_com(
+            "sem cabeçalho", arquivos=("sem-token.txt",), quadro="moveu",
+            executor=EXECUTOR_DE_MENTIRA)
+        caso("NA NUVEM, a conta declarada não existe: o relato sai pela "
+             "conta da sessão, e o recado diz qual conta faltou e que a "
+             "marca pode não notificar",
+             codigo == 0 and "quero X" in relato_no_corpo(caixa)
+             and "api --method PATCH repos/dono/repo/issues/7 --input -"
+             "\tsem-token" in chamadas
+             and RECADO_CONTA_DA_NUVEM.format(conta="conta-x") in recado)
+        caso("na nuvem o cartão não se tenta, porque o quadro é GraphQL, e "
+             "o recado manda mover à mão",
+             not (caixa / "quadro-chamado.txt").exists()
+             and RECADO_QUADRO_NA_NUVEM in recado)
+        caso("na nuvem a issue ainda ganha a etiqueta de espera e o "
+             "comentário ao dono, pela REST",
+             f"+etiqueta {ETIQUETA_PARADO_EM_VOCE}" in chamadas
+             and chamadas.count("/comments --input") == 1)
+        caso("nenhuma chamada do fluxo inteiro passa por `gh issue`, que é "
+             "GraphQL e a nuvem recusa",
+             "issue view" not in chamadas and "issue edit" not in chamadas
+             and "issue comment" not in chamadas)
+        codigo, recado, chamadas, _ = entrega_com("sem cabeçalho")
+        caso("NA NUVEM com a conta declarada à mão, ela continua valendo",
+             codigo == 0 and "token-de-conta-x" in chamadas
+             and RECADO_CONTA_DA_NUVEM.format(conta="conta-x") not in recado)
+        os.environ.pop(gh.VARIAVEL_DA_NUVEM, None)
 
         sem_endereco = _com_configuracao(raiz, {})
         codigo, recado = postar(7, "quero X", ["fiz Y"], [], [],

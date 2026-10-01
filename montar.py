@@ -148,9 +148,6 @@ LOG_MCP_JA_LIBERADO = ("  em dia:  os {} servidor(es) do .mcp.json já estão em
 LOG_MCP_ESPELHADO_NO_DEVIN = ("  espelhado: {} servidor(es) do .mcp.json em "
                               ".devin/mcp_config.local.json")
 LOG_MCP_DEVIN_EM_DIA = "  em dia:  .devin/mcp_config.local.json igual ao .mcp.json"
-LOG_INDICE_REGISTRADO = ("  registrado: servidor MCP `indice` no .mcp.json — "
-                         "versão presa, nunca @latest")
-LOG_INDICE_JA_REGISTRADO = "  em dia:  servidor MCP `indice` já está no .mcp.json"
 LOG_ALVOS_JA_EXISTEM = ("  em dia:  .agents/indice/alvos.json já existe — "
                         "os alvos são seus, não os toco")
 LOG_ALVOS_SEMEADOS = ("  semeado: .agents/indice/alvos.json com {} alvo(s), "
@@ -346,17 +343,6 @@ RESUMO_DE_SUCESSO = ("OK: {} casos — configuração escrita uma vez, argumento
                      "desconhecido recusado, cópia de módulo verificada")
 CASO_LANCADOR_RODA_PYTHON_3 = ("o lançador, rodado pelo bash, acha um "
                                "interpretador que responde que é da série 3")
-CASO_MARCADOR_SAI_DO_COMANDO = ("o comando do gancho sai sem marcador — "
-                                "nenhum gancho nasce com <interpretador>")
-CASO_TODO_GANCHO_CHAMA_O_INTERPRETADOR = (
-    "toda linha de gancho começa pelo interpretador medido nesta máquina, e "
-    "nenhuma nomeia python3 fixo — o atalho da loja está no PATH e não roda")
-CASO_SEM_PYTHON_O_GANCHO_VOLTA_AO_LANCADOR = (
-    "sem interpretador que responda, a linha volta ao lançador — que sonda a "
-    "cada execução, em vez de nascer apontando para o nada")
-CASO_CAMINHO_COM_ESPACO_VAI_ENTRE_ASPAS = (
-    "interpretador com espaço no caminho entra entre aspas, senão o shell "
-    "parte o comando em dois")
 CASO_GANCHO_COM_OUTRO_INTERPRETADOR_E_REESCRITO = (
     "gancho já declarado com outro interpretador é reescrito no lugar para "
     "o lançador, sem duplicar")
@@ -365,6 +351,9 @@ CASO_GANCHO_DE_OUTRO_ARQUIVO_NAO_CONTA = (
 CASO_ARVORE_VIRGEM_RECEBE_O_LANCADOR = (
     "a árvore virgem montada recebe o lançador, um settings.json sem python3 "
     "e o atributo de quebra de linha")
+CASO_ARVORE_VIRGEM_RECEBE_O_WORKFLOW_EM_LF = (
+    "a árvore virgem montada recebe o workflow dos céticos e o atributo que "
+    "fixa a quebra de linha dele em LF")
 CASO_COPIA_DIVERGENTE_E_DITA = (
     "instalar módulo sem sobrescrever NÃO troca a cópia que já existe, e "
     "quando ela difere da camada diz isso por extenso, com o comando que "
@@ -387,6 +376,12 @@ CASO_ARVORE_VIRGEM_LIGA_A_COBRANCA_DO_CLONE = (
     "o aviso de clone atrasado chega à árvore virgem com as DUAS ligações: "
     "a de antes da ferramenta, pelo despachante, e a de fim de turno, no "
     "settings.json")
+CASO_ARVORE_VIRGEM_ESCONDE_A_MEMORIA_DO_VARREDOR = (
+    "a árvore virgem recebe o varredor com memória local e o .gitignore que "
+    "esconde a pasta onde ela grava")
+CASO_ARVORE_VIRGEM_RECEBE_A_INCLUSAO_NA_WORKTREE = (
+    "a árvore virgem recebe o .worktreeinclude com cada arquivo local uma vez "
+    "só, e a segunda passada não o muda")
 BLOCO_DAS_CERCAS_NO_DESPACHANTE = re.compile(r"^CERCAS = \((.*?)^\)",
                                              re.M | re.S)
 CERCA_NO_DESPACHANTE = re.compile(r'\("([A-Za-z0-9_-]+)",\s*"[^"]*"')
@@ -454,11 +449,10 @@ CASO_DEVIN_RECEBE_O_ESPELHO = ("o Devin recebe o mesmo mcpServers em "
                                "mcp_config.local.json")
 CASO_ESPELHO_DO_DEVIN_FICA_FORA_DO_GIT = ("o espelho do Devin é pessoal: "
                                           ".devin/.gitignore o exclui")
-CASO_INDICE_ENTRA_SEM_APAGAR_OS_OUTROS = ("o módulo índice registra o servidor "
-                                          "`indice` no .mcp.json sem tocar nos "
-                                          "outros, com a versão presa")
-CASO_INDICE_DO_DONO_NAO_E_SOBRESCRITO = ("entrada `indice` que o dono já tem "
-                                         "não é sobrescrita")
+CASO_INDICE_NAO_E_REGISTRADO_NO_MCP = ("a montagem instala o módulo índice e "
+                                       "não registra servidor `indice` no "
+                                       ".mcp.json: a porta é o buscar.py, e os "
+                                       "outros servidores ficam como estavam")
 CASO_ALVOS_NASCEM_DESLIGADOS = ("o alvos.json semeado traz só os alvos que "
                                 "existem na árvore, cada vizinho de projetos/ "
                                 "entre eles, e nasce com ligado=false — quem "
@@ -475,8 +469,6 @@ CASO_ALVOS_SO_QUEM_TEM_GIT_PROPRIO = ("pasta comum dentro de projetos/ fica "
 CASO_ALVOS_DO_DONO_NAO_SAO_TOCADOS = ("alvos.json que o dono já tem não é "
                                       "sobrescrito pela instalação: os "
                                       "caminhos são da máquina dele")
-CASO_INDICE_NO_WINDOWS_PASSA_PELO_CMD = ("no Windows o npx passa por cmd /c, "
-                                         "senão o servidor não sobe")
 CASO_JSON_QUEBRADO_AVISA_E_NAO_ESCREVE = ("settings.local quebrado: avisa e não "
                                           "escreve por cima")
 CASO_MOLDE_DO_REPOSITORIO_NAO_CONTA = ("subpasta de conhecimento/ é território "
@@ -616,14 +608,21 @@ ESPELHO_ESCRITO = (
     "\nEscrito em {}: {} servidor(es). A cópia de antes ficou em {}.")
 ESPELHO_EM_DIA = "\nJá estava em dia: {} servidor(es), nada a reescrever."
 ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA = ".codex/hooks.json"
-COMANDO_DA_PONTE_SEM_BARRA = (f"{SHELL_DO_LANCADOR} {ARQUIVO_DO_LANCADOR} "
-                              f"{OPCAO_QUE_LIGA_O_MODO_UTF8} "
-                              f"{ARQUIVO_DA_PONTE} --codex")
+LANCADOR_NA_LINHA_DO_GANCHO = (
+    "bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;"
+    "if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;"
+    "echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho")
+EVENTOS_DOS_GANCHOS = (
+    "PreToolUse", "SessionStart", "Stop", "SubagentStop", "PostToolUseFailure",
+    "PermissionDenied", "PostToolUse", "Notification", "UserPromptSubmit")
+COMANDO_DA_PONTE_SEM_BARRA = (
+    LANCADOR_NA_LINHA_DO_GANCHO + " --evento {} --cliente codex "
+    + OPCAO_QUE_LIGA_O_MODO_UTF8 + " " + ARQUIVO_DA_PONTE + " --codex")
 EVENTOS_DA_PONTE_SEM_BARRA = ("PreToolUse", "SessionStart", "Stop")
 TEMPO_DA_PONTE_SEM_BARRA_S = 60
 GANCHOS_DO_AGENTE_SEM_BARRA = {
     "hooks": {evento: [{"hooks": [{"type": "command",
-                                   "command": COMANDO_DA_PONTE_SEM_BARRA,
+                                   "command": COMANDO_DA_PONTE_SEM_BARRA.replace("{}", evento),
                                    "timeout": TEMPO_DA_PONTE_SEM_BARRA_S}]}]
               for evento in EVENTOS_DA_PONTE_SEM_BARRA}}
 LOG_PONTE_SEM_BARRA = ("  ponte para o agente que lê {} declarada: as mesmas "
@@ -680,7 +679,6 @@ CAMINHOS_QUE_ACORDAM_A_REGRA_DE_CODIGO = (
     "**/*.py", "**/*.js", "**/*.ts", "**/*.tsx", "**/*.jsx", "**/*.cs",
     "**/*.java", "**/*.go", "**/*.rb", "**/*.php", "**/*.kt", "**/*.rs",
     "**/*.sh", "**/*.sql")
-SECAO_DOS_PEDIDOS_DE_EXEMPLO = "\n## Pedidos de exemplo\n"
 FECHAMENTO_DO_FRONTMATTER = "\n---\n"
 GANCHOS_APOSENTADOS = (".claude/hooks/injetar-padrao-de-codigo.py",
                        ".claude/hooks/avisar-motores-auxiliares.py")
@@ -701,39 +699,26 @@ CHAVE_DOS_ARGUMENTOS_DO_MCP = "args"
 CHAVE_DA_URL_DO_MCP = "url"
 CHAVE_DO_COMANDO_PERMITIDO = "serverCommand"
 CHAVE_DA_URL_PERMITIDA = "serverUrl"
-NOME_DO_MCP_DO_INDICE = "indice"
 ARQUIVO_QUE_PROVA_O_MODULO_INDICE = ".agents/indice/indexar.py"
-PACOTE_DO_SERVIDOR_DO_INDICE = "@zilliz/claude-context-mcp@0.1.15"
-AMBIENTE_DO_SERVIDOR_DO_INDICE = {
-    "EMBEDDING_PROVIDER": "Ollama",
-    "EMBEDDING_MODEL": "nomic-embed-text",
-    "OLLAMA_HOST": "http://127.0.0.1:11434",
-    "MILVUS_ADDRESS": "127.0.0.1:19530",
-}
 ARQUIVO_DOS_ALVOS_DO_INDICE = ".agents/indice/alvos.json"
-SERVIDOR_PADRAO_DO_INDICE = ("~/.local/share/atlas-indice/node_modules/"
-                             "@zilliz/claude-context-mcp/dist/index.js")
 COMANDO_DE_INDEXAR = "{} " + ARQUIVO_QUE_PROVA_O_MODULO_INDICE
 ALVOS_CANDIDATOS_DO_INDICE = ("conhecimento", ".agents/skills", ".agents",
                               ".claude/hooks")
 PASTA_DOS_VIZINHOS_INDEXAVEIS = "projetos"
-COMENTARIO_DOS_ALVOS = ("Arquivo LOCAL: os caminhos e o servidor sao desta "
-                        "maquina, e por isso ele fica fora do git. O indice "
-                        "nunca viaja — so a receita. Nasce DESLIGADO: quem "
-                        "liga e o dono, com --ligar.")
-INVOCADOR_DO_NPX_NO_WINDOWS = ("cmd", "/c")
+COMENTARIO_DOS_ALVOS = ("Arquivo LOCAL: os caminhos sao desta maquina, e por "
+                        "isso ele fica fora do git. O indice nunca viaja — so "
+                        "a receita. Nasce DESLIGADO: quem liga e o dono, com "
+                        "--ligar.")
 CHAVE_DO_CLAUDE = "claude"
 CHAVE_DAS_PERMISSOES = "permissions"
 CHAVE_DO_DENY = "deny"
 CHAVE_DO_COMANDO = "command"
 TIPO_DE_COMANDO = "command"
 
-MARCADOR_DO_INTERPRETADOR = "<interpretador>"
 PERGUNTA_DA_VERSAO = "import sys; print(sys.version_info[0])"
 VERSAO_QUE_SERVE = "3"
 TETO_DO_INTERPRETADOR_S = 10
 
-RAIZ_DO_PROJETO_NO_GANCHO = "${CLAUDE_PROJECT_DIR}"
 PROGRAMA_QUE_RODA_O_GANCHO = (
     "import os,sys,runpy;"
     "r=os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd();"
@@ -743,27 +728,26 @@ PROGRAMA_QUE_RODA_O_GANCHO = (
     "runpy.run_path(a,run_name='__main__')")
 
 
-def comando_do_gancho(arquivo: str) -> str:
-    return (f'{MARCADOR_DO_INTERPRETADOR} {OPCAO_QUE_LIGA_O_MODO_UTF8} '
+def comando_do_gancho(arquivo: str, evento: str = "PreToolUse") -> str:
+    if evento not in EVENTOS_DOS_GANCHOS:
+        raise ValueError(f"Evento de gancho desconhecido: {evento}")
+    if arquivo == ARQUIVO_DA_PONTE:
+        return COMANDO_DA_PONTE_SEM_BARRA.replace("{}", evento)
+    return (f'{LANCADOR_NA_LINHA_DO_GANCHO} --evento {evento} '
+            f'{OPCAO_QUE_LIGA_O_MODO_UTF8} '
             f'-c "{PROGRAMA_QUE_RODA_O_GANCHO}" {arquivo}')
 
 
-LANCADOR_NO_GANCHO = (
-    f'{SHELL_DO_LANCADOR} "{RAIZ_DO_PROJETO_NO_GANCHO}/{ARQUIVO_DO_LANCADOR}"')
-LINHA_DOS_CANDIDATOS = re.compile(r'^CANDIDATOS="([^"]*)"', re.M)
-LINHA_DOS_CANDIDATOS_NO_WINDOWS = re.compile(
-    r'^CANDIDATOS_NO_WINDOWS="([^"]*)"', re.M)
-LOG_INTERPRETADOR_MEDIDO = (
-    "  ganchos chamam {} direto — medido nesta máquina. Sem bash no "
-    "caminho,\n  a chamada de ferramenta economiza a partida dele")
-LOG_INTERPRETADOR_SEM_RESPOSTA = (
-    "  nenhum Python 3 respondeu aqui (tentei: {}) — os ganchos ficam com o\n"
-    "  lançador, que sonda a cada execução. Instale o Python e rode a atualização")
 ARQUIVO_GITATTRIBUTES = ".gitattributes"
 ATRIBUTOS_DO_LANCADOR = (f"{ARQUIVO_DO_LANCADOR} text eol=lf",)
 ROTULO_DOS_ATRIBUTOS = ".gitattributes (quebra de linha do lançador)"
 MOTIVO_DOS_ATRIBUTOS = ("# O lançador dos ganchos é lido pelo bash, que não "
                         "aceita quebra de linha CRLF.")
+ATRIBUTOS_DOS_WORKFLOWS = (".claude/workflows/*.js text eol=lf",)
+ROTULO_DOS_ATRIBUTOS_DOS_WORKFLOWS = ".gitattributes (quebra de linha dos workflows)"
+MOTIVO_DOS_ATRIBUTOS_DOS_WORKFLOWS = (
+    "# O harness recusa rodar workflow com caractere de controle, e o CRLF do "
+    "checkout no Windows é um.")
 
 ARQUIVO_DO_GANCHO_DE_BRANCH = ".claude/hooks/vetar-branch-protegida.py"
 ARQUIVO_DO_GANCHO_DE_CONHECIMENTO = ".claude/hooks/vetar-conhecimento-em-codigo.py"
@@ -773,6 +757,8 @@ ARQUIVO_DO_GANCHO_DE_FORA_DA_EXECUCAO = (".claude/hooks/vetar-escrita-fora-da-ex
 ARQUIVO_DO_GANCHO_DE_PERGUNTA = (".claude/hooks/vetar-pergunta-ja-respondida.py")
 ARQUIVO_DO_GANCHO_DE_COMENTARIO = (".claude/hooks/vetar-comentario-explicativo.py")
 SUBAGENTE_VARREDOR = ".claude/agents/varredor.md"
+SUBAGENTE_ESCRITOR = ".claude/agents/escritor.md"
+WORKFLOW_DOS_CETICOS = ".claude/workflows/ceticos.js"
 ARQUIVO_DO_GANCHO_DE_CREDENCIAL = ".claude/hooks/orientar-credencial.py"
 ARQUIVO_DO_GANCHO_DE_MCP = ".claude/hooks/verificar-mcp.py"
 ARQUIVO_DO_GANCHO_DE_AMBIENTE = ".claude/hooks/verificar-ambiente.py"
@@ -784,6 +770,8 @@ ARQUIVO_DO_COMANDO_DE_ABERTURA = ".claude/commands/bootstart.md"
 ARQUIVO_DO_COMANDO_DE_PARTIDA = ".claude/commands/partida.md"
 ARQUIVO_DO_GANCHO_DE_DOCUMENTO = ".claude/hooks/vetar-documento-rastreavel.py"
 ARQUIVO_DO_GANCHO_DA_RAIZ = ".claude/hooks/vetar-escrita-na-raiz.py"
+ARQUIVO_DO_GANCHO_DA_MEMORIA_DO_VARREDOR = (
+    ".claude/hooks/vetar-escrita-do-varredor-fora-da-memoria.py")
 ARQUIVO_DOS_DOCUMENTOS_VERSIONADOS = ".claude/documentos-versionados.txt"
 ARQUIVO_DOS_TRECHOS_PERDOADOS = ".claude/trechos-que-a-varredura-perdoa.txt"
 ARQUIVO_DO_GANCHO_DE_RELATO = ".claude/hooks/cobrar-relato-da-sessao.py"
@@ -796,11 +784,15 @@ ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA = (
 ARQUIVO_DO_GANCHO_DE_CLONE_ATRASADO = (
     ".claude/hooks/avisar-clone-desatualizado.py")
 ARQUIVO_DO_GANCHO_DE_INDICE_FORA = ".claude/hooks/avisar-indice-fora.py"
+ARQUIVO_DO_GANCHO_DA_NUVEM = ".claude/hooks/preparar-sessao-na-nuvem.py"
 ARQUIVO_DO_GANCHO_DE_CD = ".claude/hooks/vetar-caminho-relativo-apos-cd.py"
 ARQUIVO_DO_GANCHO_DE_PESQUISA = (
     ".claude/hooks/vetar-escrita-em-sessao-de-pesquisa.py")
 ARQUIVO_DO_GANCHO_DE_DESPEJO = ".claude/hooks/vetar-despejo-de-ambiente.py"
 ARQUIVO_DO_GANCHO_DE_ENXAME = ".claude/hooks/vetar-enxame-de-agentes.py"
+ARQUIVO_DO_GANCHO_DA_RECUSA_DO_ISOLAMENTO = (
+    ".claude/hooks/orientar-recusa-do-isolamento.py")
+ARQUIVO_DO_GANCHO_DA_NEGATIVA = ".claude/hooks/registrar-negativa.py"
 ARQUIVO_DO_DESEMBRULHADOR_DE_COMANDO = ".claude/hooks/desembrulhar-comando.py"
 
 COMANDO_DO_VETO_DE_BRANCH = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_BRANCH)
@@ -824,13 +816,20 @@ COMANDO_DO_VETO_DE_POLITICA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_POLITICA)
 COMANDO_DO_AVISO_DE_SESSAO_PARALELA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA)
 COMANDO_DO_AVISO_DE_CLONE_ATRASADO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_CLONE_ATRASADO)
 COMANDO_DO_AVISO_DE_INDICE_FORA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_INDICE_FORA)
+COMANDO_DA_PREPARACAO_DA_NUVEM = comando_do_gancho(ARQUIVO_DO_GANCHO_DA_NUVEM)
 COMANDO_DO_VETO_DE_PESQUISA = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_PESQUISA)
 
 COMANDO_DO_DESPACHANTE_DE_CERCAS = comando_do_gancho(ARQUIVO_DO_DESPACHANTE_DE_CERCAS)
 COMANDO_DO_VETO_DE_DOCUMENTO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DOCUMENTO)
 COMANDO_DO_VETO_DA_RAIZ = comando_do_gancho(ARQUIVO_DO_GANCHO_DA_RAIZ)
+COMANDO_DO_VETO_DA_MEMORIA_DO_VARREDOR = comando_do_gancho(
+    ARQUIVO_DO_GANCHO_DA_MEMORIA_DO_VARREDOR)
 COMANDO_DO_VETO_DE_DESPEJO = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_DESPEJO)
 COMANDO_DO_VETO_DE_ENXAME = comando_do_gancho(ARQUIVO_DO_GANCHO_DE_ENXAME)
+COMANDO_DA_ORIENTACAO_DA_RECUSA_DO_ISOLAMENTO = comando_do_gancho(
+    ARQUIVO_DO_GANCHO_DA_RECUSA_DO_ISOLAMENTO)
+COMANDO_DO_REGISTRO_DA_NEGATIVA = comando_do_gancho(
+    ARQUIVO_DO_GANCHO_DA_NEGATIVA)
 
 CERCAS_QUE_O_DESPACHANTE_ASSUMIU = (
     ARQUIVO_DO_GANCHO_DE_BRANCH,
@@ -855,6 +854,8 @@ LOG_CERCA_ASSUMIDA = ("  tirado do settings.json: {} — quem as roda agora é o
 EVENTO_DE_ABERTURA = "SessionStart"
 EVENTO_ANTES_DA_FERRAMENTA = "PreToolUse"
 EVENTO_DE_FIM_DE_TURNO = "Stop"
+EVENTO_DEPOIS_DA_FALHA = "PostToolUseFailure"
+EVENTO_DA_NEGATIVA = "PermissionDenied"
 
 MATCHER_DO_SHELL = "Bash|PowerShell"
 MATCHER_DA_ESCRITA_E_DO_SHELL = "Write|Edit|NotebookEdit|Bash|PowerShell"
@@ -959,6 +960,9 @@ GANCHO_DA_COBRANCA_DO_CLONE_ATRASADO = GanchoDeclarado(
 GANCHO_DO_AVISO_DE_INDICE_FORA = GanchoDeclarado(
     "aviso de índice fora do ar", EVENTO_DE_ABERTURA, SEM_MATCHER,
     COMANDO_DO_AVISO_DE_INDICE_FORA, ARQUIVO_DO_GANCHO_DE_INDICE_FORA)
+GANCHO_DA_PREPARACAO_DA_NUVEM = GanchoDeclarado(
+    "preparação da sessão na nuvem", EVENTO_DE_ABERTURA, SEM_MATCHER,
+    COMANDO_DA_PREPARACAO_DA_NUVEM, ARQUIVO_DO_GANCHO_DA_NUVEM)
 GANCHO_DO_VETO_DE_PESQUISA = GanchoDeclarado(
     "veto de escrita na sessão de pesquisa", EVENTO_ANTES_DA_FERRAMENTA,
     MATCHER_DA_ESCRITA_E_DO_SHELL, COMANDO_DO_VETO_DE_PESQUISA,
@@ -975,6 +979,11 @@ GANCHO_DO_VETO_DA_RAIZ = GanchoDeclarado(
     "veto de escrita na raiz que só espelha a integração",
     EVENTO_ANTES_DA_FERRAMENTA, MATCHER_DA_ESCRITA, COMANDO_DO_VETO_DA_RAIZ,
     ARQUIVO_DO_GANCHO_DA_RAIZ)
+GANCHO_DO_VETO_DA_MEMORIA_DO_VARREDOR = GanchoDeclarado(
+    "veto de escrita do varredor fora da pasta da memória dele",
+    EVENTO_ANTES_DA_FERRAMENTA, MATCHER_DA_ESCRITA,
+    COMANDO_DO_VETO_DA_MEMORIA_DO_VARREDOR,
+    ARQUIVO_DO_GANCHO_DA_MEMORIA_DO_VARREDOR)
 GANCHO_DO_VETO_DE_DESPEJO = GanchoDeclarado(
     "veto de despejo de ambiente", EVENTO_ANTES_DA_FERRAMENTA,
     MATCHER_DO_SHELL, COMANDO_DO_VETO_DE_DESPEJO,
@@ -983,6 +992,13 @@ GANCHO_DO_VETO_DE_ENXAME = GanchoDeclarado(
     "veto de enxame de agentes", EVENTO_ANTES_DA_FERRAMENTA,
     MATCHER_DO_ENXAME, COMANDO_DO_VETO_DE_ENXAME,
     ARQUIVO_DO_GANCHO_DE_ENXAME)
+GANCHO_DA_ORIENTACAO_DA_RECUSA_DO_ISOLAMENTO = GanchoDeclarado(
+    "orientação da recusa do isolamento de worktree", EVENTO_DEPOIS_DA_FALHA,
+    MATCHER_DO_SHELL, COMANDO_DA_ORIENTACAO_DA_RECUSA_DO_ISOLAMENTO,
+    ARQUIVO_DO_GANCHO_DA_RECUSA_DO_ISOLAMENTO)
+GANCHO_DO_REGISTRO_DA_NEGATIVA = GanchoDeclarado(
+    "registro da negativa do classificador", EVENTO_DA_NEGATIVA, SEM_MATCHER,
+    COMANDO_DO_REGISTRO_DA_NEGATIVA, ARQUIVO_DO_GANCHO_DA_NEGATIVA)
 
 PISO_DE_ATUALIZACAO = "0.88"
 
@@ -1144,14 +1160,17 @@ MOLDE_DA_CONFIGURACAO = {
     "padrao_de_nome": "${PADRAO_DO_NOME_DA_ISSUE}",
     "enderecos_do_onde_esta": ["conhecimento/mapa-do-repositorio.md",
                                "conhecimento/projetos/indice.json"],
-    "autorizacoes": {"commit": False, "push": False},
+    "autorizacoes": {"commit": False, "push": False, "mesclar": False},
     "branches_por_incorporacao": ["main"],
     "teto_da_largada_em_bytes": None,
     "regras": [
-        "As autorizações `commit` e `push` nascem em false, como manda a "
-        "regra 9: omissão não é permissão. Ligue à mão a que este repositório "
-        "quiser dar à automação — enquanto estiver em false, o gancho recusa "
-        "e diz por quê. Publicar não tem chave: é do dono, sempre. O gancho "
+        "As autorizações `commit`, `push` e `mesclar` nascem em false, como "
+        "manda a regra 9: omissão não é permissão. Ligue à mão a que este "
+        "repositório quiser dar à automação — enquanto estiver em false, o "
+        "gancho recusa e diz por quê. `mesclar` deixa a sessão mesclar o "
+        "pedido de incorporação que o dono aprovou; o gancho não confere a "
+        "aprovação, quem a exige é a regra do servidor, e sem ela a chave "
+        "fica em false. Publicar não tem chave: é do dono, sempre. O gancho "
         "`vetar-branch-protegida` recusa as formas comuns; quem trava é a "
         "regra do servidor, onde o dono a ligou.",
         "`branches_por_incorporacao` são as branches em que NÃO se grava "
@@ -1351,12 +1370,12 @@ FONTES = (PAGINA_REGRAS,
           ".agents/gh/gh.py",
           ".agents/caixa/caixa.py",
           ".agents/entrega/entrega.py",
-          ".agents/gatilho/gatilho.py",
           ".agents/travessia/travessia.py",
           ".agents/travessia/ponte.py",
           ARQUIVO_DO_DESPACHANTE_DE_CERCAS,
           ARQUIVO_DO_GANCHO_DE_DOCUMENTO,
           ARQUIVO_DO_GANCHO_DA_RAIZ,
+          ARQUIVO_DO_GANCHO_DA_MEMORIA_DO_VARREDOR,
           ARQUIVO_DO_GANCHO_DE_BRANCH,
           ARQUIVO_DO_GANCHO_DE_CONHECIMENTO,
           ARQUIVO_DO_GANCHO_DE_AUTOMACAO,
@@ -1365,6 +1384,8 @@ FONTES = (PAGINA_REGRAS,
           ARQUIVO_DO_GANCHO_DE_PERGUNTA,
           ARQUIVO_DO_GANCHO_DE_COMENTARIO,
           SUBAGENTE_VARREDOR,
+          SUBAGENTE_ESCRITOR,
+          WORKFLOW_DOS_CETICOS,
           ARQUIVO_DO_GANCHO_DE_CREDENCIAL,
           ARQUIVO_DO_GANCHO_DE_MCP,
           ARQUIVO_DO_GANCHO_DE_AMBIENTE,
@@ -1379,9 +1400,12 @@ FONTES = (PAGINA_REGRAS,
           ARQUIVO_DO_GANCHO_DE_SESSAO_PARALELA,
           ARQUIVO_DO_GANCHO_DE_CLONE_ATRASADO,
           ARQUIVO_DO_GANCHO_DE_INDICE_FORA,
+          ARQUIVO_DO_GANCHO_DA_NUVEM,
           ARQUIVO_DO_GANCHO_DE_PESQUISA,
           ARQUIVO_DO_GANCHO_DE_DESPEJO,
           ARQUIVO_DO_GANCHO_DE_ENXAME,
+          ARQUIVO_DO_GANCHO_DA_RECUSA_DO_ISOLAMENTO,
+          ARQUIVO_DO_GANCHO_DA_NEGATIVA,
           ARQUIVO_DO_DESEMBRULHADOR_DE_COMANDO,
           ARQUIVO_DO_LANCADOR,
           ARQUIVO_DO_COMANDO_DE_ABERTURA,
@@ -1390,7 +1414,8 @@ FONTES = (PAGINA_REGRAS,
 
 IGNORAR_LIXO = ("/tmp/*", "!/tmp/LEIAME.md", "__pycache__/", "*.pyc",
                 ".pytest_cache/", ".ruff_cache/", ".mypy_cache/",
-                ".playwright-mcp/", "/.tmp.driveupload/")
+                ".playwright-mcp/", "/.tmp.driveupload/", ".ck/",
+                ".ckignore")
 MOTIVO_LIXO = "# Descartáveis: rascunho e cache de ferramenta. Apagar não perde nada."
 
 ARQUIVO_DO_EXECUTOR_LOCAL = "nucleo/executor.json"
@@ -1404,6 +1429,18 @@ MOTIVO_LOCAL = ("# Configuração deste repositório e resultado de execução, 
                 "nucleo/executor.exemplo.json. A pasta aprovacoes/ guarda a "
                 "decisão\n# do dono numa execução: é evento daquela rodada, "
                 "não fato da camada.")
+IGNORAR_MEMORIA_DOS_SUBAGENTES = (".claude/agent-memory-local/",)
+MOTIVO_DA_MEMORIA_DOS_SUBAGENTES = (
+    "# A memória que o subagente grava com `memory: local` — a do varredor "
+    "mora em\n# .claude/agent-memory-local/varredor/. Ela anota o que ele "
+    "aprendeu nesta\n# máquina e pode citar caminho e nome: fica fora do git.")
+ARQUIVO_DA_INCLUSAO_NA_WORKTREE = ".worktreeinclude"
+INCLUIR_NA_WORKTREE = (ARQUIVO_DO_EXECUTOR_LOCAL, ARQUIVO_DE_DECLARACAO_DE_MCP,
+                       ARQUIVO_DOS_ALVOS_DO_INDICE, ARQUIVO_SETTINGS_LOCAL)
+MOTIVO_DA_INCLUSAO_NA_WORKTREE = (
+    "# O que o Claude Code copia da raiz para cada worktree nova que ele cria: "
+    "só\n# o que casa uma linha e o git ignora. São os arquivos locais da "
+    "camada, que\n# não viajam pelo git.")
 
 SECAO_DO_ENDERECO_DO_QUADRO = "\nOnde as issues deste workspace nascem"
 PERGUNTA_DA_CONFIGURACAO = "  {rotulo}\n  [Enter = {padrao}] > "
@@ -1437,6 +1474,9 @@ LOG_EXECUTOR_SEM_GITIGNORE = (
     "nomeia\n  repositório e conta — isso não entra no git de ninguém.")
 ROTULO_DO_GITIGNORE_DO_LIXO = ".gitignore (descartáveis)"
 ROTULO_DO_GITIGNORE_LOCAL = ".gitignore (local)"
+ROTULO_DO_GITIGNORE_DA_MEMORIA = ".gitignore (memória dos subagentes)"
+ROTULO_DA_INCLUSAO_NA_WORKTREE = (".worktreeinclude (arquivos locais da "
+                                  "worktree nova)")
 ROTULO_DO_GITIGNORE_DO_DEVIN = ".devin/.gitignore (espelho pessoal do MCP)"
 MOTIVO_DO_ESPELHO_PESSOAL = ("# Espelho pessoal do .mcp.json para o Devin CLI: "
                              "nasce do --atualizar e não viaja.")
@@ -1476,7 +1516,7 @@ SECOES_INSTRUCOES = [
         "Leia `.agents/prompts/bootstart.md` INTEIRO antes de escolher skill, "
         "abrir arquivo ou responder: é o briefing da camada para qualquer "
         "agente — o que a sessão vai encontrar, o que os ganchos recusam, e a "
-        "tabela que diz o que atende cada tipo de pedido. Pedido que já nomeia "
+        "tabela do que atende o pedido que não é de skill. Pedido que já nomeia "
         "uma skill, um vizinho ou uma issue não dispensa a leitura.",
         "Depois rode `python .agents/camada/camada.py --abertura`, com "
         "`--raiz` e o caminho por extenso, e relate na primeira resposta o que ele acusou em falta "
@@ -1505,7 +1545,7 @@ SECOES_INSTRUCOES = [
     ("Ordens deste repositório", [
         "Publicar é do dono, sempre: publicação não se desfaz, e o teto "
         "da sessão é o ensaio, que mostra o que subiria sem subir. "
-        "Commit e push seguem `autorizacoes` em "
+        "Commit, push e mescla de pedido aprovado seguem `autorizacoes` em "
         "`nucleo/configuracao.json`, que é a mesma fonte que o gancho "
         "lê — omissão não é permissão, e sem declaração ninguém "
         "commita. Destrutivo é do dono. Este é o único lugar desta "
@@ -1600,7 +1640,7 @@ def comandos_do_bloco(bloco: dict) -> list:
             for gancho in ganchos if isinstance(gancho, dict)]
 
 
-CAMINHO_DO_GANCHO_NO_COMANDO = re.compile(r"\.claude/hooks/[^\"'\s]+\.py")
+CAMINHO_DO_GANCHO_NO_COMANDO = re.compile(r"\.agents/travessia/ponte\.py|\.claude/hooks/[^\"'\s]+\.py")
 
 
 def arquivo_do_gancho_no_comando(comando: str) -> str:
@@ -1946,55 +1986,6 @@ def linhas_das_instrucoes(regras: list) -> list:
     return linhas
 
 
-def candidatos_do_lancador_da_camada() -> tuple:
-    texto = paginas_da_camada().get(ARQUIVO_DO_LANCADOR, "")
-    no_windows = LINHA_DOS_CANDIDATOS_NO_WINDOWS.search(texto)
-    geral = LINHA_DOS_CANDIDATOS.search(texto)
-    if os.name == "nt" and no_windows:
-        return tuple(no_windows.group(1).split())
-    return tuple(geral.group(1).split()) if geral else ()
-
-
-def responde_python_3(nome: str) -> bool:
-    try:
-        pronto = subprocess.run(
-            [shutil.which(nome) or nome, "-c", PERGUNTA_DA_VERSAO],
-            capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=TETO_DO_INTERPRETADOR_S)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return pronto.returncode == 0 and pronto.stdout.strip() == VERSAO_QUE_SERVE
-
-
-def interpretador_que_roda(candidatos: tuple):
-    for nome in candidatos:
-        if responde_python_3(nome):
-            return nome
-    return None
-
-
-@functools.lru_cache(maxsize=1)
-def interpretador_desta_maquina() -> str:
-    candidatos = candidatos_do_lancador_da_camada()
-    achado = interpretador_que_roda(candidatos)
-    print(LOG_INTERPRETADOR_MEDIDO.format(achado) if achado
-          else LOG_INTERPRETADOR_SEM_RESPOSTA.format(" ".join(candidatos)))
-    return achado or ""
-
-
-def chamada_do_gancho(interpretador: str) -> str:
-    if not interpretador:
-        return LANCADOR_NO_GANCHO
-    return interpretador if " " not in interpretador else f'"{interpretador}"'
-
-
-def comando_com_o_interpretador(comando: str, interpretador=None) -> str:
-    nome = (interpretador_desta_maquina() if interpretador is None
-            else interpretador)
-    return comando.replace(MARCADOR_DO_INTERPRETADOR,
-                           chamada_do_gancho(nome))
-
-
 def conselho_da_divergencia(raiz: Path) -> str:
     if e_a_casa_do_desenvolvimento(raiz):
         return LOG_DIVERGENCIA_EM_CASA.format(BANDEIRA_SINCRONIZAR)
@@ -2071,6 +2062,29 @@ def paginas_instaladas_fora_de_dia(raiz: Path) -> list:
                                           errors="replace") != texto]
 
 
+def verificar_molde_dos_ganchos(raiz: Path) -> int:
+    divergentes = []
+    for nome in (ARQUIVO_SETTINGS, ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA):
+        destino = raiz / nome
+        if not destino.exists():
+            continue
+        configuracao = ler_json_ou_avisar(destino)
+        if configuracao is None:
+            divergentes.append(nome)
+            continue
+        for evento, blocos in configuracao.get("hooks", {}).items():
+            for bloco in blocos:
+                for comando in comandos_do_bloco(bloco):
+                    arquivo = arquivo_do_gancho_no_comando(comando)
+                    if not arquivo:
+                        continue
+                    if evento not in EVENTOS_DOS_GANCHOS or comando != comando_do_gancho(arquivo, evento):
+                        divergentes.append(f"{nome}: {evento}: {comando}")
+    for linha in divergentes:
+        print(f"  gancho fora do molde: {linha}")
+    return int(bool(divergentes))
+
+
 def verificar_a_camada_instalada(raiz: Path) -> int:
     gerar_pagina_de_regras(raiz, escrevendo=False)
     gerar_instrucoes_de_agente(raiz, escrevendo=False)
@@ -2078,7 +2092,10 @@ def verificar_a_camada_instalada(raiz: Path) -> int:
     total = len(paginas_da_camada()) + len(arquivos_de_modulos_instalados(raiz))
     print(LOG_TOTAL_DE_PAGINAS.format(total, ACAO_VERIFICADAS,
                                       marco_da_camada()))
+    ganchos_fora_do_molde = verificar_molde_dos_ganchos(raiz)
     if not atrasadas:
+        if ganchos_fora_do_molde:
+            return 1
         print(LOG_INSTALADA_EM_DIA)
         return 0
     print(LOG_INSTALADA_ATRASADA.format(len(atrasadas), BANDEIRA_ATUALIZAR))
@@ -2816,31 +2833,6 @@ def espelhar_mcp_para_o_agente_sem_barra(raiz: Path, escrevendo: bool,
     return 0
 
 
-def servidor_mcp_do_indice(windows: bool = os.name == "nt") -> dict:
-    comando = ["npx", PACOTE_DO_SERVIDOR_DO_INDICE]
-    if windows:
-        comando = [*INVOCADOR_DO_NPX_NO_WINDOWS, *comando]
-    return {CHAVE_DO_COMANDO_DO_MCP: comando[0],
-            CHAVE_DOS_ARGUMENTOS_DO_MCP: comando[1:],
-            "env": dict(AMBIENTE_DO_SERVIDOR_DO_INDICE)}
-
-
-def registrar_mcp_do_indice(raiz: Path) -> None:
-    if not (raiz / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).exists():
-        return
-    destino = raiz / ARQUIVO_DE_DECLARACAO_DE_MCP
-    declaracao = ler_json_ou_avisar(destino)
-    if declaracao is None:
-        return
-    servidores = declaracao.setdefault(CHAVE_DOS_SERVIDORES_MCP, {})
-    if NOME_DO_MCP_DO_INDICE in servidores:
-        print(LOG_INDICE_JA_REGISTRADO)
-        return
-    servidores[NOME_DO_MCP_DO_INDICE] = servidor_mcp_do_indice()
-    gravar_configuracao_json(destino, declaracao)
-    print(LOG_INDICE_REGISTRADO)
-
-
 def e_repositorio_vizinho(pasta: Path) -> bool:
     return (pasta.is_dir() and not pasta.name.startswith(".")
             and (pasta / PASTA_DO_GIT).exists())
@@ -2882,13 +2874,11 @@ def semear_alvos_do_indice(raiz: Path) -> None:
         return
     gravar_configuracao_json(destino, {
         "comentario": COMENTARIO_DOS_ALVOS,
-        "servidor": SERVIDOR_PADRAO_DO_INDICE,
-        "ambiente": dict(AMBIENTE_DO_SERVIDOR_DO_INDICE),
         "alvos": alvos,
         "ligado": False})
     print(LOG_ALVOS_SEMEADOS.format(
-        len(alvos), comando_com_o_interpretador(
-            COMANDO_DE_INDEXAR.format(MARCADOR_DO_INTERPRETADOR))))
+        len(alvos), COMANDO_DE_INDEXAR.format(
+            f"{SHELL_DO_LANCADOR} {ARQUIVO_DO_LANCADOR} -X utf8")))
 
 
 def garantir_gancho_declarado(raiz: Path, gancho) -> None:
@@ -2900,7 +2890,8 @@ def garantir_gancho_declarado(raiz: Path, gancho) -> None:
     configuracao = ler_json_ou_vazio(destino)
     declarados = configuracao.setdefault(CHAVE_DOS_GANCHOS, {}).setdefault(
         gancho.evento, [])
-    comando = comando_com_o_interpretador(gancho.comando)
+    comando = comando_do_gancho(
+        arquivo_do_gancho_no_comando(gancho.comando), gancho.evento)
     declarado = gancho_declarado_com_a_cauda(declarados, gancho.comando)
     if declarado is not None and declarado.get(CHAVE_DO_COMANDO) == comando:
         print(LOG_GANCHO_EM_DIA.format(gancho.nome))
@@ -3363,11 +3354,15 @@ def garantir_ajustes(raiz: Path, numero: int) -> None:
     garantir_configuracao_do_repositorio(raiz)
     garantir_gancho_declarado(raiz, GANCHO_DO_DESPACHANTE_DE_CERCAS)
     garantir_gancho_declarado(raiz, GANCHO_DO_AVISO_DE_INDICE_FORA)
+    garantir_gancho_declarado(raiz, GANCHO_DA_PREPARACAO_DA_NUVEM)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_DESTINO)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_RELATO)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_APRESENTACAO)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DE_PENDENCIA)
     garantir_gancho_declarado(raiz, GANCHO_DA_COBRANCA_DO_CLONE_ATRASADO)
+    garantir_gancho_declarado(raiz,
+                              GANCHO_DA_ORIENTACAO_DA_RECUSA_DO_ISOLAMENTO)
+    garantir_gancho_declarado(raiz, GANCHO_DO_REGISTRO_DA_NEGATIVA)
     garantir_ponte_para_a_outra_ferramenta(raiz)
     garantir_leitura_livre(raiz)
     garantir_regras_nativas_de_edicao(raiz)
@@ -3375,7 +3370,6 @@ def garantir_ajustes(raiz: Path, numero: int) -> None:
     garantir_gancho_declarado(raiz, GANCHO_DA_VERIFICACAO_DE_MCP)
     garantir_gancho_declarado(raiz, GANCHO_DA_VERIFICACAO_DE_AMBIENTE)
     garantir_ponte_do_devin_desligada(raiz)
-    registrar_mcp_do_indice(raiz)
     semear_alvos_do_indice(raiz)
     liberar_servidores_mcp_declarados(raiz)
     espelhar_mcp_para_o_devin(raiz)
@@ -3383,9 +3377,21 @@ def garantir_ajustes(raiz: Path, numero: int) -> None:
                                   ROTULO_DO_GITIGNORE_DO_LIXO, MOTIVO_LIXO)
     acrescentar_linhas_que_faltam(raiz / ARQUIVO_GITIGNORE, IGNORAR_LOCAL,
                                   ROTULO_DO_GITIGNORE_LOCAL, MOTIVO_LOCAL)
+    acrescentar_linhas_que_faltam(raiz / ARQUIVO_GITIGNORE,
+                                  IGNORAR_MEMORIA_DOS_SUBAGENTES,
+                                  ROTULO_DO_GITIGNORE_DA_MEMORIA,
+                                  MOTIVO_DA_MEMORIA_DOS_SUBAGENTES)
+    acrescentar_linhas_que_faltam(raiz / ARQUIVO_DA_INCLUSAO_NA_WORKTREE,
+                                  INCLUIR_NA_WORKTREE,
+                                  ROTULO_DA_INCLUSAO_NA_WORKTREE,
+                                  MOTIVO_DA_INCLUSAO_NA_WORKTREE)
     acrescentar_linhas_que_faltam(raiz / ARQUIVO_GITATTRIBUTES,
                                   ATRIBUTOS_DO_LANCADOR, ROTULO_DOS_ATRIBUTOS,
                                   MOTIVO_DOS_ATRIBUTOS)
+    acrescentar_linhas_que_faltam(raiz / ARQUIVO_GITATTRIBUTES,
+                                  ATRIBUTOS_DOS_WORKFLOWS,
+                                  ROTULO_DOS_ATRIBUTOS_DOS_WORKFLOWS,
+                                  MOTIVO_DOS_ATRIBUTOS_DOS_WORKFLOWS)
 
     print(SECAO_DO_VERSIONAMENTO.format(numero + 1))
     verificar_versionaveis(raiz)
@@ -3412,7 +3418,7 @@ def regra_de_codigo_gerada(raiz: Path):
     texto = skill.read_text(encoding="utf-8")
     corpo = texto.partition(FECHAMENTO_DO_FRONTMATTER)[2] \
         if texto.startswith("---") else texto
-    corpo = corpo.partition(SECAO_DOS_PEDIDOS_DE_EXEMPLO)[0].strip() + "\n"
+    corpo = corpo.strip() + "\n"
     frente = "---\npaths:\n" + "".join(
         f'  - "{c}"\n' for c in CAMINHOS_QUE_ACORDAM_A_REGRA_DE_CODIGO) + "---\n\n"
     return frente + corpo
@@ -3650,26 +3656,157 @@ def casos_da_ponte_do_devin_com_ensaio(caso) -> None:
              and (raiz / "AGENTS.md").is_file())
 
 
+def casos_do_contrato_dos_ganchos(caso):
+    import contextlib
+    import io
+    import tempfile
+    from unittest.mock import patch
+
+    casa = casa_do_instalador()
+    for nome in (ARQUIVO_SETTINGS, ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA):
+        dado = ler_json_ou_vazio(casa / nome)
+        for evento, blocos in dado.get("hooks", {}).items():
+            for bloco in blocos:
+                for linha in comandos_do_bloco(bloco):
+                    arquivo = arquivo_do_gancho_no_comando(linha)
+                    if arquivo:
+                        esperado = comando_do_gancho(arquivo, evento)
+                        caso(f"I1 {nome} {evento} {arquivo}", linha == esperado)
+    linhas = [comando_do_gancho(g.arquivo_exigido or
+              arquivo_do_gancho_no_comando(g.comando), g.evento)
+              for g in ganchos_declarados()]
+    linhas += [g["hooks"][0]["command"] for blocos in
+               GANCHOS_DO_AGENTE_SEM_BARRA["hooks"].values() for g in blocos]
+    for linha in linhas:
+        partes = linha.split("'", 2)
+        caso("I6 variáveis e caracteres de concha", len(partes) == 3
+             and "$" not in partes[0] + partes[2]
+             and not any(c in partes[1] for c in '|&<>()^%"'))
+    try:
+        comando_do_gancho(ARQUIVO_DA_SONDA_DO_GANCHO, "EventoInventado")
+    except ValueError:
+        recusou = True
+    else:
+        recusou = False
+    caso("I11 evento fora da tabela recusado", recusou)
+    fonte = Path(__file__).read_text(encoding="utf-8")
+    caso("I9 medição removida", not any("def " + nome in fonte for nome in
+         ("interpretador_" + "desta_maquina", "comando_com_o_" + "interpretador")))
+    with tempfile.TemporaryDirectory(prefix="montar contrato ") as pasta:
+        raiz = Path(pasta)
+        sonda = raiz / ARQUIVO_DA_SONDA_DO_GANCHO
+        sonda.parent.mkdir(parents=True)
+        sonda.write_text("import sys;print(sys.argv[0]);sys.exit(7)\n", encoding="utf-8")
+        lancador = raiz / ARQUIVO_DO_LANCADOR
+        shutil.copyfile(casa / ARQUIVO_DO_LANCADOR, lancador)
+        subpasta = raiz / "subpasta"
+        subpasta.mkdir()
+        bash = shutil.which("bash") or "bash"
+        ambiente = dict(os.environ, CLAUDE_PROJECT_DIR=raiz.as_posix())
+        linha = comando_do_gancho(ARQUIVO_DA_SONDA_DO_GANCHO, "PreToolUse")
+        def rodar(comando, cwd=subpasta, env=ambiente, shell=False):
+            return subprocess.run(comando, cwd=cwd, env=env, shell=shell,
+                                  capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=30)
+        corrida = rodar([bash, "-c", linha])
+        caso("I3 raiz com espaço, subpasta e argv0", corrida.returncode == 7
+             and Path(corrida.stdout.strip()).resolve() == sonda.resolve())
+        if os.name == "nt":
+            for concha in (None, "powershell"):
+                corrida = rodar(linha if concha is None else
+                    [concha, "-NoProfile", "-Command", linha + "; exit $LASTEXITCODE"],
+                    cwd=raiz, shell=concha is None)
+                caso(f"I5 {concha or 'cmd'}", corrida.returncode == 7
+                     and Path(corrida.stdout.strip()).resolve() == sonda.resolve())
+        vazio = raiz / "sem python"
+        vazio.mkdir()
+        sem_python = dict(ambiente, PATH=str(vazio))
+        sem_python["BASH_FUNC_bash%%"] = '() { "$BASH" "$@"; }'
+        for evento in ("PreToolUse", "Stop"):
+            comando = comando_do_gancho(ARQUIVO_DA_SONDA_DO_GANCHO, evento)
+            corrida = rodar([bash, "-c", comando], env=sem_python)
+            caso(f"I4 {evento} sem Python", corrida.returncode ==
+                 (2 if evento == "PreToolUse" else 0) and
+                 ("nenhum Python 3" in corrida.stderr if evento == "PreToolUse"
+                  else "systemMessage" in corrida.stdout))
+        gancho = GANCHO_DO_VETO_DE_BRANCH._replace(arquivo_exigido="")
+        for antiga in ("py -3", "python", "python3",
+                       'bash "${CLAUDE_PROJECT_DIR}/.claude/hooks/interpretador.sh"',
+                       "bash .claude/hooks/interpretador.sh"):
+            gravar_configuracao_json(raiz / ARQUIVO_SETTINGS, {"hooks": {
+                gancho.evento: [{"matcher": "Bash", "hooks": [{"type": "command",
+                    "command": antiga + " " + ARQUIVO_DO_GANCHO_DE_BRANCH}]}]}})
+            with contextlib.redirect_stdout(io.StringIO()):
+                garantir_gancho_declarado(raiz, gancho)
+                antes = (raiz / ARQUIVO_SETTINGS).read_bytes()
+                garantir_gancho_declarado(raiz, gancho)
+            blocos = ler_json_ou_vazio(raiz / ARQUIVO_SETTINGS)["hooks"][gancho.evento]
+            caso(f"I7 migração {antiga}", len(blocos) == 1 and
+                 comandos_do_bloco(blocos[0]) == [comando_do_gancho(
+                     ARQUIVO_DO_GANCHO_DE_BRANCH, gancho.evento)] and
+                 antes == (raiz / ARQUIVO_SETTINGS).read_bytes())
+        programa = ("import montar;from pathlib import Path;"
+                    "montar.garantir_gancho_declarado(Path(" + repr(str(raiz)) + "),"
+                    "montar.GANCHO_DO_VETO_DE_BRANCH._replace(arquivo_exigido=''))")
+        resultados = []
+        for caminho in (os.environ.get("PATH", ""), str(Path(bash).parent)):
+            (raiz / ARQUIVO_SETTINGS).unlink()
+            corrida = subprocess.run([sys.executable, "-X", "utf8", "-c", programa],
+                cwd=casa, env=dict(os.environ, PATH=caminho), capture_output=True,
+                text=True, encoding="utf-8", timeout=30)
+            resultados.append((corrida.returncode, (raiz / ARQUIVO_SETTINGS).read_bytes()))
+        caso("I2 montagem independente do PATH", resultados[0] == resultados[1]
+             and resultados[0][0] == 0)
+        for nome in (ARQUIVO_SETTINGS, ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA):
+            arquivo = ARQUIVO_DO_GANCHO_DE_BRANCH if nome == ARQUIVO_SETTINGS else ARQUIVO_DA_PONTE
+            (raiz / nome).parent.mkdir(parents=True, exist_ok=True)
+            gravar_configuracao_json(raiz / nome, {"hooks": {"PreToolUse": [
+                {"hooks": [{"command": "python " + arquivo}]}]}})
+        for em_casa in (True, False):
+            saida = io.StringIO()
+            with patch.object(Path, "cwd", return_value=raiz), \
+                 patch(__name__ + ".e_a_casa_do_desenvolvimento", return_value=em_casa), \
+                 patch(__name__ + ".sincronizar", return_value=0), \
+                 patch(__name__ + ".gerar_pagina_de_regras"), \
+                 patch(__name__ + ".gerar_instrucoes_de_agente"), \
+                 patch(__name__ + ".paginas_instaladas_fora_de_dia", return_value=[]), \
+                 patch.object(sys, "argv", ["montar.py", "--verificar"]), \
+                 contextlib.redirect_stdout(saida):
+                (raiz / ".git").mkdir(exist_ok=True)
+                retorno = main()
+            caso(f"I8 verificar casa={em_casa}", retorno == 1 and
+                 all(nome in saida.getvalue() for nome in
+                     (ARQUIVO_SETTINGS, ARQUIVO_DOS_GANCHOS_DO_AGENTE_SEM_BARRA)))
+        lancador.unlink()
+        for evento in ("PreToolUse", "Stop"):
+            comando = comando_do_gancho(ARQUIVO_DA_SONDA_DO_GANCHO, evento)
+            for concha in ([False, True] if os.name == "nt" else [False]):
+                corrida = rodar(comando if concha else [bash, "-c", comando],
+                                cwd=raiz, shell=concha)
+                caso(f"I10 sem lançador {evento} cmd={concha}",
+                     corrida.returncode == (2 if evento == "PreToolUse" else 0)
+                     and (evento == "PreToolUse" or
+                          "atlas: lancador dos ganchos ausente em " in corrida.stdout))
+
+
 def casos_do_gancho_em_qualquer_concha(caso) -> None:
     import contextlib
     import io
     import tempfile
 
     molde = globals().get("comando_do_gancho")
-    caso("todo gancho declarado sai sem variável de concha no texto do comando",
-         all("$" not in comando_com_o_interpretador(g.comando, sys.executable)
-             for g in ganchos_declarados()))
     caso("existe um molde só para o comando de gancho", callable(molde))
     if not callable(molde):
         return
-    linha = comando_com_o_interpretador(molde(ARQUIVO_DA_SONDA_DO_GANCHO),
-                                        sys.executable)
+    linha = molde(ARQUIVO_DA_SONDA_DO_GANCHO)
     with tempfile.TemporaryDirectory(prefix="montar-concha-") as pasta, \
             tempfile.TemporaryDirectory(prefix="montar-outro-cwd-") as outro:
         raiz = Path(pasta)
         sonda = raiz / ARQUIVO_DA_SONDA_DO_GANCHO
         sonda.parent.mkdir(parents=True)
         sonda.write_text(SONDA_DO_GANCHO, encoding="utf-8")
+        shutil.copyfile(casa_do_instalador() / ARQUIVO_DO_LANCADOR,
+                        raiz / ARQUIVO_DO_LANCADOR)
         visto = sonda.parent / "visto.json"
         corrida = rodar_linha_de_gancho(linha, raiz, Path(outro), True)
         leitura = (json.loads(visto.read_text(encoding="utf-8"))
@@ -3690,8 +3827,7 @@ def casos_do_gancho_em_qualquer_concha(caso) -> None:
         caso("sem a variável, a linha acha a raiz pelo diretório atual",
              sem_variavel.returncode == 2 and visto.is_file())
         ausente = rodar_linha_de_gancho(
-            comando_com_o_interpretador(molde(".claude/hooks/nao-existe.py"),
-                                        sys.executable), raiz, raiz, True)
+            molde(".claude/hooks/nao-existe.py"), raiz, raiz, True)
         caso("gancho ausente sai 2, que barra, e diz qual arquivo faltou",
              ausente.returncode == 2 and "nao-existe.py" in ausente.stderr)
         antiga = ('python "${CLAUDE_PROJECT_DIR}/'
@@ -3711,13 +3847,12 @@ def casos_do_gancho_em_qualquer_concha(caso) -> None:
              "para o formato novo, sem duplicar o gancho",
              len(blocos) == 1
              and blocos[0][CHAVE_DOS_GANCHOS][0][CHAVE_DO_COMANDO]
-             == comando_com_o_interpretador(COMANDO_DO_VETO_DE_BRANCH))
+             == COMANDO_DO_VETO_DE_BRANCH)
         codificacao = raiz / ARQUIVO_DA_SONDA_DA_CODIFICACAO
         codificacao.write_text(SONDA_DA_CODIFICACAO, encoding="utf-8")
         visto_na_entrada = codificacao.parent / "visto-codificacao.json"
         corrida = rodar_linha_sem_o_modo_utf8(
-            comando_com_o_interpretador(molde(ARQUIVO_DA_SONDA_DA_CODIFICACAO),
-                                        sys.executable),
+            molde(ARQUIVO_DA_SONDA_DA_CODIFICACAO),
             raiz, json.dumps({"texto": ENTRADA_QUE_O_CP1252_ESTRAGA},
                              ensure_ascii=False).encode("utf-8"))
         lido = (json.loads(visto_na_entrada.read_text(encoding="utf-8")).get(
@@ -3731,9 +3866,8 @@ def casos_do_gancho_em_qualquer_concha(caso) -> None:
              and corrida.stdout.decode("utf-8", errors="replace").strip()
              == ENTRADA_QUE_O_CP1252_ESTRAGA + SAIDA_FORA_DO_CP1252)
     caso("a ponte do Codex liga o modo UTF-8 no Python que o lançador escolhe",
-         COMANDO_DA_PONTE_SEM_BARRA.startswith(
-             f"{SHELL_DO_LANCADOR} {ARQUIVO_DO_LANCADOR} "
-             f"{OPCAO_QUE_LIGA_O_MODO_UTF8} {ARQUIVO_DA_PONTE}"))
+         f"--cliente codex {OPCAO_QUE_LIGA_O_MODO_UTF8} {ARQUIVO_DA_PONTE}"
+         in COMANDO_DA_PONTE_SEM_BARRA)
     caso("a ponte do Devin também liga o modo UTF-8",
          f"{ARQUIVO_DO_LANCADOR}\" {OPCAO_QUE_LIGA_O_MODO_UTF8} "
          in COMANDO_DA_PONTE)
@@ -3810,6 +3944,9 @@ def casos_do_modulo_privado(caso) -> None:
     caso("o ignore gerado trata como lixo o temporário do Google Drive "
          "para desktop, que nasce na raiz de pasta sincronizada",
          "/.tmp.driveupload/" in IGNORAR_LIXO)
+    caso("o ignore gerado esconde o índice que o ck grava dentro do alvo, "
+         "para a busca não sujar o git de quem instala",
+         ".ck/" in IGNORAR_LIXO and ".ckignore" in IGNORAR_LIXO)
 
 
 PAGINA_NOVA_RASTREADA_DO_TESTE = ".agents/skills/portao/rastreada.md"
@@ -4290,6 +4427,7 @@ def testar() -> int:
     casos_do_modulo_privado(caso)
     casos_do_modulo_na_casa(caso)
     casos_da_montagem_e_atualizacao_na_casa(caso)
+    casos_do_contrato_dos_ganchos(caso)
     casos_do_gancho_em_qualquer_concha(caso)
     casos_da_ponte_do_devin_com_ensaio(caso)
     caso(CASO_MOLDE_POR_PREENCHER,
@@ -4355,6 +4493,11 @@ def testar() -> int:
              and atributos.is_file()
              and ATRIBUTOS_DO_LANCADOR[0] in atributos.read_text(
                  encoding="utf-8"))
+        caso(CASO_ARVORE_VIRGEM_RECEBE_O_WORKFLOW_EM_LF,
+             (raiz / WORKFLOW_DOS_CETICOS).is_file()
+             and atributos.is_file()
+             and ATRIBUTOS_DOS_WORKFLOWS[0] in atributos.read_text(
+                 encoding="utf-8").splitlines())
         despachante = raiz / ARQUIVO_DO_DESPACHANTE_DE_CERCAS
         bloco = BLOCO_DAS_CERCAS_NO_DESPACHANTE.search(
             despachante.read_text(encoding="utf-8"))
@@ -4382,6 +4525,25 @@ def testar() -> int:
         caso(CASO_ARVORE_VIRGEM_LIGA_A_COBRANCA_DO_CLONE,
              "avisar-clone-desatualizado" in listadas
              and "avisar-clone-desatualizado.py" in ligados_no_fim_de_turno)
+        memoria_do_varredor = subprocess.run(
+            ["git", "check-ignore", "-q",
+             ".claude/agent-memory-local/varredor/MEMORY.md"],
+            cwd=str(raiz), capture_output=True)
+        caso(CASO_ARVORE_VIRGEM_ESCONDE_A_MEMORIA_DO_VARREDOR,
+             "memory: local" in (raiz / SUBAGENTE_VARREDOR).read_text(
+                 encoding="utf-8")
+             and memoria_do_varredor.returncode == 0)
+        inclusao = raiz / ARQUIVO_DA_INCLUSAO_NA_WORKTREE
+        incluidas = (inclusao.read_text(encoding="utf-8").splitlines()
+                     if inclusao.is_file() else [])
+        with contextlib.redirect_stdout(io.StringIO()):
+            acrescentar_linhas_que_faltam(inclusao, INCLUIR_NA_WORKTREE,
+                                          ROTULO_DA_INCLUSAO_NA_WORKTREE,
+                                          MOTIVO_DA_INCLUSAO_NA_WORKTREE)
+        caso(CASO_ARVORE_VIRGEM_RECEBE_A_INCLUSAO_NA_WORKTREE,
+             all(incluidas.count(linha) == 1 for linha in INCLUIR_NA_WORKTREE)
+             and inclusao.read_text(encoding="utf-8").splitlines()
+             == incluidas)
 
     caso(CASO_CONFIGURACAO_FORA_DE_PAGINAS,
          ENDERECO_DA_CONFIGURACAO_COBRADO_A_MAO not in paginas_da_camada())
@@ -4505,25 +4667,7 @@ def testar() -> int:
     except (OSError, subprocess.SubprocessError):
         lancador_respondeu = False
     caso(CASO_LANCADOR_RODA_PYTHON_3, lancador_respondeu)
-    caso(CASO_MARCADOR_SAI_DO_COMANDO,
-         MARCADOR_DO_INTERPRETADOR not in comando_com_o_interpretador(
-             COMANDO_DO_VETO_DE_BRANCH))
-    medido = interpretador_desta_maquina()
-    caso(CASO_TODO_GANCHO_CHAMA_O_INTERPRETADOR,
-         all(comando_com_o_interpretador(g.comando).startswith(
-             chamada_do_gancho(medido)) for g in ganchos_declarados())
-         and not any(comando_com_o_interpretador(g.comando).startswith(
-             "python3 ") for g in ganchos_declarados()))
-    caso(CASO_SEM_PYTHON_O_GANCHO_VOLTA_AO_LANCADOR,
-         comando_com_o_interpretador(
-             COMANDO_DO_VETO_DE_BRANCH, "").startswith(LANCADOR_NO_GANCHO))
-    caso(CASO_CAMINHO_COM_ESPACO_VAI_ENTRE_ASPAS,
-         comando_com_o_interpretador(
-             COMANDO_DO_VETO_DE_BRANCH,
-             "C:/Program Files/Python/python.exe").startswith(
-                 '"C:/Program Files/Python/python.exe"'))
-    de_outro_jeito = COMANDO_DO_VETO_DE_BRANCH.replace(
-        MARCADOR_DO_INTERPRETADOR, "py -3")
+    de_outro_jeito = "py -3 " + ARQUIVO_DO_GANCHO_DE_BRANCH
     with tempfile.TemporaryDirectory() as pasta:
         raiz = Path(pasta)
         gancho_no_disco = raiz / ARQUIVO_DO_GANCHO_DE_BRANCH
@@ -4541,7 +4685,7 @@ def testar() -> int:
         caso(CASO_GANCHO_COM_OUTRO_INTERPRETADOR_E_REESCRITO,
              len(blocos) == 1
              and blocos[0][CHAVE_DOS_GANCHOS][0][CHAVE_DO_COMANDO]
-             == comando_com_o_interpretador(COMANDO_DO_VETO_DE_BRANCH))
+             == COMANDO_DO_VETO_DE_BRANCH)
     caso(CASO_GANCHO_DE_OUTRO_ARQUIVO_NAO_CONTA,
          not tem_comando_declarado(
              [{CHAVE_DOS_GANCHOS: [{CHAVE_DO_COMANDO: de_outro_jeito}]}],
@@ -4594,10 +4738,19 @@ def testar() -> int:
 
     with tempfile.TemporaryDirectory() as pasta:
         alvo = Path(pasta)
+        servidor_de_quem_instala = {"command": "python",
+                                    "args": ["servidor.py"]}
+        gravar_configuracao_json(
+            alvo / ARQUIVO_DE_DECLARACAO_DE_MCP,
+            {CHAVE_DOS_SERVIDORES_MCP: {"local": servidor_de_quem_instala}})
         mudo = io.StringIO()
         with contextlib.redirect_stdout(mudo):
             saiu = montar(alvo)
         caso(CASO_MONTAGEM_INTEIRA_RODA, saiu == 0)
+        caso(CASO_INDICE_NAO_E_REGISTRADO_NO_MCP,
+             (alvo / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).is_file()
+             and servidores_mcp_declarados(alvo)
+             == {"local": servidor_de_quem_instala})
         caso(CASO_MONTAGEM_ENTREGA_AS_INSTRUCOES,
              (alvo / PAGINA_INSTRUCOES).is_file())
         entregues = ((alvo / PAGINA_INSTRUCOES).read_text(encoding="utf-8")
@@ -4688,7 +4841,6 @@ def testar() -> int:
         with contextlib.redirect_stdout(silencio):
             liberar_servidores_mcp_declarados(raiz)
             espelhar_mcp_para_o_devin(raiz)
-            registrar_mcp_do_indice(raiz)
         caso(CASO_SEM_MCP_NADA_NASCE,
              not (raiz / ARQUIVO_SETTINGS_LOCAL).exists()
              and not (raiz / ARQUIVO_MCP_LOCAL_DO_DEVIN).exists()
@@ -4733,28 +4885,6 @@ def testar() -> int:
         (raiz / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).parent.mkdir(parents=True)
         (raiz / ARQUIVO_QUE_PROVA_O_MODULO_INDICE).write_text(
             "", encoding="utf-8")
-        with contextlib.redirect_stdout(silencio):
-            registrar_mcp_do_indice(raiz)
-        registrados = servidores_mcp_declarados(raiz)
-        caso(CASO_INDICE_ENTRA_SEM_APAGAR_OS_OUTROS,
-             set(registrados) == {"local", "remoto", "torto",
-                                  NOME_DO_MCP_DO_INDICE}
-             and PACOTE_DO_SERVIDOR_DO_INDICE in (
-                 registrados[NOME_DO_MCP_DO_INDICE]["args"]))
-        registrados[NOME_DO_MCP_DO_INDICE] = {"command": "node",
-                                              "args": ["meu.js"]}
-        gravar_configuracao_json(raiz / ARQUIVO_DE_DECLARACAO_DE_MCP,
-                                 {CHAVE_DOS_SERVIDORES_MCP: registrados})
-        with contextlib.redirect_stdout(silencio):
-            registrar_mcp_do_indice(raiz)
-        caso(CASO_INDICE_DO_DONO_NAO_E_SOBRESCRITO,
-             servidores_mcp_declarados(raiz)[NOME_DO_MCP_DO_INDICE]
-             == {"command": "node", "args": ["meu.js"]})
-        caso(CASO_INDICE_NO_WINDOWS_PASSA_PELO_CMD,
-             servidor_mcp_do_indice(windows=True)["command"] == "cmd"
-             and servidor_mcp_do_indice(windows=True)["args"][:2]
-             == ["/c", "npx"]
-             and servidor_mcp_do_indice(windows=False)["command"] == "npx")
 
         (raiz / PASTA_DOS_VIZINHOS_INDEXAVEIS / "vizinho"
          / PASTA_DO_GIT).mkdir(parents=True)
@@ -5123,7 +5253,9 @@ def main() -> int:
         print(LOG_CABECALHO_DA_VERIFICACAO.format(raiz))
         if not e_a_casa_do_desenvolvimento(raiz):
             return verificar_a_camada_instalada(raiz)
-        return sincronizar(raiz, escrevendo=False)
+        paginas_fora_de_dia = sincronizar(raiz, escrevendo=False)
+        ganchos_fora_do_molde = verificar_molde_dos_ganchos(raiz)
+        return int(bool(ganchos_fora_do_molde or paginas_fora_de_dia))
 
     if pediram(BANDEIRA_SINCRONIZAR):
         recusar_sincronizar_fora_de_casa(raiz)

@@ -181,6 +181,7 @@ ACAO_RENOMEAR = "renomear"
 ACAO_COMMIT = "commit"
 ACAO_PUSH = "push"
 ACAO_PUBLICAR = "publicar"
+ACAO_MESCLAR = "mesclar"
 VERBO_COMMIT = "commit"
 BANDEIRAS_DO_COMMIT_QUE_NAO_GRAVAM = {"--dry-run", "--help", "-h"}
 OPCOES_DO_COMMIT_QUE_COMEM_O_SEGUINTE = {
@@ -238,7 +239,12 @@ VERBOS_POR_ACAO = {
     ACAO_PUSH: (VERBO_PUSH,),
     ACAO_PUBLICAR: ("pr", "release"),
 }
-OMISSAO_NAO_E_PERMISSAO = {ACAO_COMMIT: False, ACAO_PUSH: False}
+OMISSAO_NAO_E_PERMISSAO = {ACAO_COMMIT: False, ACAO_PUSH: False,
+                           ACAO_MESCLAR: False}
+VERBO_DO_PEDIDO = "pr"
+INDICE_DO_VERBO_SEM_BANDEIRA_ANTES = 1
+BANDEIRAS_DA_MESCLA_DA_CASA = frozenset({"--merge"})
+VARIAVEIS_QUE_TROCAM_O_REPOSITORIO_DO_GH = ("gh_repo", "gh_host")
 
 VERBO_DA_API = "api"
 METODO_QUE_SO_LE = "GET"
@@ -367,16 +373,38 @@ APRENDIZADO_DA_INTEGRACAO = (
     "pelo que `nucleo/executor.json` declara."
 )
 MOTIVO_PUBLICAR = (
-    "publicar — mesclar pedido de incorporação, ou criar ou mudar release")
+    "publicar — criar ou mudar release, ou mesclar pedido de incorporação "
+    "fora da forma `gh pr merge <número> --merge` rodada da pasta do "
+    "repositório")
 RECUSA_POR_PUBLICAR = (
-    "Regra 9 da camada: isto quer {}. Publicar é do dono, sempre: nenhuma "
-    "chave de `autorizacoes` libera, porque publicação não se desfaz. O "
+    "Regra 9 da camada: isto quer {}. Publicar é do dono, sempre: release, "
+    "mescla que contorna a aprovação (`--admin`, `--auto`), que apaga a "
+    "branch de cabeça, que vai pela API ou que troca de repositório (`-R`, "
+    "`GH_REPO`) não se liberam por chave, porque publicação não se desfaz. O "
     "caminho: deixe o pedido de incorporação aberto, diga ao dono o que "
-    "espera por ele e pare — quem mescla e quem lança é ele."
+    "espera por ele e pare. Onde a raiz declara "
+    "`autorizacoes.mesclar`, a sessão mescla o que o dono aprovou só pela "
+    "forma `gh pr merge <número> --merge`, rodada da pasta dela."
+)
+MOTIVO_MESCLA_COM_OUTRO_REMOTO = (
+    "publicar — mesclar de uma pasta com remoto além do `origin`, onde o gh "
+    "pode escolher outro repositório")
+TRECHO_DA_CHAVE_DA_MESCLA = "`autorizacoes.mesclar`"
+RECUSA_POR_MESCLA_SEM_CHAVE = (
+    "Regra 9 da camada: isto quer {}. Ligar " + TRECHO_DA_CHAVE_DA_MESCLA
+    + " é decisão do dono, não da sessão, e ela só vale na raiz do "
+    "workspace. O caminho: deixe o pedido aprovado aberto, diga ao dono que "
+    "ele espera a mescla e pare."
+)
+APRENDIZADO_DA_MESCLA = (
+    "a sessão mescla o pedido aprovado só onde a raiz declara "
+    + TRECHO_DA_CHAVE_DA_MESCLA + ", e só pela forma `gh pr merge <número> "
+    "--merge`, da pasta do repositório; ligar a chave é do dono."
 )
 APRENDIZADO_DE_PUBLICAR = (
-    "publicar é do dono, sempre: a sessão abre o pedido de incorporação e "
-    "para; mesclar pedido e criar release não se liberam por chave."
+    "publicar é do dono, sempre: release e mescla fora da forma da casa não "
+    "se liberam por chave; a mescla da casa segue `autorizacoes.mesclar` e a "
+    "aprovação que o servidor exige."
 )
 MOTIVO_REBASE_PELO_SERVIDOR = (
     "reescrever pelo servidor a história da branch de cabeça do pedido "
@@ -1191,8 +1219,28 @@ def acao_do_gh(verbo: str, resto: list, texto_cru: str = "") -> str:
         return SEM_ACAO
     if subverbo in SUBVERBOS_QUE_EMPURRAM.get(verbo, frozenset()):
         return ACAO_PUSH
+    if (verbo == VERBO_DO_PEDIDO and subverbo == VERBO_MERGE
+            and j == INDICE_DO_VERBO_SEM_BANDEIRA_ANTES
+            and e_a_mescla_da_casa(palavras[j + 1:])):
+        return ACAO_MESCLAR
     return ACAO_PUBLICAR if verbo in VERBOS_POR_ACAO[ACAO_PUBLICAR] \
         else SEM_ACAO
+
+
+def e_a_mescla_da_casa(argumentos: list) -> bool:
+    bandeiras = {a for a in argumentos if a.startswith(LETRA_DE_OPCAO_NO_SHELL)}
+    pedidos = [a for a in argumentos
+               if not a.startswith(LETRA_DE_OPCAO_NO_SHELL)]
+    return (bandeiras == BANDEIRAS_DA_MESCLA_DA_CASA and len(pedidos) == 1
+            and pedidos[0].isascii() and pedidos[0].isdigit())
+
+
+def mescla_no_repositorio_da_pasta(indice_do_verbo: int,
+                                   texto_cru: str) -> bool:
+    baixo = (texto_cru or "").lower()
+    return (indice_do_verbo == INDICE_DO_VERBO_SEM_BANDEIRA_ANTES
+            and not any(nome in baixo or nome.upper() in os.environ
+                        for nome in VARIAVEIS_QUE_TROCAM_O_REPOSITORIO_DO_GH))
 
 
 def acao_do_comando(tokens: list, aqui: str = "", texto_cru: str = "") -> str:
@@ -1206,7 +1254,11 @@ def acao_do_comando(tokens: list, aqui: str = "", texto_cru: str = "") -> str:
         return SEM_ACAO
     primeiro = tokens[i].lower()
     if programa == NOME_DO_GH:
-        return acao_do_gh(primeiro, tokens[i + 1:], texto_cru)
+        acao = acao_do_gh(primeiro, tokens[i + 1:], texto_cru)
+        if acao == ACAO_MESCLAR and not mescla_no_repositorio_da_pasta(
+                i, texto_cru):
+            return ACAO_PUBLICAR
+        return acao
     if primeiro in VERBOS_QUE_PODEM_MESCLAR:
         if so_avanca_para_o_proprio_espelho(tokens, aqui):
             return SEM_ACAO
@@ -1343,6 +1395,13 @@ def motivo_da_recusa(comando: str, protegidas: set, alvo: Path,
             or None)
 
 
+def comando_mescla(comando: str, ferramenta: str = FERRAMENTA_BASH) -> bool:
+    return any(
+        acao_do_comando(tokens_sem_prefixos_transparentes(segmento.strip()),
+                        texto_cru=comando) == ACAO_MESCLAR
+        for segmento in separar_desembrulhando(comando, ferramenta))
+
+
 def motivo_que_vale_em_qualquer_repositorio(
         comando: str, ferramenta: str = FERRAMENTA_BASH) -> str:
     reescreve_pelo_servidor = False
@@ -1370,6 +1429,8 @@ CHAVE_DA_INTEGRACAO = "integracao"
 CHAVES_DAS_BRANCHES_SEM_COMMIT_DIRETO = (CHAVE_DA_INTEGRACAO, CHAVE_DA_BASE)
 REPOSITORIO_DA_PROPRIA_RAIZ = "."
 COMANDO_DO_REMOTO = ["git", "-C", "{alvo}", "remote", "get-url", "origin"]
+COMANDO_DOS_REMOTOS = ["git", "-C", "{alvo}", "remote"]
+REMOTO_QUE_A_MESCLA_ACEITA = "origin"
 NOME_DO_REPOSITORIO_NO_FIM_DA_URL = re.compile(r"([^/\\:]+?)(?:\.git)?[/\\]*$")
 
 
@@ -1411,6 +1472,17 @@ def endereco_do_remoto(alvo: Path) -> str:
     except (OSError, subprocess.SubprocessError):
         return ""
     return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def so_o_origin_como_remoto(alvo: Path) -> bool:
+    comando = [parte.format(alvo=alvo) for parte in COMANDO_DOS_REMOTOS]
+    try:
+        r = subprocess.run(comando, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=TEMPO_LIMITE_DO_GIT)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0 and r.stdout.split() == [REMOTO_QUE_A_MESCLA_ACEITA]
 
 
 def nome_do_repositorio_no_remoto(alvo: Path) -> str:
@@ -1469,8 +1541,11 @@ def autorizacoes_do_alvo(raiz: Path, alvo: Path, projeto: dict = None) -> dict:
         for acao in permitido:
             if isinstance(declarado.get(acao), bool):
                 permitido[acao] = declarado[acao]
+    else:
+        permitido = autorizacoes(alvo)
+    if e_a_propria_raiz(raiz, alvo):
         return permitido
-    return autorizacoes(alvo)
+    return {**permitido, ACAO_MESCLAR: False}
 
 
 def raiz_do_projeto_nunca_o_cwd() -> Path:
@@ -1534,7 +1609,8 @@ def decidir() -> int:
     raiz = raiz_do_projeto_nunca_o_cwd()
     alvo = repositorio_que_o_comando_muda(onde, raiz, comando, ferramenta)
     if e_somente_leitura(raiz, alvo):
-        return SILENCIO
+        return (negar_ensinando_o_caminho(MOTIVO_PUBLICAR)
+                if comando_mescla(comando, ferramenta) else SILENCIO)
     projeto = projeto_do_alvo(raiz, alvo)
     motivo = motivo_da_recusa(
         comando, nomes_protegidos(alvo), alvo,
@@ -1542,11 +1618,20 @@ def decidir() -> int:
         branches_por_incorporacao(alvo), None,
         branches_sem_commit_direto(raiz, alvo, projeto), ferramenta)
     if not motivo:
-        return SILENCIO
+        return (fecho_da_mescla_liberada(comando, ferramenta, alvo)
+                if comando_mescla(comando, ferramenta) else SILENCIO)
     if nao_expandido := expansao_que_o_gancho_nao_resolve(comando,
                                                           ferramenta):
         return recusa_por_nao_medir_o_alvo(nao_expandido)
     return negar_ensinando_o_caminho(motivo)
+
+
+def fecho_da_mescla_liberada(comando: str, ferramenta: str, alvo: Path) -> int:
+    if nao_expandido := expansao_que_o_gancho_nao_resolve(comando, ferramenta):
+        return recusa_por_nao_medir_o_alvo(nao_expandido)
+    if not so_o_origin_como_remoto(alvo):
+        return negar_ensinando_o_caminho(MOTIVO_MESCLA_COM_OUTRO_REMOTO)
+    return SILENCIO
 
 
 def negar_ensinando_o_caminho(motivo: str) -> int:
@@ -1559,9 +1644,12 @@ def negar_ensinando_o_caminho(motivo: str) -> int:
 
 
 def recusa_que_ensina_o_caminho(motivo: str) -> str:
-    if motivo == MOTIVO_PUBLICAR:
+    if motivo in (MOTIVO_PUBLICAR, MOTIVO_MESCLA_COM_OUTRO_REMOTO):
         return (RECUSA_POR_PUBLICAR.format(motivo)
                 + MANDA_GRAVAR.format(APRENDIZADO_DE_PUBLICAR))
+    if TRECHO_DA_CHAVE_DA_MESCLA in motivo:
+        return (RECUSA_POR_MESCLA_SEM_CHAVE.format(motivo)
+                + MANDA_GRAVAR.format(APRENDIZADO_DA_MESCLA))
     if motivo == MOTIVO_REBASE_PELO_SERVIDOR:
         return (RECUSA_POR_REBASE_PELO_SERVIDOR.format(motivo)
                 + MANDA_GRAVAR.format(APRENDIZADO_DO_REBASE_PELO_SERVIDOR))
@@ -1806,7 +1894,34 @@ REESCREVEM_PELO_SERVIDOR = [
      "gh pr update-branch 13 --rebase=true"),
 ]
 PUBLICAR_E_DO_DONO = [
-    ("mesclar o pedido", "gh pr merge 1 --merge"),
+    ("mesclar contornando a aprovação", "gh pr merge 1 --merge --admin"),
+    ("ligar a mescla automática", "gh pr merge 1 --auto --merge"),
+    ("mesclar apagando a branch de cabeça",
+     "gh pr merge 1 --merge --delete-branch"),
+    ("a letra curta de apagar também", "gh pr merge 1 -m -d"),
+    ("mesclar amassando os commits", "gh pr merge 1 --squash"),
+    ("mesclar rebaseando os commits", "gh pr merge 1 --rebase"),
+    ("mesclar sem dizer o método", "gh pr merge 1"),
+    ("a letra curta do método fica fora da forma da casa", "gh pr merge 1 -m"),
+    ("sem número, o pedido que o gh escolhe", "gh pr merge --merge"),
+    ("dois números", "gh pr merge 1 2 --merge"),
+    ("o pedido pelo endereço, que nomeia outro repositório",
+     "gh pr merge https://github.com/d/r/pull/1 --merge"),
+    ("o pedido pelo nome da branch", "gh pr merge minha-branch --merge"),
+    ("o algarismo de outra escrita não é número",
+     "gh pr merge " + chr(0x661) + " --merge"),
+    ("a bandeira de repositório entre o pr e o merge",
+     "gh pr -R d/r merge 1 --merge"),
+    ("a bandeira de repositório depois do método",
+     "gh pr merge 1 --merge -R d/r"),
+    ("a bandeira longa de repositório colada por igual",
+     "gh pr merge 1 --merge --repo=d/r"),
+    ("o repositório trocado pelo ambiente",
+     "GH_REPO=d/r gh pr merge 1 --merge"),
+    ("o servidor trocado pelo ambiente",
+     "GH_HOST=outro.exemplo gh pr merge 1 --merge"),
+    ("qualquer outra bandeira fecha a forma da casa",
+     "gh pr merge 1 --merge --body texto"),
     ("criar a release", "gh release create v1"),
     ("o apelido do create da release também cria", "gh release new v1"),
     ("a bandeira global longa não esconde a mescla",
@@ -1855,11 +1970,26 @@ PUBLICAR_E_DO_DONO = [
     ("o caminho que só termina como o das notas não é o das notas",
      "gh api -X PATCH repos/d/r/releases/1/releases/generate-notes "
      "-F draft=false"),
-    ("o gh.exe mescla igual", "gh.exe pr merge 8 --merge"),
+    ("o gh.exe contorna igual", "gh.exe pr merge 8 --merge --admin"),
     ("o gh.exe mescla igual pela API",
      "gh.exe api -X PUT repos/d/r/pulls/8/merge"),
 ]
 FALHA_PUBLICAR_LIBERADO = "  DEVIA NEGAR como publicar, {} — {}: saiu {!r}"
+MESCLA_DA_CASA = [
+    ("a mescla da casa", "gh pr merge 1 --merge"),
+    ("o método antes do número", "gh pr merge --merge 1"),
+    ("o gh.exe mescla igual", "gh.exe pr merge 8 --merge"),
+    ("o token do robô na frente não troca o repositório",
+     "GH_TOKEN=x gh pr merge 1 --merge"),
+]
+PERMITE_A_MESCLA = {ACAO_COMMIT: True, ACAO_PUSH: True, ACAO_MESCLAR: True}
+TRECHO_DA_AUTORIZACAO_DA_MESCLA = TRECHO_DA_CHAVE_DA_MESCLA
+TRECHO_DA_DECISAO_DO_DONO = "é decisão do dono, não da sessão"
+FALHA_RECUSA_DA_MESCLA = (
+    "  a recusa da mescla sem chave não diz que ligar a chave é do dono, ou "
+    "manda a sessão ligá-la")
+FALHA_MESCLA_DA_CASA = (
+    "  [a mescla da casa segue autorizacoes.mesclar] {} — {}: saiu {!r}")
 FALHA_RECUSA_DE_PUBLICAR = (
     "  a recusa de publicar não diz que é do dono, sempre, ou manda ligar a "
     "chave")
@@ -2038,8 +2168,7 @@ AVANCA_O_PONTEIRO_SEM_GRAVAR = [
      "git merge --ff-only origin/{} 2>&1"),
 ]
 GH_MERGE_CONTINUA_SENDO_PUBLICAR = [
-    ("gh pr merge continua exigindo autorização de publicar",
-     "gh pr merge 8 --merge"),
+    ("gh pr merge sem a chave continua recusado", "gh pr merge 8 --merge"),
 ]
 SAI_DA_PROTEGIDA_ANTES_DE_GRAVAR = [
     ("o checkout na mesma linha tira a gravação da protegida",
@@ -2118,7 +2247,8 @@ BARRA_SEM_AUTORIZACAO = [
      "git -c user.name=x commit -m algo"),
 ]
 
-AUTORIZA_TUDO = {"commit": True, "push": True, "publicar": True}
+AUTORIZA_TUDO = {"commit": True, "push": True, "mesclar": True,
+                 "publicar": True}
 FORCA_EM_PROTEGIDA = "git push --force origin main"
 BRANCH_DE_TRABALHO_DO_TESTE = "issue/1-algo"
 BRANCH_DE_INTEGRACAO_DO_TESTE = "homolog"
@@ -2436,7 +2566,7 @@ NOME_DO_VIZINHO_DA_PROVA = "vizinho"
 NOME_DO_CLONE_SO_LEITURA_DA_PROVA = "vizinho-so-leitura"
 NOME_DA_RAIZ_DA_PROVA = "atlas"
 CASOS_DE_PUBLICAR_PELO_ARQUIVO = (
-    ("mesclar o pedido", "gh pr merge 8 --merge", NEGA),
+    ("mesclar contornando a aprovação", "gh pr merge 8 --merge --admin", NEGA),
     ("criar a release", "gh release create v1", NEGA),
     ("mesclar pela API", "gh api -X PUT repos/d/r/pulls/8/merge", NEGA),
     ("CONTROLE: o push da branch de trabalho segue a chave, que está ligada",
@@ -2525,8 +2655,111 @@ def _publicar_nao_se_liga_pelo_arquivo(falhas):
                     rotulo, nome, saida.strip()[:200]))
 
 
+PASSA_CALADO = ""
+NOME_DA_RAIZ_COM_OUTRO_REMOTO = "atlas-com-upstream"
+NOME_DA_WORKTREE_DA_RAIZ = "atlas-worktree"
+TRECHO_DO_ALVO_NAO_MEDIDO = "não sabe qual repositório"
+SEM_AMBIENTE_A_MAIS = {}
+CASOS_DA_MESCLA_PELO_ALVO = (
+    ("na raiz que liga a chave, a mescla da casa passa",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_RAIZ_DA_PROVA, "gh pr merge 8 --merge",
+     PASSA_CALADO, SEM_AMBIENTE_A_MAIS),
+    ("na raiz que liga a chave, a mescla que contorna a aprovação nega",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_RAIZ_DA_PROVA,
+     "gh pr merge 8 --merge --admin", TRECHO_DE_PUBLICAR_E_DO_DONO,
+     SEM_AMBIENTE_A_MAIS),
+    ("da raiz, o repositório trocado pelo prefixo nega",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_RAIZ_DA_PROVA,
+     "GH_REPO=d/vizinho gh pr merge 8 --merge", TRECHO_DE_PUBLICAR_E_DO_DONO,
+     SEM_AMBIENTE_A_MAIS),
+    ("da raiz, o repositório trocado no ambiente do gancho nega",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_RAIZ_DA_PROVA, "gh pr merge 8 --merge",
+     TRECHO_DE_PUBLICAR_E_DO_DONO, {"GH_REPO": "d/vizinho"}),
+    ("da raiz, a pasta numa variável não se mede e nega",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_RAIZ_DA_PROVA,
+     'cd "$WT" && gh pr merge 8 --merge', TRECHO_DO_ALVO_NAO_MEDIDO,
+     SEM_AMBIENTE_A_MAIS),
+    ("da raiz, o cd para o vizinho leva o alvo junto",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_RAIZ_DA_PROVA,
+     "cd ../" + NOME_DO_VIZINHO_DA_PROVA + " && gh pr merge 8 --merge",
+     TRECHO_DA_DECISAO_DO_DONO, SEM_AMBIENTE_A_MAIS),
+    ("no vizinho, a chave no cadastro não libera a mescla",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DO_VIZINHO_DA_PROVA, "gh pr merge 8 --merge",
+     TRECHO_DA_DECISAO_DO_DONO, SEM_AMBIENTE_A_MAIS),
+    ("no clone somente leitura, a mescla nega em vez de calar",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DO_CLONE_SO_LEITURA_DA_PROVA,
+     "gh pr merge 8 --merge", TRECHO_DE_PUBLICAR_E_DO_DONO,
+     SEM_AMBIENTE_A_MAIS),
+    ("na worktree da raiz, a chave dela vale",
+     NOME_DA_RAIZ_DA_PROVA, NOME_DA_WORKTREE_DA_RAIZ, "gh pr merge 8 --merge",
+     PASSA_CALADO, SEM_AMBIENTE_A_MAIS),
+    ("na raiz com remoto além do origin, a mescla nega",
+     NOME_DA_RAIZ_COM_OUTRO_REMOTO, NOME_DA_RAIZ_COM_OUTRO_REMOTO,
+     "gh pr merge 8 --merge", TRECHO_DE_PUBLICAR_E_DO_DONO,
+     SEM_AMBIENTE_A_MAIS),
+)
+FALHA_DA_MESCLA_PELO_ALVO = (
+    "  [a mescla segue a chave do alvo] {} — em {}: esperava {!r}, saiu {!r}")
+
+
+def repositorio_de_prova_com_remotos(onde: Path, *remotos: str) -> Path:
+    repositorio_de_prova(onde, BRANCH_DE_TRABALHO_DO_TESTE)
+    for remoto in remotos:
+        subprocess.run(["git", "-C", str(onde), "remote", "add", remoto,
+                        REMOTO_DE_TESTE.format(onde.name + "-" + remoto)],
+                       check=True,
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
+    return onde
+
+
+def raiz_de_prova_que_liga_a_mescla(onde: Path, *remotos: str) -> Path:
+    repositorio_de_prova_com_remotos(onde, *remotos)
+    (onde / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+        {CHAVE_DAS_AUTORIZACOES: PERMITE_A_MESCLA}), encoding="utf-8")
+    return onde
+
+
+def _a_mescla_segue_a_chave_do_alvo(falhas):
+    with tempfile.TemporaryDirectory(prefix="vetar-mescla-") as pasta:
+        raiz = Path(pasta).resolve()
+        atlas = raiz_de_prova_que_liga_a_mescla(
+            raiz / NOME_DA_RAIZ_DA_PROVA, REMOTO_QUE_A_MESCLA_ACEITA)
+        worktree = raiz / NOME_DA_WORKTREE_DA_RAIZ
+        subprocess.run(["git", "-C", str(atlas), "worktree", "add", "-q",
+                        "--detach", str(worktree)], check=True,
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
+        (worktree / "nucleo").mkdir(exist_ok=True)
+        (worktree / ARQUIVO_CONFIGURACAO).write_text(json.dumps(
+            {CHAVE_DAS_AUTORIZACOES: PERMITE_A_MESCLA}), encoding="utf-8")
+        raiz_de_prova_que_liga_a_mescla(
+            raiz / NOME_DA_RAIZ_COM_OUTRO_REMOTO, REMOTO_QUE_A_MESCLA_ACEITA,
+            "upstream")
+        for nome in (NOME_DO_VIZINHO_DA_PROVA,
+                     NOME_DO_CLONE_SO_LEITURA_DA_PROVA):
+            repositorio_de_prova_com_remotos(raiz / nome,
+                                             REMOTO_QUE_A_MESCLA_ACEITA)
+        (atlas / ARQUIVO_EXECUTOR).write_text(json.dumps({
+            CHAVE_DOS_PROJETOS: {
+                "v": {CHAVE_DO_REPOSITORIO: NOME_DO_VIZINHO_DA_PROVA,
+                      CHAVE_DAS_AUTORIZACOES_DO_VIZINHO: PERMITE_A_MESCLA},
+                "s": {CHAVE_DO_REPOSITORIO: NOME_DO_CLONE_SO_LEITURA_DA_PROVA,
+                      CHAVE_DO_SO_LEITURA: True}}}), encoding="utf-8")
+        for (rotulo, projeto, nome, comando, esperado,
+             ambiente) in CASOS_DA_MESCLA_PELO_ALVO:
+            saida = saida_do_gancho_inteiro(raiz / projeto, raiz / nome,
+                                            comando, ambiente=ambiente)
+            certo = (not saida.strip() if esperado == PASSA_CALADO
+                     else esperado in razao_da_negativa(saida))
+            if not certo:
+                falhas.append(FALHA_DA_MESCLA_PELO_ALVO.format(
+                    rotulo, nome, esperado or "calar", saida.strip()[:200]))
+
+
 def saida_do_gancho_inteiro(projeto_dir: Path, cwd: Path, comando: str,
-                            ferramenta: str = FERRAMENTA_BASH) -> str:
+                            ferramenta: str = FERRAMENTA_BASH,
+                            ambiente: dict = None) -> str:
     entrada = json.dumps({"tool_name": ferramenta,
                           "tool_input": {"command": comando},
                           "cwd": str(cwd)})
@@ -2534,7 +2767,8 @@ def saida_do_gancho_inteiro(projeto_dir: Path, cwd: Path, comando: str,
         [sys.executable, str(Path(__file__).resolve())],
         input=entrada, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
-        env={**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(projeto_dir)})
+        env={**os.environ, VARIAVEL_DA_RAIZ_DO_PROJETO: str(projeto_dir),
+             **(ambiente or {})})
     return r.stdout
 
 
@@ -2688,6 +2922,8 @@ def _as_duas_recusas_ensinam(falhas):
 
 
 def testar() -> int:
+    for nome in VARIAVEIS_QUE_TROCAM_O_REPOSITORIO_DO_GH:
+        os.environ.pop(nome.upper(), None)
     protegidas = set(PROTEGIDAS_EMBUTIDAS)
     raiz = Path.cwd()
     falhas = []
@@ -2719,6 +2955,24 @@ def testar() -> int:
             if motivo != MOTIVO_PUBLICAR:
                 falhas.append(FALHA_PUBLICAR_LIBERADO.format(
                     leitura, rotulo, motivo))
+    for rotulo, comando in MESCLA_DA_CASA:
+        for leitura, permitido, liberada in (
+                ("sem autorização", None, False),
+                ("com commit e push, sem a chave", PERMITE_COMMIT_E_PUSH,
+                 False),
+                ("com a chave ligada", PERMITE_A_MESCLA, True)):
+            motivo = motivo_da_recusa(comando, protegidas, raiz, permitido,
+                                      fora)
+            certo = (not motivo if liberada
+                     else TRECHO_DA_AUTORIZACAO_DA_MESCLA in (motivo or ""))
+            if not certo:
+                falhas.append(FALHA_MESCLA_DA_CASA.format(leitura, rotulo,
+                                                          motivo))
+    recusa_da_mescla = recusa_que_ensina_o_caminho(MOTIVO_SEM_AUTORIZACAO.format(
+        ACAO_MESCLAR, ACAO_MESCLAR, ARQUIVO_CONFIGURACAO))
+    if (TRECHO_DA_DECISAO_DO_DONO not in recusa_da_mescla
+            or TRECHO_QUE_MANDA_LIGAR_A_CHAVE in recusa_da_mescla.lower()):
+        falhas.append(FALHA_RECUSA_DA_MESCLA)
     recusa_de_publicar = recusa_que_ensina_o_caminho(MOTIVO_PUBLICAR)
     if (TRECHO_DE_PUBLICAR_E_DO_DONO not in recusa_de_publicar
             or TRECHO_QUE_MANDA_LIGAR_A_CHAVE in recusa_de_publicar.lower()):
@@ -2852,10 +3106,12 @@ def testar() -> int:
     _o_portao_le_a_palavra_como_o_shell(falhas)
     _o_gh_do_windows_passa_pela_cerca(falhas)
     _publicar_nao_se_liga_pelo_arquivo(falhas)
+    _a_mescla_segue_a_chave_do_alvo(falhas)
 
     total = (6 + len(CASOS_DO_CADASTRO) + 1 + len(CASOS_DO_ENCADEAMENTO)
              + len(CASOS_DO_PORTAO) + len(CASOS_DO_GH_DO_WINDOWS) * 2
              + len(PUBLICAR_E_DO_DONO) * 2 + 1
+             + len(MESCLA_DA_CASA) * 3 + 1 + len(CASOS_DA_MESCLA_PELO_ALVO)
              + len(EMPURRAM_PELO_SERVIDOR) * 2 + len(REESCREVEM_PELO_SERVIDOR)
              + 2 + len(CASOS_DE_PUBLICAR_PELO_ARQUIVO) * 2
              + len(CASOS_DE_PUBLICAR_ANTES_DO_ALVO)

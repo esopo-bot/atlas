@@ -95,6 +95,54 @@ atacam pelo procedimento acima.
   céticos, o achado fica sem voto, e o relato separa as duas listas:
   refutado foi medido; sem voto não foi.
 
+### O primeiro cético é o `codex review`
+
+Quando o alvo é uma mudança num repositório e o despacho ao Codex existe e
+diz ligado, a rodada abre com a revisão do Codex, antes de qualquer cético
+em Claude: é a outra família de modelo, e custa minutos. Sem o despacho —
+outra instalação, o espelho público — o passo não existe, e a rodada começa
+nas lentes.
+
+```bash
+python .agents/despacho/despacho.py --estado
+python <raiz do atlas>/.agents/despacho/despacho.py --revisar \
+  --base <integração>
+```
+
+- Rode o `--revisar` da raiz da árvore revisada, com o caminho por extenso
+  do `despacho.py`: a revisão roda da pasta atual e não aceita `-C`.
+- O parecer sai em JSON: `saida` é o arquivo do `-o`, e `gasto_de_cota` é
+  a diferença da cota lida antes e depois, porque o `turn.completed` chega
+  zerado.
+- A resposta mora no arquivo do `-o`. Depois de `Full review comments:` —
+  ou `Review comment:`, quando o achado é um só —, um item por achado:
+  `- [P<n>] <título> — <arquivo>:<início>-<fim>`, com a explicação nas
+  linhas de baixo. P0 e P1 são graves. O `--output-schema` não muda esse
+  formato.
+- Os achados do Codex são a primeira lista de achados, não veredito: os
+  céticos em Claude tentam derrubá-los como a qualquer outro. Zero achado
+  não dispensa as lentes (passo 3.1).
+
+### A rodada em Claude é o workflow `ceticos`
+
+No Claude Code, as lentes e os céticos rodam pelo workflow salvo
+`.claude/workflows/ceticos.js`, chamado como `/ceticos`, com estes `args`:
+
+- `alvo`: `{"base": "<integração>", "ponta": "HEAD"}`, ou
+  `{"arquivos": ["<caminho>"]}`;
+- `revisao_do_codex`: o texto do arquivo do `-o`, quando o passo acima
+  rodou;
+- `contexto`: o que a mudança diz fazer, na frase do objetivo da issue.
+
+As lentes, o teto de agentes da rodada e quem ganha um segundo cético moram
+no script, não aqui. Ele devolve as listas provado, provável, não provado,
+derrubado e sem voto, cada achado com o comando e a saída de quem votou.
+Leia antes `lentes_que_cairam` e `revisao_do_codex.fora_do_formato`: o que
+está ali ficou sem medir. Com `nao_mediu`, todas as lentes caíram e não há
+lista: rode de novo, porque zero lido não é zero achado.
+Rode de novo o comando do achado em que vai agir, e leve o veredito ao corpo
+da issue. Agente sem workflow faz a rodada à mão, pelas regras desta seção.
+
 ## Comando destrutivo se julga pela cerca
 
 Verificador mandado em somente leitura não roda comando destrutivo para
@@ -114,10 +162,3 @@ Não é revisão de código nem verificação de implementação — para isso, 
 as rotinas de revisão da sua ferramenta. Aqui o alvo é o **raciocínio**: a
 ponte entre o que foi medido e o que foi concluído. Na segunda forma o código
 é só o terreno: o que se julga continua sendo cada achado.
-
-## Pedidos de exemplo
-
-- "concluí que o gargalo é o banco, porque a página só demora quando tem muita linha. antes de eu refatorar em cima disso, ataca essa conclusão"
-- "acho que o teste tá quebrando por causa de fuso horário. me desafia nisso antes de eu sair mexendo"
-- "roda o cético nisto: o erro só acontece em produção, então é problema de configuração"
-- "revisa esse módulo de cobrança por várias lentes, cada uma de um ângulo, e derruba o achado que não se sustentar"

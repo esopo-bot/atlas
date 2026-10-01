@@ -565,7 +565,19 @@ sys.stdin.reconfigure(encoding="utf-8")
 
 with LOG.open("a", encoding="utf-8") as registro:
     registro.write(" ".join(sys.argv[1:]) + chr(10))
-if "view" in sys.argv:
+rota = sys.argv[4] if sys.argv[1:3] == ["api", "--method"] else ""
+if rota.endswith("/comments") and sys.argv[3] == "POST":
+    if os.environ.get("CAIXA_TESTE_RECUSA_COMENTARIO"):
+        sys.exit(2)
+    with COMENTARIOS.open("a", encoding="utf-8") as escrito:
+        escrito.write(json.loads(sys.stdin.read())["body"] + chr(10))
+elif rota and sys.argv[3] == "GET" and "/comments" not in rota:
+    print(json.dumps({"body": CORPO.read_text(encoding="utf-8")}))
+elif rota and sys.argv[3] == "PATCH" and "/comments" not in rota:
+    if not os.environ.get("CAIXA_TESTE_ENGOLE"):
+        CORPO.write_text(json.loads(sys.stdin.read())["body"],
+                         encoding="utf-8")
+elif "view" in sys.argv:
     print(json.dumps({"body": CORPO.read_text(encoding="utf-8")}))
 elif "comment" in sys.argv:
     if os.environ.get("CAIXA_TESTE_RECUSA_COMENTARIO"):
@@ -761,6 +773,8 @@ def testar() -> int:
             registro.write_text("", encoding="utf-8")
             comentarios.write_text("", encoding="utf-8")
 
+        COMENTARIO_NO_REGISTRO = "/comments --input"
+
         def chamadas(qual):
             return registro.read_text(encoding="utf-8").count(qual)
 
@@ -899,7 +913,7 @@ def testar() -> int:
             caso("o corpo não guarda fechamento: a linha sai, nada de "
                  "seção nova nem comentário, e o registro com o motivo "
                  "vai no recado, para o commit",
-                 chamadas("issue comment") == 0 and escrito == ""
+                 chamadas(COMENTARIO_NO_REGISTRO) == 0 and escrito == ""
                  and "fechamentos" not in no_corpo.lower()
                  and "caixa-aprende-a-podar" not in no_corpo
                  and "caixa-aprende-a-podar" in recado
@@ -908,7 +922,7 @@ def testar() -> int:
             codigo, recado = podar("nunca-esteve-no-quadro", amanha,
                                    cwd=str(base))
             caso("podar linha que não está no quadro é recusa, sem escrita",
-                 codigo != 0 and chamadas("issue comment") == 0
+                 codigo != 0 and chamadas(COMENTARIO_NO_REGISTRO) == 0
                  and chamadas("edit") == 3)
 
             do_zero()
@@ -927,7 +941,7 @@ def testar() -> int:
             caso("o ensaio do relatório mostra o corpo e não escreve na "
                  "caixa",
                  codigo == 0 and relatorio.strip() in recado
-                 and chamadas("issue comment") == 0
+                 and chamadas(COMENTARIO_NO_REGISTRO) == 0
                  and chamadas("api") == 0 and chamadas("edit") == 0)
 
             def bloco_do_relatorio():
@@ -937,7 +951,7 @@ def testar() -> int:
             codigo, recado = relatar(relatorio, cwd=str(base))
             caso("SEM NADA PARA O DONO: o relatório reescreve o bloco dele no "
                  "corpo da caixa e não abre comentário nenhum",
-                 codigo == 0 and chamadas("issue comment") == 0
+                 codigo == 0 and chamadas(COMENTARIO_NO_REGISTRO) == 0
                  and "O que ela mediu." in bloco_do_relatorio()
                  and not comentarios.read_text(encoding="utf-8").strip())
             caso("o relatório no corpo não vira linha do quadro",
@@ -948,7 +962,7 @@ def testar() -> int:
             escrito = corpo.read_text(encoding="utf-8")
             caso("relatar de novo reescreve o MESMO bloco: o relatório velho "
                  "sai do corpo, e continua no histórico de edição",
-                 codigo == 0 and chamadas("issue comment") == 0
+                 codigo == 0 and chamadas(COMENTARIO_NO_REGISTRO) == 0
                  and "O que mudou." in bloco_do_relatorio()
                  and "O que ela mediu." not in escrito
                  and escrito.count(gh.marcas_do_bloco(
@@ -963,7 +977,7 @@ def testar() -> int:
             dito = comentarios.read_text(encoding="utf-8")
             caso("COM ALGO PARA O DONO: o relatório vai ao corpo e UM "
                  "comentário abre marcando o login da configuração local",
-                 codigo == 0 and chamadas("issue comment") == 1
+                 codigo == 0 and chamadas(COMENTARIO_NO_REGISTRO) == 1
                  and dito.startswith("@a-pessoa ")
                  and "https://x/issues/7" in dito
                  and "O que ela mediu." in bloco_do_relatorio())
@@ -975,7 +989,7 @@ def testar() -> int:
             dito = comentarios.read_text(encoding="utf-8")
             caso("SEM LOGIN CONFIGURADO: o comentário sai sem marca, e o "
                  "recado avisa o campo que falta",
-                 codigo == 0 and chamadas("issue comment") == 1
+                 codigo == 0 and chamadas(COMENTARIO_NO_REGISTRO) == 1
                  and "@" not in dito and "quem_se_marca" in recado)
 
             do_zero()

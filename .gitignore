@@ -14,6 +14,12 @@
 nucleo/executor.json
 nucleo/bancada.json
 
+# A memória que o subagente grava com `memory: local` — a do varredor mora em
+# .claude/agent-memory-local/varredor/. Ela anota o que ele aprendeu nesta
+# máquina e pode citar caminho e nome: fica fora do git. Quem instala a camada
+# recebe a mesma linha pelo montar.py.
+.claude/agent-memory-local/
+
 # Registros de verificação. O `latest` é symlink que a ferramenta deixa ao
 # lado do log quando o verificador roda com --debug-file: artefato dela, não
 # nosso. Com core.symlinks=false ele parece um arquivo de texto com o caminho
@@ -40,6 +46,10 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 /.tmp.driveupload/
+# O indice do ck mora dentro de cada alvo que ele indexa: derivado, refeito
+# pela ronda. Nos vizinhos as mesmas linhas vao ao .git/info/exclude deles.
+.ck/
+.ckignore
 
 # A pasta do editor é de cada máquina: o launch.json nasce no primeiro F5 e
 # não é o mesmo em duas. A exceção que a verificação de referências órfãs
@@ -111,3 +121,4 @@ conhecimento/observabilidade/
 references/ingestao.md
 .agents/skills/observabilidade/
 .claude/skills/observabilidade/
+.agents/evals/results/

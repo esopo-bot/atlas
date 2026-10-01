@@ -15,8 +15,8 @@ máquina, fica fora do git.
 | `conhecimento/` | página que gente lê | só as que a tupla `FONTES` do `montar.py` nomeia: `regras-da-camada.md` — a lista das regras gerada de `nucleo/regras.json` —, as duas receitas de quem instala, `verificacao-pos-atualizacao.md` e `organizar-conhecimento-e-projetos.md`, [`windows-e-git-bash.md`](windows-e-git-bash.md), as armadilhas do Windows com Git Bash e o conserto de cada uma. As outras páginas ficam neste repositório: quem instala recebe regras, skills, instrumentos e ganchos, e a documentação da camada mora aqui |
 | `conhecimento/projetos/` | a wiki dos repositórios vizinhos — um perfil por repositório, gerado pela skill `perfil-de-repositorio` | não: é conteúdo do workspace, fora do git |
 | `conhecimento/issues_encerradas/` | o histórico do trabalho feito: um `.md` por issue fechada, numa pasta por projeto, escrito pelo módulo `historico` na árvore principal | o mecanismo, sim, porque o módulo vem ligado; o histórico, não: fica na máquina, fora do git |
-| `.agents/` | instrumentos (Python), as skills (fonte) e dois prompts: `.agents/prompts/bootstart.md`, o briefing de abertura para qualquer agente — o que a sessão vai encontrar, o que os ganchos recusam, e que skill ou receita atende cada pedido — e [`.agents/prompts/partida.md`](../.agents/prompts/partida.md), o checklist de partida, que roda sob demanda, em qualquer agente, e devolve o relatório GO ou NO-GO | os instrumentos, as skills e os dois prompts, sim. Quem tem comando de barra chega neles por `/bootstart` e `/partida`; quem só carrega o arquivo de instruções da raiz chega pelo `AGENTS.md`, que manda ler o briefing e aponta a partida para quando o dono pedir; e o primeiro comando do briefing é a saúde da abertura |
-| `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills e a regra por caminho do padrão de código, gerada da skill | sim |
+| `.agents/` | instrumentos (Python), as skills (fonte) e dois prompts: `.agents/prompts/bootstart.md`, o briefing de abertura para qualquer agente — o que a sessão vai encontrar, o que os ganchos recusam, e a tabela do que atende o pedido que não é de skill — e [`.agents/prompts/partida.md`](../.agents/prompts/partida.md), o checklist de partida, que roda sob demanda, em qualquer agente, e devolve o relatório GO ou NO-GO | os instrumentos, as skills e os dois prompts, sim. Quem tem comando de barra chega neles por `/bootstart` e `/partida`; quem só carrega o arquivo de instruções da raiz chega pelo `AGENTS.md`, que manda ler o briefing e aponta a partida para quando o dono pedir; e o primeiro comando do briefing é a saúde da abertura |
+| `.claude/` | o que o Claude Code lê: ganchos, subagentes, cópia das skills, o workflow salvo dos céticos e a regra por caminho do padrão de código, gerada da skill | sim |
 | `nucleo/` | os dados que instrumento lê (JSON) | sim |
 | `modulos/` | peça opcional, que só chega para quem pedir pelo nome | não |
 | `execucoes/` | roteiros do executor, **cópia gerada** de `modulos/encadeador/execucoes/` — edite lá, nunca aqui; o resultado de cada rodada fica fora do git | só com `--modulo encadeador`: os roteiros nomeados chegam pelo módulo, não pela camada base |
@@ -144,27 +144,46 @@ só. Em troca, as cercas deixam de ser independentes: se o despachante não
 sobe, **todas** caem juntas. Ele paga isso negando por conta da cerca que
 estourar, em vez de deixar passar sem cerca, e continua avaliando as outras.
 
-Toda linha de gancho chama o Python pelo nome que o instalador mediu nesta
-máquina, e o próprio Python acha o gancho: `python -X utf8 -c "..."
-.claude/hooks/<arquivo>.py`. O `-X utf8` liga o modo UTF-8 do Python só para
+Toda linha de gancho é a mesma em qualquer máquina, e passa pelo lançador:
+`bash -c 'set -f;IFS=;l=${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/interpretador.sh;if [ -f $l ];then exec $BASH $l $@;fi;if [ $2 = PreToolUse ];then exit 2;fi;echo atlas: lancador dos ganchos ausente em $l;exit 0' gancho --evento <Evento> -X utf8 -c "..." .claude/hooks/<arquivo>.py`
+(decisão do dono de 29/09/2026, que reabriu as de 10/09/2026, Python direto
+por latência, e de 15/09/2026, linha sem variável pelo Copilot: num clone
+sem Python, o nome medido viajou no `settings.json` e deixou toda cerca
+falhando aberta e calada). A variável só aparece dentro das aspas simples,
+que nem o Git Bash, nem o cmd da ponte, nem o PowerShell expandem antes de o
+bash ver a linha; por isso dentro delas não entra `| & < > ( ) ^ %` nem
+aspas duplas. `set -f` e `IFS=` fazem a raiz com espaço chegar inteira;
+`$BASH` é o bash que já está rodando. A conferência do arquivo cobre o
+lançador apagado: `PreToolUse` sai 2, os outros eventos saem 0 com o aviso
+no stdout. O evento vai na linha (`--evento`), lido da chave do bloco pelo
+`montar.py`, e o lançador nunca o procura no texto da entrada. O
+`--verificar` acusa linha fora do molde no `settings.json` e no
+`.codex/hooks.json`. O custo medido em 29/09/2026: mediana de 148 ms por
+chamada contra 84 ms da linha direta de antes, 21 voltas intercaladas.
+O `-X utf8` liga o modo UTF-8 do Python só para
 o gancho: a entrada e a saída saem em UTF-8 também na máquina que não o liga,
 e sem ele um caractere fora do cp1252 derruba o gancho, que então deixa a
 ferramenta passar. O programa curto do `-c` lê a raiz em
 `CLAUDE_PROJECT_DIR`, ou no diretório atual quando a variável falta, põe a
 pasta dos ganchos no lugar do diretório atual no caminho de importação, e roda
-o gancho no mesmo processo; gancho que falta sai 2, que barra. **A linha não
-tem variável no texto de propósito.** O Claude Code roda o gancho pelo Git Bash
-no Windows; o Copilot, com a pasta confiada, roda o mesmo `.claude/settings.json`
-por uma concha que não expande `${...}`, e já entrega a variável no ambiente e
-a entrada no formato do Claude; a ponte do Codex e do Devin roda as cercas pelo
-cmd. Só uma linha sem variável no texto roda igual nas três; a prova é a
-sonda recusada no Copilot pela cerca do próprio Claude.
+o gancho no mesmo processo; gancho que falta sai 2, que barra. **A variável fica só
+dentro das aspas simples.** O Claude Code roda o gancho pelo Git Bash no
+Windows; a ponte do Codex e do Devin roda as cercas pelo cmd; o PowerShell 5.1
+repassa o argumento entre aspas simples inteiro. Medido em 29/09/2026: uma
+escrita em cópia gerada é recusada pela mesma linha nas três conchas. O que
+não está coberto: um `bash` impostor à frente no PATH roda a linha do jeito
+dele (cmd e PowerShell, medido), e a ponte sem `bash` no PATH passa calada; o
+Copilot não foi medido nesta máquina.
 
-O **lançador**, `.claude/hooks/interpretador.sh`, fica para a linha de reserva,
-quando nenhum Python respondeu na instalação, e para as pontes do Codex e do
-Devin. É um script de bash que escolhe o interpretador por execução — o primeiro da
+O **lançador**, `.claude/hooks/interpretador.sh`, é por onde toda linha
+passa. É um script de bash que escolhe o interpretador por execução — o primeiro da
 lista dele que responde `3` a `-c "import sys; print(sys.version_info[0])"` —
-e entrega o gancho a ele. Ele existe porque o nome `python3` não é universal:
+e entrega o gancho a ele, uma vez só. Código de saída fora do zero é
+suspeito: o lançador sonda o mesmo interpretador de novo e só repassa o código
+se ele responde `3`; senão descarta a lembrança, escolhe outro e roda o
+gancho, que ainda não tinha rodado. É assim que o atalho da loja (49), o `py`
+sem runtime e o venv sem base (103) e o nome que virou outro programa deixam
+de falhar abertos. Ele existe porque o nome `python3` não é universal:
 no Windows é o atalho da loja, que está no PATH, não roda, e `which` dá por
 presente. A lista de candidatos mora só nele; a rotina `camada` e o gancho
 `verificar-ambiente` a leem de lá e julgam cada nome executando, nunca por
@@ -174,7 +193,8 @@ py` — porque tentar o atalho da loja primeiro faz cada gancho pagar a sonda
 de um nome que não roda.
 
 **E ele lembra quem respondeu, senão sonda de novo a cada chamada.** O nome
-escolhido fica num arquivo da pasta privada do usuário — `XDG_RUNTIME_DIR`
+escolhido, e o caminho para onde ele resolvia, ficam num arquivo da pasta
+privada do usuário — `XDG_RUNTIME_DIR`
 onde existe, `LOCALAPPDATA` no Windows; sem nenhuma das duas não há lembrança
 e ele só sonda —, estado que não viaja, e a chamada seguinte o usa direto.
 A lembrança não é confiada às cegas, porque conteúdo de arquivo é dado, nunca
@@ -182,20 +202,20 @@ ordem: só vale se for arquivo regular, do próprio usuário e não um link; só
 vale se o nome estiver na lista de candidatos do próprio lançador, nunca um
 caminho; e a escrita é atômica, por arquivo próprio movido por cima. Fora
 disso o lançador sonda outra vez e reescreve. O `--testar` dele planta um
-impostor na lembrança e prova que o Python roda no lugar dele. Com a
-lembrança, o piso de cada chamada é o bash mais a partida do Python; chamar
-o Python direto tira também o bash, e por isso a linha chama o Python pelo
-nome medido na instalação, e o lançador fica como reserva.
+impostor na lembrança e prova que o Python roda no lugar dele. A lembrança
+só vale enquanto o nome ainda resolve para aquele caminho.
 
-**Quando nenhum nome responde, o lançador sai 2, que é a única saída que
-barra.** A documentação oficial dos ganchos é explícita: em `PreToolUse` só
-o código 2 impede a chamada, e qualquer outro código diferente de zero é
-erro que **não** barra. O lançador saía 1 — então, numa máquina sem Python,
-as cercas falhavam abertas e só um aviso no erro do gancho denunciava. Cerca
-que não roda não deixa passar. Ele também diz isso no erro do gancho
-em vez de morrer calado. Ele viaja em `FONTES`, sem evento nem matcher, e o
-instalador reescreve no lugar a linha de gancho que ainda nomeia um
-interpretador.
+**Quando nenhum nome responde, a saída depende do evento declarado na linha.**
+A documentação oficial dos ganchos é explícita: em `PreToolUse` só o código 2
+impede a chamada, e qualquer outro código diferente de zero é erro que **não**
+barra; em `Stop`, o 2 força a continuação. Por isso `PreToolUse` sai 2 com o
+motivo no stderr (ou, para o Codex, `--cliente codex`, o JSON de `deny` que a
+ponte usa); `SessionStart` sai 0 com `systemMessage` e `additionalContext`; os
+outros eventos saem 0 com `systemMessage`; linha sem `--evento` sai 2. Cerca
+que não roda não deixa passar, e parada sem Python não entra em laço. O
+lançador viaja em `FONTES`, sem evento nem matcher, e o instalador reescreve
+no lugar qualquer forma velha de linha (`python ...`, `py -3 ...`, a reserva
+com `${CLAUDE_PROJECT_DIR}`), sem duplicar.
 
 **Cerca que roda mas não lê a lista de que depende também não libera.**
 Lista vazia e lista não lida são estados diferentes. Tratar a falha de
@@ -364,3 +384,10 @@ o rascunho. Duas linhas que valem por todas:
 O que a sessão precisa e não está no git se declara por nome em
 `nucleo/ambiente.json` e se verifica por instrumento. O porquê e a receita
 de repor estão em [o estado que não viaja](estado-que-nao-viaja.md).
+
+A lista do que muda a sessão sem estar no git — telemetria, classificador
+do modo automático, settings local, tarefa agendada, binários no PATH e
+registros em `tmp/` — mora em
+[o que vive fora do repositório](configuracao-da-maquina.md), em
+`conhecimento/`. A página fica neste repositório e não viaja: a tupla
+`FONTES` não a nomeia.

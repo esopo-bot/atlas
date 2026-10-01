@@ -12,8 +12,8 @@ Para qualquer agente de IA neste repositório.
   ato de toda sessão. No Claude Code ele é `/partida`.
 - Leia `.agents/prompts/bootstart.md` INTEIRO antes de escolher skill, abrir
   arquivo ou responder: é o briefing da camada para qualquer agente — o que a
-  sessão vai encontrar, o que os ganchos recusam, e a tabela que diz o que
-  atende cada tipo de pedido. Pedido que já nomeia uma skill, um vizinho ou uma
+  sessão vai encontrar, o que os ganchos recusam, e a tabela do que atende o
+  pedido que não é de skill. Pedido que já nomeia uma skill, um vizinho ou uma
   issue não dispensa a leitura.
 - Depois rode `python .agents/camada/camada.py --abertura`, com `--raiz` e o
   caminho por extenso, e relate na primeira resposta o que ele acusou em falta
@@ -41,11 +41,11 @@ Para qualquer agente de IA neste repositório.
 ## Ordens deste repositório
 
 - Publicar é do dono, sempre: publicação não se desfaz, e o teto da sessão é o
-  ensaio, que mostra o que subiria sem subir. Commit e push seguem
-  `autorizacoes` em `nucleo/configuracao.json`, que é a mesma fonte que o
-  gancho lê — omissão não é permissão, e sem declaração ninguém commita.
-  Destrutivo é do dono. Este é o único lugar desta regra: outro arquivo que
-  disser diferente está errado.
+  ensaio, que mostra o que subiria sem subir. Commit, push e mescla de pedido
+  aprovado seguem `autorizacoes` em `nucleo/configuracao.json`, que é a mesma
+  fonte que o gancho lê — omissão não é permissão, e sem declaração ninguém
+  commita. Destrutivo é do dono. Este é o único lugar desta regra: outro
+  arquivo que disser diferente está errado.
 - Repositório público: nada de nome de pessoa ou empresa, credencial ou caminho
   de máquina em arquivo, commit, branch ou issue. Na dúvida, pergunte.
 - Não altere o que não foi pedido.
@@ -66,7 +66,8 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 7. Rede com cortesia.
 8. Segredo não entra em git nenhum — em texto rastreado vai `${VARIAVEL}`,
    nunca o valor; ler credencial localmente é livre.
-9. Destrutivo é do dono; commit e push seguem o que o repositório autorizou.
+9. Destrutivo é do dono; commit, push e mescla seguem o que o repositório
+   autorizou.
 10. Texto na régua.
 11. Não invente passo onde já existe receita.
 12. Branch de longa duração e configuração de integração contínua não se tocam.
@@ -79,6 +80,7 @@ Citadas por número; os itens de cada uma: `conhecimento/regras-da-camada.md`.
 18. Número não mora em prosa.
 19. Não pare sem necessidade.
 20. Decisão do dono não se reabre sem citar a data e o motivo.
+21. Se a sessão consegue fazer, ela faz e avisa; não devolve serviço ao dono.
 
 ## Os nomes
 

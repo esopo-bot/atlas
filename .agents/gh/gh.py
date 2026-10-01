@@ -10,15 +10,22 @@ USO = ("roda o `gh` na conta declarada, e devolve o berro legível quando ele "
        "recusa. Importado por quem fala com issue, etiqueta ou quadro — o "
        "token sai do `gh auth token --user`, e nunca de variável no disco. "
        "Também escreve um bloco marcado no corpo da issue (lê, grava só o "
-       "bloco, relê) e o comentário que marca o dono")
+       "bloco, relê) e o comentário que marca o dono, pela API REST: a "
+       "sessão na nuvem recusa o GraphQL que `gh issue` usa por baixo")
 
 GH_PADRAO = "gh"
 VARIAVEL_DO_GH = "ATLAS_GH"
+VARIAVEL_DA_NUVEM = "CLAUDE_CODE_REMOTE"
+VALOR_DA_NUVEM = "true"
 SISTEMA_WINDOWS = "nt"
 ASPAS = "\"'"
 TEMPO_DO_GH = 60
 LIMITE_DO_ERRO = 300
 NAO_RODOU = "o gh não rodou"
+RECUSA_SEM_TOKEN = (
+    "a conta {conta} foi pedida e o token dela não se obteve pelo "
+    "`gh auth token --user`: a operação não sai por outra conta. "
+    "Entre com `gh auth login` nessa conta")
 
 MARCA_QUE_ABRE = "<!-- {} -->"
 MARCA_QUE_FECHA = "<!-- /{} -->"
@@ -86,6 +93,22 @@ def rodar(argumentos: list, ambiente: dict = None, entrada=None):
         return None
 
 
+def na_nuvem() -> bool:
+    return os.environ.get(VARIAVEL_DA_NUVEM, "").strip().lower() == VALOR_DA_NUVEM
+
+
+def rota_da_issue(repositorio: str, issue) -> str:
+    return f"repos/{repositorio}/issues/{issue}"
+
+
+def pela_rest(metodo: str, rota: str, dado: dict = None) -> tuple:
+    argumentos = ["api", "--method", metodo, rota]
+    if dado is None:
+        return argumentos, None
+    texto = {chave: sem_retorno_de_carro(valor) for chave, valor in dado.items()}
+    return argumentos + ["--input", "-"], json.dumps(texto, ensure_ascii=False)
+
+
 def token_da_conta(conta: str) -> str:
     if not conta:
         return ""
@@ -95,6 +118,9 @@ def token_da_conta(conta: str) -> str:
 
 def na_conta(conta: str, argumentos: list, entrada=None):
     token = token_da_conta(conta)
+    if conta and not token:
+        return subprocess.CompletedProcess(
+            argumentos, 1, "", RECUSA_SEM_TOKEN.format(conta=conta))
     return rodar(argumentos, {"GH_TOKEN": token} if token else {}, entrada)
 
 
@@ -141,8 +167,8 @@ def corpo_com_o_bloco(corpo: str, nome: str, texto: str) -> str:
 
 
 def ler_o_corpo(conta: str, repositorio: str, issue) -> tuple:
-    feito = na_conta(conta, ["issue", "view", str(issue), "--repo",
-                             repositorio, "--json", "body"])
+    argumentos, _ = pela_rest("GET", rota_da_issue(repositorio, issue))
+    feito = na_conta(conta, argumentos)
     if feito is None or feito.returncode != 0:
         return None, FALHA_AO_LER_O_CORPO.format(issue=issue,
                                                  motivo=berro(feito))
@@ -176,8 +202,10 @@ def gravar_o_bloco(conta: str, repositorio: str, issue, nome: str,
         if len(proposto.encode("utf-8")) > LIMITE_DO_CORPO_EM_BYTES:
             return False, CORPO_CHEIO.format(nome=nome, issue=issue,
                                              limite=LIMITE_DO_CORPO_EM_BYTES)
-        feito = na_conta(conta, ["issue", "edit", str(issue), "--repo",
-                                 repositorio, "--body-file", "-"], proposto)
+        argumentos, entrada = pela_rest("PATCH", rota_da_issue(repositorio,
+                                                               issue),
+                                        {"body": proposto})
+        feito = na_conta(conta, argumentos, entrada)
         if feito is None or feito.returncode != 0:
             return False, FALHA_AO_GRAVAR_O_CORPO.format(issue=issue,
                                                          motivo=berro(feito))
@@ -205,8 +233,10 @@ def texto_que_marca(texto: str, login: str) -> tuple:
 def comentar_para_o_dono(conta: str, repositorio: str, issue, texto: str,
                          login: str) -> tuple:
     marcado, aviso = texto_que_marca(texto, login)
-    feito = na_conta(conta, ["issue", "comment", str(issue), "--repo",
-                             repositorio, "--body-file", "-"], marcado)
+    argumentos, entrada = pela_rest(
+        "POST", rota_da_issue(repositorio, issue) + "/comments",
+        {"body": marcado})
+    feito = na_conta(conta, argumentos, entrada)
     if feito is None or feito.returncode != 0:
         return False, FALHA_AO_COMENTAR.format(issue=issue,
                                                motivo=berro(feito)), aviso
@@ -222,8 +252,13 @@ CAIXA = pathlib.Path(os.environ["GH_TESTE_CAIXA"])
 CORPO = CAIXA / "corpo.md"
 OUTRO = CAIXA / "outro-escritor.txt"
 argv = sys.argv[1:]
+if argv[:2] == ["auth", "token"] and (CAIXA / "sem-token.txt").exists():
+    sys.stderr.write("token indisponivel\\n")
+    sys.exit(2)
+token = os.environ.get("GH_TOKEN", "")
 (CAIXA / "chamadas.txt").open("a").write(
-    " ".join(argv) + chr(9) + os.environ.get("GH_TOKEN", "sem-token") + chr(10))
+    " ".join(argv) + chr(9)
+    + (token if token.startswith("token-") else "sem-token") + chr(10))
 recebido = b""
 if "--body-file" in argv:
     recebido = sys.stdin.buffer.read()
@@ -233,12 +268,16 @@ if argv[:2] == ["auth", "token"]:
 elif (CAIXA / "recusa.txt").exists():
     sys.stderr.write("nao vai\\n")
     sys.exit(2)
-elif argv[:2] == ["issue", "view"]:
+elif argv[:3] == ["api", "--method", "GET"]:
     sys.stdout.reconfigure(encoding="utf-8")
     print(json.dumps({"body": CORPO.read_text(encoding="utf-8")
                       if CORPO.exists() else ""}))
-elif argv[:2] == ["issue", "edit"] and recebido:
-    CORPO.write_bytes(recebido)
+elif argv[:3] == ["api", "--method", "PATCH"]:
+    if "--input" in argv:
+        recebido = sys.stdin.buffer.read()
+        (CAIXA / "corpo-recebido.bin").write_bytes(recebido)
+    CORPO.write_text(json.loads(recebido.decode("utf-8"))["body"],
+                     encoding="utf-8")
     vezes = int(OUTRO.read_text(encoding="utf-8")) if OUTRO.exists() else 0
     if vezes > 0:
         CORPO.write_bytes((CAIXA / "corpo-do-outro.md").read_bytes())
@@ -261,6 +300,7 @@ def testar() -> int:
             falhou += 1
             print(f"FALHOU: {nome}")
 
+    os.environ.pop(VARIAVEL_DA_NUVEM, None)
     with tempfile.TemporaryDirectory() as pasta:
         caixa = Path(pasta)
         falso = caixa / "gh-falso.py"
@@ -287,6 +327,34 @@ def testar() -> int:
              token_da_conta("") == "")
         caso("com conta declarada, o token sai do `gh auth token --user`",
              token_da_conta("alguem") == "token-de-alguem")
+
+        os.environ["GH_TOKEN"] = "token-do-dono-ficticio"
+        chamadas_antes = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+        (caixa / "sem-token.txt").write_text("x", encoding="utf-8")
+        recusado = na_conta("alguem", ["issue", "comment", "1"])
+        chamadas_depois = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+        caso("conta pedida sem token recusa antes da operacao mesmo com GH_TOKEN herdado",
+             recusado is not None and recusado.returncode != 0
+             and "alguem" in berro(recusado)
+             and "gh auth login" in berro(recusado)
+             and chamadas_depois == chamadas_antes)
+        (caixa / "sem-token.txt").unlink()
+
+        chamada_com_token = na_conta("alguem", ["issue", "comment", "1"])
+        novas_chamadas = (caixa / "chamadas.txt").read_text(
+            encoding="utf-8")[len(chamadas_depois):]
+        caso("token obtido prevalece sobre GH_TOKEN herdado na operacao",
+             chamada_com_token is not None and chamada_com_token.returncode == 0
+             and "issue comment 1\ttoken-de-alguem\n" in novas_chamadas
+             and "issue comment 1\ttoken-do-dono-ficticio" not in novas_chamadas)
+
+        chamada_sem_conta = na_conta("", ["issue", "comment", "1"])
+        novas_chamadas = (caixa / "chamadas.txt").read_text(
+            encoding="utf-8")[len(chamadas_depois + novas_chamadas):]
+        caso("conta vazia continua usando o ambiente herdado",
+             chamada_sem_conta is not None and chamada_sem_conta.returncode == 0
+             and "issue comment 1\ttoken-do-dono-ficticio\n" in novas_chamadas)
+        os.environ.pop("GH_TOKEN", None)
 
         na_conta("alguem", ["issue", "view", "1"])
         chamadas = (caixa / "chamadas.txt").read_text(encoding="utf-8")
@@ -343,6 +411,32 @@ def testar() -> int:
         caso("gravar o bloco lê, grava e relê: ele fica no corpo da issue",
              ok and texto_do_bloco((caixa / "corpo.md").read_text(
                  encoding="utf-8"), "o bloco") == "vale")
+        chamadas = (caixa / "chamadas.txt").read_text(encoding="utf-8")
+        caso("o corpo se lê e se grava pela API REST, na rota da issue, e "
+             "nunca por `gh issue view` ou `gh issue edit`: os dois usam "
+             "GraphQL, e a sessão na nuvem recusa GraphQL",
+             "api --method GET repos/dono/repo/issues/7\t" in chamadas
+             and "api --method PATCH repos/dono/repo/issues/7 --input -"
+             in chamadas
+             and "issue view 7" not in chamadas
+             and "issue edit 7" not in chamadas)
+        (caixa / "corpo.md").write_text(corpo, encoding="utf-8")
+        gravar_o_bloco("alguem", "dono/repo", 7, "o bloco", "a\r\nb")
+        enviado = json.loads((caixa / "corpo-recebido.bin").read_bytes()
+                             .decode("utf-8"))["body"]
+        caso("o corpo que sobe em JSON também sai sem retorno de carro: "
+             "dentro do JSON ele vira escape, e a limpeza do stdin não o via",
+             "\r" not in enviado and "a\nb" in enviado)
+
+        _, entrada = pela_rest("POST", "x", {"body": "ação"})
+        caso("o texto vai em UTF-8 legível, não em escape de ASCII",
+             "ação" in entrada)
+        for valor, esperado in (("true", True), ("TRUE", True),
+                                ("false", False), ("", False)):
+            os.environ[VARIAVEL_DA_NUVEM] = valor
+            caso(f"`{VARIAVEL_DA_NUVEM}={valor}` diz nuvem {esperado}",
+                 na_nuvem() is esperado)
+        os.environ.pop(VARIAVEL_DA_NUVEM, None)
 
         do_outro = corpo_com_o_bloco(corpo, "o do outro", "escrito pelo outro")
         (caixa / "corpo-do-outro.md").write_text(do_outro, encoding="utf-8")

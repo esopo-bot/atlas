@@ -41,6 +41,7 @@ CERCAS = (
      "Write|Edit|NotebookEdit|Bash|PowerShell"),
     ("vetar-documento-rastreavel", "Write|Edit|NotebookEdit"),
     ("vetar-escrita-na-raiz", "Write|Edit|NotebookEdit"),
+    ("vetar-escrita-do-varredor-fora-da-memoria", "Write|Edit|NotebookEdit"),
     ("vetar-despejo-de-ambiente", "Bash|PowerShell"),
     ("vetar-enxame-de-agentes",
      "Task|Agent|Workflow|Write|Edit|NotebookEdit|Bash|PowerShell|Read"),

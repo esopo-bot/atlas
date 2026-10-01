@@ -16,10 +16,15 @@ python .agents/historico/historico.py --issue <numero> --ensaio   # mostra sem g
 
 O `--abertura` do `camada.py` roda o `--pendentes` e acusa a issue fechada
 sem histórico. A issue fecha no rastreador, quase sempre pelo `Closes` do
-pedido que o dono mescla, às vezes à mão, e nenhuma sessão está aberta nessa
-hora. Por isso o histórico se colhe por puxada, na sessão seguinte, e os dois
+pedido mesclado, às vezes à mão, e nem sempre há sessão aberta nessa hora.
+Por isso o histórico se colhe por puxada, na sessão seguinte, e os dois
 caminhos de fechamento contam igual: o instrumento olha o estado `closed` da
 issue, não o pedido mesclado.
+
+A manutenção, `camada.py --manutencao`, busca a integração e os vizinhos,
+colhe o histórico e roda a ronda do índice; a abertura dentro da janela dela
+não busca de novo, e `camada.py --agendar` imprime, sem registrar, o comando
+que a agenda todo dia.
 
 ## O que o instrumento garante
 

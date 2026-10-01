@@ -1,33 +1,17 @@
 # indice
 
-Busca por significado no código dos repositórios do workspace — a sessão
-pergunta em linguagem natural e recebe o trecho, em vez de varrer com `grep`
-até acertar a palavra. Vale a pena a partir de milhares de arquivos; abaixo
-disso o `grep` ganha, e a página do módulo traz a régua medida.
-
-Duas peças de terceiros, nenhuma escrita aqui: o banco vetorial (Milvus, em
-container) e o gerador de embeddings (Ollama, em container, modelo pequeno —
-nada de LLM local). Quem indexa é o servidor `@zilliz/claude-context-mcp`,
-conduzido pelo `indexar.py`; quem busca é o `buscar.py`, por HTTP puro — a
-porta normal, porque política de organização pode barrar todo MCP sem aviso.
+Busca no acervo pelo `ck` no modo léxico: termo e palavra, ranqueados por
+BM25, com o índice em arquivo dentro de cada alvo — sem serviço de pé e sem
+modelo baixado. Sem o `ck` no PATH, a busca cai no grep e avisa.
 
 ```bash
 python <pasta do clone do atlas>/montar.py --modulo indice
-python .agents/indice/subir.py
+python .agents/indice/indexar.py --estado
 ```
 
-O `subir.py` sobe as duas peças, baixa o modelo e **liga a placa de vídeo
-sozinho quando houver uma que o docker entregue** — medido: 232 pedaços por
-minuto na placa contra 32 em CPU, 7,2 vezes. Sem placa ele sobe igual, em CPU,
-e diz por quê. `--ensaio` mostra a decisão sem subir nada.
+O índice não tem servidor MCP: o do ck expõe três ferramentas que baixam
+modelo e não se desligam, e a porta é o `buscar.py`.
 
-**O banco é sempre derivado.** Nada nasce dentro dele: apagar os volumes e
-reindexar reconstrói tudo. A receita inteira — subir, indexar, buscar, e o registro
-do MCP, que a atualização da camada faz sozinha no `.mcp.json` — está na página
-`conhecimento/indice.md`, que viaja junto.
-
-**Ambiente corporativo trancado recusa as três linhas acima.** Proxy que
-reassina TLS, registro de pacote bloqueado por política e CLI barrado por
-regra de empresa têm contorno — todos estão na seção "Quando o ambiente
-é trancado" da mesma página. Não invente outro: o que travar fora da
-lista é achado para o dono, com a mensagem de erro exata.
+A receita inteira — instalar o ck, o que ele grava em cada alvo, indexar,
+buscar e o que acontece sem ele — está na página `conhecimento/indice.md`,
+que viaja junto.

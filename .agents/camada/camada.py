@@ -1,5 +1,6 @@
 import argparse
 import ast
+import calendar
 import contextlib
 import fnmatch
 import functools
@@ -80,8 +81,8 @@ MEDIDA_CUSTO_MEDIDO = ("mediana US$ {:.2f} por execução, {} execução(ões), 
                        "{:.0f}% do gasto sem etapa atribuída")
 MEDIDA_CUSTO_SEM_EXECUCAO = "não medido: nenhuma execução gravada"
 MEDIDA_ROTA_NAO_MEDIDA = ("não medido nesta linha — rode `{} verificacoes.py "
-                          "gatilho` cinco vezes e tome a mediana; a escolha "
-                          "de skill varia ~1 acerto por rodada")
+                          "evals` na rodada; o `claude plugin eval` mede o "
+                          "disparo das skills")
 ARQUIVO_DE_CONFIGURACAO = "nucleo/configuracao.json"
 CHAVE_DO_TETO = "teto_da_largada_em_bytes"
 LARGADA_SEM_TETO = ("Largada: {} bytes. Sem teto declarado em {} ({}) — "
@@ -189,12 +190,16 @@ INSCRITOS_TORTOS = "{} item(ns) sem instrumento, bandeira e rotulo em texto"
 TEMPO_DO_AVISO_DE_MODULO = 60
 SAIDA_DO_MODULO_COM_AVISO = 1
 AVISO_DE_MODULO_NAO_MEDIDO = "{rotulo}: não medido — {motivo}"
+VARIAVEL_DA_NUVEM = "CLAUDE_CODE_REMOTE"
+NA_NUVEM_NAO_SE_MEDE = (
+    "na nuvem, não se medem o {historico} nem os módulos de {chave}:\n"
+    "  pedem a conta de cada papel pelo `gh` e programas da máquina local, e\n"
+    "  a nuvem tem uma conta só. A receita: "
+    "conhecimento/estado-que-nao-viaja.md")
 INSTRUMENTO_DO_INDICE = ".agents/indice/indexar.py"
 BUSCADOR_DO_INDICE = ".agents/indice/buscar.py"
-MARCA_DA_COLECAO_SEM_ALVO = "coleção sem alvo em"
 BANDEIRA_DO_ESTADO_DO_INDICE = "--estado"
 TEMPO_DO_ESTADO_DO_INDICE = 60
-TETO_DE_LINHAS_DO_ERRO = 6
 INSTRUCOES_NO_LUGAR = "  {} está aqui — a sessão abriu na raiz."
 INSTRUCOES_AUSENTES = (
     "  {} não está aqui: esta pasta não é a raiz do repositório, e a sessão\n"
@@ -276,16 +281,15 @@ ESTADO_DO_CLIENTE_NAO_GUARDA_CONEXAO = (
     "  resposta.")
 INDICE_NAO_INSTALADO = (
     "  o módulo do índice não está instalado aqui ({} não existe) — a busca\n"
-    "  por significado não é desta camada, e nada a cobra.")
-INDICE_SEM_ALVOS = (
-    "  {} não existe — o indexador não sabe o que indexar, e a busca\n"
-    "  responde menos do que existe. Declare os alvos.")
+    "  do acervo não é desta camada, e nada a cobra.")
 INDICE_DE_PE = (
-    "  o índice responde, e a busca sem servidor de contexto é `python {}`.")
-INDICE_FORA = (
-    "  o índice não respondeu — `python {} {}` saiu {}:\n{}\n"
-    "  Sem ele, a busca por significado não existe nesta sessão; a busca por\n"
-    "  termo exato continua em `python {}`.")
+    "  o índice é o ck em {}, no modo léxico e sem serviço de pé; a busca é\n"
+    "  `python {}`.")
+INDICE_SEM_O_CK = (
+    "  o `ck` não está no PATH — a busca do acervo cai no grep, por palavra\n"
+    "  e sem ranking, em `python {}`. A receita de instalar está em\n"
+    "  conhecimento/indice.md.")
+PROGRAMA_DO_INDICE = "ck"
 ABERTURA_INTEGRA = "Abertura íntegra: {} peça(s) de pé."
 ABERTURA_INCOMPLETA = (
     "Abertura INCOMPLETA: {} peça(s) faltando. A sessão que seguir daqui "
@@ -332,7 +336,9 @@ AVANCO_POR_MESCLA = ("git fetch origin {integracao} && git merge {ref},\n"
 AVANCO_NUMA_ARVORE_DA_INTEGRACAO = (
     "{branch} não recebe mescla da sessão: depois de git fetch origin\n"
     "  {integracao}, abra a sessão numa worktree nova de {ref}.")
-TEMPO_DA_BUSCA_DA_INTEGRACAO = 30
+TEMPO_DA_BUSCA_NO_REMOTO = 30
+AMBIENTE_DA_BUSCA_SEM_PERGUNTA = {"GIT_TERMINAL_PROMPT": "0",
+                                  "GCM_INTERACTIVE": "never"}
 TEMPO_DO_AVANCO_DA_RAIZ = 300
 COMANDO_DA_DECLARACAO_DA_RAIZ = ("git", "config", "--local", "--bool", "--get",
                                  CHAVE_DA_RAIZ_QUE_ESPELHA)
@@ -340,7 +346,8 @@ COMANDO_DA_PASTA_COMUM_DO_GIT = ("git", "rev-parse", "--path-format=absolute",
                                  "--git-common-dir")
 COMANDO_DA_MUDANCA_RASTREADA = ("git", "status", "--porcelain",
                                 "--untracked-files=no")
-COMANDO_DA_BUSCA_DA_INTEGRACAO = ("git", "fetch", "--quiet", "origin", "{}")
+COMANDO_DA_BUSCA_NO_ORIGIN = ("git", "fetch", "--quiet", "origin")
+COMANDO_DOS_REMOTOS = ("git", "remote")
 COMANDO_DOS_COMMITS_ENTRE = ("git", "rev-list", "--count", "{}..{}")
 COMANDO_DO_AVANCO_RAPIDO = ("git", "merge", "--ff-only",
                             "--no-overwrite-ignore", "--quiet", "{}")
@@ -383,6 +390,88 @@ RAIZ_COM_SESSAO_VIVA = (
 RAIZ_EM_PESQUISA = (
     f"  A raiz: a sessão de pesquisa ({MARCA_DA_SESSAO_DE_PESQUISA}) não busca "
     "nem avança a raiz.")
+RAIZ_BUSCADA_PELA_MANUTENCAO = (
+    "  A integração {ref} foi buscada pela manutenção às {hora}: a abertura "
+    "não busca de novo.")
+BANDEIRA_DA_MANUTENCAO = "--manutencao"
+BANDEIRA_DO_AGENDAMENTO = "--agendar"
+ARQUIVO_DA_MARCA_DA_MANUTENCAO = "tmp/manutencao-noturna.json"
+SUFIXO_DO_PROVISORIO = ".provisorio"
+JANELA_DA_MANUTENCAO_H = 12
+SEGUNDOS_DA_HORA = 3600
+FORMATO_DO_INSTANTE = "%Y-%m-%dT%H:%M:%SZ"
+FORMATO_DA_HORA = "%H:%M"
+CHAVE_DE_QUANDO_RODOU = "rodou_em"
+CHAVE_DOS_PASSOS = "passos"
+CHAVE_DO_ESTADO_DO_PASSO = "estado"
+CHAVE_DA_REF_BUSCADA = "ref"
+CHAVE_DO_MOTIVO_DO_PASSO = "motivo"
+CHAVE_DA_ULTIMA_LINHA = "ultima_linha"
+CHAVE_DAS_FALHAS = "falhas"
+CHAVE_DOS_BUSCADOS = "buscados"
+CHAVE_DOS_PULADOS = "pulados"
+PASSO_DA_INTEGRACAO = "integracao"
+PASSO_DOS_VIZINHOS = "vizinhos"
+PASSO_DO_HISTORICO = "historico"
+PASSO_DO_INDICE = "indice"
+ESTADO_OK = "ok"
+ESTADO_FALHOU = "falhou"
+ESTADO_PULADO = "pulado"
+PASTA_DOS_VIZINHOS = "projetos"
+CAMPO_DA_PASTA_DO_VIZINHO = "repositorio"
+PASTA_DO_GIT = ".git"
+BANDEIRA_DA_COLHEITA = "--colher"
+BANDEIRA_DA_RONDA_DO_INDICE = "--ronda"
+TEMPO_DA_COLHEITA = 900
+TEMPO_DA_RONDA_DO_INDICE = 1800
+TITULO_DA_MANUTENCAO = "A MANUTENÇÃO — o que a abertura deixa de pagar"
+LINHA_DO_PASSO = "  {nome}: {estado} ({segundos} s){detalhe}"
+SEPARADOR_DO_DETALHE = " — "
+SEM_VIZINHO_COM_CLONE = "nenhum vizinho cadastrado tem clone com .git"
+VIZINHO_SEM_O_REMOTO_DA_BUSCA = "sem o remoto {}"
+MODULO_NAO_INSTALADO = "{} não está instalado"
+MANUTENCAO_EM_DIA = "Marca gravada em {arquivo}: nenhum passo falhou."
+MANUTENCAO_COM_FALHA = ("Marca gravada em {arquivo}: {quantos} passo(s) "
+                        "falharam — {quais}.")
+MARCA_QUE_NAO_SE_GRAVOU = (
+    "A marca NÃO se gravou em {arquivo} ({motivo}): a abertura seguinte "
+    "busca como sempre.")
+MARCA_ILEGIVEL = (
+    "  A marca da manutenção em {arquivo} não se deixou ler ({motivo}): a "
+    "abertura busca como sempre.")
+MARCA_SEM_FORMA = "não é um objeto JSON"
+INTERPRETADOR_SEM_JANELA = "pythonw.exe"
+INTERPRETADOR_COM_CONSOLE = "python.exe"
+CAMINHO_DESTE_INSTRUMENTO = ".agents/camada/camada.py"
+HORA_DA_MANUTENCAO = "05:30"
+NOME_DA_TAREFA = "{}\\manutencao-noturna"
+TETO_DO_COMANDO_DA_TAREFA = 261
+PREFIXO_SEM_CONVERSAO = "MSYS_NO_PATHCONV=1 schtasks"
+TITULO_DO_AGENDAMENTO = (
+    "O AGENDAMENTO — o comando que agenda a manutenção todo dia; aqui ele só "
+    "se imprime")
+AGENDAMENTO_NO_WINDOWS = (
+    "  Registrar a tarefa é configuração persistente da máquina e pede o sim "
+    "do dono.\n"
+    "  Criar, no Git Bash:\n"
+    "    {prefixo} /Create /TN \"{tarefa}\" /SC DAILY /ST {hora} /F /TR "
+    "\"{acao}\"\n"
+    "  Conferir: {prefixo} /Query /TN \"{tarefa}\" /V /FO LIST\n"
+    "  Rodar agora: {prefixo} /Run /TN \"{tarefa}\"\n"
+    "  Remover: {prefixo} /Delete /TN \"{tarefa}\" /F\n"
+    "  A tarefa é do usuário e roda com ele logado. Máquina dormindo na hora "
+    "pula o dia,\n  e a abertura seguinte busca como sempre.")
+AGENDAMENTO_SEM_JANELA_AUSENTE = (
+    "  AVISO: {} não existe ao lado de {}: a tarefa abre uma janela a cada "
+    "rodada.")
+AGENDAMENTO_ACIMA_DO_TETO = (
+    "  AVISO: o /TR tem {} caracteres, acima do teto de {} do schtasks: "
+    "encurte o caminho da raiz ou crie a tarefa pelo XML.")
+AGENDAMENTO_FORA_DO_WINDOWS = (
+    "  Registrar o agendamento é configuração persistente da máquina e pede "
+    "o sim do dono.\n"
+    "  Fora do Windows, a linha do crontab (crontab -e):\n"
+    "    {minuto} {hora} * * * {acao}")
 TITULO_DA_CONFIANCA_DO_CODEX = (
     "A CONFIANÇA DOS GANCHOS DO CODEX — a impressão de hoje contra a "
     "confiada")
@@ -811,6 +900,10 @@ BANCADA_NAO_COUBE = ("{} — não coube no teto de {}s desta rotina: isto não �
                      "reprovação, é orçamento. Rode-a à parte, com o tempo "
                      "que ela pedir")
 BANCADA_NAO_RODOU = "{} — a bancada não chegou a rodar: {}"
+PREFIXO_DA_PASTA_DE_FORA = "bancada-fora-da-raiz-"
+PASTA_DE_FORA_QUE_FICOU = ("  a pasta temporária {} não se apagou ({}): um "
+                           "processo da bancada ainda a segura. Ela fica "
+                           "para o sistema limpar, e a rotina segue")
 LINHA_DA_BANCADA = "{} — {:.1f}s — {}"
 BANCADA_FORA_DO_ORCAMENTO = (
     "Fora do orçamento: {} instrumento(s) tocado(s) NÃO rodaram, porque "
@@ -868,6 +961,7 @@ COPIA_QUE_FICOU = ("  (AVISO: a cópia da simulação ficou em {} — {}; a medi
                    "acima vale, o disco ficou com sobra)")
 NUMERO_DESCONHECIDO = "Número que não existe: {}.\nOs que existem: {}."
 NUMERO_NAO_MEDIDO = "não medido"
+PASSO_DESCONHECIDO = "passo que não existe: {}. Os que existem: {}."
 FORA_DA_RAIZ = "Rode na raiz do repositório: {} não encontrado aqui."
 
 PEDIDO = """Você abriu esta sessão na raiz de um repositório que tem uma camada de
@@ -900,10 +994,16 @@ def ambiente_sem_o_modo_utf8() -> dict:
     return ambiente
 
 
+def bandeiras_sem_janela() -> int:
+    if sys.stdout is not None:
+        return 0
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
 def corre_a_lista(argumentos: list, tempo=TEMPO_DE_UM_TESTE, cwd=None):
     r = subprocess.run(argumentos, capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=tempo,
-                       cwd=cwd)
+                       cwd=cwd, creationflags=bandeiras_sem_janela())
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -923,7 +1023,7 @@ FORA_DO_ALCANCE = ("a listagem de skills que a ferramenta monta some {} bytes "
 LISTAGEM_NAO_MEDIDA = ("a listagem da máquina não foi medida — não há pasta de "
                        "skill da ferramenta neste alcance")
 
-TETO_DO_CORPO_DA_SKILL = 35000
+TETO_DO_CORPO_DA_SKILL = 36000
 SKILL_ACIMA_DO_TETO = "{} ({} bytes)"
 NENHUMA_SKILL_ACIMA = "nenhuma"
 
@@ -1021,7 +1121,8 @@ ASPAS_QUE_O_SHELL_TIRARIA = "\"'"
 
 def chama_o_lancador(pedacos: list) -> bool:
     return (pedacos[0] == SHELL_DO_LANCADOR and len(pedacos) > 1
-            and pedacos[1].endswith(ARQUIVO_DO_LANCADOR))
+            and any(ARQUIVO_DO_LANCADOR in pedaco
+                    for pedaco in pedacos[1:3]))
 
 
 def interpretadores_que_somem(comandos: list, raiz: Path) -> list:
@@ -1599,19 +1700,20 @@ def servidores_da_raiz_principal(raiz: Path) -> str:
         quantos=len(declarados), nomes=", ".join(sorted(declarados)))
 
 
-def derrubar_o_servidor(processo: subprocess.Popen) -> None:
+def derrubar_a_arvore_do_processo(processo: subprocess.Popen) -> None:
     if processo.poll() is not None:
         return
     try:
         if os.name == "nt":
             subprocess.run([parte.format(processo.pid) for parte in
                             COMANDO_QUE_DERRUBA_A_ARVORE_DO_PROCESSO],
-                           capture_output=True, timeout=TEMPO_PARA_DERRUBAR)
+                           capture_output=True, timeout=TEMPO_PARA_DERRUBAR,
+                           creationflags=bandeiras_sem_janela())
         else:
             processo.kill()
         processo.wait(timeout=TEMPO_PARA_DERRUBAR)
     except (OSError, subprocess.SubprocessError) as falha:
-        print(f"  o servidor de pid {processo.pid} não caiu: {falha}",
+        print(f"  o processo de pid {processo.pid} não caiu: {falha}",
               file=sys.stderr)
 
 
@@ -1693,7 +1795,7 @@ def aperto_de_mao(raiz: Path, nome: str, declaracao: dict,
             resposta = resposta_ao_aperto_de_mao(processo, tempo)
             saiu = codigo_de_saida_assentado(processo)
         finally:
-            derrubar_o_servidor(processo)
+            derrubar_a_arvore_do_processo(processo)
         berros.seek(0)
         berro = berros.read().decode("utf-8", "replace")
     if "result" in resposta:
@@ -1754,29 +1856,17 @@ def servidores_de_contexto(raiz: Path, casa: Path = None,
     return de_pe, f"{declaracao}\n{estado}\n{linhas}"
 
 
+def o_programa_do_indice() -> str:
+    return shutil.which(PROGRAMA_DO_INDICE) or ""
+
+
 def indice_da_abertura(raiz: Path) -> tuple:
     if not (raiz / INSTRUMENTO_DO_INDICE).is_file():
         return None, INDICE_NAO_INSTALADO.format(INSTRUMENTO_DO_INDICE)
-    if not (raiz / ARQUIVO_DOS_ALVOS_DO_INDICE).is_file():
-        return False, INDICE_SEM_ALVOS.format(ARQUIVO_DOS_ALVOS_DO_INDICE)
-    try:
-        codigo, saida = corre_a_lista(
-            [INTERPRETADOR, INSTRUMENTO_DO_INDICE,
-             BANDEIRA_DO_ESTADO_DO_INDICE],
-            tempo=TEMPO_DO_ESTADO_DO_INDICE, cwd=raiz)
-    except (OSError, subprocess.SubprocessError) as falha:
-        return False, INDICE_FORA.format(
-            INSTRUMENTO_DO_INDICE, BANDEIRA_DO_ESTADO_DO_INDICE,
-            type(falha).__name__, f"    {falha}", BUSCADOR_DO_INDICE)
-    if codigo != 0:
-        ultimas = saida.splitlines()[-TETO_DE_LINHAS_DO_ERRO:]
-        return False, INDICE_FORA.format(
-            INSTRUMENTO_DO_INDICE, BANDEIRA_DO_ESTADO_DO_INDICE, codigo,
-            "\n".join(f"    {linha}" for linha in ultimas),
-            BUSCADOR_DO_INDICE)
-    sobras = [linha for linha in saida.splitlines()
-              if MARCA_DA_COLECAO_SEM_ALVO in linha]
-    return True, "\n".join([INDICE_DE_PE.format(BUSCADOR_DO_INDICE)] + sobras)
+    programa = o_programa_do_indice()
+    if not programa:
+        return False, INDICE_SEM_O_CK.format(BUSCADOR_DO_INDICE)
+    return True, INDICE_DE_PE.format(programa, BUSCADOR_DO_INDICE)
 
 
 def git_dos_ganchos(raiz: Path, comando: tuple, *valores) -> tuple:
@@ -1880,23 +1970,61 @@ def lista_dos_sujos(sujos: list) -> str:
     return lista + (SUJOS_ALEM_DO_TETO.format(alem) if alem > 0 else "")
 
 
-def buscar_a_integracao(principal: Path, integracao: str) -> str:
-    argumentos = [parte.format(integracao)
-                  for parte in COMANDO_DA_BUSCA_DA_INTEGRACAO]
+def buscar_no_remoto(pasta: Path, ramo: str) -> str:
+    argumentos = list(COMANDO_DA_BUSCA_NO_ORIGIN) + ([ramo] if ramo else [])
+    buscado = ramo or COMANDO_DA_BUSCA_NO_ORIGIN[-1]
     try:
-        feito = subprocess.run(
-            argumentos, cwd=str(principal),
-            env=dict(os.environ, GIT_TERMINAL_PROMPT="0"),
+        processo = subprocess.Popen(
+            argumentos, cwd=str(pasta),
+            env=dict(os.environ, **AMBIENTE_DA_BUSCA_SEM_PERGUNTA),
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, timeout=TEMPO_DA_BUSCA_DA_INTEGRACAO)
-    except subprocess.TimeoutExpired:
-        return (f"a busca de {integracao} passou de "
-                f"{TEMPO_DA_BUSCA_DA_INTEGRACAO} s")
+            stderr=subprocess.DEVNULL, creationflags=bandeiras_sem_janela())
     except (OSError, subprocess.SubprocessError) as falha:
-        return f"a busca de {integracao} não rodou ({type(falha).__name__})"
-    if feito.returncode != 0:
-        return f"a busca de {integracao} no remoto saiu {feito.returncode}"
+        return f"a busca de {buscado} não rodou ({type(falha).__name__})"
+    try:
+        codigo = processo.wait(timeout=TEMPO_DA_BUSCA_NO_REMOTO)
+    except subprocess.TimeoutExpired:
+        derrubar_a_arvore_do_processo(processo)
+        return f"a busca de {buscado} passou de {TEMPO_DA_BUSCA_NO_REMOTO} s"
+    if codigo != 0:
+        return f"a busca de {buscado} no remoto saiu {codigo}"
     return ""
+
+
+def instante_em_utc(segundos: float) -> str:
+    return time.strftime(FORMATO_DO_INSTANTE, time.gmtime(segundos))
+
+
+def segundos_do_instante(texto):
+    try:
+        return float(calendar.timegm(time.strptime(texto, FORMATO_DO_INSTANTE)))
+    except (TypeError, ValueError):
+        return None
+
+
+def busca_feita_pela_manutencao(principal: Path, integracao: str,
+                                agora: float) -> tuple:
+    marca, erro = json_que_se_deixa_ler(
+        principal / ARQUIVO_DA_MARCA_DA_MANUTENCAO)
+    if not erro and marca is not None and not isinstance(marca, dict):
+        erro = MARCA_SEM_FORMA
+    if erro:
+        return "", MARCA_ILEGIVEL.format(arquivo=ARQUIVO_DA_MARCA_DA_MANUTENCAO,
+                                         motivo=erro)
+    if marca is None:
+        return "", ""
+    passos = marca.get(CHAVE_DOS_PASSOS)
+    passo = passos.get(PASSO_DA_INTEGRACAO) if isinstance(passos, dict) \
+        else None
+    rodou = segundos_do_instante(marca.get(CHAVE_DE_QUANDO_RODOU))
+    vale = (isinstance(passo, dict)
+            and passo.get(CHAVE_DO_ESTADO_DO_PASSO) == ESTADO_OK
+            and passo.get(CHAVE_DA_REF_BUSCADA) == integracao
+            and rodou is not None
+            and 0 <= agora - rodou < JANELA_DA_MANUTENCAO_H * SEGUNDOS_DA_HORA)
+    if not vale:
+        return "", ""
+    return time.strftime(FORMATO_DA_HORA, time.localtime(rodou)), ""
 
 
 def sessoes_vivas_na_raiz(principal: Path, lar: Path, minha: str,
@@ -1915,7 +2043,8 @@ def sessoes_vivas_na_raiz(principal: Path, lar: Path, minha: str,
     return [apelido[:LETRAS_DO_APELIDO_DA_SESSAO] for _, apelido in vivas]
 
 
-def avancar_a_raiz(raiz: Path, lar=None, minha=None, agora=None) -> str:
+def avancar_a_raiz(raiz: Path, lar=None, minha=None, agora=None,
+                   dizer=print) -> str:
     if not declara_que_a_raiz_espelha(raiz):
         return ""
     if os.environ.get(MARCA_DA_SESSAO_DE_PESQUISA):
@@ -1936,7 +2065,14 @@ def avancar_a_raiz(raiz: Path, lar=None, minha=None, agora=None) -> str:
     if branch != integracao:
         return RAIZ_FORA_DA_INTEGRACAO.format(branch=branch or "?",
                                               integracao=integracao)
-    falha = buscar_a_integracao(principal, integracao)
+    agora = time.time() if agora is None else agora
+    hora, marca_torta = busca_feita_pela_manutencao(principal, integracao,
+                                                    agora)
+    if marca_torta:
+        dizer(marca_torta)
+    if hora:
+        dizer(RAIZ_BUSCADA_PELA_MANUTENCAO.format(ref=referencia, hora=hora))
+    falha = "" if hora else buscar_no_remoto(principal, integracao)
     if falha:
         return RAIZ_NAO_MEDIDA.format(ref=referencia, motivo=falha)
     codigo_atras, atras = git_da_raiz(principal, COMANDO_DOS_COMMITS_ENTRE,
@@ -1966,7 +2102,7 @@ def avancar_a_raiz(raiz: Path, lar=None, minha=None, agora=None) -> str:
     vivas = sessoes_vivas_na_raiz(
         principal, Path.home() if lar is None else Path(lar),
         os.environ.get(VARIAVEL_DA_SESSAO_DO_CLIENTE, "") if minha is None
-        else minha, time.time() if agora is None else agora)
+        else minha, agora)
     if vivas is None:
         return RAIZ_NAO_MEDIDA.format(
             ref=referencia, motivo="não se leu se há outra sessão viva na "
@@ -2042,6 +2178,10 @@ def avisos_dos_modulos_inscritos(raiz: Path) -> list:
     return [aviso for aviso in avisos if aviso]
 
 
+def sessao_na_nuvem() -> bool:
+    return os.environ.get(VARIAVEL_DA_NUVEM) == "true"
+
+
 def pecas_da_abertura(raiz: Path, conexao: bool = False) -> list:
     declarado, recado = quadro_declarado(raiz)
     return [instrucoes_da_raiz(raiz),
@@ -2061,17 +2201,220 @@ def abertura(raiz: Path, conexao: bool = False) -> int:
     aviso_dos_ganchos = ganchos_contra_a_integracao(raiz)
     if aviso_dos_ganchos:
         print(aviso_dos_ganchos)
-    quadro_de_pe = pecas[2][0]
-    aviso_das_encerradas = aviso_do_historico(raiz) if quadro_de_pe else ""
-    if aviso_das_encerradas:
-        print(aviso_das_encerradas)
-    for aviso in avisos_dos_modulos_inscritos(raiz):
-        print(aviso)
+    if sessao_na_nuvem():
+        print(NA_NUVEM_NAO_SE_MEDE.format(
+            historico=ROTULO_DO_HISTORICO, chave=CHAVE_DOS_AVISOS_DA_ABERTURA))
+    else:
+        quadro_de_pe = pecas[2][0]
+        aviso_das_encerradas = (aviso_do_historico(raiz) if quadro_de_pe
+                                else "")
+        if aviso_das_encerradas:
+            print(aviso_das_encerradas)
+        for aviso in avisos_dos_modulos_inscritos(raiz):
+            print(aviso)
     faltam = [ok for ok, _ in pecas if ok is False]
     if faltam:
         print(ABERTURA_INCOMPLETA.format(len(faltam)))
         return SAIDA_COM_ACHADO
     print(ABERTURA_INTEGRA.format(len([ok for ok, _ in pecas if ok])))
+    return SAIDA_LIMPA
+
+
+def passo_cronometrado(fazer, *argumentos) -> dict:
+    comeco = time.time()
+    feito = fazer(*argumentos)
+    return dict(feito, instante=instante_em_utc(comeco),
+                segundos=round(time.time() - comeco, 1))
+
+
+def passo_da_integracao(principal: Path) -> dict:
+    integracao = integracao_declarada(principal)
+    if not integracao:
+        return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_PULADO,
+                CHAVE_DO_MOTIVO_DO_PASSO: f"{ARQUIVO_DO_EXECUTOR} não declara "
+                f"{CHAVE_DAS_BRANCHES}.{CHAVE_DA_INTEGRACAO}"}
+    falha = buscar_no_remoto(principal, integracao)
+    if falha:
+        return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_FALHOU,
+                CHAVE_DA_REF_BUSCADA: integracao,
+                CHAVE_DO_MOTIVO_DO_PASSO: falha}
+    return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_OK,
+            CHAVE_DA_REF_BUSCADA: integracao}
+
+
+def nome_de_pasta_simples(nome) -> bool:
+    return (isinstance(nome, str) and nome not in ("", ".", "..")
+            and nome.strip() == nome and Path(nome).name == nome)
+
+
+def pastas_dos_vizinhos(principal: Path) -> tuple:
+    executor, erro = json_que_se_deixa_ler(principal / ARQUIVO_DO_EXECUTOR)
+    if erro:
+        return None, erro
+    cadastros = (executor.get(CHAVE_DOS_CADASTROS)
+                 if isinstance(executor, dict) else None)
+    nomes = {cadastro.get(CAMPO_DA_PASTA_DO_VIZINHO)
+             for cadastro in (cadastros.values()
+                              if isinstance(cadastros, dict) else ())
+             if isinstance(cadastro, dict)}
+    pastas = [principal / PASTA_DOS_VIZINHOS / nome
+              for nome in sorted(n for n in nomes if nome_de_pasta_simples(n))]
+    return [pasta for pasta in pastas if (pasta / PASTA_DO_GIT).exists()], ""
+
+
+def falta_o_remoto_da_busca(pasta: Path) -> bool:
+    codigo, saida = git_da_raiz(pasta, COMANDO_DOS_REMOTOS)
+    return codigo == 0 and COMANDO_DA_BUSCA_NO_ORIGIN[-1] not in saida.split()
+
+
+def passo_dos_vizinhos(principal: Path) -> dict:
+    pastas, erro = pastas_dos_vizinhos(principal)
+    if pastas is None:
+        return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_FALHOU,
+                CHAVE_DO_MOTIVO_DO_PASSO: f"{ARQUIVO_DO_EXECUTOR}: {erro}"}
+    if not pastas:
+        return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_PULADO,
+                CHAVE_DO_MOTIVO_DO_PASSO: SEM_VIZINHO_COM_CLONE}
+    sem_remoto = [pasta for pasta in pastas if falta_o_remoto_da_busca(pasta)]
+    buscaveis = [pasta for pasta in pastas if pasta not in sem_remoto]
+    motivo_do_pulo = VIZINHO_SEM_O_REMOTO_DA_BUSCA.format(
+        COMANDO_DA_BUSCA_NO_ORIGIN[-1])
+    falhas = []
+    for pasta in buscaveis:
+        falha = buscar_no_remoto(pasta, "")
+        if falha:
+            falhas.append(f"{pasta.name}: {falha}")
+    estado = (ESTADO_FALHOU if falhas
+              else ESTADO_OK if buscaveis else ESTADO_PULADO)
+    return {CHAVE_DO_ESTADO_DO_PASSO: estado,
+            CHAVE_DOS_BUSCADOS: len(buscaveis), CHAVE_DAS_FALHAS: falhas,
+            CHAVE_DOS_PULADOS: [f"{pasta.name}: {motivo_do_pulo}"
+                                for pasta in sem_remoto]}
+
+
+def interpretador_com_console() -> str:
+    python = Path(INTERPRETADOR)
+    com_console = python.with_name(INTERPRETADOR_COM_CONSOLE)
+    if (python.name.lower() == INTERPRETADOR_SEM_JANELA
+            and com_console.is_file()):
+        return str(com_console)
+    return INTERPRETADOR
+
+
+def passo_do_modulo(principal: Path, instrumento: str, bandeiras: tuple,
+                    tempo: int) -> dict:
+    if not (principal / instrumento).is_file():
+        return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_PULADO,
+                CHAVE_DO_MOTIVO_DO_PASSO: MODULO_NAO_INSTALADO.format(
+                    instrumento)}
+    try:
+        codigo, saida = corre_a_lista(
+            [interpretador_com_console(), instrumento, *bandeiras, "--cwd",
+             str(principal)],
+            tempo=tempo, cwd=principal)
+    except (OSError, subprocess.SubprocessError) as falha:
+        return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_FALHOU,
+                CHAVE_DA_ULTIMA_LINHA: type(falha).__name__}
+    return {CHAVE_DO_ESTADO_DO_PASSO: ESTADO_OK if codigo == 0
+            else ESTADO_FALHOU,
+            CHAVE_DA_ULTIMA_LINHA: ultima_linha(saida) or f"saiu {codigo}"}
+
+
+def passo_do_indice(principal: Path) -> dict:
+    ronda = passo_do_modulo(principal, INSTRUMENTO_DO_INDICE,
+                            (BANDEIRA_DA_RONDA_DO_INDICE,),
+                            TEMPO_DA_RONDA_DO_INDICE)
+    if ronda[CHAVE_DO_ESTADO_DO_PASSO] != ESTADO_OK:
+        return ronda
+    visto = passo_do_modulo(principal, INSTRUMENTO_DO_INDICE,
+                            (BANDEIRA_DO_ESTADO_DO_INDICE,),
+                            TEMPO_DO_ESTADO_DO_INDICE)
+    return dict(visto, ronda=ronda[CHAVE_DA_ULTIMA_LINHA])
+
+
+def gravar_a_marca(principal: Path, marca: dict) -> str:
+    destino = principal / ARQUIVO_DA_MARCA_DA_MANUTENCAO
+    provisorio = destino.with_name(destino.name + SUFIXO_DO_PROVISORIO)
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        provisorio.write_text(json.dumps(marca, ensure_ascii=False, indent=2)
+                              + "\n", encoding="utf-8")
+        os.replace(provisorio, destino)
+    except OSError as falha:
+        with contextlib.suppress(OSError):
+            provisorio.unlink()
+        return f"{type(falha).__name__}: {falha}"
+    return ""
+
+
+def detalhe_do_passo(passo: dict) -> str:
+    detalhe = (passo.get(CHAVE_DO_MOTIVO_DO_PASSO)
+               or passo.get(CHAVE_DA_ULTIMA_LINHA)
+               or "; ".join((passo.get(CHAVE_DAS_FALHAS) or [])
+                            + (passo.get(CHAVE_DOS_PULADOS) or [])))
+    return f"{SEPARADOR_DO_DETALHE}{detalhe}" if detalhe else ""
+
+
+def manutencao(raiz: Path) -> int:
+    principal = arvore_principal(raiz) or raiz
+    comeco = time.time()
+    passos = {
+        PASSO_DA_INTEGRACAO: passo_cronometrado(passo_da_integracao,
+                                                principal),
+        PASSO_DOS_VIZINHOS: passo_cronometrado(passo_dos_vizinhos, principal),
+        PASSO_DO_HISTORICO: passo_cronometrado(
+            passo_do_modulo, principal, INSTRUMENTO_DO_HISTORICO,
+            (BANDEIRA_DA_COLHEITA,), TEMPO_DA_COLHEITA),
+        PASSO_DO_INDICE: passo_cronometrado(passo_do_indice, principal)}
+    print(f"\n{TITULO_DA_MANUTENCAO}")
+    for nome, passo in passos.items():
+        print(LINHA_DO_PASSO.format(
+            nome=nome, estado=passo[CHAVE_DO_ESTADO_DO_PASSO],
+            segundos=passo["segundos"], detalhe=detalhe_do_passo(passo)))
+    erro = gravar_a_marca(principal, {CHAVE_DE_QUANDO_RODOU:
+                                      instante_em_utc(comeco),
+                                      CHAVE_DOS_PASSOS: passos})
+    if erro:
+        print(MARCA_QUE_NAO_SE_GRAVOU.format(
+            arquivo=ARQUIVO_DA_MARCA_DA_MANUTENCAO, motivo=erro))
+        return SAIDA_COM_ACHADO
+    falhos = [nome for nome, passo in passos.items()
+              if passo[CHAVE_DO_ESTADO_DO_PASSO] == ESTADO_FALHOU]
+    if falhos:
+        print(MANUTENCAO_COM_FALHA.format(
+            arquivo=ARQUIVO_DA_MARCA_DA_MANUTENCAO, quantos=len(falhos),
+            quais=", ".join(falhos)))
+        return SAIDA_COM_ACHADO
+    print(MANUTENCAO_EM_DIA.format(arquivo=ARQUIVO_DA_MARCA_DA_MANUTENCAO))
+    return SAIDA_LIMPA
+
+
+def agendamento(raiz: Path) -> int:
+    principal = arvore_principal(raiz) or raiz
+    python = Path(sys.executable)
+    sem_janela = python.with_name(INTERPRETADOR_SEM_JANELA)
+    interpretador = sem_janela if sem_janela.is_file() else python
+    instrumento = principal / CAMINHO_DESTE_INSTRUMENTO
+    print(f"\n{TITULO_DO_AGENDAMENTO}")
+    if os.name != "nt":
+        hora, minuto = HORA_DA_MANUTENCAO.split(":")
+        print(AGENDAMENTO_FORA_DO_WINDOWS.format(
+            minuto=int(minuto), hora=int(hora),
+            acao=f'"{python}" -X utf8 "{instrumento}" {BANDEIRA_DA_MANUTENCAO} '
+                 f'--raiz "{principal}"'))
+        return SAIDA_LIMPA
+    acao = (f'"{interpretador}" -X utf8 "{instrumento}" '
+            f'{BANDEIRA_DA_MANUTENCAO} --raiz "{principal}"')
+    print(AGENDAMENTO_NO_WINDOWS.format(
+        prefixo=PREFIXO_SEM_CONVERSAO, tarefa=NOME_DA_TAREFA.format(
+            principal.name), hora=HORA_DA_MANUTENCAO,
+        acao=acao.replace('"', '\\"')))
+    if interpretador == python:
+        print(AGENDAMENTO_SEM_JANELA_AUSENTE.format(INTERPRETADOR_SEM_JANELA,
+                                                    python))
+    if len(acao) > TETO_DO_COMANDO_DA_TAREFA:
+        print(AGENDAMENTO_ACIMA_DO_TETO.format(len(acao),
+                                               TETO_DO_COMANDO_DA_TAREFA))
     return SAIDA_LIMPA
 
 
@@ -2349,6 +2692,7 @@ def rascunho(raiz: Path) -> int:
 
 PASTA_DAS_EVIDENCIAS = "execucoes/evidencias"
 CAMPO_DO_CUSTO = re.compile(r'"total_cost_usd":([0-9.]+)')
+CAMPO_DA_SESSAO = re.compile(r'"session_id":"([^"]+)"')
 TITULO_DA_CONTA = "A CONTA — o que cada execução custou, do que já está gravado"
 SEM_EVIDENCIAS = ("sem evidência gravada em {} — a conta não tem o que ler, "
                   "e isso não é achado")
@@ -2421,6 +2765,20 @@ def custo_por_etapa(raiz: Path) -> list:
                   key=lambda linha: -linha[1])
 
 
+def _cobrado_no_log(texto: str) -> float:
+    ultimo_da_sessao, sem_sessao = {}, 0.0
+    for linha in texto.splitlines():
+        custo = CAMPO_DO_CUSTO.search(linha)
+        if not custo:
+            continue
+        sessao = CAMPO_DA_SESSAO.search(linha)
+        if sessao:
+            ultimo_da_sessao[sessao.group(1)] = float(custo.group(1))
+        else:
+            sem_sessao += float(custo.group(1))
+    return sem_sessao + sum(ultimo_da_sessao.values())
+
+
 def custo_das_execucoes(raiz: Path) -> list:
     pasta = raiz / PASTA_DAS_EVIDENCIAS
     if not pasta.is_dir():
@@ -2431,8 +2789,8 @@ def custo_das_execucoes(raiz: Path) -> list:
             texto = log.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        cobrado[log.parent.name] = cobrado.get(log.parent.name, 0.0) + sum(
-            float(achado.group(1)) for achado in CAMPO_DO_CUSTO.finditer(texto))
+        cobrado[log.parent.name] = (cobrado.get(log.parent.name, 0.0)
+                                    + _cobrado_no_log(texto))
     atribuido = {}
     for trabalho, dado in _evidencias(pasta):
         usd = _usd_da_evidencia(dado)
@@ -3273,11 +3631,34 @@ def caminhos_que_a_sessao_tocou(raiz: Path) -> tuple:
     return sorted(set(mudados) | set(nascidos) | set(commitados)), base
 
 
+def corre_e_derruba_a_arvore_no_teto(argumentos: list, tempo: float,
+                                     cwd: Path) -> tuple:
+    processo = subprocess.Popen(argumentos, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True,
+                                encoding="utf-8", errors="replace", cwd=cwd,
+                                creationflags=bandeiras_sem_janela())
+    try:
+        saida, erro = processo.communicate(timeout=tempo)
+    except subprocess.TimeoutExpired:
+        derrubar_a_arvore_do_processo(processo)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            processo.communicate(timeout=TEMPO_PARA_DERRUBAR)
+        raise
+    return processo.returncode, (saida + erro).strip()
+
+
+def apagar_a_pasta_de_fora(pasta: Path) -> None:
+    try:
+        shutil.rmtree(pasta)
+    except OSError as falha:
+        print(PASTA_DE_FORA_QUE_FICOU.format(pasta.as_posix(), falha))
+
+
 def rodar_uma_bancada(raiz: Path, caminho: str, teto: float,
                       de_onde: Path = None) -> tuple:
     partida = time.monotonic()
     try:
-        codigo, saida = corre_a_lista(
+        codigo, saida = corre_e_derruba_a_arvore_no_teto(
             [INTERPRETADOR, str(raiz / caminho), BANDEIRA_DE_TESTE],
             tempo=teto, cwd=de_onde or raiz)
     except subprocess.TimeoutExpired:
@@ -3415,7 +3796,8 @@ def bancada_dos_tocados(raiz: Path,
     caidos, nao_couberam, rodadas, fora_do_orcamento = [], [], 0, []
     nasceu_antes = linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU)
     orcamento = orcamento_das_bancadas(com_bancada, orcamento, teto, tetos)
-    with tempfile.TemporaryDirectory(prefix="bancada-fora-da-raiz-") as fora:
+    fora = tempfile.mkdtemp(prefix=PREFIXO_DA_PASTA_DE_FORA)
+    try:
         def rodar_se_couber(caminho):
             if time.monotonic() - partida >= orcamento:
                 return None
@@ -3436,6 +3818,8 @@ def bancada_dos_tocados(raiz: Path,
                     caidos.append(caminho)
                 if marca == MARCA_DE_QUE_NAO_COUBE:
                     nao_couberam.append(caminho)
+    finally:
+        apagar_a_pasta_de_fora(Path(fora))
     sujou = o_que_a_bancada_sujou(
         nasceu_antes, linhas_do_git(raiz, COMANDO_DO_QUE_NASCEU))
     anunciar_o_que_ficou_de_fora(fora_do_orcamento, orcamento)
@@ -3686,6 +4070,7 @@ PASSOS = (
     ("provar", TITULO_PROVAR, provar),
     ("simular", TITULO_SIMULAR, simular),
 )
+NOMES_DOS_PASSOS = tuple(nome for nome, _titulo, _passo in PASSOS)
 
 NUMEROS = {
     "largada": ("medir", "largada"),
@@ -3797,11 +4182,19 @@ def um_numero(raiz: Path, chave: str) -> int:
     return 0
 
 
-def main() -> int:
+def passos_desconhecidos(pedidos) -> list:
+    return list(dict.fromkeys(pedido for pedido in pedidos
+                              if pedido not in NOMES_DOS_PASSOS))
+
+
+def leitor_de_argumentos() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=DESCRICAO_DA_CLI)
-    ap.add_argument("passo", nargs="*", choices=[p[0] for p in PASSOS] or None,
-                    help="quais passos rodar (padrão: medir e provar)")
-    ap.add_argument("--evidencia", choices=[p[0] for p in PASSOS],
+    ap.add_argument("passo", nargs="*",
+                    metavar="{" + ",".join(NOMES_DOS_PASSOS) + "}",
+                    help="quais passos rodar, entre "
+                         + ", ".join(NOMES_DOS_PASSOS)
+                         + " (padrão: medir e provar)")
+    ap.add_argument("--evidencia", choices=NOMES_DOS_PASSOS,
                     help="emite a evidência de um passo, para o executor de roteiros")
     ap.add_argument("--numero", help="imprime um número só, para virar prova")
     ap.add_argument("--largada", action="store_true",
@@ -3812,6 +4205,14 @@ def main() -> int:
     ap.add_argument(BANDEIRA_DA_CONEXAO, action="store_true",
                     help="com --abertura, faz o aperto de mão MCP com cada "
                          "servidor stdio declarado e nomeia o que caiu")
+    ap.add_argument(BANDEIRA_DA_MANUTENCAO, action="store_true",
+                    help="busca a integração e os vizinhos, colhe o histórico "
+                         "e roda a ronda do índice; grava a marca que deixa "
+                         f"a abertura sem buscar por {JANELA_DA_MANUTENCAO_H} "
+                         "h")
+    ap.add_argument(BANDEIRA_DO_AGENDAMENTO, action="store_true",
+                    help="imprime, sem registrar, o comando que agenda a "
+                         "manutenção todo dia")
     ap.add_argument("--entrega", action="store_true",
                     help="prova que nada ficou fora da branch de entrega")
     ap.add_argument(BANDEIRA_SEM_O_PEDIDO, action="store_true",
@@ -3843,7 +4244,7 @@ def main() -> int:
                     help="mostra o que cada execução gravada custou")
     ap.add_argument("--versao", action="store_true",
                     help="as medidas da versão: versão, largada, custo por "
-                         "entrega e acerto de rota, para comparar versões")
+                         "entrega e acerto de rota via evals, para comparar versões")
     ap.add_argument("--resumo", action="store_true",
                     help="só o JSON, para comparar entre rodadas")
     ap.add_argument("--raiz", default=None,
@@ -3851,7 +4252,15 @@ def main() -> int:
                          "atual")
     ap.add_argument(BANDEIRA_DE_TESTE, action="store_true",
                     dest="testar", help="roda os casos deste instrumento")
+    return ap
+
+
+def main() -> int:
+    ap = leitor_de_argumentos()
     a = ap.parse_args()
+    if desconhecidos := passos_desconhecidos(a.passo):
+        ap.error(PASSO_DESCONHECIDO.format(", ".join(desconhecidos),
+                                           ", ".join(NOMES_DOS_PASSOS)))
 
     if a.testar:
         try:
@@ -3872,6 +4281,12 @@ def main() -> int:
 
     if a.abertura:
         return abertura(raiz, conexao=a.conexao)
+
+    if a.agendar:
+        return agendamento(raiz)
+
+    if a.manutencao:
+        return manutencao(raiz)
 
     if a.entrega:
         return entrega(raiz, sem_pedido=a.sem_pedido)

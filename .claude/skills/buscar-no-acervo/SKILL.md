@@ -1,6 +1,9 @@
 ---
 name: buscar-no-acervo
-description: Busca por significado ou termo exato no acervo indexado, sem MCP. Use em "procura no acervo", "onde está", "o que já se decidiu sobre", "qual arquivo fala de".
+description: Busca por termo exato ou palavra no acervo indexado, sem MCP. Use em "procura no acervo", "onde está", "o que já se decidiu sobre", "qual arquivo fala de".
+context: fork
+agent: Explore
+background: false
 ---
 
 # Buscar no acervo
@@ -34,8 +37,9 @@ você não sabe. Achou o alvo, repita a pergunta nele.
   quer dizer "ninguém indexou", não "não existe".
 - `--alvo` restringe pelo fim do caminho (`skills`, `conhecimento`) ou pelo
   caminho absoluto. Sem ele, busca em tudo que o banco tem.
-- A busca é híbrida: significado mais termo exato, fundidos. `--denso` roda só
-  por significado, para comparar; `--medir` compara os dois no seu acervo.
+- A busca é léxica, pelo `ck`: acha palavra, não sinônimo — pergunte com as
+  palavras que o texto usa. Sem o `ck`, ela avisa e cai no grep. A receita
+  está em `conhecimento/indice.md`.
 - **A resposta tem teto.** O total sai cortado no `--teto-total` (o padrão
   está no `--help`), e a última linha avisa quando cortou:
   `cortado no teto de N: havia M`. Viu essa linha? Você não viu tudo — o
@@ -47,8 +51,10 @@ Pergunta cuja resposta é um arquivo que você já sabe onde está: abra o arqui
 Acervo pequeno: `grep` ganha. A régua medida está na página do módulo
 `indice`.
 
-## Pedidos de exemplo
+## Quando roda à parte
 
-- "procura no acervo onde a autenticação decide quem entra"
-- "o que já se decidiu sobre a cópia gerada que diverge da fonte? busca no acervo"
-- "qual arquivo fala do gancho vetar-andamento-em-arquivo?"
+No Claude Code, esta skill roda num subagente, sem a conversa de quem pediu.
+O pedido chega no fim, na linha `ARGUMENTS:`, e tem de trazer a pergunta ou o
+termo exato — e o alvo, quando quem pede sabe onde o assunto mora. Sem
+pergunta, devolva numa linha o que faltou; não adivinhe. Devolva o
+`arquivo:linha` e a frase que responde, nunca a saída inteira do comando.

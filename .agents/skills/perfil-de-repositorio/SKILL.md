@@ -1,6 +1,8 @@
 ---
 name: perfil-de-repositorio
 description: Indexação dos repositórios do workspace e escrita do perfil destilado de cada um em conhecimento/projetos/. Use para indexar projetos, gerar ou atualizar o índice local, criar ou atualizar o perfil de um repositório, ou depois de mudança grande num projeto. Escopo — ESCREVER o perfil. Buscar código que já existe é da busca-de-codigo-existente. Palavras que a acordam — "indexa os projetos", "monta a wiki", "cria o perfil do repositório", "esse projeto mudou, atualiza".
+context: fork
+agent: general-purpose
 ---
 
 # Wiki de projetos
@@ -36,8 +38,19 @@ normais, o que se lê é o `indice.json` real do disco.
    dos vizinhos não tem repositório, e `git -C` sobe a árvore e responde com
    o SHA **desta** camada. A entrada nasceria com um SHA que muda a cada
    commit da casa: parece viva e reperfilada, e nunca houve repositório ali.
-   Liste antes de triar, e trie só o que sobrar:
-   `for p in <pasta>/*/; do [ -e "$p/.git" ] && echo "${p%/}"; done`
+   Liste antes de triar, e trie só o que sobrar. O laço não vai no shell:
+   vai num roteiro `.py` na pasta temporária, rodado com
+   `python -X utf8 <roteiro> <pasta>` (`conhecimento/windows-e-git-bash.md`):
+
+   ```python
+   import sys
+   from pathlib import Path
+
+   for pasta in sorted(Path(sys.argv[1]).iterdir()):
+       if (pasta / ".git").exists():
+           print(pasta.as_posix())
+   ```
+
 3. **Triagem barata, sem abrir arquivo** — para cada repositório da lista:
    `git -C <repo> rev-parse --short HEAD` e compare:
    - SHA igual e `versao_do_template` atual → **pula**.
@@ -95,8 +108,11 @@ normais, o que se lê é o `indice.json` real do disco.
 Confira se o `AGENTS.md` da raiz aponta a wiki e o mapa. Sem o ponteiro, a
 wiki existe e ninguém a lê.
 
-## Pedidos de exemplo
+## Quando roda à parte
 
-- "indexa os projetos do workspace e monta a wiki local"
-- "cria o perfil do repositório de faturamento na wiki"
-- "o projeto de cobrança mudou bastante, atualiza a wiki dele"
+No Claude Code, esta skill roda num subagente, sem a conversa de quem pediu e
+sem a ferramenta de pergunta. O pedido chega no fim, na linha `ARGUMENTS:`, e
+diz a pasta dos repositórios e, se for um só, qual; sem isso, a rodada é a
+pasta inteira. A triagem do passo 4, a pergunta ao dono sobre tipo indefinido
+e o ponteiro que falta no `AGENTS.md` voltam no relatório final: quem fala com
+o dono é quem pediu.

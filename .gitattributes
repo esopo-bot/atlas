@@ -19,3 +19,7 @@ manual.html linguist-generated=true
 
 # O lançador dos ganchos é lido pelo bash, que não aceita quebra de linha CRLF.
 .claude/hooks/interpretador.sh text eol=lf
+
+# O harness recusa rodar workflow com caractere de controle, e o CRLF do
+# checkout no Windows é um.
+.claude/workflows/*.js text eol=lf

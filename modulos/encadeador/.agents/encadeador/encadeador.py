@@ -1,4 +1,7 @@
 import argparse
+import asyncio
+import importlib.util
+from dataclasses import asdict, is_dataclass
 import contextlib
 import graphlib
 import hashlib
@@ -51,6 +54,9 @@ ESPERA_SEM_HORA_DECLARADA_S = 300
 MARGEM_DA_ESPERA_S = 30
 SUBTIPO_SUCESSO = "success"
 SUBTIPO_TETO_DE_TURNOS = "error_max_turns"
+SUBTIPO_TETO_DE_DOLAR = "error_max_budget_usd"
+SUBTIPOS_QUE_NAO_ESPERAM_A_JANELA = (SUBTIPO_SUCESSO, SUBTIPO_TETO_DE_DOLAR,
+                                  "error_sdk")
 PAREDE_DE_USO = re.compile(r"\brate limit\b")
 STATUS_SEM_PAREDE = (None, "allowed", "allowed_warning")
 ARQUIVO_ESTADO = "estado.json"
@@ -124,6 +130,11 @@ PADRAO_DA_BANDEIRA_SEM_CAMADA = "--bare"
 PADRAO_DA_BANDEIRA_DE_FERRAMENTAS_NEGADAS = "--disallowed-tools"
 BANDEIRA_MODELO = "--model"
 CAMPO_MODELO_POR_ETAPA = "modelo_por_etapa"
+BANDEIRA_DO_TETO_DE_DOLAR = "--max-budget-usd"
+TETO_DE_DOLAR_POR_FAIXA = {"haiku": 2, "sonnet": 6, "opus": 10, "fable": 20}
+TETO_DE_DOLAR_SEM_FAIXA = TETO_DE_DOLAR_POR_FAIXA["fable"]
+TETO_DE_DOLAR_DECLARADO = os.environ.get("ENCADEADOR_TETO_DE_DOLAR")
+CASAS_DO_TETO_DE_DOLAR = 4
 SESSAO = partir_comando_do_ambiente(
     os.environ.get("ENCADEADOR_SESSAO", PADRAO_DA_SESSAO))
 BANDEIRAS_DA_SESSAO = partir_comando_do_ambiente(os.environ.get(
@@ -408,21 +419,51 @@ CLI_FALSO_QUE_BATE_NO_TETO_E_TRAVA = (
 CLI_FALSO_QUE_RETOMA_E_ENTREGA = (
     '#!/bin/sh\n'
     'cat > /dev/null\n'
+    'anterior=""\n'
+    'for argumento in "$@"; do\n'
+    '  if [ "$anterior" = "--max-budget-usd" ]; then\n'
+    '    echo "$argumento" >> {marca}\n'
+    '  fi\n'
+    '  anterior="$argumento"\n'
+    'done\n'
     'case "$*" in\n'
     '  *resume*)\n'
-    '    printf \'{"type":"result","subtype":"success","num_turns":3,'
-    '"session_id":"s-duas-pernas","result":"pronto","total_cost_usd":0.5,'
-    '"usage":{"input_tokens":2,"output_tokens":4,'
-    '"cache_read_input_tokens":6,"cache_creation_input_tokens":8},'
-    '"structured_output":{"veredito":"segue","provado":[],"suposto":[],'
-    '"faltas":[]}}\\n\'\n'
+    '    printf \'{{"type":"result","subtype":"success","num_turns":3,'
+    '"session_id":"s-duas-pernas","result":"pronto",'
+    '"total_cost_usd":0.2537,'
+    '"usage":{{"input_tokens":2,"output_tokens":4,'
+    '"cache_read_input_tokens":6,"cache_creation_input_tokens":8}},'
+    '"modelUsage":{{"modelo":{{"inputTokens":3,"outputTokens":1365,'
+    '"cacheReadInputTokens":9,"cacheCreationInputTokens":12,'
+    '"costUSD":0.2537}}}},'
+    '"structured_output":{{"veredito":"segue","provado":[],"suposto":[],'
+    '"faltas":[]}}}}\\n\'\n'
     '    exit 0\n'
     '    ;;\n'
     'esac\n'
-    'printf \'{"type":"result","subtype":"error_max_turns","num_turns":5,'
-    '"session_id":"s-duas-pernas","result":"teto","total_cost_usd":1.0,'
-    '"usage":{"input_tokens":1,"output_tokens":2,'
-    '"cache_read_input_tokens":3,"cache_creation_input_tokens":4}}\\n\'\n')
+    'printf \'{{"type":"result","subtype":"error_max_turns","num_turns":5,'
+    '"session_id":"s-duas-pernas","result":"teto","total_cost_usd":0.2332,'
+    '"usage":{{"input_tokens":1,"output_tokens":2,'
+    '"cache_read_input_tokens":3,"cache_creation_input_tokens":4}},'
+    '"modelUsage":{{"modelo":{{"inputTokens":1,"outputTokens":1361,'
+    '"cacheReadInputTokens":3,"cacheCreationInputTokens":4,'
+    '"costUSD":0.2332}}}}}}\\n\'\n')
+CLI_FALSO_QUE_BATE_NA_PAREDE_SEM_SESSAO = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'if [ -f {marca} ]; then\n'
+    '  printf \'{{"type":"result","subtype":"success","num_turns":2,'
+    '"result":"pronto","total_cost_usd":0.2,'
+    '"usage":{{"input_tokens":1,"output_tokens":1,'
+    '"cache_read_input_tokens":1,"cache_creation_input_tokens":1}}}}\\n\'\n'
+    '  exit 0\n'
+    'fi\n'
+    'touch {marca}\n'
+    'printf \'{{"type":"result","subtype":"error_during_execution",'
+    '"num_turns":1,"result":"rate limit reached","total_cost_usd":0.1,'
+    '"usage":{{"input_tokens":1,"output_tokens":1,'
+    '"cache_read_input_tokens":1,"cache_creation_input_tokens":1}}}}\\n\'\n'
+    'exit 1\n')
 CLI_FALSO_QUE_FALA_E_TRAVA = (
     '#!/bin/sh\n'
     'cat > /dev/null\n'
@@ -436,6 +477,27 @@ CLI_FALSO_QUE_ENTREGA_SEM_CUSTO = (
     '"session_id":"s-sem-custo","result":"pronto",'
     '"structured_output":{"veredito":"segue","provado":[],"suposto":[],'
     '"faltas":[]}}\\n\'\n')
+CLI_FALSO_QUE_ESTOURA_O_TETO_DE_DOLAR = (
+    '#!/bin/sh\n'
+    'cat > /dev/null\n'
+    'echo rodou >> {marca}\n'
+    'case "$*" in\n'
+    '  *resume*)\n'
+    '    printf \'{{"type":"result","subtype":"success","num_turns":1,'
+    '"session_id":"s-teto-de-dolar","result":"pronto",'
+    '"structured_output":{{"veredito":"segue","provado":[],"suposto":[],'
+    '"faltas":[]}}}}\\n\'\n'
+    '    exit 0\n'
+    '    ;;\n'
+    'esac\n'
+    'printf \'{{"type":"result","subtype":"error_max_budget_usd",'
+    '"is_error":true,"num_turns":2,"session_id":"s-teto-de-dolar",'
+    '"result":null,"errors":["Reached maximum budget ($0.1)"],'
+    '"terminal_reason":"budget_exhausted","total_cost_usd":0.2332,'
+    '"usage":{{"input_tokens":2,"output_tokens":138,'
+    '"cache_read_input_tokens":23600,'
+    '"cache_creation_input_tokens":20014}}}}\\n\'\n'
+    'exit 1\n')
 ERRO_SITUACAO_DESCONHECIDA = ("defeito no encadeador: situação {!r} "
                               "fora de SITUACOES")
 ERRO_ETAPA_SEM_EVIDENCIA = (
@@ -504,6 +566,10 @@ ERRO_LIMPEZA_FORA_DO_DISCO = ("{alvo}: existe_arquivo_limpeza é true e "
 ERRO_DE_CONFIGURACAO = "erro de configuração: {}"
 ERRO_NADA_RODOU_SEM_CONFIGURACAO = (
     "nada rodou — o executor não dispara sem configuração válida.")
+ERRO_TETO_DE_DOLAR_TORTO = (
+    "ENCADEADOR_TETO_DE_DOLAR={!r} não é um valor em dólar maior que zero — "
+    "declare um número, como 0.5; vazia, a variável tira o teto, e ausente "
+    "vale o teto da faixa do modelo")
 ERRO_DE_CONTA = "erro de conta: {}"
 ERRO_CONTA_SEM_ACESSO = ("{papel}: a conta {conta!r} não lê o repositório "
                          "{repositorio} — {resposta}")
@@ -511,8 +577,9 @@ ERRO_NADA_RODOU_SEM_A_CONTA = (
     "nada rodou — a configuração declara uma conta que não faz o trabalho "
     "que ela diz fazer. Dê acesso a essa conta, ou declare em {} a conta "
     "que realmente faz. Nenhuma sessão abriu.")
-RESPOSTA_SEM_TOKEN = ("`gh auth token --user {}` não devolveu token, e sem "
-                      "token o motor agiria como a conta ativa")
+RESPOSTA_SEM_TOKEN = ("a conta {} foi pedida e o token dela não se obteve pelo "
+                      "`gh auth token --user`: a operação não sai por outra "
+                      "conta. Entre com `gh auth login` nessa conta")
 ARQUIVO_DOS_CAMINHOS_DE_POLITICA = ".claude/caminhos-de-politica.txt"
 SECAO_ONDE_MEXER = "## onde mexer"
 MARCA_DE_SECAO = "## "
@@ -586,6 +653,9 @@ LOG_TETO_SEM_SESSAO = ("    {}: bateu no teto e não devolveu session_id — "
                        "sem retomada possível")
 LOG_RETOMANDO_NO_TETO = ("    {rotulo}: teto de turnos — retomando a MESMA "
                          "sessão para fechar a evidência ({vez} de {teto})")
+LOG_TETO_DE_DOLAR_SEM_SOBRA = ("    {rotulo}: a etapa já gastou US$ "
+                               "{gasto:.4f} e não sobra teto de dólar — "
+                               "não retoma")
 SUFIXO_DA_RETOMADA = " (retomada {})"
 LOG_ANDAMENTO_DA_SESSAO = "    {minutos:d}m{segundos:02d} {rotulo}: {resumo}"
 LOG_ENSAIO = "ensaio do trabalho {} — nada será executado:"
@@ -771,7 +841,13 @@ MORTE_TETO_DE_TURNOS = ("esgotou o teto de turnos sem escrever a evidência, "
                         "está no log. Aumente `max-turnos` nesta etapa, ou "
                         "peça menos dela")
 MORTE_DURANTE_A_EXECUCAO = "a sessão falhou durante a execução"
+MORTE_TETO_DE_DOLAR = ("esgotou o teto de dólar da etapa e parou, sem "
+                       "retomada — o que ela produziu está no log. Suba o "
+                       "teto da faixa do modelo em TETO_DE_DOLAR_POR_FAIXA, "
+                       "o de toda etapa por ENCADEADOR_TETO_DE_DOLAR, ou "
+                       "peça menos dela")
 MORTE_CONHECIDA = {SUBTIPO_TETO_DE_TURNOS: MORTE_TETO_DE_TURNOS,
+                   SUBTIPO_TETO_DE_DOLAR: MORTE_TETO_DE_DOLAR,
                    "error_during_execution": MORTE_DURANTE_A_EXECUCAO}
 MORTE_DESCONHECIDA = "a sessão devolveu {}"
 MORTE_O_QUE_ELA_DISSE = "disse: {}"
@@ -1310,6 +1386,13 @@ class TempoEstourado(Exception):
         self.custo = None
 
 
+class TetoDeDolarEsgotado(Exception):
+    def __init__(self, turnos, custo):
+        super().__init__(MORTE_TETO_DE_DOLAR)
+        self.turnos = turnos
+        self.custo = custo
+
+
 def _resumo_do_evento(dado: dict) -> str:
     tipo = dado.get("type")
     if tipo == "assistant":
@@ -1339,31 +1422,39 @@ def _ferramenta_com_pista(bloco: dict) -> str:
 def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
     tempo = etapa.get("tempo-limite", TEMPO_SESSAO)
     entrada = _prompt_da_sessao(etapa, cwd)
+    modelo = _modelo_da_etapa(etapa, cwd)
     retomar, ditos, turnos = "", [], 0
-    custo_das_pernas = None
+    custo_da_etapa = custo_antes_da_sessao = None
     for tentativa in range(RETOMADAS + 1):
         if tentativa:
             _anotar_retomada_no_log(log, tentativa)
+        if not retomar:
+            custo_antes_da_sessao = custo_da_etapa
         try:
             codigo, saida, erro, marcas = _rodar_sessao_em_fluxo(
-                _comando_sessao(etapa, cwd, retomar), cwd=cwd, env=ambiente,
+                _comando_sessao(etapa, cwd, retomar,
+                                _dolares_gastos(custo_da_etapa)),
+                cwd=cwd, env=ambiente,
                 entrada=entrada, tempo=tempo, log=log,
                 rotulo=rotulo + (SUFIXO_DA_RETOMADA.format(tentativa)
                                  if tentativa else ""),
                 modo_do_log=(ANEXA_AO_LOG if tentativa
                              else ABRE_O_LOG_DO_ZERO))
         except TempoEstourado as estouro:
-            estouro.turnos = turnos
-            estouro.custo = custo_das_pernas
+            estouro.turnos += turnos
+            estouro.custo = (_custo_somado(custo_antes_da_sessao, estouro.custo)
+                             if estouro.custo is not None else custo_da_etapa)
             raise
         ditos += marcas.get("ditos", [])
         marcas["ditos"] = ditos
         turnos += marcas.get("turnos", 0)
         marcas["turnos"] = turnos
-        custo_das_pernas = _custo_somado(custo_das_pernas,
-                                         _custo_da_sessao(saida))
-        marcas["custo"] = custo_das_pernas
+        if (da_perna := _custo_da_sessao(saida)) is not None:
+            custo_da_etapa = _custo_somado(custo_antes_da_sessao, da_perna)
+        marcas["custo"] = custo_da_etapa
         if (espera := _espera_do_limite(saida, marcas.get("limite"))):
+            _morrer_se_o_teto_de_dolar_acabou(modelo, custo_da_etapa, turnos,
+                                              rotulo)
             _dormir_ate_a_janela_abrir(espera, etapa, rotulo)
             retomar = marcas.get("sessao") or retomar
             entrada = PEDIDO_DE_FECHO if retomar else entrada
@@ -1373,10 +1464,22 @@ def _sessao_com_retomada(etapa, *, cwd, ambiente, log, rotulo):
         if not marcas.get("sessao"):
             print(LOG_TETO_SEM_SESSAO.format(rotulo), flush=True)
             return codigo, saida, erro, marcas
+        _morrer_se_o_teto_de_dolar_acabou(modelo, custo_da_etapa, turnos,
+                                          rotulo)
         retomar, entrada = marcas["sessao"], PEDIDO_DE_FECHO
         print(LOG_RETOMANDO_NO_TETO.format(rotulo=rotulo, vez=tentativa + 1,
                                            teto=RETOMADAS), flush=True)
     return codigo, saida, erro, marcas
+
+
+def _morrer_se_o_teto_de_dolar_acabou(modelo, custo_da_etapa, turnos,
+                                      rotulo) -> None:
+    gasto = _dolares_gastos(custo_da_etapa)
+    sobra = _sobra_do_teto_de_dolar(modelo, gasto)
+    if sobra is not None and sobra <= 0:
+        print(LOG_TETO_DE_DOLAR_SEM_SOBRA.format(rotulo=rotulo, gasto=gasto),
+              flush=True)
+        raise TetoDeDolarEsgotado(turnos, custo_da_etapa)
 
 
 def _anotar_retomada_no_log(log, tentativa: int) -> None:
@@ -1412,7 +1515,7 @@ def _resultado_da_sessao(saida: str):
 def _espera_do_limite(saida: str, limite: dict | None) -> int:
     dado = _resultado_da_sessao(saida)
     subtipo = str(dado.get("subtype") or "")
-    if subtipo == SUBTIPO_SUCESSO:
+    if subtipo in SUBTIPOS_QUE_NAO_ESPERAM_A_JANELA:
         return 0
     texto = f"{subtipo} {dado.get('result', '')}".lower()
     bloqueado = bool(PAREDE_DE_USO.search(texto))
@@ -1433,7 +1536,142 @@ def _bateu_no_teto(saida: str) -> bool:
     return _resultado_da_sessao(saida).get("subtype") == SUBTIPO_TETO_DE_TURNOS
 
 
+def sdk_disponivel():
+    return (SESSAO == partir_comando_do_ambiente(PADRAO_DA_SESSAO)
+            and importlib.util.find_spec("claude_agent_sdk") is not None)
+
+
+def _opcoes_do_sdk(comando, cwd, ambiente):
+    opcoes = {"cwd": cwd, "env": ambiente,
+              "setting_sources": ["project", "local"], "extra_args": {}}
+    campos = {"max-turns": ("max_turns", int),
+              "max-budget-usd": ("max_budget_usd", float),
+              "resume": ("resume", str), "model": ("model", str),
+              "settings": ("settings", str),
+              "allowed-tools": ("allowed_tools", lambda valor: valor.split(",")),
+              "allowedTools": ("allowed_tools", lambda valor: valor.split(",")),
+              "disallowed-tools": ("disallowed_tools", lambda valor: valor.split(",")),
+              "disallowedTools": ("disallowed_tools", lambda valor: valor.split(","))}
+    argumentos = list(comando[len(SESSAO):])
+    while argumentos:
+        chave = argumentos.pop(0).removeprefix("--")
+        valor = None
+        if "=" in chave:
+            chave, valor = chave.split("=", 1)
+        elif argumentos and not argumentos[0].startswith("--"):
+            valor = argumentos.pop(0)
+        if chave == "dangerously-skip-permissions":
+            opcoes["permission_mode"] = "bypassPermissions"
+            continue
+        if chave in ("output-format", "verbose"):
+            continue
+        if chave == "json-schema":
+            opcoes["output_format"] = {"type": "json_schema", "schema": json.loads(valor)}
+        elif chave in campos:
+            nome, converter = campos[chave]
+            opcoes[nome] = converter(valor)
+        else:
+            opcoes["extra_args"][chave] = valor
+    return opcoes
+
+
+def _evento_do_sdk(mensagem):
+    dado = asdict(mensagem) if is_dataclass(mensagem) else vars(mensagem).copy()
+    nome = type(mensagem).__name__
+    if nome == "ResultMessage":
+        return dict(dado, type="result")
+    if nome == "AssistantMessage":
+        blocos = []
+        for bloco in mensagem.content:
+            parte = asdict(bloco) if is_dataclass(bloco) else vars(bloco).copy()
+            parte["type"] = {"TextBlock": "text", "ToolUseBlock": "tool_use"}.get(
+                type(bloco).__name__, "outro")
+            blocos.append(parte)
+        return {"type": "assistant", "message": {"content": blocos}}
+    if nome == "SystemMessage":
+        return dict(dado.get("data", {}), type="system", subtype=mensagem.subtype)
+    if nome == "RateLimitEvent":
+        return dict(dado, type="rate_limit_event")
+    return dado
+
+
 def _rodar_sessao_em_fluxo(comando, *, cwd, env, entrada, tempo, log, rotulo,
+                           modo_do_log=ABRE_O_LOG_DO_ZERO):
+    colhido = {"resultado": "", "linhas": [], "sessao": "", "ditos": [],
+               "limite": None, "turnos": 0}
+    recebeu = False
+    erros = []
+
+    async def consultar():
+        nonlocal recebeu
+        from claude_agent_sdk import ClaudeAgentOptions, query
+        opcoes = ClaudeAgentOptions(**_opcoes_do_sdk(comando, cwd, env),
+                                    stderr=erros.append)
+        with log.open(modo_do_log, encoding="utf-8") as diario:
+            async with contextlib.aclosing(query(prompt=entrada, options=opcoes)) as fluxo:
+                async for mensagem in fluxo:
+                    recebeu = True
+                    dado = _evento_do_sdk(mensagem)
+                    linha = json.dumps(dado, ensure_ascii=False) + "\n"
+                    diario.write(linha)
+                    diario.flush()
+                    _guardar_o_que_importa(dado, linha, colhido)
+
+    async def dentro_do_prazo():
+        prazo = asyncio.timeout(tempo)
+        try:
+            async with prazo:
+                await consultar()
+        except TimeoutError as erro:
+            if not prazo.expired():
+                raise
+            estouro = TempoEstourado(tempo)
+            estouro.turnos = colhido["turnos"]
+            estouro.custo = _custo_da_sessao(colhido["resultado"])
+            raise estouro from erro
+
+    if sdk_disponivel():
+        comecou = time.monotonic()
+        try:
+            asyncio.run(dentro_do_prazo())
+            if not colhido["resultado"]:
+                raise RuntimeError("SDK encerrou sem resultado")
+        except TempoEstourado:
+            raise
+        except Exception as erro:
+            if recebeu:
+                dado = _resultado_da_sessao(colhido["resultado"])
+                dado.update(type="result", subtype="error_sdk", is_error=True,
+                            result=str(erro), structured_output=None)
+                colhido["resultado"] = json.dumps(dado, ensure_ascii=False)
+                erros.append(str(erro))
+                with log.open(ANEXA_AO_LOG, encoding="utf-8") as diario:
+                    diario.write(colhido["resultado"] + "\n")
+            elif shutil.which(SESSAO[0]) is None:
+                raise RuntimeError(
+                    f"o SDK falhou antes de começar ({erro}) e o comando "
+                    f"{SESSAO[0]} não está no PATH para o caminho de reserva"
+                ) from erro
+            else:
+                print(f"SDK indisponível antes da execução: {erro}; usando CLI",
+                      file=sys.stderr)
+        else:
+            recebeu = True
+        if recebeu:
+            saida = colhido.pop("resultado")
+            colhido.pop("linhas")
+            return (int(bool(_resultado_da_sessao(saida).get("is_error"))),
+                    saida, "\n".join(erros), colhido)
+        restante = tempo - (time.monotonic() - comecou)
+        if restante <= 0:
+            raise TempoEstourado(tempo)
+        tempo = restante
+    return _rodar_sessao_pelo_cli(
+        comando, cwd=cwd, env=env, entrada=entrada, tempo=tempo, log=log,
+        rotulo=rotulo, modo_do_log=modo_do_log)
+
+
+def _rodar_sessao_pelo_cli(comando, *, cwd, env, entrada, tempo, log, rotulo,
                            modo_do_log=ABRE_O_LOG_DO_ZERO):
     with tempfile.TemporaryFile("w+", encoding="utf-8",
                                 errors="replace") as ferro:
@@ -2039,14 +2277,46 @@ def _modelo_da_etapa(etapa: dict, cwd) -> str:
     return central if isinstance(central, str) else ""
 
 
-def _comando_sessao(etapa: dict, cwd, retomar: str = "") -> list:
+def problema_do_teto_de_dolar_declarado(texto) -> str:
+    if texto is None or not texto.strip():
+        return ""
+    try:
+        valor = float(texto)
+    except ValueError:
+        return ERRO_TETO_DE_DOLAR_TORTO.format(texto)
+    return "" if 0 < valor < float("inf") \
+        else ERRO_TETO_DE_DOLAR_TORTO.format(texto)
+
+
+def _teto_de_dolar_do_modelo(modelo: str):
+    if TETO_DE_DOLAR_DECLARADO is not None:
+        declarado = TETO_DE_DOLAR_DECLARADO.strip()
+        return float(declarado) if declarado else None
+    return next((teto for faixa, teto in TETO_DE_DOLAR_POR_FAIXA.items()
+                 if faixa in modelo.lower()), TETO_DE_DOLAR_SEM_FAIXA)
+
+
+def _sobra_do_teto_de_dolar(modelo: str, gasto):
+    teto = _teto_de_dolar_do_modelo(modelo)
+    return (None if teto is None
+            else round(teto - gasto, CASAS_DO_TETO_DE_DOLAR))
+
+
+def _dolares_gastos(custo_da_etapa):
+    return custo_da_etapa["usd"] if custo_da_etapa else 0
+
+
+def _comando_sessao(etapa: dict, cwd, retomar: str = "", gasto=0) -> list:
     comando = list(SESSAO)
     if retomar:
         comando += [*RETOMADA_DA_SESSAO, retomar]
     if etapa.get("bare") and BANDEIRA_SEM_CAMADA:
         comando.append(BANDEIRA_SEM_CAMADA)
-    if modelo := _modelo_da_etapa(etapa, cwd):
+    modelo = _modelo_da_etapa(etapa, cwd)
+    if modelo:
         comando += [BANDEIRA_MODELO, modelo]
+    if (sobra := _sobra_do_teto_de_dolar(modelo, gasto)) is not None:
+        comando += [BANDEIRA_DO_TETO_DE_DOLAR, str(sobra)]
     if (negadas := etapa.get("ferramentas-negadas")) \
             and BANDEIRA_FERRAMENTAS_NEGADAS:
         comando += [BANDEIRA_FERRAMENTAS_NEGADAS, ",".join(negadas)]
@@ -2100,6 +2370,13 @@ def rodar_etapa(etapa, ordem, trabalho, dir_base, cwd, ambiente, teto,
                                     _bandeira_de_turnos("", estouro.turnos)
                                     + _bandeira_de_custo("", estouro.custo)
                                     + _bandeira_de_duracao(comecou))
+    except TetoDeDolarEsgotado as esgotado:
+        return _evidencia_sintetica(base, "morta",
+                                    MORTE_TETO_DE_DOLAR
+                                    + MORTE_LEIA_O_LOG.format(log),
+                                    _bandeira_de_turnos("", esgotado.turnos)
+                                    + _bandeira_de_custo("", esgotado.custo)
+                                    + _bandeira_de_duracao(comecou))
 
     _guardar_no_log(log, etapa["tipo"], saida, erro)
     if codigo_saida != 0:
@@ -2128,9 +2405,9 @@ def _bandeira_de_duracao(comecou: float) -> list:
 
 def _o_que_a_sessao_gastou(saida: str, comecou: float,
                            turnos_colhidos: int = 0,
-                           custo_das_pernas=None) -> list:
+                           custo_da_etapa=None) -> list:
     return (_bandeira_de_turnos(saida, turnos_colhidos)
-            + _bandeira_de_custo(saida, custo_das_pernas)
+            + _bandeira_de_custo(saida, custo_da_etapa)
             + _bandeira_de_duracao(comecou))
 
 
@@ -2244,14 +2521,23 @@ def _porque_morreu(codigo_saida: int, saida: str, log) -> str:
         partes.append(motivo)
     elif dado.get("subtype"):
         partes.append(MORTE_DESCONHECIDA.format(dado["subtype"]))
-    if isinstance(dado.get("result"), str) and dado["result"].strip():
-        partes.append(MORTE_O_QUE_ELA_DISSE.format(
-            dado["result"].strip()[:LIMITE_DO_RECADO]))
+    if (recado := _recado_da_sessao(dado)):
+        partes.append(MORTE_O_QUE_ELA_DISSE.format(recado[:LIMITE_DO_RECADO]))
     if (turnos := dado.get("num_turns")):
         partes.append(MORTE_TURNOS_GASTOS.format(turnos))
     if not partes:
         return MORTE_SEM_CAUSA.format(codigo=codigo_saida, log=log)
     return "; ".join(partes) + MORTE_LEIA_O_LOG.format(log)
+
+
+def _recado_da_sessao(dado: dict) -> str:
+    if isinstance(dado.get("result"), str) and dado["result"].strip():
+        return dado["result"].strip()
+    erros = dado.get("errors")
+    if not isinstance(erros, list):
+        return ""
+    return "; ".join(erro.strip() for erro in erros
+                     if isinstance(erro, str) and erro.strip())
 
 
 def auditar_ao_fim(pasta, cwd, ambiente,
@@ -2823,9 +3109,15 @@ def _com_a_conta_no_git(ambiente: dict) -> None:
     ambiente["GIT_CONFIG_COUNT"] = str(quantas)
 
 
+class ContaSemToken(ValueError):
+    pass
+
+
 def _ambiente_da_conta(conta, base=None):
-    ambiente = dict(os.environ if base is None else base)
     token = _token_da_conta(conta)
+    if conta and not token:
+        raise ContaSemToken(RESPOSTA_SEM_TOKEN.format(conta))
+    ambiente = dict(os.environ if base is None else base)
     if token:
         ambiente["GH_TOKEN"] = token
         _com_a_conta_no_git(ambiente)
@@ -2857,6 +3149,8 @@ def _gh_da_conta(conta, argumentos, tempo=TEMPO_DO_GH):
     try:
         return subprocess.run(GH + argumentos, capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=tempo, env=_ambiente_da_conta(conta))
+    except ContaSemToken as falha:
+        return subprocess.CompletedProcess(GH + argumentos, 1, "", str(falha))
     except (OSError, subprocess.SubprocessError):
         return None
 
@@ -3186,7 +3480,7 @@ def postar_na_issue(configuracao, issue, texto, *raizes):
             capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
             env=_ambiente_da_conta(_conta_das_issues(configuracao)))
-    except (OSError, subprocess.SubprocessError) as falha:
+    except (ContaSemToken, OSError, subprocess.SubprocessError) as falha:
         return False, RECADO_FALHA_AO_POSTAR.format(issue=issue, motivo=falha)
     if feito.returncode != 0:
         berro = (feito.stderr or feito.stdout).strip()
@@ -3288,7 +3582,7 @@ def gravar_no_corpo(configuracao, issue, texto, *raizes):
                 input=proposto, capture_output=True, text=True,
                 encoding="utf-8", errors="replace", timeout=TEMPO_DO_GH,
                 env=_ambiente_da_conta(_conta_das_issues(configuracao)))
-        except (OSError, subprocess.SubprocessError) as falha:
+        except (ContaSemToken, OSError, subprocess.SubprocessError) as falha:
             return False, RECADO_NAO_GRAVEI_O_CORPO.format(issue=issue,
                                                            motivo=falha)
         if feito.returncode != 0:
@@ -3619,7 +3913,7 @@ def _parar_no_teto(etapas, ordem_de, trabalho, dir_base, teto) -> int:
 def _falta_o_claude(etapas, ambiente) -> bool:
     tem_sessao = any(e["tipo"] == "sessao" and e.get("ligada", True)
                      for e in etapas)
-    return tem_sessao and not shutil.which(SESSAO[0],
+    return tem_sessao and not sdk_disponivel() and not shutil.which(SESSAO[0],
                                            path=ambiente.get("PATH"))
 
 
@@ -3636,6 +3930,9 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
 
     configuracao, problemas = (configuracao, []) if configuracao is not None \
         else carregar_executor(cwd, caminho_configuracao, roteiro)
+    if (teto_torto := problema_do_teto_de_dolar_declarado(
+            TETO_DE_DOLAR_DECLARADO)):
+        problemas = [*problemas, teto_torto]
     if problemas:
         for problema in problemas:
             print(ERRO_DE_CONFIGURACAO.format(problema), file=sys.stderr)
@@ -3705,6 +4002,11 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
                       "branch_esperada": branch_que_a_issue_pede(
                           branches_do_alvo(configuracao, os.environ)
                           .get("padrao_de_trabalho"), issue)})
+    try:
+        ambiente_da_conta = _ambiente_da_conta(_conta_do_remoto(configuracao))
+    except ContaSemToken as falha:
+        print(ERRO_DE_CONTA.format(falha), file=sys.stderr)
+        return EXIT_ERRO_DE_USO_OU_AMBIENTE
     gravar_estado(dir_base, trabalho, "rodando", issue=issue,
                   roteiro=str(caminho_roteiro) if caminho_roteiro else None)
 
@@ -3737,8 +4039,7 @@ def executar(roteiro, trabalho, dir_base, cwd, configuracao=None,
     feitas = 0
     marca_da_vez = [""]
     _instalar_a_parada_a_pedido(_fechar, trabalho, marca_da_vez)
-    ambiente = montar_ambiente(
-        roteiro, cwd, _ambiente_da_conta(_conta_do_remoto(configuracao)))
+    ambiente = montar_ambiente(roteiro, cwd, ambiente_da_conta)
     gravar_ambiente_da_execucao(pasta, ambiente)
     if _falta_o_claude(etapas, ambiente):
         print(ERRO_CLAUDE_FORA_DO_PATH.format(SESSAO[0]), file=sys.stderr)

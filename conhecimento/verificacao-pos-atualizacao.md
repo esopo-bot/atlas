@@ -26,9 +26,10 @@ linha só com a saída colada.
       mostre ao dono.
 - [ ] Um `montar.py` antigo na raiz daqui não é mais a origem; apagar é do
       dono.
-- [ ] O `--testar` de cada instrumento de `.agents/` passa. Cuidado: o
-      `gatilho` abre sessões pagas (só com o dono); o `encadeador` demora
-      minutos; o `buscar.py` sem banco se declara "não medido".
+- [ ] O `--testar` de cada instrumento de `.agents/` passa. O disparo das
+      skills é medido pela rotina `evals`, com `claude plugin eval`, em rodada
+      paga. O `encadeador` demora minutos; sem o `ck` no PATH, o `buscar.py`
+      e o `indexar.py` declaram "não medido" o caso real.
 - [ ] `python verificacoes.py ritual`, se existir aqui (só existe no
       repositório da camada).
 - [ ] O que a versão nova precisa: um Python 3 que responda
@@ -66,7 +67,10 @@ leve valor pessoal que esteja no da camada para o local, reponha no local o
 que sumiu, e prove:
 `python -m json.tool .claude/settings.local.json > /dev/null && echo legivel`.
 Segredo não entra em nenhum dos dois por valor. Gancho novo só carrega em
-sessão nova.
+sessão nova. Depois de atualizar, toda linha de gancho do `settings.json` e
+do `.codex/hooks.json` começa por `bash -c '...' gancho --evento <Evento>`,
+sem nome de interpretador: `python montar.py --verificar` acusa a linha que
+ficou fora do molde.
 
 Esta sessão não edita cópia da camada, não apaga fora da lista do
 instrumento sem perguntar, e não commita sem `autorizacoes` em
